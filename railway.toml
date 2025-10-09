@@ -1,9 +1,10 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "backend/Dockerfile"
+dockerfilePath = "Dockerfile"
+watchPaths = ["backend/**", "Dockerfile"]
 
 [deploy]
-startCommand = "cd backend && gunicorn app.main:app -c gunicorn.conf.py"
+startCommand = "gunicorn app.main:app -c gunicorn.conf.py"
 healthcheckPath = "/health"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"

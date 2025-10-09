@@ -1,0 +1,12 @@
+{
+  "empresa_actual": "Per-seo",
+  "empresa_activada": true,
+  "modulos_activos": {
+    "crm": true,
+    "per-seo": true,
+    "facturacion": true,
+    "marketing": true
+  },
+  "ultima_activacion": "2025-08-12T08:12:29.668259",
+  "version": "1.0.0"
+}

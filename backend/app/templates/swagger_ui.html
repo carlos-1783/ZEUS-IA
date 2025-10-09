@@ -1,0 +1,88 @@
+<!-- Custom Swagger UI template with URL encoding fix -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{% raw %}{{ title }}{% endraw %}</title>
+  <link rel="icon" href="{% raw %}{{ favicon_url }}{% endraw %}">
+  <link rel="stylesheet" type="text/css" href="{% raw %}{{ swagger_css_url }}{% endraw %}">
+  <style>
+    html {
+      box-sizing: border-box;
+      overflow: -moz-scrollbars-vertical;
+      overflow-y: scroll;
+    }
+    *,
+    *:before,
+    *:after {
+      box-sizing: inherit;
+    }
+    body {
+      margin: 0;
+      background: #fafafa;
+    }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="{% raw %}{{ swagger_js_url }}{% endraw %}"></script>
+  <script src="{% raw %}{{ swagger_standalone_preset_js_url }}{% endraw %}"></script>
+  <script>
+    // Fix for URL encoding in deep links
+    const originalGetLocation = window.location.toString;
+    window.location.toString = function() {
+      const url = originalGetLocation.call(window.location);
+      return url.replace(/_/g, '%20');
+    };
+
+    window.onload = function() {
+      // Begin Swagger UI call region
+      const ui = SwaggerUIBundle({
+        url: "{% raw %}{{ openapi_url }}{% endraw %}",
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        plugins: [
+          SwaggerUIBundle.plugins.DownloadUrl
+        ],
+        layout: "StandaloneLayout",
+        persistAuthorization: true,
+        docExpansion: "none",
+        filter: true,
+        displayRequestDuration: true,
+        tryItOutEnabled: true,
+        requestSnippetsEnabled: true,
+        defaultModelsExpandDepth: -1,
+        defaultModelExpandDepth: 1,
+        defaultModelRendering: "example",
+        showCommonExtensions: true,
+        showExtensions: true,
+        tagsSorter: "alpha",
+        operationsSorter: "method",
+        // Fix for URL encoding in deep links
+        onComplete: function() {
+          // Fix for URL encoding in deep links
+          const originalUpdateLayout = ui.layoutActions.updateLayout;
+          ui.layoutActions.updateLayout = function() {
+            const result = originalUpdateLayout.apply(this, arguments);
+            // Replace _ with %20 in the URL
+            if (window.location.hash) {
+              const newHash = window.location.hash.replace(/_/g, '%20');
+              if (newHash !== window.location.hash) {
+                window.history.replaceState(null, '', '#' + newHash.substring(1));
+              }
+            }
+            return result;
+          };
+        }
+      });
+      // End Swagger UI call region
+
+      window.ui = ui;
+    };
+  </script>
+</body>
+</html>

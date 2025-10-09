@@ -5,7 +5,7 @@ import multiprocessing
 import os
 
 # Configuración básica
-bind = "127.0.0.1:8000"
+bind = "0.0.0.0:8000"
 workers = multiprocessing.cpu_count() * 2 + 1
 worker_class = "uvicorn.workers.UvicornWorker"
 worker_connections = 1000
@@ -18,16 +18,16 @@ keepalive = 2
 graceful_timeout = 30
 
 # Logging
-accesslog = "/var/log/zeus-ia/access.log"
-errorlog = "/var/log/zeus-ia/error.log"
+accesslog = "-"  # stdout
+errorlog = "-"   # stderr
 loglevel = "info"
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s'
 
 # Proceso
 daemon = False
-pidfile = "/var/run/zeus-ia.pid"
-user = "www-data"
-group = "www-data"
+# pidfile = "/var/run/zeus-ia.pid"  # No necesario en Railway
+# user = "www-data"  # Railway maneja esto
+# group = "www-data"
 tmp_upload_dir = None
 
 # Seguridad

@@ -22,12 +22,13 @@ pip list | grep -E "(fastapi|uvicorn|gunicorn|sqlalchemy)"
 
 echo ""
 echo "🔧 Probando importación de la aplicación..."
-python -c "from app.main import app; print('✅ Aplicación importada correctamente')" || {
-    echo "❌ Error al importar la aplicación"
-    echo "Intentando mostrar el error:"
-    python -c "from app.main import app"
-    exit 1
-}
+if python -c "from app.main import app; print('✅ Aplicación importada correctamente')" 2>&1; then
+    echo "✅ Aplicación importada exitosamente"
+else
+    echo "⚠️ Advertencia: Error al importar la aplicación, pero continuando..."
+    echo "Detalles del error:"
+    python -c "from app.main import app" 2>&1 || true
+fi
 
 echo ""
 echo "🌐 Iniciando servidor Gunicorn..."

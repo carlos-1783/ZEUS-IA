@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# Testing
+backend/tests/
+backend/test_*.py
+backend/*_test.py
+
+# Logs
+*.log
+logs/
+backend/logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment files
+.env
+.env.*
+*.env
+
+# Frontend
+frontend/
+electron/
+zeus_app/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Scripts
+scripts/
+*.bat
+*.ps1
+*.sh
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+query
+
+# Docker
+docker-compose*.yml
+Dockerfile.dev
+
+# Misc
+styles/
+.DS_Store
+Thumbs.db

@@ -25,13 +25,13 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar archivos de requisitos desde backend/
-COPY backend/requirements.txt .
+COPY ./backend/requirements.txt ./requirements.txt
 
 # Instalar dependencias de Python
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar el código de la aplicación desde backend/
-COPY backend/ .
+COPY ./backend/ .
 
 # Crear directorios necesarios
 RUN mkdir -p /app/logs /app/static && \

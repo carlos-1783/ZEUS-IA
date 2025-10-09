@@ -47,5 +47,9 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Comando para ejecutar con Gunicorn en producción
-CMD ["gunicorn", "app.main:app", "-c", "gunicorn.conf.py"]
+# Copiar y dar permisos al script de inicio
+COPY backend/start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
+# Comando para ejecutar con el script de inicio
+CMD ["/app/start.sh"]

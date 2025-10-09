@@ -33,8 +33,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar el código de la aplicación desde backend/
 COPY ./backend/ .
 
-# Crear directorios necesarios
+# Copiar script de inicio
+COPY backend/start.sh /app/start.sh
+
+# Crear directorios necesarios y dar permisos
 RUN mkdir -p /app/logs /app/static && \
+    chmod +x /app/start.sh && \
     chown -R zeus:zeus /app
 
 # Cambiar al usuario no-root
@@ -46,10 +50,6 @@ EXPOSE 8000
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
-
-# Copiar y dar permisos al script de inicio
-COPY backend/start.sh /app/start.sh
-RUN chmod +x /app/start.sh
 
 # Comando para ejecutar con el script de inicio
 CMD ["/app/start.sh"]

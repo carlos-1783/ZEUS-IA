@@ -4,8 +4,8 @@ dockerfilePath = "Dockerfile"
 watchPaths = ["backend/**", "Dockerfile"]
 
 [deploy]
-startCommand = "/app/start.sh"
+startCommand = "bash /app/start.sh"
 healthcheckPath = "/health"
-healthcheckTimeout = 100
+healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10

@@ -29,4 +29,4 @@ EXPOSE 8000
 ENV PORT=8000
 
 # Comando de prueba que SIEMPRE funciona
-CMD ["python", "-c", "print('=== ZEUS-IA Backend Starting ==='); import sys; print('Python version:', sys.version); print('Working directory:', '/app'); print('Starting server...'); import uvicorn; uvicorn.run('app.main:app', host='0.0.0.0', port=8000, log_level='debug')"]
+CMD ["python", "-c", "print('=== ZEUS-IA Backend Starting ==='); import sys; print('Python version:', sys.version); print('Working directory:', '/app'); print('Files in /app:'); import os; print(os.listdir('/app')); print('Testing imports...'); try: from app.core.config import settings; print('✅ Settings imported'); except Exception as e: print('❌ Settings error:', e); try: from app.main import app; print('✅ App imported'); except Exception as e: print('❌ App error:', e); print('Starting server...'); import uvicorn; uvicorn.run('app.main:app', host='0.0.0.0', port=8000, log_level='debug')"]

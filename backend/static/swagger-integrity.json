@@ -1,0 +1,34 @@
+{
+  "swagger-ui-bundle.js": {
+    "url": "/static/swagger-ui-bundle.js",
+    "integrity": "sha384-yrdF3mlUytUBwQyEVFAdwuUKEC9Qqrf+IUCgFgho4O5O6irf77pMjv36FN4eTpQD"
+  },
+  "swagger-ui-standalone-preset.js": {
+    "url": "/static/swagger-ui-standalone-preset.js",
+    "integrity": "sha384-azzkurII4f+bjmZvm3hWhj7JezshyXtwobwneRyWCCIksK61Xi0Ry3xA2am9/TWp"
+  },
+  "swagger-ui.css": {
+    "url": "/static/swagger-ui.css",
+    "integrity": "sha384-ZJ2d83jl4Lvr6GKYzXpvQUmu+8us6T5frIryNHoLuypLK61jUnnCWZWyyrnifLda"
+  },
+  "swagger-ui-bundle.js.map": {
+    "url": "/static/swagger-ui-bundle.js.map",
+    "integrity": "sha384-y3I/PV1Z/ljcPNx91ruVX6HIjRbH+GXE3wjYojX8Y3c/koNXms/L4wxJxX62qVKt"
+  },
+  "swagger-ui-standalone-preset.js.map": {
+    "url": "/static/swagger-ui-standalone-preset.js.map",
+    "integrity": "sha384-2H2Hms3rLi+2krr2rxtYJ9CrxkDOYN+lOvNj8aIqLDmgk3nKEE+XNYOv5jBcfqrf"
+  },
+  "swagger-ui.css.map": {
+    "url": "/static/swagger-ui.css.map",
+    "integrity": "sha384-AXk73J8TG7LMVpDAkhcV1QPQqusQIGyl97ya5IwKrti/c4Sm0Q3Zw8NWb7VdvUVu"
+  },
+  "favicon-16x16.png": {
+    "url": "/static/favicon-16x16.png",
+    "integrity": "sha384-oDUaQMChCjWOp/XEgKGoKkbxI13qtC09h29tktgIqrVZSllgzHICA+tADxIplCMH"
+  },
+  "favicon-32x32.png": {
+    "url": "/static/favicon-32x32.png",
+    "integrity": "sha384-vCPruBEcPmxk2uv19KNJCkWttTDv8oQxBAzSuTndOepjsIyiKHSoLNlWOcQMpXdL"
+  }
+}

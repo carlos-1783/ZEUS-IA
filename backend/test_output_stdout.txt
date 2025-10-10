@@ -1,0 +1,48 @@
+=== PRUEBA DE SALIDA ===
+Directorio actual: C:\Users\Acer\ZEUS-IA\backend
+Python version: 3.10.11 (tags/v3.10.11:7d4cc5a, Apr  5 2023, 00:38:17) [MSC v.1929 64 bit (AMD64)]
+Listando directorio actual:
+- .env
+- app
+- check_and_fix_token.py
+- check_user.py
+- create_user.py
+- debug_sqlalchemy.py
+- direct_fastapi.py
+- docker
+- Dockerfile
+- fastapi_minimal_test.py
+- fastapi_test.py
+- generate_favicon.py
+- init_db.py
+- isolated_test.py
+- logs
+- main.py
+- minimal_app.py
+- minimal_fastapi.py
+- minimal_test.py
+- nginx
+- output.log
+- public
+- requirements.txt
+- reset_and_register.py
+- scripts
+- sql_app.db
+- static
+- test.db
+- tests
+- test_db.py
+- test_env.py
+- test_logging.py
+- test_output.py
+- test_output_stderr.txt
+- test_output_stdout.txt
+- test_sqlalchemy.py
+- test_sqlalchemy_tables.py
+- test_sqlite.db
+- test_sqlite.py
+- update_user_email.py
+- venv
+- zeus.db
+- zeus.db.backup
+- __pycache__

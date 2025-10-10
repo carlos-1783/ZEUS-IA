@@ -1,0 +1,17 @@
+{
+  "name": "zeus-electron",
+  "version": "1.0.0",
+  "description": "ZEUS IA Desktop Application",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "latest",
+    "electron-reload": "^2.0.0-alpha.1"
+  }
+}

@@ -36,10 +36,11 @@ COPY ./backend/ .
 # Copiar scripts de inicio
 COPY backend/start.sh /app/start.sh
 COPY backend/start-simple.sh /app/start-simple.sh
+COPY backend/start-debug.sh /app/start-debug.sh
 
 # Crear directorios necesarios y dar permisos
 RUN mkdir -p /app/logs /app/static && \
-    chmod +x /app/start.sh /app/start-simple.sh && \
+    chmod +x /app/start.sh /app/start-simple.sh /app/start-debug.sh && \
     chown -R zeus:zeus /app
 
 # Cambiar al usuario no-root
@@ -53,5 +54,5 @@ ENV PORT=8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Comando para ejecutar con el script de inicio simple
-CMD ["bash", "/app/start-simple.sh"]
+# Comando para ejecutar con el script de debug
+CMD ["bash", "/app/start-debug.sh"]

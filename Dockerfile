@@ -28,5 +28,5 @@ RUN mkdir -p /app/logs /app/static
 EXPOSE 8000
 ENV PORT=8000
 
-# Comando directo que usa el puerto de Railway
-CMD ["python", "-c", "import os; port = int(os.environ.get('PORT', 8000)); print(f'Starting ZEUS-IA on port {port}'); from app.main import app; import uvicorn; uvicorn.run(app, host='0.0.0.0', port=port, log_level='info')"]
+# Usar uvicorn directamente con el módulo
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

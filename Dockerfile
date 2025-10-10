@@ -1,4 +1,4 @@
-# Dockerfile optimizado para Railway
+# Dockerfile optimizado para FastAPI en Railway
 FROM python:3.11-slim
 
 # Instalar dependencias del sistema
@@ -28,5 +28,5 @@ RUN mkdir -p /app/logs /app/static
 EXPOSE 8000
 ENV PORT=8000
 
-# Comando que usa puerto dinámico y confirma inicio del servidor
-CMD ["python", "-c", "import os; port = int(os.environ.get('PORT', 8000)); print('=== ZEUS-IA Backend Starting ==='); print(f'Using port: {port}'); from app.main import app; import uvicorn; print('Servidor iniciado correctamente'); uvicorn.run(app, host='0.0.0.0', port=port, log_level='info')"]
+# Comando optimizado para FastAPI con uvicorn
+CMD ["python", "-c", "import os; port = int(os.environ.get('PORT', 8000)); print('=== ZEUS-IA FastAPI Backend Starting ==='); print(f'Host: 0.0.0.0, Port: {port}'); from app.main import app; import uvicorn; print('✅ FastAPI app loaded successfully'); print('🚀 Starting Uvicorn server...'); uvicorn.run(app, host='0.0.0.0', port=port, log_level='info')"]

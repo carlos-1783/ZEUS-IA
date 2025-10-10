@@ -44,8 +44,9 @@ RUN mkdir -p /app/logs /app/static && \
 # Cambiar al usuario no-root
 USER zeus
 
-# Exponer el puerto
+# Exponer el puerto (Railway usa $PORT dinámicamente)
 EXPOSE 8000
+ENV PORT=8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \

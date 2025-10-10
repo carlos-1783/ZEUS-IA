@@ -32,14 +32,15 @@ fi
 
 echo ""
 echo "🌐 Iniciando servidor Gunicorn..."
+echo "Puerto: ${PORT:-8000}"
 echo "Bind: 0.0.0.0:${PORT:-8000}"
-echo "Workers: $(python -c 'import multiprocessing; print(multiprocessing.cpu_count() * 2 + 1)')"
+echo "Workers: 2"
 
-exec gunicorn app.main:app \
-    --bind 0.0.0.0:${PORT:-8000} \
-    --workers 2 \
-    --worker-class uvicorn.workers.UvicornWorker \
-    --timeout 120 \
-    --access-logfile - \
-    --error-logfile - \
-    --log-level info
+# Usar uvicorn directamente para simplificar
+echo ""
+echo "🚀 Iniciando con Uvicorn..."
+exec uvicorn app.main:app \
+    --host 0.0.0.0 \
+    --port ${PORT:-8000} \
+    --log-level info \
+    --no-access-log

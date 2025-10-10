@@ -1,4 +1,4 @@
-# Dockerfile ultra-básico para debugging
+# Dockerfile optimizado para Railway
 FROM python:3.11-slim
 
 # Instalar dependencias del sistema
@@ -24,9 +24,9 @@ COPY ./backend/ .
 # Crear directorios necesarios
 RUN mkdir -p /app/logs /app/static
 
-# Exponer el puerto
+# Exponer el puerto (Railway usa $PORT dinámicamente)
 EXPOSE 8000
 ENV PORT=8000
 
-# Comando de prueba que SIEMPRE funciona
-CMD ["python", "-c", "print('=== ZEUS-IA Backend Starting ==='); import sys; print('Python version:', sys.version); print('Working directory:', '/app'); print('Files in /app:'); import os; print(os.listdir('/app')); print('Testing imports...'); try: from app.core.config import settings; print('✅ Settings imported'); except Exception as e: print('❌ Settings error:', e); try: from app.main import app; print('✅ App imported'); except Exception as e: print('❌ App error:', e); print('Starting server...'); import uvicorn; uvicorn.run('app.main:app', host='0.0.0.0', port=8000, log_level='debug')"]
+# Comando directo que usa el puerto de Railway
+CMD ["python", "-c", "import os; port = int(os.environ.get('PORT', 8000)); print(f'Starting ZEUS-IA on port {port}'); from app.main import app; import uvicorn; uvicorn.run(app, host='0.0.0.0', port=port, log_level='info')"]

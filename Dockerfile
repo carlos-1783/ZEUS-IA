@@ -1,4 +1,4 @@
-# Dockerfile ultra-simple sin usuario no-root
+# Dockerfile ultra-básico para debugging
 FROM python:3.11-slim
 
 # Instalar dependencias del sistema
@@ -28,5 +28,5 @@ RUN mkdir -p /app/logs /app/static
 EXPOSE 8000
 ENV PORT=8000
 
-# Comando directo sin script
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug"]
+# Comando de prueba que SIEMPRE funciona
+CMD ["python", "-c", "print('=== ZEUS-IA Backend Starting ==='); import sys; print('Python version:', sys.version); print('Working directory:', '/app'); print('Starting server...'); import uvicorn; uvicorn.run('app.main:app', host='0.0.0.0', port=8000, log_level='debug')"]

@@ -1,0 +1,258 @@
+/*! swagger-ui-custom.css | Optimizado para rendimiento, accesibilidad y compatibilidad */
+
+/* Variables CSS para temas */
+:root {
+  /* Colores claros (tema por defecto) */
+  --swagger-ui-bg: #ffffff;
+  --swagger-ui-text: #3b4151;
+  --swagger-ui-text-light: #777;
+  --swagger-ui-border: #e8e8e8;
+  --swagger-ui-primary: #4990e2;
+  --swagger-ui-success: #49cc90;
+  --swagger-ui-warning: #fca130;
+  --swagger-ui-error: #f93e3e;
+  --swagger-ui-code-bg: #f8f8f8;
+  --swagger-ui-input-bg: #fff;
+  --swagger-ui-input-border: #d9d9d9;
+  --swagger-ui-focus: rgba(73, 144, 226, 0.3);
+  --swagger-ui-loading: #f8f8f8;
+}
+
+/* Modo oscuro */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --swagger-ui-bg: #1a1f2c;
+    --swagger-ui-text: #f3f4f6;
+    --swagger-ui-text-light: #a0aec0;
+    --swagger-ui-border: #2d3748;
+    --swagger-ui-primary: #63b3ed;
+    --swagger-ui-success: #68d391;
+    --swagger-ui-warning: #f6ad55;
+    --swagger-ui-error: #fc8181;
+    --swagger-ui-code-bg: #2d3748;
+    --swagger-ui-input-bg: #2d3748;
+    --swagger-ui-input-border: #4a5568;
+    --swagger-ui-focus: rgba(99, 179, 237, 0.3);
+    --swagger-ui-loading: #2d3748;
+  }
+}
+
+/* Reset y estilos base */
+.swagger-ui {
+  /* Asegurar que los estilos se aplican correctamente */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+  line-height: 1.5;
+  color: var(--swagger-ui-text);
+  background-color: var(--swagger-ui-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Mejorar accesibilidad y legibilidad */
+.swagger-ui .info .title {
+  font-size: 2em;
+  margin: 0 0 0.5em;
+  color: var(--swagger-ui-text);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.swagger-ui .opblock .opblock-summary-description {
+  color: var(--swagger-ui-text);
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+/* Mejorar contraste para accesibilidad */
+.swagger-ui .info .description,
+.swagger-ui .info .markdown,
+.swagger-ui .info .markdown p,
+.swagger-ui .info .markdown code,
+.swagger-ui .info .markdown pre,
+.swagger-ui .opblock .opblock-summary-operation-id,
+.swagger-ui .opblock .opblock-summary-path,
+.swagger-ui .opblock .opblock-summary-path__deprecated,
+.swagger-ui .opblock-description-wrapper p,
+.swagger-ui .opblock-external-docs-wrapper p,
+.swagger-ui .opblock-title_normal p {
+  color: var(--swagger-ui-text);
+  line-height: 1.6;
+}
+
+/* Mejorar interactividad y estados de enfoque */
+.swagger-ui button:focus,
+.swagger-ui input[type="text"]:focus,
+.swagger-ui select:focus,
+.swagger-ui textarea:focus,
+.swagger-ui .btn:focus {
+  outline: 3px solid var(--swagger-ui-focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--swagger-ui-focus);
+  border-color: var(--swagger-ui-primary);
+}
+
+/* Optimizar rendimiento de animaciones */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Mejorar contraste para enlaces */
+.swagger-ui a {
+  color: #4990e2;
+  text-decoration: none;
+}
+
+.swagger-ui a.nostyle,
+.swagger-ui a.nostyle:visited,
+.swagger-ui a.nostyle:active {
+  color: inherit;
+}
+
+/* Mejorar el foco para navegación por teclado */
+.swagger-ui button:focus,
+.swagger-ui input[type="text"]:focus,
+.swagger-ui select:focus,
+.swagger-ui textarea:focus,
+.swagger-ui .opblock .opblock-section-header:focus,
+.swagger-ui .opblock .opblock-section-header:focus h4,
+.swagger-ui .opblock .opblock-section-header:focus svg {
+  outline: 2px solid #4990e2;
+  outline-offset: 2px;
+}
+
+/* Mejorar la legibilidad de los ejemplos de código */
+.swagger-ui .opblock .opblock-section .opblock-section-header {
+  background: #f7f7f7;
+  box-shadow: none;
+}
+
+.swagger-ui .opblock .opblock-section .opblock-section-header h4 {
+  color: #3b4151;
+  font-weight: 600;
+}
+
+/* Mejorar la visibilidad de los botones */
+.swagger-ui .btn {
+  padding: 8px 20px;
+  font-weight: 600;
+  border-radius: 4px;
+  transition: all 0.3s;
+}
+
+.swagger-ui .btn.execute {
+  background-color: #4990e2;
+  border-color: #4990e2;
+}
+
+.swagger-ui .btn.execute:hover {
+  background-color: #3a7bc8;
+  border-color: #3a7bc8;
+}
+
+/* Mejorar la responsividad */
+@media (max-width: 768px) {
+  .swagger-ui .wrapper {
+    padding: 20px 10px;
+  }
+  
+  .swagger-ui .info {
+    margin: 0 0 20px 0;
+  }
+  
+  .swagger-ui .opblock .opblock-section-header {
+    padding: 10px;
+  }
+}
+
+/* Mejorar la visibilidad de los campos requeridos */
+.swagger-ui .parameters-col_description input[required] + label:after {
+  content: " *";
+  color: #ff4444;
+}
+
+/* Mejorar la legibilidad de los esquemas */
+.swagger-ui .model-box {
+  background: #f7f7f7;
+  border-radius: 4px;
+  padding: 10px;
+  margin: 5px 0;
+}
+
+/* Mejorar la navegación por pestañas */
+.swagger-ui .tab li {
+  margin: 0;
+}
+
+.swagger-ui .tab li button.tabitem {
+  padding: 8px 20px;
+  border-radius: 4px 4px 0 0;
+  border: 1px solid #e0e0e0;
+  border-bottom: none;
+  background: #f7f7f7;
+  margin-right: 5px;
+}
+
+.swagger-ui .tab li button.tabitem.active {
+  background: #fff;
+  border-bottom: 1px solid #fff;
+  margin-bottom: -1px;
+}
+
+/* Mejorar la visibilidad de los códigos de estado */
+.swagger-ui .responses-table .response-col_status {
+  font-weight: 600;
+}
+
+.swagger-ui .responses-table .response-col_status .response-undocumented {
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+
+/* Mejorar la legibilidad de los esquemas JSON */
+.swagger-ui .model {
+  font-family: 'Source Code Pro', monospace;
+  font-size: 14px;
+}
+
+/* Mejorar la visibilidad de los parámetros */
+.swagger-ui .parameters .parameters-col_name {
+  width: 30%;
+}
+
+.swagger-ui .parameters .parameters-col_description {
+  width: 70%;
+}
+
+/* Mejorar la visibilidad de los ejemplos */
+.swagger-ui .examples .examples-select {
+  margin-bottom: 10px;
+}
+
+.swagger-ui .examples .examples-select select {
+  padding: 5px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+
+/* Mejorar el contraste para el modo oscuro */
+@media (prefers-color-scheme: dark) {
+  .swagger-ui {
+    filter: invert(1) hue-rotate(180deg);
+  }
+  
+  .swagger-ui .highlight-code {
+    filter: invert(1) hue-rotate(180deg);
+  }
+  
+  .swagger-ui img, 
+  .swagger-ui svg {
+    filter: invert(1) hue-rotate(180deg);
+  }
+}

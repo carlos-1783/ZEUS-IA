@@ -29,4 +29,4 @@ EXPOSE 8000
 ENV PORT=8000
 
 # Comando optimizado para FastAPI con uvicorn
-CMD ["python", "-c", "import os; port = int(os.environ.get('PORT', 8000)); print('=== ZEUS-IA FastAPI Backend Starting ==='); print(f'Host: 0.0.0.0, Port: {port}'); from app.main import app; import uvicorn; print('✅ FastAPI app loaded successfully'); print('🚀 Starting Uvicorn server...'); uvicorn.run(app, host='0.0.0.0', port=port, log_level='info')"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

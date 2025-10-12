@@ -88,7 +88,8 @@ api_metadata = {
 # Crear instancia de FastAPI
 app = FastAPI(
     **{k: v for k, v in api_metadata.items() if k not in ['debug']},
-    lifespan=lifespan
+    lifespan=lifespan,
+    redirect_slashes=False  # Deshabilitar redirect automático para healthcheck
 )
 
 # Configurar middlewares

@@ -227,7 +227,8 @@ async def add_csp_header(request: Request, call_next):
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
 
 if not settings.DEBUG:
-    app.add_middleware(HTTPSRedirectMiddleware)
+    # NOTA: HTTPSRedirectMiddleware deshabilitado porque Railway hace healthcheck via HTTP interno
+    # app.add_middleware(HTTPSRedirectMiddleware)
     # Solo en producción, forzar HTTPS y otras políticas de seguridad
     security_headers = {
         "Strict-Transport-Security": f"max-age={settings.SECURE_HSTS_SECONDS}; includeSubDomains; preload",

@@ -24,12 +24,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 43200  # 30 days
     
     # CORS Configuration - Permitir conexiones desde los puertos comunes del frontend
-    BACKEND_CORS_ORIGINS: list[str] = [
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ]
+    BACKEND_CORS_ORIGINS: list[str] = os.getenv("BACKEND_CORS_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173,http://localhost:8000,http://127.0.0.1:8000").split(",")
     
     # Database Configuration
     DATABASE_URL: str = "sqlite:///./zeus.db"  # Default SQLite for development

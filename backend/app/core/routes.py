@@ -43,9 +43,6 @@ def setup_routes(app: FastAPI):
     async def root():
         return {"message": "Bienvenido a ZEUS-IA API"}
     
-    @app.get("/health", include_in_schema=False)
-    async def health_check():
-        """Endpoint de verificación de salud."""
-        return {"status": "healthy"}
+    # Nota: /health está definido en main.py, no duplicar aquí
     
     return app

@@ -1,6 +1,7 @@
 from pydantic import PostgresDsn
 from pydantic_settings import BaseSettings
 from typing import Optional, List, Dict, Any
+import os
 
 class Settings(BaseSettings):
     # Application settings

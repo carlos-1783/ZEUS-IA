@@ -45,9 +45,18 @@ class Settings(BaseSettings):
     
     # CORS Headers Configuration
     CORS_ALLOW_CREDENTIALS: bool = True
-    CORS_ALLOW_METHODS: list[str] = ["*"]
-    CORS_ALLOW_HEADERS: list[str] = ["*"]
-    CORS_EXPOSE_HEADERS: list[str] = ["Content-Disposition"]
+    CORS_ALLOW_METHODS: Union[list[str], str] = "*"
+    CORS_ALLOW_HEADERS: Union[list[str], str] = "*"
+    CORS_EXPOSE_HEADERS: Union[list[str], str] = "Content-Disposition"
+    
+    @field_validator('CORS_ALLOW_METHODS', 'CORS_ALLOW_HEADERS', 'CORS_EXPOSE_HEADERS', mode='before')
+    @classmethod
+    def parse_cors_lists(cls, v):
+        if isinstance(v, str):
+            if v == "*":
+                return ["*"]
+            return [item.strip() for item in v.split(',')]
+        return v
     
     # Static Files Configuration
     STATIC_URL: str = "/static"

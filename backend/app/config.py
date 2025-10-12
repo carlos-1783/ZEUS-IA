@@ -1,9 +1,15 @@
-from pydantic import PostgresDsn
-from pydantic_settings import BaseSettings
-from typing import Optional, List, Dict, Any
+from pydantic import PostgresDsn, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Optional, List, Dict, Any, Union
 import os
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True
+    )
+    
     # Application settings
     PROJECT_NAME: str = "ZEUS-IA"
     VERSION: str = "1.0.0"  # Versión de la aplicación
@@ -25,7 +31,14 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 43200  # 30 days
     
     # CORS Configuration - Permitir conexiones desde los puertos comunes del frontend
-    BACKEND_CORS_ORIGINS: list[str] = os.getenv("BACKEND_CORS_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173,http://localhost:8000,http://127.0.0.1:8000").split(",")
+    BACKEND_CORS_ORIGINS: Union[list[str], str] = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173,http://localhost:8000,http://127.0.0.1:8000"
+    
+    @field_validator('BACKEND_CORS_ORIGINS', mode='before')
+    @classmethod
+    def parse_cors_origins(cls, v):
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(',')]
+        return v
     
     # Database Configuration
     DATABASE_URL: str = "sqlite:///./zeus.db"  # Default SQLite for development

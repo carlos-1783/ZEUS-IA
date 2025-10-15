@@ -12,8 +12,7 @@
     "install:frontend": "cd frontend && npm install",
     "dev:frontend": "cd frontend && npm run dev",
     "dev:backend": "cd backend && python -m uvicorn app.main:app --reload",
-    "build": "npm run build:frontend",
-    "install": "npm run install:frontend"
+    "build": "npm run build:frontend"
   },
   "engines": {
     "node": ">=18.0.0",

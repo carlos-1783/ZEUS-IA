@@ -1,0 +1,22 @@
+{
+  "name": "zeus-ia-monorepo",
+  "version": "1.0.0",
+  "description": "ZEUS-IA Monorepo - Backend FastAPI + Frontend Vite",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "build:frontend": "cd frontend && npm run build",
+    "install:frontend": "cd frontend && npm install",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && python -m uvicorn app.main:app --reload",
+    "build": "npm run build:frontend",
+    "install": "npm run install:frontend"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  }
+}

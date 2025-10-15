@@ -114,7 +114,6 @@ scripts/
 5. **Migrations** → Base de datos automática
 6. **Health Check** → Verificación de endpoints
 7. **Notification** → Estado del despliegue
-
 ## 🌐 **URLs de Producción**
 
 - **Frontend**: https://zeusia.app

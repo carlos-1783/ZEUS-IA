@@ -1,0 +1,172 @@
+// Colors
+$primary: #4f46e5;
+$primary-dark: #4338ca;
+$primary-light: #818cf8;
+$secondary: #10b981;
+$success: #10b981;
+$warning: #f59e0b;
+$danger: #ef4444;
+$info: #3b82f6;
+$light: #f9fafb;
+$dark: #111827;
+$gray-100: #f3f4f6;
+$gray-200: #e5e7eb;
+$gray-300: #d1d5db;
+$gray-400: #9ca3af;
+$gray-500: #6b7280;
+$gray-600: #4b5563;
+$gray-700: #374151;
+$gray-800: #1f2937;
+$gray-900: #111827;
+
+// Typography
+$font-family-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+$font-family-mono: 'Fira Code', 'Fira Mono', 'Roboto Mono', 'Courier New', monospace;
+$font-size-base: 1rem;
+$font-size-sm: 0.875rem;
+$font-size-lg: 1.125rem;
+$font-weight-normal: 400;
+$font-weight-medium: 500;
+$font-weight-semibold: 600;
+$font-weight-bold: 700;
+$line-height-base: 1.5;
+$line-height-sm: 1.25;
+$line-height-lg: 1.75;
+
+// Spacing
+$spacer: 1rem;
+$spacers: (
+  0: 0,
+  1: $spacer * 0.25,
+  2: $spacer * 0.5,
+  3: $spacer,
+  4: $spacer * 1.5,
+  5: $spacer * 3,
+);
+
+// Border radius
+$border-radius: 0.375rem;
+$border-radius-sm: 0.25rem;
+$border-radius-lg: 0.5rem;
+$border-radius-full: 9999px;
+
+// Box shadow
+$box-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+$box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+$box-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+$box-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+$box-shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+// Transitions
+$transition-base: all 0.2s ease-in-out;
+$transition-fade: opacity 0.15s linear;
+$transition-collapse: height 0.35s ease;
+
+// Z-index
+$zindex-dropdown: 1000;
+$zindex-sticky: 1020;
+$zindex-fixed: 1030;
+$zindex-modal-backdrop: 1040;
+$zindex-modal: 1050;
+$zindex-popover: 1060;
+$zindex-tooltip: 1070;
+
+// Breakpoints
+$breakpoint-xs: 0;
+$breakpoint-sm: 640px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 1024px;
+$breakpoint-xl: 1280px;
+$breakpoint-2xl: 1536px;
+
+// Breakpoints map for mixins
+$breakpoints: (
+  'xs': $breakpoint-xs,
+  'sm': $breakpoint-sm,
+  'md': $breakpoint-md,
+  'lg': $breakpoint-lg,
+  'xl': $breakpoint-xl,
+  '2xl': $breakpoint-2xl
+);
+
+// Container max widths
+$container-sm: 100%;
+$container-md: 100%;
+$container-lg: 1024px;
+$container-xl: 1280px;
+$container-2xl: 1536px;
+
+// Grid columns
+$grid-columns: 12;
+$grid-gutter-width: 1.5rem;
+
+// Custom variables
+:root {
+  // Theme colors
+  --color-primary: #{$primary};
+  --color-primary-dark: #{$primary-dark};
+  --color-primary-light: #{$primary-light};
+  --color-secondary: #{$secondary};
+  --color-success: #{$success};
+  --color-warning: #{$warning};
+  --color-danger: #{$danger};
+  --color-info: #{$info};
+  --color-light: #{$light};
+  --color-dark: #{$dark};
+  
+  // Gray scale - Using direct variable access instead of map functions
+  --color-gray-100: #{$gray-100};
+  --color-gray-200: #{$gray-200};
+  --color-gray-300: #{$gray-300};
+  --color-gray-400: #{$gray-400};
+  --color-gray-500: #{$gray-500};
+  --color-gray-600: #{$gray-600};
+  --color-gray-700: #{$gray-700};
+  --color-gray-800: #{$gray-800};
+  --color-gray-900: #{$gray-900};
+  
+  // Typography
+  --font-sans: #{$font-family-sans};
+  --font-mono: #{$font-family-mono};
+  
+  // Spacing
+  @each $size, $value in $spacers {
+    --spacer-#{$size}: #{$value};
+  }
+  
+  // Border radius
+  --rounded: #{$border-radius};
+  --rounded-sm: #{$border-radius-sm};
+  --rounded-lg: #{$border-radius-lg};
+  --rounded-full: #{$border-radius-full};
+  
+  // Box shadow
+  --shadow-sm: #{$box-shadow-sm};
+  --shadow: #{$box-shadow};
+  --shadow-md: #{$box-shadow-md};
+  --shadow-lg: #{$box-shadow-lg};
+  --shadow-xl: #{$box-shadow-xl};
+  
+  // Transitions
+  --transition: #{$transition-base};
+  --transition-fade: #{$transition-fade};
+  --transition-collapse: #{$transition-collapse};
+  
+  // Z-index
+  --z-dropdown: #{$zindex-dropdown};
+  --z-sticky: #{$zindex-sticky};
+  --z-fixed: #{$zindex-fixed};
+  --z-modal-backdrop: #{$zindex-modal-backdrop};
+  --z-modal: #{$zindex-modal};
+  --z-popover: #{$zindex-popover};
+  --z-tooltip: #{$zindex-tooltip};
+}
+
+// Dark mode overrides
+[data-theme='dark'] {
+  // Update color variables for dark mode
+  --color-light: #1f2937;
+  --color-dark: #f9fafb;
+  
+  // Add any other dark mode overrides here
+}

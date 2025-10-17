@@ -1,11 +1,10 @@
 {
-  "name": "zeus-ia-monorepo",
+  "name": "zeus-ia-root",
   "version": "1.0.0",
-  "description": "ZEUS-IA Monorepo - Backend FastAPI + Frontend Vite",
   "private": true,
   "scripts": {
-    "build:frontend": "cd frontend && npm run build",
-    "dev:frontend": "cd frontend && npm run dev",
-    "dev:backend": "cd backend && python -m uvicorn app.main:app --reload"
+    "build": "cd frontend-vercel && npm run build",
+    "dev": "cd frontend-vercel && npm run dev",
+    "install:frontend": "cd frontend-vercel && npm install"
   }
 }

@@ -1,7 +1,7 @@
 [build]
   base = "frontend-vercel"
   command = "npm run build"
-  publish = "dist"
+  publish = "frontend-vercel/dist"
 
 [build.environment]
   NODE_VERSION = "18"

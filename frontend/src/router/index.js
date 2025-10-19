@@ -22,7 +22,7 @@ import MainLayout from '../layouts/MainLayout.vue'
 // Views
 import Dashboard from '../views/Dashboard.vue'
 import Login from '../views/auth/Login.vue'
-import Register from '../views/auth/Register.vue'
+import Register from '../views/auth/RegisterSimple.vue'
 import ForgotPassword from '../views/auth/ForgotPassword.vue'
 import ResetPassword from '../views/auth/ResetPassword.vue'
 import NotFound from '../views/errors/NotFound.vue'

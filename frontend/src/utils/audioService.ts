@@ -334,8 +334,7 @@ const initAudioSystem = () => {
 };
 
 // Initialize audio system on module load
-// TEMPORARILY DISABLED - causing performance issues
-// initAudioSystem();
+initAudioSystem();
 
 // Export all functions as a default object
 export default {

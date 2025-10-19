@@ -153,6 +153,22 @@
     <!-- Scripts will be injected by Vite -->
     <script type="module" src="/src/main.js"></script>
     
-    <!-- PWA Service Worker Registration - ELIMINADO TEMPORALMENTE -->
+    <!-- PWA Service Worker Registration - Solo en producción -->
+    <script>
+      // Solo registrar service worker en producción
+      if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', function() {
+            navigator.serviceWorker.register('/sw.js', { scope: '/' })
+              .then(function(registration) {
+                console.log('ServiceWorker registration successful with scope: ', registration.scope);
+              })
+              .catch(function(error) {
+                console.error('ServiceWorker registration failed: ', error);
+              });
+          });
+        }
+      }
+    </script>
 </body>
 </html>

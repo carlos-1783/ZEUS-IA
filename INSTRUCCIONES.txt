@@ -1,0 +1,50 @@
+================================================================
+                    ZEUS-IA - COMO USAR
+================================================================
+
+ZEUS-IA YA ESTA CORRIENDO!
+
+Backend:  http://localhost:8000  ✓
+Frontend: http://localhost:5173  ✓
+
+================================================================
+
+SI VES ERRORES EN EL NAVEGADOR:
+
+1. Abre la consola del navegador (F12)
+2. Ejecuta:
+
+   localStorage.clear()
+   location.reload()
+
+   O visita: http://localhost:5173/limpiar-cache.html
+
+================================================================
+
+LUEGO HAZ LOGIN:
+
+URL: http://localhost:5173/auth/login
+
+Credenciales:
+   Email:    marketingdigitalper.seo@gmail.com
+   Password: Carnay19
+
+================================================================
+
+PARA DETENER ZEUS-IA:
+
+En PowerShell ejecuta:
+
+   powershell -ExecutionPolicy Bypass -File STOP-ZEUS.ps1
+
+================================================================
+
+DOCUMENTACION:
+
+- README.md              - Manual completo
+- API Docs:                http://localhost:8000/docs
+
+================================================================
+
+ZEUS-IA v1.0.0
+

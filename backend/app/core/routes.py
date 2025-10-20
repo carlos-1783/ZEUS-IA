@@ -2,7 +2,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import os
-from ..config import settings
+from app.core.config import settings
 
 class CustomStaticFiles(StaticFiles):
     """Clase personalizada para servir archivos estáticos con configuración adicional."""

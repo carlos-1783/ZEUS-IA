@@ -18,8 +18,10 @@ COPY frontend/ ./
 # Build frontend
 RUN npm run build
 
-# Verify build output
-RUN ls -la dist/
+# Debug: Show build output
+RUN echo "=== BUILD OUTPUT ===" && ls -la dist/
+RUN echo "=== DIST CONTENTS ===" && find dist/ -type f -name "*.js" | head -5
+RUN echo "=== INDEX.HTML ===" && cat dist/index.html | head -10
 
 # Stage 2: Backend with Frontend
 FROM mirror.gcr.io/library/python:3.10-slim

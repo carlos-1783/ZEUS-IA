@@ -1,0 +1,12 @@
+# VARIABLES MÍNIMAS PARA RAILWAY - COPIA Y PEGA EXACTAMENTE
+
+SECRET_KEY=zeus_ia_super_secret_key_2024_production_secure_12345
+JWT_SECRET_KEY=zeus_ia_jwt_secret_2024_production_secure_key
+DATABASE_URL=postgresql://postgres:password@localhost:5432/zeus_ia
+BACKEND_CORS_ORIGINS=["https://zeus-ia-production-16d8.up.railway.app","http://localhost:5173","http://localhost:3000"]
+VITE_API_URL=/api/v1
+VITE_APP_NAME=ZEUS-IA
+VITE_ENVIRONMENT=production
+VITE_DEBUG=false
+NODE_VERSION=18
+PYTHON_VERSION=3.10

@@ -144,20 +144,7 @@
     <!-- Scripts will be injected by Vite -->
     
     
-    <!-- Debug script -->
-    <script>
-      console.log('🔍 HTML loaded, checking for Vue...');
-      
-      // Check if Vue is loaded - INCREASED TIMEOUT
-      setTimeout(() => {
-        if (!document.querySelector('#app').__vue__) {
-          console.error('❌ Vue not mounted after 5 seconds');
-          console.log('Available scripts:', document.querySelectorAll('script'));
-        } else {
-          console.log('✅ Vue mounted successfully');
-        }
-      }, 5000);
-    </script>
+    <!-- NO DEBUG - CLEAN HTML -->
     
     <!-- NO SERVICE WORKER - COMPLETELY REMOVED -->
 </body>

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Limpiar Caché - ZEUS-IA</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #4F46E5;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #4F46E5;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #4338CA;
+        }
+        .success {
+            background: #10B981;
+            padding: 15px;
+            border-radius: 4px;
+            color: white;
+            margin-top: 20px;
+            display: none;
+        }
+        .info {
+            background: #EFF6FF;
+            padding: 15px;
+            border-radius: 4px;
+            color: #1E40AF;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧹 Limpiar Caché de ZEUS-IA</h1>
+        
+        <div class="info">
+            <strong>¿Por qué necesito esto?</strong><br>
+            Si ves errores 404 o problemas de conexión, es porque el navegador tiene datos viejos guardados.
+        </div>
+        
+        <button onclick="limpiarTodo()">🗑️ Limpiar Todo y Recargar</button>
+        <button onclick="volverAZeus()">↩️ Volver a ZEUS-IA</button>
+        
+        <div class="success" id="success">
+            ✅ Caché limpiado correctamente. Redirigiendo a ZEUS-IA...
+        </div>
+    </div>
+
+    <script>
+        function limpiarTodo() {
+            // Limpiar localStorage
+            localStorage.clear();
+            console.log('✓ localStorage limpiado');
+            
+            // Limpiar sessionStorage
+            sessionStorage.clear();
+            console.log('✓ sessionStorage limpiado');
+            
+            // Limpiar Service Workers
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                    for(let registration of registrations) {
+                        registration.unregister();
+                        console.log('✓ Service Worker eliminado');
+                    }
+                });
+            }
+            
+            // Limpiar caché de la API
+            if ('caches' in window) {
+                caches.keys().then(function(names) {
+                    for (let name of names) {
+                        caches.delete(name);
+                        console.log('✓ Caché eliminado:', name);
+                    }
+                });
+            }
+            
+            // Mostrar mensaje de éxito
+            document.getElementById('success').style.display = 'block';
+            
+            // Redirigir después de 2 segundos
+            setTimeout(function() {
+                window.location.href = '/';
+            }, 2000);
+        }
+        
+        function volverAZeus() {
+            window.location.href = '/';
+        }
+    </script>
+</body>
+</html>
+

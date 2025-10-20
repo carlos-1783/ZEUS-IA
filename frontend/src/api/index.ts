@@ -238,7 +238,7 @@ const handleTokenRefresh = async (): Promise<boolean> => {
 
   try {
     const response = await axiosInstance.post<ApiResponse<AuthTokens>>(
-      '/api/v1/auth/refresh-token',
+      'auth/refresh-token',
       { refresh_token: refreshToken },
       { skipAuthRefresh: true } as any
     );
@@ -341,7 +341,7 @@ const refreshToken = async (refreshTokenValue: string): Promise<AuthTokens> => {
 
   try {
     const response = await axiosInstance.post<ApiResponse<AuthTokens>>(
-      '/api/v1/auth/refresh-token',
+      'auth/refresh-token',
       { refresh_token: refreshTokenValue },
       { skipAuthRefresh: true } as any
     );
@@ -520,7 +520,7 @@ const api: ApiClient = {
     formData.append('password', credentials.password);
     formData.append('grant_type', 'password');
 
-    const response = await axiosInstance.post('/api/v1/auth/login', formData, {
+    const response = await axiosInstance.post('auth/login', formData, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
@@ -553,7 +553,7 @@ const api: ApiClient = {
       // Try to revoke the refresh token
       const refreshToken = tokenService.getRefreshToken();
       if (refreshToken) {
-        await axiosInstance.post('/api/v1/auth/logout', { refresh_token: refreshToken });
+        await axiosInstance.post('auth/logout', { refresh_token: refreshToken });
       }
     } catch (error) {
       console.error('Error during logout:', error);
@@ -568,7 +568,7 @@ const api: ApiClient = {
   
   // User methods
   getCurrentUser: async (): Promise<UserProfile> => {
-    const response = await axiosInstance.get('/api/v1/auth/me');
+    const response = await axiosInstance.get('auth/me');
     
     // El backend devuelve directamente los datos del usuario, no en un wrapper de ApiResponse
     if (response.data && response.data.data) {

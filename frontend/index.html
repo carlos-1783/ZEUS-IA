@@ -153,6 +153,21 @@
     <!-- Scripts will be injected by Vite -->
     <script type="module" src="/src/main.js"></script>
     
+    <!-- Debug script -->
+    <script>
+      console.log('🔍 HTML loaded, checking for Vue...');
+      
+      // Check if Vue is loaded
+      setTimeout(() => {
+        if (!document.querySelector('#app').__vue__) {
+          console.error('❌ Vue not mounted after 3 seconds');
+          console.log('Available scripts:', document.querySelectorAll('script'));
+        } else {
+          console.log('✅ Vue mounted successfully');
+        }
+      }, 3000);
+    </script>
+    
     <!-- PWA Service Worker Registration - TEMPORARILY DISABLED -->
     <!-- <script>
       // Solo registrar service worker en producción

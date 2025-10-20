@@ -1,0 +1,34 @@
+# ========================================
+# RAILWAY ESSENTIAL VARIABLES - COPY & PASTE
+# ========================================
+
+SECRET_KEY=zeus_ia_super_secret_key_2024_production_secure_12345
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+BACKEND_CORS_ORIGINS=["https://zeus-ia-production.up.railway.app","http://localhost:5173"]
+DATABASE_URL=postgresql://postgres:password@localhost:5432/zeus_ia
+ENVIRONMENT=production
+DEBUG=false
+
+VITE_API_BASE_URL=https://zeus-ia-production.up.railway.app
+VITE_API_URL=https://zeus-ia-production.up.railway.app/api/v1
+VITE_APP_NAME=ZEUS-IA
+VITE_APP_VERSION=1.0.0
+VITE_COMPANY_NAME=ZEUS Technologies
+VITE_CORS_ORIGINS=https://zeus-ia-production.up.railway.app
+VITE_DEBUG=false
+VITE_DEFAULT_LANGUAGE=es
+VITE_DEFAULT_THEME=light
+VITE_ENABLE_ANALYTICS=true
+VITE_ENABLE_DARK_MODE=true
+VITE_ENABLE_ERROR_REPORTING=true
+VITE_ENVIRONMENT=production
+VITE_LOG_LEVEL=info
+VITE_SUPPORT_EMAIL=support@zeus-ia.com
+VITE_SUPPORTED_LANGUAGES=es,en
+
+PYTHON_VERSION=3.10
+NODE_VERSION=18
+NPM_FLAGS=--legacy-peer-deps
+UVICORN_HOST=0.0.0.0
+UVICORN_PORT=8000

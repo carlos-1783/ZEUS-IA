@@ -148,7 +148,7 @@ const webSocketService = {
       if (isDev) {
         // En desarrollo, usar el proxy de Vite con localhost
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${protocol}//localhost:8000/ws`;
+        wsUrl = `${protocol}//${window.location.host}/ws`;
       } else {
         // En producción, usar la URL configurada en las variables de entorno
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';

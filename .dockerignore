@@ -37,8 +37,7 @@ backend/logs/
 .env.*
 *.env
 
-# Frontend
-frontend/
+# Frontend (allow Docker build to include frontend)
 electron/
 zeus_app/
 

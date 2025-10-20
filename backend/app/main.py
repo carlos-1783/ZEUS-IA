@@ -35,8 +35,19 @@ app.include_router(api_router, prefix="/api/v1")
 
 # Serve static files (frontend)
 if os.path.exists("static"):
-    app.mount("/assets", StaticFiles(directory="static/assets"), name="assets")
+    # Mount assets directory
+    if os.path.exists("static/assets"):
+        app.mount("/assets", StaticFiles(directory="static/assets"), name="assets")
+    
+    # Mount static directory for other files
     app.mount("/static", StaticFiles(directory="static"), name="static")
+    
+    # Debug: List available files
+    print(f"[DEBUG] Static directory exists: {os.path.exists('static')}")
+    if os.path.exists("static"):
+        print(f"[DEBUG] Static contents: {os.listdir('static')}")
+        if os.path.exists("static/assets"):
+            print(f"[DEBUG] Assets contents: {os.listdir('static/assets')}")
 
 # Serve frontend for all non-API routes
 @app.get("/{full_path:path}")

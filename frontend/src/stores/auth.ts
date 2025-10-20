@@ -424,16 +424,18 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Initialize the store
   async function initialize(): Promise<boolean> {
-    const currentToken = getToken();
-    const currentRefreshToken = getRefreshToken();
+    console.log('[AuthStore] Initializing...');
     
-    // If no token is available, do nothing
-    if (!currentToken || !currentRefreshToken) {
-      console.log('[AuthStore] No stored tokens found');
-      return false;
-    }
-
     try {
+      const currentToken = getToken();
+      const currentRefreshToken = getRefreshToken();
+      
+      // If no token is available, do nothing
+      if (!currentToken || !currentRefreshToken) {
+        console.log('[AuthStore] No stored tokens found');
+        return false;
+      }
+
       // First, set the current token in the API client
       if (typedApi.setAuthToken) {
         typedApi.setAuthToken(currentToken);
@@ -450,29 +452,30 @@ export const useAuthStore = defineStore('auth', () => {
         isExpired: isTokenExpired
       });
 
-      // If token is expired, try to refresh it
+      // If token is expired, clear it but don't try to refresh during init
       if (isTokenExpired) {
-        console.log('[AuthStore] Token expired, attempting to refresh...');
-        return await refreshAccessToken();
+        console.log('[AuthStore] Token expired, clearing tokens');
+        resetAuthState();
+        return false;
       }
 
       // Update state with current tokens
       token.value = currentToken;
       refreshToken.value = currentRefreshToken;
       
-      // Update user data from token
-      const userUpdated = updateUserFromToken(currentToken);
-      if (!userUpdated) {
-        console.warn('[AuthStore] Could not update user from token');
-        resetAuthState();
-        return false;
+      // Update user data from token (non-blocking)
+      try {
+        updateUserFromToken(currentToken);
+        console.log('[AuthStore] Initialization successful');
+        return true;
+      } catch (userError) {
+        console.warn('[AuthStore] Could not update user from token:', userError);
+        // Don't reset auth state, just continue
+        return true;
       }
-
-      console.log('[AuthStore] Initialization successful');
-      return true;
     } catch (error) {
       console.error('[AuthStore] Error during initialization:', error);
-      resetAuthState();
+      // Don't reset auth state during init, just log and continue
       return false;
     }
   }

@@ -52,91 +52,82 @@
     
     <!-- Critical CSS -->
     <style>
-      /* Base styles */
-      :root {
-        --grad-start: #0f4c81;
-        --grad-mid: #0575E6;
-        --grad-end: #00F260;
-        --text-color: #f8fafc;
-        --bg-color: #0f172a;
-        --card-bg: rgba(255, 255, 255, 0.05);
-        --card-hover: rgba(255, 255, 255, 0.1);
-        --primary: #3b82f6;
-        --primary-hover: #2563eb;
+      :root{
+        --grad-start:#0f4c81;
+        --grad-mid:#0575e6;
+        --grad-end:#00f260;
+        --text-color:#f8fafc;
+        --bg-color:#0f172a;
+        --card-bg:hsla(0,0%,100%,.05);
+        --card-hover:hsla(0,0%,100%,.1);
+        --primary:#3b82f6;
+        --primary-hover:#2563eb;
       }
-      
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
+      *{
+        box-sizing:border-box;
       }
-      
-      body {
-        margin: 0;
-        padding: 0;
-        min-height: 100vh;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-        background-color: var(--bg-color);
-        color: var(--text-color);
-        line-height: 1.6;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
+      *,body{
+        margin:0;
+        padding:0;
       }
-      
-      #app {
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
+      body{
+        background-color:var(--bg-color);
+        color:var(--text-color);
+        font-family:Inter,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Oxygen,Ubuntu,Cantarell,Open Sans,Helvetica Neue,sans-serif;
+        line-height:1.6;
+        -webkit-font-smoothing:antialiased;
+        -moz-osx-font-smoothing:grayscale;
       }
-      
-      /* Animations */
-      @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
+      #app,body{
+        min-height:100vh;
       }
-      
+      #app{
+        display:flex;
+        flex-direction:column;
+      }
+      @keyframes fadeIn{
+        from{ opacity:0; }
+        to{ opacity:1; }
+      }
       .fade-enter-active,
-      .fade-leave-active {
-        transition: opacity 0.3s ease;
+      .fade-leave-active{
+        transition:opacity .3s ease;
       }
-      
       .fade-enter-from,
-      .fade-leave-to {
-        opacity: 0;
+      .fade-leave-to{
+        opacity:0;
       }
-      
-      /* Loading animation */
-      .app-loading {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: var(--bg-color);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 9999;
+      .app-loading{
+        align-items:center;
+        background-color:var(--bg-color);
+        bottom:0;
+        display:flex;
+        justify-content:center;
+        left:0;
+        position:fixed;
+        right:0;
+        top:0;
+        z-index:9999;
       }
-      
-      .app-loading-content {
-        text-align: center;
+      .app-loading-content{
+        text-align:center;
       }
-      
-      .loading-spinner {
-        width: 50px;
-        height: 50px;
-        border: 3px solid rgba(255, 255, 255, 0.1);
-        border-radius: 50%;
-        border-top-color: var(--primary);
-        animation: spin 1s ease-in-out infinite;
-        margin: 0 auto 1rem;
+      .loading-spinner{
+        animation:spin 1s ease-in-out infinite;
+        border:3px solid hsla(0,0%,100%,.1);
+        border-radius:50%;
+        border-top:3px solid var(--primary);
+        height:50px;
+        margin:0 auto 1rem;
+        width:50px;
       }
-      
-      @keyframes spin {
-        to { transform: rotate(360deg); }
+      @keyframes spin{
+        to{ transform:rotate(1turn); }
       }
     </style>
+  <script type="module" crossorigin src="/assets/js/index-1c029d3b.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/js/vendor-fedb1ea9.js">
+  <link rel="stylesheet" href="/assets/css/index-f9a5a1d1.css">
 </head>
 <body>
     <!-- Contenedor raíz de Vue -->
@@ -151,7 +142,7 @@
     </div>
 
     <!-- Scripts will be injected by Vite -->
-    <script type="module" src="/src/main.js"></script>
+    
     
     <!-- Debug script -->
     <script>

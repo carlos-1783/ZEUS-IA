@@ -1,0 +1,42 @@
+{
+  "name": "ZEUS IA - Tu Negocio Autónomo Inteligente",
+  "short_name": "ZEUS",
+  "description": "Plataforma de inteligencia artificial para automatizar y hacer crecer tu negocio",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "/images/logo/zeus-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/images/logo/zeus-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "business"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Acceso rápido al dashboard principal",
+      "url": "/dashboard",
+      "icons": [
+        {
+          "src": "/images/logo/zeus-logo.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+} 

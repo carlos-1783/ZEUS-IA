@@ -4,7 +4,7 @@
 # Multi-stage build for Railway deployment
 
 # Stage 1: Build Frontend
-FROM node:18-alpine AS frontend-builder
+FROM mirror.gcr.io/library/node:18-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -19,7 +19,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Backend with Frontend
-FROM python:3.10-slim
+FROM mirror.gcr.io/library/python:3.10-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1

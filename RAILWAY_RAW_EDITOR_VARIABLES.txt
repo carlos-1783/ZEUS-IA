@@ -1,0 +1,109 @@
+# ========================================
+# RAILWAY RAW EDITOR - VARIABLES TO COPY
+# ========================================
+# Copia estas variables una por una en Railway Raw Editor
+# Formato: VARIABLE_NAME=valor
+
+# ========================================
+# BACKEND VARIABLES (FastAPI)
+# ========================================
+
+SECRET_KEY=zeus_ia_super_secret_key_2024_production_secure_12345
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+BACKEND_CORS_ORIGINS=["https://zeus-ia-production.up.railway.app","https://zeus-ia-app.netlify.app","http://localhost:5173","http://localhost:3000"]
+DATABASE_URL=postgresql://postgres:password@localhost:5432/zeus_ia
+ENVIRONMENT=production
+DEBUG=false
+LOG_LEVEL=INFO
+
+# ========================================
+# FRONTEND VARIABLES (Vue.js)
+# ========================================
+
+VITE_API_BASE_URL=https://zeus-ia-production.up.railway.app
+VITE_API_URL=https://zeus-ia-production.up.railway.app/api/v1
+VITE_APP_NAME=ZEUS-IA
+VITE_APP_VERSION=1.0.0
+VITE_COMPANY_NAME=ZEUS Technologies
+VITE_CORS_ORIGINS=https://zeus-ia-production.up.railway.app
+VITE_DEBUG=false
+VITE_DEFAULT_LANGUAGE=es
+VITE_DEFAULT_THEME=light
+VITE_ENABLE_ANALYTICS=true
+VITE_ENABLE_DARK_MODE=true
+VITE_ENABLE_ERROR_REPORTING=true
+VITE_ENVIRONMENT=production
+VITE_LOG_LEVEL=info
+VITE_SUPPORT_EMAIL=support@zeus-ia.com
+VITE_SUPPORTED_LANGUAGES=es,en
+
+# ========================================
+# DATABASE VARIABLES
+# ========================================
+
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=zeus_ia
+DB_USER=postgres
+DB_PASSWORD=password
+
+# ========================================
+# SECURITY VARIABLES
+# ========================================
+
+JWT_SECRET_KEY=zeus_ia_jwt_secret_2024_production_secure_key
+JWT_ALGORITHM=HS256
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
+
+# ========================================
+# PRODUCTION SETTINGS
+# ========================================
+
+PYTHON_VERSION=3.10
+NODE_VERSION=18
+NPM_FLAGS=--legacy-peer-deps
+UVICORN_HOST=0.0.0.0
+UVICORN_PORT=8000
+UVICORN_WORKERS=1
+
+# ========================================
+# MONITORING & LOGS
+# ========================================
+
+SENTRY_DSN=
+LOG_FORMAT=json
+LOG_FILE=logs/zeus-ia.log
+MAX_LOG_SIZE=10MB
+LOG_BACKUP_COUNT=5
+
+# ========================================
+# CACHE & PERFORMANCE
+# ========================================
+
+REDIS_URL=redis://localhost:6379
+CACHE_TTL=3600
+MAX_CONNECTIONS=100
+TIMEOUT=30
+
+# ========================================
+# EMAIL SETTINGS (Optional)
+# ========================================
+
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=marketingdigitalper.seo@gmail.com
+SMTP_PASSWORD=Carnay19
+SMTP_TLS=true
+
+# ========================================
+# INSTRUCTIONS:
+# ========================================
+# 1. Ve a Railway Dashboard
+# 2. Selecciona tu proyecto
+# 3. Ve a Variables tab
+# 4. Haz clic en "Raw Editor"
+# 5. Copia y pega estas variables
+# 6. Guarda los cambios
+# ========================================

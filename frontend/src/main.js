@@ -127,3 +127,6 @@ window.addEventListener('unhandledrejection', (event) => {
     console.error('Stack trace:', event.reason.stack);
   }
 });
+
+// Inicializar la aplicación
+initApp();

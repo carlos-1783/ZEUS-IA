@@ -157,7 +157,7 @@ class ApiClient {
     formData.append('grant_type', 'password');
 
     const response = await this.instance.post<ApiResponse<AuthTokens>>(
-      '/api/v1/auth/login',
+      'auth/login',
       formData,
       {
         headers: {
@@ -180,7 +180,7 @@ class ApiClient {
     try {
       const refreshToken = tokenService.getRefreshToken();
       if (refreshToken) {
-        await this.instance.post('/api/v1/auth/logout', { refresh_token: refreshToken });
+        await this.instance.post('auth/logout', { refresh_token: refreshToken });
       }
     } catch (error) {
       console.error('Error during logout:', error);
@@ -209,7 +209,7 @@ class ApiClient {
       };
 
       const response = await this.instance.post<ApiResponse<AuthTokens>>(
-        '/api/v1/auth/refresh-token',
+        'auth/refresh-token',
         { refresh_token: refreshToken },
         requestConfig
       );
@@ -241,7 +241,7 @@ class ApiClient {
 
   // User methods
   public async getCurrentUser(): Promise<UserProfile> {
-    const response = await this.instance.get<ApiResponse<UserProfile>>('/api/v1/auth/me');
+    const response = await this.instance.get<ApiResponse<UserProfile>>('auth/me');
     
     if (response.data.status === 'success' && response.data.data) {
       return response.data.data;
@@ -252,7 +252,7 @@ class ApiClient {
 
   // System methods
   public async getSystemStatus(): Promise<SystemStatus> {
-    const response = await this.instance.get<ApiResponse<SystemStatus>>('/api/v1/system/status');
+    const response = await this.instance.get<ApiResponse<SystemStatus>>('system/status');
     
     if (response.data.status === 'success' && response.data.data) {
       return response.data.data;

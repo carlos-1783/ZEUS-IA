@@ -1,0 +1,66 @@
+# ========================================
+# RAILWAY VARIABLES CORRECTED - FINAL
+# ========================================
+
+# FRONTEND - URLs relativas (mismo dominio)
+VITE_API_BASE_URL=
+VITE_API_URL=/api/v1
+VITE_APP_NAME=ZEUS-IA
+VITE_APP_VERSION=1.0.0
+VITE_COMPANY_NAME=ZEUS Technologies
+VITE_DEFAULT_LANGUAGE=es
+VITE_DEFAULT_THEME=light
+VITE_ENABLE_ANALYTICS=true
+VITE_ENABLE_DARK_MODE=true
+VITE_ENABLE_ERROR_REPORTING=true
+VITE_ENVIRONMENT=production
+VITE_LOG_LEVEL=info
+VITE_SUPPORT_EMAIL=support@zeus-ia.com
+VITE_SUPPORTED_LANGUAGES=es,en
+VITE_CORS_ORIGINS=
+
+# BACKEND/API - CORS actualizado con URL real
+BACKEND_CORS_ORIGINS=["https://zeus-ia-production-d895.up.railway.app","http://localhost:5173","http://localhost:3000"]
+SECRET_KEY=zeus_ia_super_secret_key_2024_production_secure_12345
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+JWT_SECRET_KEY=zeus_ia_jwt_secret_2024_production_secure_key
+JWT_ALGORITHM=HS256
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
+ENVIRONMENT=production
+DEBUG=false
+LOG_LEVEL=INFO
+LOG_FORMAT=json
+
+# DATABASE - SQLite temporal
+DATABASE_URL=sqlite:///./zeus_ia.db
+DB_HOST=
+DB_PORT=
+DB_NAME=
+DB_USER=
+DB_PASSWORD=
+
+# SERVER
+PYTHON_VERSION=3.10
+NODE_VERSION=18
+NPM_FLAGS=--legacy-peer-deps
+UVICORN_HOST=0.0.0.0
+UVICORN_PORT=8000
+UVICORN_WORKERS=1
+TIMEOUT=30
+MAX_CONNECTIONS=100
+
+# LOGS
+LOG_FILE=logs/zeus-ia.log
+MAX_LOG_SIZE=10MB
+LOG_BACKUP_COUNT=5
+
+# OPTIONAL
+REDIS_URL=
+SENTRY_DSN=
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=marketingdigitalper.seo@gmail.com
+SMTP_PASSWORD=
+SMTP_TLS=true

@@ -10,7 +10,7 @@ WORKDIR /app/frontend
 
 # Copy frontend package files
 COPY frontend/package*.json ./
-RUN npm ci --only=production
+RUN npm install --legacy-peer-deps
 
 # Copy frontend source
 COPY frontend/ ./

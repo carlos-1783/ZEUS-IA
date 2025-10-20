@@ -1,3 +1,5 @@
+console.log('🚀 Iniciando ZEUS-IA frontend...');
+
 // Importa primero los estilos
 import './style.css';
 import './assets/styles/main.scss';

@@ -4,7 +4,7 @@ export const config = {
   ws: {
     url: import.meta.env.VITE_WS_URL || 
       `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`,
-    reconnectInterval: 8000, // 3 seconds
+    reconnectInterval: 3000, // 3 seconds
     maxReconnectAttempts: 5,
   },
   

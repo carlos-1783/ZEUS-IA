@@ -33,21 +33,14 @@ app.add_middleware(
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")
 
-# Serve static files (frontend)
+# Serve static files (frontend) - SIMPLIFIED
 if os.path.exists("static"):
-    # Mount assets directory
-    if os.path.exists("static/assets"):
-        app.mount("/assets", StaticFiles(directory="static/assets"), name="assets")
-    
-    # Mount static directory for other files
-    app.mount("/static", StaticFiles(directory="static"), name="static")
-    
-    # Debug: List available files
-    print(f"[DEBUG] Static directory exists: {os.path.exists('static')}")
-    if os.path.exists("static"):
-        print(f"[DEBUG] Static contents: {os.listdir('static')}")
-        if os.path.exists("static/assets"):
-            print(f"[DEBUG] Assets contents: {os.listdir('static/assets')}")
+    # Mount everything from static directory
+    app.mount("/", StaticFiles(directory="static", html=True), name="static")
+    print(f"[DEBUG] Serving static files from: {os.path.abspath('static')}")
+    print(f"[DEBUG] Static files: {os.listdir('static')}")
+else:
+    print("[ERROR] Static directory not found!")
 
 # Serve frontend for all non-API routes
 @app.get("/{full_path:path}")

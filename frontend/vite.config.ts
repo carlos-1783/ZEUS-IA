@@ -10,7 +10,7 @@ export default defineConfig(({ command, mode }: ConfigEnv): UserConfig => {
   const env = loadEnv(mode, process.cwd(), '');
   
   // Base configuration
-  const base = './';
+  const base = '/';
   
   // CSS configuration
   const cssConfig = {

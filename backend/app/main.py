@@ -35,6 +35,7 @@ app.include_router(api_router, prefix="/api/v1")
 
 # Serve static files (frontend)
 if os.path.exists("static"):
+    app.mount("/assets", StaticFiles(directory="static/assets"), name="assets")
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Serve frontend for all non-API routes
@@ -44,11 +45,16 @@ async def serve_frontend(request: Request, full_path: str):
     if full_path.startswith("api/"):
         return {"error": "Not found"}
     
+    # Serve static files directly
+    static_path = f"static/{full_path}"
+    if os.path.exists(static_path) and os.path.isfile(static_path):
+        return FileResponse(static_path)
+    
     # Serve index.html for all other routes (SPA)
     if os.path.exists("static/index.html"):
         return FileResponse("static/index.html")
     else:
-        return {"error": "Frontend not built"}
+        return {"error": "Frontend not built", "path": full_path}
 
 # Health check
 @app.get("/health")

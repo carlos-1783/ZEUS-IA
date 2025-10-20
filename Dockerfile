@@ -18,6 +18,9 @@ COPY frontend/ ./
 # Build frontend
 RUN npm run build
 
+# Verify build output
+RUN ls -la dist/
+
 # Stage 2: Backend with Frontend
 FROM mirror.gcr.io/library/python:3.10-slim
 

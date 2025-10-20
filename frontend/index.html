@@ -157,15 +157,15 @@
     <script>
       console.log('🔍 HTML loaded, checking for Vue...');
       
-      // Check if Vue is loaded
+      // Check if Vue is loaded - INCREASED TIMEOUT
       setTimeout(() => {
         if (!document.querySelector('#app').__vue__) {
-          console.error('❌ Vue not mounted after 3 seconds');
+          console.error('❌ Vue not mounted after 5 seconds');
           console.log('Available scripts:', document.querySelectorAll('script'));
         } else {
           console.log('✅ Vue mounted successfully');
         }
-      }, 3000);
+      }, 5000);
     </script>
     
     <!-- NO SERVICE WORKER - COMPLETELY REMOVED -->

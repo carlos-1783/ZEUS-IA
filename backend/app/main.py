@@ -33,32 +33,35 @@ app.add_middleware(
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")
 
-# Serve static files (frontend) - SIMPLIFIED
+# Serve static files (frontend) - FIXED
 if os.path.exists("static"):
-    # Mount everything from static directory
-    app.mount("/", StaticFiles(directory="static", html=True), name="static")
     print(f"[DEBUG] Serving static files from: {os.path.abspath('static')}")
     print(f"[DEBUG] Static files: {os.listdir('static')}")
+    
+    # Mount assets directory for JS/CSS files
+    if os.path.exists("static/assets"):
+        app.mount("/assets", StaticFiles(directory="static/assets"), name="assets")
+        print(f"[DEBUG] Assets mounted at /assets")
+    
+    # Serve frontend for all non-API routes
+    @app.get("/{full_path:path}")
+    async def serve_frontend(request: Request, full_path: str):
+        # Don't serve frontend for API routes
+        if full_path.startswith("api/"):
+            return {"error": "Not found"}
+        
+        # Serve static files directly
+        static_path = f"static/{full_path}"
+        if os.path.exists(static_path) and os.path.isfile(static_path):
+            return FileResponse(static_path)
+        
+        # Serve index.html for all other routes (SPA)
+        if os.path.exists("static/index.html"):
+            return FileResponse("static/index.html")
+        else:
+            return {"error": "Frontend not built", "path": full_path}
 else:
     print("[ERROR] Static directory not found!")
-
-# Serve frontend for all non-API routes
-@app.get("/{full_path:path}")
-async def serve_frontend(request: Request, full_path: str):
-    # Don't serve frontend for API routes
-    if full_path.startswith("api/"):
-        return {"error": "Not found"}
-    
-    # Serve static files directly
-    static_path = f"static/{full_path}"
-    if os.path.exists(static_path) and os.path.isfile(static_path):
-        return FileResponse(static_path)
-    
-    # Serve index.html for all other routes (SPA)
-    if os.path.exists("static/index.html"):
-        return FileResponse("static/index.html")
-    else:
-        return {"error": "Frontend not built", "path": full_path}
 
 # Health check
 @app.get("/health")

@@ -73,6 +73,13 @@ async function initApp() {
     // Configurar el router
     app.use(router);
     
+    // FORZAR NAVEGACIÓN A /auth/login DESPUÉS DEL MOUNT
+    router.push('/auth/login').then(() => {
+      console.log('🔍 Navegación forzada a /auth/login completada');
+    }).catch(err => {
+      console.error('❌ Error al navegar a /auth/login:', err);
+    });
+    
     // Montar la aplicación
     console.log('⚡ Montando aplicación ULTRA-MINIMAL...');
     app.mount('#app');

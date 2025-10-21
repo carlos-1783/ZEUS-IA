@@ -62,9 +62,14 @@ async def startup_event():
             db.commit()
             print("[STARTUP] ✅ Usuario de prueba creado")
         else:
-            print("[STARTUP] ✅ Usuario ya existe")
+            print("[STARTUP] ✅ Usuario ya existe, actualizando contraseña...")
+            # Actualizar contraseña para asegurar que sea "Carnay19"
+            existing_user.hashed_password = get_password_hash("Carnay19")
+            db.commit()
+            print("[STARTUP] ✅ Contraseña actualizada")
     except Exception as e:
         print(f"[STARTUP] ❌ Error al crear usuario: {e}")
+        db.rollback()
     finally:
         db.close()
 

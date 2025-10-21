@@ -54,7 +54,7 @@ async def startup_event():
             test_user = User(
                 email="marketingdigitalper.seo@gmail.com",
                 full_name="Usuario de Prueba",
-                hashed_password=get_password_hash("Carnay19!"),
+                hashed_password=get_password_hash("Carnay19"),
                 is_active=True,
                 is_superuser=True
             )

@@ -115,7 +115,7 @@ const form = ref({
 
 const error = ref('');
 const isLoading = ref(false);
-const redirectTo = route.query.redirect || '/';
+const redirectTo = route.query.redirect || '/dashboard';
 
 // Verificar si ya hay una sesión activa
 onMounted(() => {

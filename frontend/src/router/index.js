@@ -60,7 +60,9 @@ const setupNavigationGuards = (router) => {
       // Redirigir a la ruta original o al dashboard
       const redirectTo = to.query.redirect || '/dashboard'
       console.log('🔄 Usuario autenticado, redirigiendo a:', redirectTo)
-      return next(redirectTo)
+      // Forzar redirección con window.location
+      window.location.href = redirectTo
+      return
     }
 
     next()

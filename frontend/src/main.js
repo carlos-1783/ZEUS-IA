@@ -1,23 +1,10 @@
 console.log('🚀 Iniciando ZEUS-IA frontend...');
 
-// Importa primero los estilos
-import './style.css';
-import './assets/styles/main.scss';
-
-// Luego las dependencias de Vue
+// Importar solo lo esencial - SIN FONTAWESOME NI ESTILOS PROBLEMÁTICOS
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
 import router from './router';
-import { useAuthStore } from './stores/auth';
-
-// Importar FontAwesome
-import { library } from '@fortawesome/fontawesome-svg-core';
-import { fas } from '@fortawesome/free-solid-svg-icons';
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
-
-// Configurar FontAwesome
-library.add(fas);
 
 // Función para inicializar la aplicación
 async function initApp() {
@@ -34,13 +21,8 @@ async function initApp() {
     // Configurar el router
     app.use(router);
     
-    // Registrar componentes globales
-    app.component('font-awesome-icon', FontAwesomeIcon);
-    
-    // Inicializar el store de autenticación antes de montar la aplicación
-    console.log('🔄 Inicializando store de autenticación...');
-    const authStore = useAuthStore();
-    await authStore.initialize();
+    // NO INICIALIZAR AUTH STORE - PUEDE CAUSAR PROBLEMAS
+    console.log('🔄 Saltando inicialización de auth store...');
     
     // Montar la aplicación
     console.log('⚡ Montando aplicación...');

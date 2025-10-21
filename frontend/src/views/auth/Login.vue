@@ -187,9 +187,16 @@ const handleSubmit = async () => {
       // REDIRECCIÓN DIRECTA Y DEFINITIVA
       console.log('🔄 Redirigiendo a:', redirectTo);
       
+      // Forzar actualización del estado de autenticación
+      await nextTick();
+      
+      // Verificar que el estado se actualizó
+      console.log('🔍 Estado de autenticación después del login:', authStore.isAuthenticated);
+      
       // Redirección inmediata sin complicaciones
       setTimeout(() => {
         console.log('🚀 Ejecutando redirección directa...');
+        // Usar window.location.href para forzar la redirección
         window.location.href = redirectTo;
       }, 100);
     } else {

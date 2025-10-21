@@ -4,11 +4,11 @@
 # Copia estas variables una por una en Railway Variables
 
 # ========================================
-# DATABASE CONFIGURATION (NEON)
+# DATABASE CONFIGURATION (RAILWAY POSTGRESQL)
 # ========================================
-# IMPORTANTE: Reemplaza con tu connection string real de Neon
-# TEMPORAL: Usar SQLite para Railway hasta configurar Neon
-DATABASE_URL=sqlite:///./zeus_ia.db
+# IMPORTANTE: Reemplaza con tu connection string real de Railway PostgreSQL
+# FORMATO: postgresql://username:password@host:port/database
+DATABASE_URL=postgresql://postgres:password@localhost:5432/zeus_ia
 
 # ========================================
 # SECURITY & AUTHENTICATION

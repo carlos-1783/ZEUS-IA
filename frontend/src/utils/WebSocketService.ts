@@ -145,6 +145,9 @@ const webSocketService = {
       status.value = 'connecting';
       error.value = null;
       
+      // Generar un client_id único
+      const clientId = `client-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
       // Usar el proxy de Vite en desarrollo
       const isDev = import.meta.env.DEV;
       let wsUrl: string;
@@ -152,11 +155,11 @@ const webSocketService = {
       if (isDev) {
         // En desarrollo, usar el proxy de Vite con localhost
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${protocol}//${window.location.host}/ws`;
+        wsUrl = `${protocol}//${window.location.host}/api/v1/ws/${clientId}`;
       } else {
         // En producción, usar la URL configurada en las variables de entorno
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${protocol}//${window.location.host}/ws`;
+        wsUrl = `${protocol}//${window.location.host}/api/v1/ws/${clientId}`;
       }
       
       console.log('WebSocket URL:', wsUrl);

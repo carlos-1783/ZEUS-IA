@@ -47,10 +47,15 @@ async def startup_event():
     
     db = SessionLocal()
     try:
+        print("[STARTUP] 🔍 Verificando usuarios en la base de datos...")
+        # Contar usuarios existentes
+        user_count = db.query(User).count()
+        print(f"[STARTUP] 📊 Usuarios en la base de datos: {user_count}")
+        
         # Verificar si ya existe un usuario
         existing_user = db.query(User).filter(User.email == "marketingdigitalper.seo@gmail.com").first()
         if not existing_user:
-            print("[STARTUP] Creando usuario de prueba...")
+            print("[STARTUP] 🆕 Creando usuario de prueba...")
             test_user = User(
                 email="marketingdigitalper.seo@gmail.com",
                 full_name="Usuario de Prueba",
@@ -60,15 +65,32 @@ async def startup_event():
             )
             db.add(test_user)
             db.commit()
-            print("[STARTUP] ✅ Usuario de prueba creado")
+            db.refresh(test_user)
+            print(f"[STARTUP] ✅ Usuario de prueba creado con ID: {test_user.id}")
+            print(f"[STARTUP] 📧 Email: {test_user.email}")
+            print(f"[STARTUP] 🔐 Contraseña: Carnay19")
         else:
-            print("[STARTUP] ✅ Usuario ya existe, actualizando contraseña...")
+            print(f"[STARTUP] ✅ Usuario ya existe con ID: {existing_user.id}")
+            print("[STARTUP] 🔄 Actualizando contraseña...")
             # Actualizar contraseña para asegurar que sea "Carnay19"
             existing_user.hashed_password = get_password_hash("Carnay19")
+            existing_user.is_active = True
+            existing_user.is_superuser = True
             db.commit()
-            print("[STARTUP] ✅ Contraseña actualizada")
+            print("[STARTUP] ✅ Contraseña y permisos actualizados")
+            print(f"[STARTUP] 📧 Email: {existing_user.email}")
+            print(f"[STARTUP] 🔐 Contraseña: Carnay19")
+        
+        # Verificar el usuario fue creado/actualizado
+        final_count = db.query(User).count()
+        print(f"[STARTUP] 📊 Usuarios finales en la base de datos: {final_count}")
+        
     except Exception as e:
         print(f"[STARTUP] ❌ Error al crear usuario: {e}")
+        print(f"[STARTUP] 🔍 Tipo de error: {type(e).__name__}")
+        import traceback
+        print(f"[STARTUP] 📋 Traceback completo:")
+        traceback.print_exc()
         db.rollback()
     finally:
         db.close()

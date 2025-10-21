@@ -11,6 +11,7 @@ import os
 # Import your existing app
 from app.core.config import settings
 from app.api.v1 import api_router
+from app.db.base import create_tables
 
 # Create FastAPI app
 app = FastAPI(
@@ -32,6 +33,42 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")
+
+# Crear tablas al iniciar la aplicación
+@app.on_event("startup")
+async def startup_event():
+    print("[STARTUP] Iniciando ZEUS-IA...")
+    create_tables()
+    
+    # Crear usuario de prueba si no existe
+    from app.db.base import SessionLocal
+    from app.models.user import Usuario
+    from app.core.security import get_password_hash
+    
+    db = SessionLocal()
+    try:
+        # Verificar si ya existe un usuario
+        existing_user = db.query(Usuario).filter(Usuario.email == "marketingdigitalper.seo@gmail.com").first()
+        if not existing_user:
+            print("[STARTUP] Creando usuario de prueba...")
+            test_user = Usuario(
+                email="marketingdigitalper.seo@gmail.com",
+                full_name="Usuario de Prueba",
+                hashed_password=get_password_hash("Carnay19!"),
+                is_active=True,
+                is_superuser=True
+            )
+            db.add(test_user)
+            db.commit()
+            print("[STARTUP] ✅ Usuario de prueba creado")
+        else:
+            print("[STARTUP] ✅ Usuario ya existe")
+    except Exception as e:
+        print(f"[STARTUP] ❌ Error al crear usuario: {e}")
+    finally:
+        db.close()
+    
+    print("[STARTUP] ✅ Aplicación lista")
 
 # Serve static files (frontend) - FIXED
 if os.path.exists("static"):

@@ -16,6 +16,7 @@ let reconnectAttempts = 0;
 const maxReconnectAttempts = 3; // Reducir intentos de reconexión
 let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 let lastToken: string | null = null;
+let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
 // Mapa de listeners de eventos
 const listeners: Record<string, Set<EventListener>> = {};
@@ -198,6 +199,10 @@ const webSocketService = {
             isConnected.value = true;
             status.value = 'connected';
             reconnectAttempts = 0; // Reset reconnection attempts on successful connection
+            
+            // Iniciar heartbeat para mantener la conexión activa
+            this._startHeartbeat();
+            
             this.emit(WebSocketEvents.CONNECT, { type: WebSocketEvents.CONNECT });
             resolve(true);
           };
@@ -292,6 +297,9 @@ const webSocketService = {
 
   // Desconectar el WebSocket
   disconnect(): void {
+    // Detener heartbeat
+    this._stopHeartbeat();
+    
     if (ws) {
       try {
         if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
@@ -343,8 +351,37 @@ const webSocketService = {
     return error.value;
   },
   
+  // Iniciar heartbeat
+  _startHeartbeat() {
+    // Limpiar heartbeat anterior si existe
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+    }
+    
+    // Enviar ping cada 30 segundos
+    heartbeatInterval = setInterval(() => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
+          console.log('📡 Heartbeat enviado');
+        } catch (err) {
+          console.error('Error enviando heartbeat:', err);
+        }
+      }
+    }, 30000); // 30 segundos
+  },
+
+  // Detener heartbeat
+  _stopHeartbeat() {
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
+  },
+
   // Método de limpieza
   cleanup() {
+    this._stopHeartbeat();
     cleanup();
   },
 

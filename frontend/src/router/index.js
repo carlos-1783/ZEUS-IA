@@ -57,7 +57,10 @@ const setupNavigationGuards = (router) => {
 
     // If already authenticated and trying to access auth pages
     if ((to.name === 'Login' || to.name === 'Register') && isAuthenticated) {
-      return next({ name: 'Dashboard' })
+      // Redirigir a la ruta original o al dashboard
+      const redirectTo = to.query.redirect || '/dashboard'
+      console.log('🔄 Usuario autenticado, redirigiendo a:', redirectTo)
+      return next(redirectTo)
     }
 
     next()

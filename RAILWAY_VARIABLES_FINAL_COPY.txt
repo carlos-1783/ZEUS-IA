@@ -7,7 +7,8 @@
 # DATABASE CONFIGURATION (NEON)
 # ========================================
 # IMPORTANTE: Reemplaza con tu connection string real de Neon
-DATABASE_URL=postgresql://username:password@host:port/database?sslmode=require
+# TEMPORAL: Usar SQLite para Railway hasta configurar Neon
+DATABASE_URL=sqlite:///./zeus_ia.db
 
 # ========================================
 # SECURITY & AUTHENTICATION

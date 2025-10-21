@@ -209,14 +209,26 @@ async function initializeZeusSystem() {
 }
 
 function setupPeriodicUpdates() {
-  // Actualizar estado cada 30 segundos
-  setInterval(async () => {
-    await updateSystemStatus()
+  // Actualizar estado cada 30 segundos (no bloqueante)
+  setInterval(() => {
+    requestAnimationFrame(async () => {
+      try {
+        await updateSystemStatus()
+      } catch (error) {
+        console.error('Error actualizando estado:', error)
+      }
+    })
   }, 30000)
   
-  // Actualizar logs cada 10 segundos
+  // Actualizar logs cada 10 segundos (no bloqueante)
   setInterval(() => {
-    updateSystemLogs()
+    requestAnimationFrame(() => {
+      try {
+        updateSystemLogs()
+      } catch (error) {
+        console.error('Error actualizando logs:', error)
+      }
+    })
   }, 10000)
 }
 
@@ -226,11 +238,18 @@ function setupPeriodicUpdates() {
 
 async function updateSystemStatus() {
   try {
+    // Timeout de 5 segundos para evitar bloqueos
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+    
     const response = await fetch('/api/v1/zeus/status', {
       headers: {
         'Authorization': `Bearer ${authStore.token}`
-      }
+      },
+      signal: controller.signal
     })
+    
+    clearTimeout(timeoutId)
     
     if (response.ok) {
       const result = await response.json()
@@ -240,7 +259,11 @@ async function updateSystemStatus() {
       activeAgents.value = status.active_agents || 0
     }
   } catch (error) {
-    console.error('Error actualizando estado:', error)
+    if (error.name === 'AbortError') {
+      console.warn('Timeout actualizando estado del sistema')
+    } else {
+      console.error('Error actualizando estado:', error)
+    }
   }
 }
 
@@ -281,6 +304,10 @@ function onCommandExecuted(result) {
 
 async function executeQuickCommand(command) {
   try {
+    // Timeout de 10 segundos para comandos
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000)
+    
     const response = await fetch('/api/v1/zeus/execute', {
       method: 'POST',
       headers: {
@@ -290,8 +317,11 @@ async function executeQuickCommand(command) {
       body: JSON.stringify({
         command: command,
         data: {}
-      })
+      }),
+      signal: controller.signal
     })
+    
+    clearTimeout(timeoutId)
     
     if (response.ok) {
       const result = await response.json()
@@ -300,9 +330,15 @@ async function executeQuickCommand(command) {
       throw new Error('Error ejecutando comando')
     }
   } catch (error) {
-    console.error('Error ejecutando comando rápido:', error)
-    addSystemLog('error', `Error ejecutando ${command}: ${error.message}`)
-    showNotification('error', 'Error de Comando', error.message)
+    if (error.name === 'AbortError') {
+      console.warn(`Timeout ejecutando comando: ${command}`)
+      addSystemLog('warning', `Timeout ejecutando ${command}`)
+      showNotification('warning', 'Timeout de Comando', `El comando ${command} tardó demasiado`)
+    } else {
+      console.error('Error ejecutando comando rápido:', error)
+      addSystemLog('error', `Error ejecutando ${command}: ${error.message}`)
+      showNotification('error', 'Error de Comando', error.message)
+    }
   }
 }
 

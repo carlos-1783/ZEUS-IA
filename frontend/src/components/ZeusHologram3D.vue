@@ -328,21 +328,27 @@ function createHolographicGrid() {
 function animate() {
   animationId = requestAnimationFrame(animate)
   
-  // Rotar objetos holográficos
-  holographicObjects.forEach((obj, index) => {
+  // Optimización: Reducir cálculos en cada frame
+  const now = Date.now()
+  const time = now * 0.0005
+  
+  // Rotar objetos holográficos (optimizado)
+  holographicObjects.forEach((obj) => {
     if (obj.userData && obj.userData.agent) {
-      obj.rotation.y += 0.01
-      obj.rotation.x += 0.005
+      obj.rotation.y += 0.005 // Reducir velocidad de rotación
+      obj.rotation.x += 0.0025
     }
   })
   
-  // Rotar cámara suavemente
+  // Rotar cámara suavemente (solo si no hay interacción)
   if (!isMouseDown) {
-    camera.position.x = Math.sin(Date.now() * 0.0005) * 10
-    camera.position.z = Math.cos(Date.now() * 0.0005) * 10
+    const cameraRadius = 10
+    camera.position.x = Math.sin(time) * cameraRadius
+    camera.position.z = Math.cos(time) * cameraRadius
     camera.lookAt(0, 0, 0)
   }
   
+  // Render solo cuando sea necesario
   renderer.render(scene, camera)
 }
 
@@ -395,6 +401,10 @@ async function executeCommand() {
   if (!currentCommand.value.trim()) return
   
   try {
+    // Timeout de 10 segundos
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000)
+    
     const response = await fetch('/api/v1/zeus/execute', {
       method: 'POST',
       headers: {
@@ -404,35 +414,50 @@ async function executeCommand() {
       body: JSON.stringify({
         command: currentCommand.value,
         data: {}
-      })
+      }),
+      signal: controller.signal
     })
+    
+    clearTimeout(timeoutId)
     
     const result = await response.json()
     lastResponse.value = result
     
-    // Actualizar estado del agente
-    if (result.agent) {
-      const agent = agents.value.find(a => a.name === result.agent)
-      if (agent) {
-        agent.status = result.status === 'success' ? 'active' : 'error'
+    // Actualizar estado del agente (no bloqueante)
+    requestAnimationFrame(() => {
+      if (result.agent) {
+        const agent = agents.value.find(a => a.name === result.agent)
+        if (agent) {
+          agent.status = result.status === 'success' ? 'active' : 'error'
+        }
       }
-    }
+    })
     
-    // Reproducir voz si está disponible
+    // Reproducir voz si está disponible (no bloqueante)
     if (result.voice) {
-      speakText(result.voice)
+      setTimeout(() => speakText(result.voice), 100)
     }
     
     // Limpiar comando
     currentCommand.value = ''
     
   } catch (error) {
-    console.error('Error ejecutando comando ZEUS:', error)
-    lastResponse.value = {
-      agent: 'ERROR',
-      message: 'Error ejecutando comando',
-      timestamp: new Date().toISOString(),
-      status: 'error'
+    if (error.name === 'AbortError') {
+      console.warn('Timeout ejecutando comando ZEUS')
+      lastResponse.value = {
+        agent: 'ERROR',
+        message: 'Timeout: El comando tardó demasiado',
+        timestamp: new Date().toISOString(),
+        status: 'error'
+      }
+    } else {
+      console.error('Error ejecutando comando ZEUS:', error)
+      lastResponse.value = {
+        agent: 'ERROR',
+        message: 'Error ejecutando comando',
+        timestamp: new Date().toISOString(),
+        status: 'error'
+      }
     }
   }
 }

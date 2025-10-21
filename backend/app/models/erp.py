@@ -167,7 +167,7 @@ class Invoice(Base):
     electronic_invoice_status = Column(String(20), nullable=True)
     
     # Relationships
-    customer = relationship("Customer", back_populates="invoices")
+    # customer = relationship("Customer", back_populates="invoices")  # TEMPORALMENTE COMENTADO PARA EVITAR ERROR DE IMPORTACIÓN CIRCULAR
     items = relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="invoice", cascade="all, delete-orphan")
     inventory_movements = relationship("InventoryMovement", back_populates="invoice")

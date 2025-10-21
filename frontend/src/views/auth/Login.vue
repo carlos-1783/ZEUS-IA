@@ -97,6 +97,12 @@ const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
 
+// DESHABILITAR TOAST TEMPORALMENTE PARA EVITAR VIOLACIONES DE RENDIMIENTO
+const toast = {
+  success: (msg) => console.log('✅', msg),
+  error: (msg) => console.error('❌', msg)
+};
+
 const form = ref({
   email: '',
   password: '',
@@ -148,12 +154,17 @@ const handleSubmit = async () => {
   
   try {
     console.log('[auth/Login.vue] Iniciando proceso de login...');
+    
+    // DESHABILITAR SERVICIOS PESADOS TEMPORALMENTE
+    console.log('🚫 Evitando servicios pesados durante login...');
+    
     const result = await authStore.login(form.value.email, form.value.password);
     console.log('[auth/Login.vue] Resultado del login:', result);
     
     if (result.success) {
       alert('Login exitoso, recargando estado y redirigiendo...');
-      await authStore.initialize();
+      // DESHABILITAR INITIALIZE TEMPORALMENTE PARA EVITAR VIOLACIONES
+      // await authStore.initialize();
       // Verificar que el token se guardó correctamente
       const token = localStorage.getItem('auth_token');
       console.log('[auth/Login.vue] Token guardado en localStorage:', token ? '\u2705' : '\u274c No se guardó');

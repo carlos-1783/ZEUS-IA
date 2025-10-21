@@ -93,16 +93,20 @@ import { ref, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 
+console.log('🔍 Login.vue component is mounting...')
+
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
+
+console.log('🔍 Login.vue router:', router)
+console.log('🔍 Login.vue route:', route)
 
 // DESHABILITAR TOAST TEMPORALMENTE PARA EVITAR VIOLACIONES DE RENDIMIENTO
 const toast = {
   success: (msg) => console.log('✅', msg),
   error: (msg) => console.error('❌', msg)
-};
-
+}
 const form = ref({
   email: '',
   password: '',
@@ -115,8 +119,15 @@ const redirectTo = route.query.redirect || '/';
 
 // Verificar si ya hay una sesión activa
 onMounted(() => {
+  console.log('🔍 Login.vue onMounted called!')
+  console.log('🔍 Login.vue authStore.isAuthenticated:', authStore.isAuthenticated)
+  console.log('🔍 Login.vue redirectTo:', redirectTo)
+  
   if (authStore.isAuthenticated) {
+    console.log('🔍 Login.vue redirecting to:', redirectTo)
     router.push(redirectTo);
+  } else {
+    console.log('🔍 Login.vue not authenticated, staying on login page')
   }
 });
 

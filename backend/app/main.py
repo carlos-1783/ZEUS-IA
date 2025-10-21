@@ -68,6 +68,19 @@ else:
 async def health_check():
     return {"status": "healthy", "service": "zeus-ia"}
 
+# Debug endpoint para Railway
+@app.get("/debug")
+async def debug_info():
+    import os
+    return {
+        "status": "debug",
+        "database_url": "SET" if os.getenv("DATABASE_URL") else "NOT_SET",
+        "secret_key": "SET" if os.getenv("SECRET_KEY") else "NOT_SET",
+        "jwt_secret": "SET" if os.getenv("JWT_SECRET_KEY") else "NOT_SET",
+        "environment": os.getenv("ENVIRONMENT", "NOT_SET"),
+        "debug": os.getenv("DEBUG", "NOT_SET")
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

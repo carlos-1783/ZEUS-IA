@@ -76,16 +76,8 @@ async function initApp() {
     console.log('⚡ Montando aplicación ULTRA-MINIMAL...');
     app.mount('#app');
     
-    // FORZAR NAVEGACIÓN A /auth/login DESPUÉS DEL MOUNT
-    setTimeout(() => {
-      router.push('/auth/login').then(() => {
-        console.log('🔍 Navegación forzada a /auth/login completada');
-        console.log('🔍 Ruta actual después de navegación:', router.currentRoute.value.path);
-        console.log('🔍 Nombre de ruta después de navegación:', router.currentRoute.value.name);
-      }).catch(err => {
-        console.error('❌ Error al navegar a /auth/login:', err);
-      });
-    }, 100);
+    // NO FORZAR NAVEGACIÓN - DEJAR QUE EL ROUTER MANEJE LA NAVEGACIÓN
+    console.log('🔄 Permitiendo que el router maneje la navegación naturalmente...');
     
     // DEBUG: Verificar ruta actual después del mount
     console.log('🔍 Ruta actual después del mount:', router.currentRoute.value.path);

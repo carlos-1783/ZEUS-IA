@@ -184,38 +184,14 @@ const handleSubmit = async () => {
         throw new Error('No se pudo guardar el token de autenticación');
       }
       
-      // Redirección inmediata sin alert
+      // REDIRECCIÓN DIRECTA Y DEFINITIVA
       console.log('🔄 Redirigiendo a:', redirectTo);
       
-      // Usar nextTick para asegurar que el estado se actualice
-      await nextTick();
-      
-      // Forzar redirección con múltiples métodos
-      try {
-        // Método 1: Router push con timeout
-        const redirectPromise = router.push(redirectTo);
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Redirect timeout')), 1000)
-        );
-        
-        await Promise.race([redirectPromise, timeoutPromise]);
-        console.log('✅ Redirección con router exitosa');
-        
-        // Verificar que realmente cambió la URL
-        setTimeout(() => {
-          if (window.location.pathname === '/auth/login') {
-            console.log('❌ Router no cambió la URL, forzando redirección manual...');
-            window.location.href = redirectTo;
-          }
-        }, 500);
-        
-      } catch (redirectError) {
-        console.error('❌ Error en redirección con router:', redirectError);
-        
-        // Método 2: Redirección manual inmediata
-        console.log('🔄 Intentando redirección manual...');
+      // Redirección inmediata sin complicaciones
+      setTimeout(() => {
+        console.log('🚀 Ejecutando redirección directa...');
         window.location.href = redirectTo;
-      }
+      }, 100);
     } else {
       let mensaje = result.error || result.message || 'Error al iniciar sesión. Por favor, verifica tus credenciales.';
       if (typeof mensaje !== 'string') {

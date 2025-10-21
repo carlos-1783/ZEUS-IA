@@ -21,6 +21,7 @@ import MainLayout from '../layouts/MainLayout.vue'
 
 // Views
 import Dashboard from '../views/Dashboard.vue'
+import ZeusCore from '../views/ZeusCore.vue'
 import Login from '../views/auth/Login.vue'
 import Register from '../views/auth/Register.vue'
 import ForgotPassword from '../views/auth/ForgotPassword.vue'
@@ -173,6 +174,16 @@ const router = createRouter({
           meta: { 
             title: 'Panel de control',
             icon: 'fa-tachometer-alt',
+            requiresAuth: true
+          }
+        },
+        {
+          path: 'zeus-core',
+          name: 'ZeusCore',
+          component: ZeusCore,
+          meta: { 
+            title: 'Núcleo ZEUS-IA',
+            icon: 'fa-bolt',
             requiresAuth: true
           }
         },

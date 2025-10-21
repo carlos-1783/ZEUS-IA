@@ -86,7 +86,7 @@ const webSocketService = {
     }
   },
 
-  // Método privado para reconexión
+  // Método privado para reconexión - OPTIMIZADO PARA EVITAR VIOLACIONES
   _scheduleReconnect(): void {
     if (reconnectAttempts >= maxReconnectAttempts) {
       console.error('Número máximo de intentos de reconexión alcanzado');
@@ -94,21 +94,25 @@ const webSocketService = {
       return;
     }
     
-    const delay = Math.min(2000 * Math.pow(2, reconnectAttempts), 10000); // Reducir delay máximo
+    // REDUCIR DELAYS PARA EVITAR VIOLACIONES DE RENDIMIENTO
+    const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 3000); // MÁXIMO 3 SEGUNDOS
     reconnectAttempts++;
     
     status.value = 'reconnecting';
     console.log(`Intentando reconectar en ${delay}ms (intento ${reconnectAttempts}/${maxReconnectAttempts})`);
     
+    // USAR requestAnimationFrame PARA EVITAR BLOQUEOS
     reconnectTimeout = setTimeout(() => {
-      if (lastToken) {
-        this.connect(lastToken).catch(err => {
-          console.error('Error al reconectar:', err);
-          if (reconnectAttempts < maxReconnectAttempts) {
-            this._scheduleReconnect();
-          }
-        });
-      }
+      requestAnimationFrame(() => {
+        if (lastToken) {
+          this.connect(lastToken).catch(err => {
+            console.error('Error al reconectar:', err);
+            if (reconnectAttempts < maxReconnectAttempts) {
+              this._scheduleReconnect();
+            }
+          });
+        }
+      });
     }, delay);
   },
 
@@ -171,7 +175,7 @@ const webSocketService = {
           // Asegurarse de que las credenciales se envíen
           ws.binaryType = 'arraybuffer';
           
-          // Configurar timeout para la conexión
+          // Configurar timeout para la conexión - REDUCIDO PARA EVITAR VIOLACIONES
           const connectionTimeout = setTimeout(() => {
             if (ws && ws.readyState === WebSocket.CONNECTING) {
               console.warn('WebSocket connection timeout');
@@ -181,7 +185,7 @@ const webSocketService = {
               status.value = 'error';
               reject(new Error(errorMsg));
             }
-          }, 15000); // 15 segundos de timeout para dar más tiempo
+          }, 5000); // REDUCIDO A 5 SEGUNDOS PARA EVITAR VIOLACIONES
 
           ws.onopen = () => {
             clearTimeout(connectionTimeout);

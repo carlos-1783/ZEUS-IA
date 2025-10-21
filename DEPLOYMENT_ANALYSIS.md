@@ -54,12 +54,6 @@ Total: GRATIS ✅
 
 ## 🎯 CÓMO DESPLEGAR EN RAILWAY
 
-### PASO 1: Commit y Push
-```bash
-git add .
-git commit -m "Ready for production deployment"
-git push origin main
-```
 
 ### PASO 2: Railway Dashboard
 

@@ -20,7 +20,7 @@ VITE_SUPPORTED_LANGUAGES=es,en
 VITE_CORS_ORIGINS=
 
 # BACKEND/API - CORS actualizado con URL real
-BACKEND_CORS_ORIGINS=["https://zeus-ia-production-d895.up.railway.app","http://localhost:5173","http://localhost:3000"]
+BACKEND_CORS_ORIGINS=["https://zeus-ia-production-d895.up.railway.app","http://localhost:5173","http://localhost:8000"]
 SECRET_KEY=zeus_ia_super_secret_key_2024_production_secure_12345
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30

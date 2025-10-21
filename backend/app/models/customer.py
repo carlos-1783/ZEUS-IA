@@ -25,7 +25,7 @@ class Customer(Base):
     
     # Relationships
     contacts = relationship("ContactPerson", back_populates="customer", cascade="all, delete-orphan")
-    invoices = relationship("Invoice", back_populates="customer")
+    # invoices = relationship("Invoice", back_populates="customer")  # TEMPORALMENTE COMENTADO PARA EVITAR ERROR DE IMPORTACIÓN CIRCULAR
     
     # Metadata
     metadata_ = Column("metadata", JSON, nullable=True)

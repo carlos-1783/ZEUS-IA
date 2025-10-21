@@ -195,11 +195,20 @@ const handleSubmit = async () => {
         // Método 1: Router push con timeout
         const redirectPromise = router.push(redirectTo);
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Redirect timeout')), 2000)
+          setTimeout(() => reject(new Error('Redirect timeout')), 1000)
         );
         
         await Promise.race([redirectPromise, timeoutPromise]);
         console.log('✅ Redirección con router exitosa');
+        
+        // Verificar que realmente cambió la URL
+        setTimeout(() => {
+          if (window.location.pathname === '/auth/login') {
+            console.log('❌ Router no cambió la URL, forzando redirección manual...');
+            window.location.href = redirectTo;
+          }
+        }, 500);
+        
       } catch (redirectError) {
         console.error('❌ Error en redirección con router:', redirectError);
         

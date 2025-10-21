@@ -116,7 +116,7 @@ export default defineConfig(({ command, mode }: ConfigEnv): UserConfig => {
         changeOrigin: true,
         timeout: 5000 // REDUCIR TIMEOUT
       }
-    },
+    }, // <-- Coma añadida aquí
     fs: {
       strict: false,
       allow: ['..']

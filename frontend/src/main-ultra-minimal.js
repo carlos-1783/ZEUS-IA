@@ -17,7 +17,7 @@ import Login from './views/auth/Login.vue';
 import Dashboard from './views/Dashboard.vue';
 import NotFound from './views/errors/NotFound.vue';
 
-// Router ULTRA-SIMPLE
+// Router ULTRA-SIMPLE - CORREGIDO
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -55,6 +55,9 @@ const router = createRouter({
   ]
 });
 
+// DEBUG: Verificar rutas
+console.log('🔍 Router configurado con rutas:', router.getRoutes().map(r => ({ path: r.path, name: r.name })));
+
 // Función para inicializar la aplicación ULTRA-MINIMAL
 async function initApp() {
   try {
@@ -73,6 +76,10 @@ async function initApp() {
     // Montar la aplicación
     console.log('⚡ Montando aplicación ULTRA-MINIMAL...');
     app.mount('#app');
+    
+    // DEBUG: Verificar ruta actual después del mount
+    console.log('🔍 Ruta actual después del mount:', router.currentRoute.value.path);
+    console.log('🔍 Nombre de ruta actual:', router.currentRoute.value.name);
     
     console.log('✅ Aplicación ULTRA-MINIMAL inicializada correctamente');
     

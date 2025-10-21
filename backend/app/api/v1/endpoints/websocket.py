@@ -134,9 +134,7 @@ async def websocket_endpoint(
         client_id: Unique client identifier
         db: Database session
     """
-    # Accept the connection first to avoid hanging
-    await websocket.accept()
-    
+    # NO hacer accept aquí - se hace en manager.connect()
     # Initialize user as None for cleanup in finally block
     user = None
     connection_active = True

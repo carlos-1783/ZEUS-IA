@@ -97,7 +97,7 @@ export default defineConfig(({ command, mode }: ConfigEnv): UserConfig => {
       ]
     },
     // DESHABILITAR PROXY EN PRODUCCIÓN PARA EVITAR VIOLACIONES
-    proxy: process.env.NODE_ENV === 'development' ? {
+    proxy: {
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
@@ -116,7 +116,7 @@ export default defineConfig(({ command, mode }: ConfigEnv): UserConfig => {
         changeOrigin: true,
         timeout: 5000 // REDUCIR TIMEOUT
       }
-    } : undefined, // NO PROXY EN PRODUCCIÓN
+    },
     fs: {
       strict: false,
       allow: ['..']

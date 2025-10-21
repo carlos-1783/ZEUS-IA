@@ -89,7 +89,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 
@@ -173,20 +173,40 @@ const handleSubmit = async () => {
     console.log('[auth/Login.vue] Resultado del login:', result);
     
     if (result.success) {
-      alert('Login exitoso, recargando estado y redirigiendo...');
-      // DESHABILITAR INITIALIZE TEMPORALMENTE PARA EVITAR VIOLACIONES
-      // await authStore.initialize();
+      console.log('✅ Login exitoso, iniciando redirección...');
+      
       // Verificar que el token se guardó correctamente
       const token = localStorage.getItem('auth_token');
-      console.log('[auth/Login.vue] Token guardado en localStorage:', token ? '\u2705' : '\u274c No se guardó');
+      console.log('[auth/Login.vue] Token guardado en localStorage:', token ? '✅' : '❌ No se guardó');
       
       if (!token) {
         alert('No se pudo guardar el token de autenticación');
         throw new Error('No se pudo guardar el token de autenticación');
       }
-      setTimeout(() => {
-        router.push(redirectTo);
-      }, 100);
+      
+      // Redirección inmediata sin alert
+      console.log('🔄 Redirigiendo a:', redirectTo);
+      
+      // Usar nextTick para asegurar que el estado se actualice
+      await nextTick();
+      
+      // Forzar redirección con múltiples métodos
+      try {
+        // Método 1: Router push con timeout
+        const redirectPromise = router.push(redirectTo);
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Redirect timeout')), 2000)
+        );
+        
+        await Promise.race([redirectPromise, timeoutPromise]);
+        console.log('✅ Redirección con router exitosa');
+      } catch (redirectError) {
+        console.error('❌ Error en redirección con router:', redirectError);
+        
+        // Método 2: Redirección manual inmediata
+        console.log('🔄 Intentando redirección manual...');
+        window.location.href = redirectTo;
+      }
     } else {
       let mensaje = result.error || result.message || 'Error al iniciar sesión. Por favor, verifica tus credenciales.';
       if (typeof mensaje !== 'string') {

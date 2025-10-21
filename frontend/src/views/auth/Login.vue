@@ -1,12 +1,5 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-    <div class="max-w-md w-full space-y-8">
-      <div>
-        <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Iniciar sesión
-        </h2>
-      </div>
-      
+  <div>
       <div v-if="error" class="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
         <div class="flex">
           <div class="flex-shrink-0">
@@ -22,7 +15,7 @@
         </div>
       </div>
 
-      <form class="mt-8 space-y-6" @submit.prevent="handleSubmit">
+      <form class="space-y-6" @submit.prevent="handleSubmit">
         <div class="rounded-md shadow-sm -space-y-px">
           <div>
             <label for="email-address" class="sr-only">Correo electrónico</label>
@@ -92,7 +85,6 @@
           </button>
         </div>
       </form>
-    </div>
   </div>
 </template>
 

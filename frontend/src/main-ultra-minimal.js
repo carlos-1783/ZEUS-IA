@@ -17,6 +17,11 @@ import Login from './views/auth/Login.vue';
 import Dashboard from './views/Dashboard.vue';
 import NotFound from './views/errors/NotFound.vue';
 
+// DEBUG: Verificar que los componentes se importan correctamente
+console.log('🔍 Login component imported:', Login);
+console.log('🔍 AuthLayout component imported:', AuthLayout);
+console.log('🔍 MainLayout component imported:', MainLayout);
+
 // Router ULTRA-SIMPLE - CORREGIDO
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -27,14 +32,8 @@ const router = createRouter({
     },
     {
       path: '/auth/login',
-      component: AuthLayout,
-      children: [
-        {
-          path: '',
-          component: Login,
-          name: 'Login'
-        }
-      ]
+      component: Login,
+      name: 'Login'
     },
     {
       path: '/dashboard',

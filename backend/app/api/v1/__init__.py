@@ -1,7 +1,7 @@
 from fastapi import APIRouter, WebSocket
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, commands, health, system, customers, test
+from app.api.v1.endpoints import auth, commands, health, system, customers, test, zeus_core
 from app.api.v1.endpoints.websocket import websocket_endpoint
 
 api_router = APIRouter()
@@ -19,6 +19,9 @@ api_router.include_router(customers.router, prefix="/customers", tags=["customer
 
 # Test endpoints
 api_router.include_router(test.router, prefix="/test", tags=["test"])
+
+# Núcleo ZEUS endpoints
+api_router.include_router(zeus_core.router, prefix="/zeus", tags=["zeus-core"])
 
 # WebSocket endpoint
 @api_router.websocket("/ws/{client_id}")

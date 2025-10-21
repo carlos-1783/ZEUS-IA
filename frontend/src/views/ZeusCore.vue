@@ -130,15 +130,20 @@ const uptime = computed(() => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
 })
 
-// Comandos disponibles
+// Comandos disponibles con especializaciones reales
 const availableCommands = ref([
   'ZEUS.ACTIVAR',
   'ZEUS.ANALIZAR',
-  'ZEUS.EJECUTAR',
-  'ZEUS.SEGURIDAD',
-  'THALOS.PROTEGER',
-  'JUSTICIA.VERIFICAR',
-  'RAFAEL.SALUD',
+  'PERSEO.FUNNEL',
+  'PERSEO.SEO',
+  'PERSEO.COPY',
+  'THALOS.SHIELD',
+  'THALOS.SCAN',
+  'JUSTICIA.CONTRATO',
+  'JUSTICIA.RGPD',
+  'RAFAEL.IVA',
+  'RAFAEL.IRPF',
+  'RAFAEL.IS',
   'ANALISIS.PROCESAR',
   'IA.PROCESAR'
 ])

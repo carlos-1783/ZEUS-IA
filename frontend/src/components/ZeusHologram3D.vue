@@ -96,49 +96,56 @@ let animationId = null
 let isMouseDown = false
 let mouseX = 0, mouseY = 0
 
-// Agentes ZEUS
+// Agentes ZEUS con especializaciones reales
 const agents = ref([
   {
     name: 'ZEUS',
     type: 'zeus',
-    description: 'Núcleo principal del sistema',
+    description: 'Núcleo principal del ecosistema empresarial',
     status: 'inactive',
     position: { x: 0, y: 0, z: 0 }
   },
   {
+    name: 'PER-SEO',
+    type: 'perseo',
+    description: 'Estratega de Ventas y Crecimiento Exponencial',
+    status: 'inactive',
+    position: { x: -3, y: 0, z: 0 }
+  },
+  {
     name: 'THALOS',
     type: 'thalos',
-    description: 'Seguridad y protección',
+    description: 'Ciberdefensa Automatizada (ZEUS SHIELD)',
     status: 'inactive',
-    position: { x: -2, y: 0, z: 0 }
+    position: { x: 3, y: 0, z: 0 }
   },
   {
     name: 'JUSTICIA',
     type: 'justicia',
-    description: 'Ética y cumplimiento',
+    description: 'Abogada Digital',
     status: 'inactive',
-    position: { x: 2, y: 0, z: 0 }
+    position: { x: 0, y: 2, z: -2 }
   },
   {
     name: 'RAFAEL',
     type: 'rafael',
-    description: 'Salud y bienestar',
+    description: 'Asistente Fiscal y Contable (España)',
     status: 'inactive',
-    position: { x: 0, y: 2, z: 0 }
+    position: { x: 0, y: -2, z: -2 }
   },
   {
     name: 'ANÁLISIS',
     type: 'analisis',
-    description: 'Análisis de datos',
+    description: 'Análisis de datos empresariales',
     status: 'inactive',
-    position: { x: 0, y: -2, z: 0 }
+    position: { x: -2, y: 2, z: 0 }
   },
   {
     name: 'IA',
     type: 'ia',
-    description: 'Inteligencia artificial',
+    description: 'Inteligencia artificial avanzada',
     status: 'inactive',
-    position: { x: 0, y: 0, z: 2 }
+    position: { x: 2, y: 2, z: 0 }
   }
 ])
 
@@ -271,11 +278,12 @@ function createAgentHologram(agent, index) {
 function getAgentColor(type) {
   const colors = {
     zeus: 0xff6b00,      // Naranja dorado
-    thalos: 0x0066ff,    // Azul
-    justicia: 0xff0066,  // Rosa
-    rafael: 0x00ff66,    // Verde
-    analisis: 0x6600ff,  // Púrpura
-    ia: 0xff6600         // Naranja
+    perseo: 0x00ff00,    // Verde brillante (ventas)
+    thalos: 0x0066ff,    // Azul (seguridad)
+    justicia: 0xff0066,  // Rosa (legal)
+    rafael: 0x00ffff,    // Cyan (fiscal)
+    analisis: 0x6600ff,  // Púrpura (análisis)
+    ia: 0xff6600         // Naranja (IA)
   }
   return colors[type] || 0x00ffff
 }
@@ -521,9 +529,10 @@ function formatTime(timestamp) {
 }
 
 .holographic-avatar.zeus { background: linear-gradient(45deg, #ff6b00, #ffaa00); }
+.holographic-avatar.perseo { background: linear-gradient(45deg, #00ff00, #66ff66); }
 .holographic-avatar.thalos { background: linear-gradient(45deg, #0066ff, #00aaff); }
 .holographic-avatar.justicia { background: linear-gradient(45deg, #ff0066, #ff66aa); }
-.holographic-avatar.rafael { background: linear-gradient(45deg, #00ff66, #66ffaa); }
+.holographic-avatar.rafael { background: linear-gradient(45deg, #00ffff, #66ffff); }
 .holographic-avatar.analisis { background: linear-gradient(45deg, #6600ff, #aa66ff); }
 .holographic-avatar.ia { background: linear-gradient(45deg, #ff6600, #ffaa66); }
 

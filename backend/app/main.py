@@ -67,7 +67,7 @@ async def startup_event():
         print(f"[STARTUP] ❌ Error al crear usuario: {e}")
     finally:
         db.close()
-    
+
     print("[STARTUP] ✅ Aplicación lista")
 
 # Serve static files (frontend) - FIXED

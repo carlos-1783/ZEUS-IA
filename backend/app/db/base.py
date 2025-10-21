@@ -20,7 +20,7 @@ def create_tables():
         # Importar modelos aquí para evitar importación circular
         from app.models.user import User, RefreshToken
         from app.models.customer import Customer
-        from app.models.erp import Invoice, Product, Order
+        from app.models.erp import Invoice, Product, Payment
         
         Base.metadata.create_all(bind=engine)
         print("[DATABASE] ✅ Tablas creadas correctamente")

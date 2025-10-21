@@ -14,6 +14,9 @@ onMounted(() => {
   console.log('ZEUS IA Frontend iniciado correctamente')
   console.log('Current route:', route.path)
   console.log('Route name:', route.name)
+  
+  // DESHABILITAR SERVICIOS PESADOS TEMPORALMENTE
+  console.log('🚫 Deshabilitando servicios pesados para evitar violaciones de rendimiento...')
 })
 </script>
 

@@ -1,10 +1,13 @@
 console.log('🚀 Iniciando ZEUS-IA frontend...');
 
-// Importar solo lo esencial - SIN FONTAWESOME NI ESTILOS PROBLEMÁTICOS
+// Importar solo lo esencial - SIN SERVICIOS PESADOS
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
 import router from './router';
+
+// DESHABILITAR SERVICIOS PESADOS TEMPORALMENTE
+console.log('🚫 Deshabilitando servicios pesados para evitar violaciones de rendimiento...');
 
 // Función para inicializar la aplicación
 async function initApp() {

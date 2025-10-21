@@ -38,6 +38,12 @@ app.include_router(api_router, prefix="/api/v1")
 @app.on_event("startup")
 async def startup_event():
     print("[STARTUP] Iniciando ZEUS-IA...")
+    
+    # MOSTRAR DATABASE_URL CONFIGURADA
+    import os
+    db_url = os.getenv("DATABASE_URL", "NO CONFIGURADA")
+    print(f"[STARTUP] 🔍 DATABASE_URL: {db_url[:50]}...")  # Mostrar solo los primeros 50 caracteres
+    
     create_tables()
     
     # Crear usuario de prueba si no existe

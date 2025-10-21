@@ -18,7 +18,7 @@ def create_tables():
     try:
         print("[DATABASE] Creando tablas...")
         # Importar modelos aquí para evitar importación circular
-        from app.models.user import Usuario, RefreshToken
+        from app.models.user import User, RefreshToken
         from app.models.customer import Customer
         from app.models.erp import Invoice, Product, Order
         

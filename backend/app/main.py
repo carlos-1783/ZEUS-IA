@@ -42,16 +42,16 @@ async def startup_event():
     
     # Crear usuario de prueba si no existe
     from app.db.base import SessionLocal
-    from app.models.user import Usuario
+    from app.models.user import User
     from app.core.security import get_password_hash
     
     db = SessionLocal()
     try:
         # Verificar si ya existe un usuario
-        existing_user = db.query(Usuario).filter(Usuario.email == "marketingdigitalper.seo@gmail.com").first()
+        existing_user = db.query(User).filter(User.email == "marketingdigitalper.seo@gmail.com").first()
         if not existing_user:
             print("[STARTUP] Creando usuario de prueba...")
-            test_user = Usuario(
+            test_user = User(
                 email="marketingdigitalper.seo@gmail.com",
                 full_name="Usuario de Prueba",
                 hashed_password=get_password_hash("Carnay19!"),

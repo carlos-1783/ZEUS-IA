@@ -96,13 +96,14 @@ export default defineConfig(({ command, mode }: ConfigEnv): UserConfig => {
         '**/*.timestamp-*'
       ]
     },
-    proxy: {
+    // DESHABILITAR PROXY EN PRODUCCIÓN PARA EVITAR VIOLACIONES
+    proxy: process.env.NODE_ENV === 'development' ? {
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
         ws: true,
-        timeout: 30000,
+        timeout: 5000, // REDUCIR TIMEOUT
         configure: (proxy: any, options: any) => {
           proxy.on('error', (err: any, req: any, res: any) => {
             console.log('Proxy error:', err);
@@ -113,9 +114,9 @@ export default defineConfig(({ command, mode }: ConfigEnv): UserConfig => {
         target: 'ws://localhost:8000',
         ws: true,
         changeOrigin: true,
-        timeout: 30000
+        timeout: 5000 // REDUCIR TIMEOUT
       }
-    },
+    } : undefined, // NO PROXY EN PRODUCCIÓN
     fs: {
       strict: false,
       allow: ['..']

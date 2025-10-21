@@ -22,7 +22,7 @@ REFRESH_TOKEN_EXPIRE_DAYS=7
 # ========================================
 # CORS CONFIGURATION
 # ========================================
-BACKEND_CORS_ORIGINS=["https://zeus-ia-production.up.railway.app","https://zeus-ia-app.netlify.app","http://localhost:5173","http://localhost:3000"]
+BACKEND_CORS_ORIGINS=["https://zeus-ia-production-d895.up.railway.app","http://localhost:5173","http://localhost:8000"]
 
 # ========================================
 # ENVIRONMENT SETTINGS

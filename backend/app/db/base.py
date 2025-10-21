@@ -13,15 +13,15 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
-# Importar todos los modelos para que se registren con Base
-from app.models.user import Usuario, RefreshToken
-from app.models.customer import Customer
-from app.models.erp import Invoice, Product, Order
-
 def create_tables():
     """Crear todas las tablas en la base de datos"""
     try:
         print("[DATABASE] Creando tablas...")
+        # Importar modelos aquí para evitar importación circular
+        from app.models.user import Usuario, RefreshToken
+        from app.models.customer import Customer
+        from app.models.erp import Invoice, Product, Order
+        
         Base.metadata.create_all(bind=engine)
         print("[DATABASE] ✅ Tablas creadas correctamente")
     except Exception as e:

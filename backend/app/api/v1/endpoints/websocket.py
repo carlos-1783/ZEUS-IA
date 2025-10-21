@@ -3,6 +3,8 @@ from fastapi.security import OAuth2PasswordBearer
 from typing import Dict, List, Optional, Any
 import json
 import logging
+import asyncio
+import uuid
 from datetime import datetime
 from sqlalchemy.orm import Session
 from jose import JWTError

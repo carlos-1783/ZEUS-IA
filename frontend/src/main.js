@@ -128,5 +128,4 @@ window.addEventListener('unhandledrejection', (event) => {
   }
 });
 
-// Inicializar la aplicación
-initApp();
+// La aplicación se inicializa automáticamente arriba

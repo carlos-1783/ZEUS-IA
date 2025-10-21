@@ -104,3 +104,4 @@ INTERRUPCION=30
 # 5. IMPORTANTE: Reemplaza DATABASE_URL con tu connection string real de Neon
 # 6. Click "Save" en cada variable
 # 7. Railway redeployará automáticamente
+# Force Railway to use SQLite - 10/21/2025 19:29:08

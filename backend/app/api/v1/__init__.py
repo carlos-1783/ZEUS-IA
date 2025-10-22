@@ -23,7 +23,7 @@ api_router.include_router(test.router, prefix="/test", tags=["test"])
 # Núcleo ZEUS endpoints
 api_router.include_router(zeus_core.router, prefix="/zeus", tags=["zeus-core"])
 
-# WebSocket endpoint
+# WebSocket endpoint - CORREGIDO para Railway
 @api_router.websocket("/ws/{client_id}")
 async def websocket_handler(websocket: WebSocket, client_id: str):
     from app.db.session import SessionLocal

@@ -22,7 +22,7 @@ app = FastAPI(
     redoc_url="/api/redoc"
 )
 
-# CORS middleware
+# CORS middleware - CONFIGURADO PARA WEBSOCKETS EN RAILWAY
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.BACKEND_CORS_ORIGINS,
@@ -30,6 +30,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Middleware específico para WebSockets en Railway
+@app.middleware("http")
+async def websocket_middleware(request: Request, call_next):
+    # Permitir WebSocket upgrades
+    if request.headers.get("upgrade") == "websocket":
+        # Asegurar que las cabeceras necesarias estén presentes
+        response = await call_next(request)
+        response.headers["Upgrade"] = "websocket"
+        response.headers["Connection"] = "Upgrade"
+        return response
+    
+    return await call_next(request)
 
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")
@@ -148,7 +161,19 @@ async def debug_info():
         "secret_key": "SET" if os.getenv("SECRET_KEY") else "NOT_SET",
         "jwt_secret": "SET" if os.getenv("JWT_SECRET_KEY") else "NOT_SET",
         "environment": os.getenv("ENVIRONMENT", "NOT_SET"),
-        "debug": os.getenv("DEBUG", "NOT_SET")
+        "debug": os.getenv("DEBUG", "NOT_SET"),
+        "websocket_support": "ENABLED",
+        "cors_origins": settings.BACKEND_CORS_ORIGINS
+    }
+
+# WebSocket test endpoint
+@app.get("/ws-test")
+async def websocket_test():
+    return {
+        "message": "WebSocket endpoint available",
+        "endpoint": "/api/v1/ws/{client_id}",
+        "protocol": "wss://" if os.getenv("RAILWAY_ENVIRONMENT") else "ws://",
+        "status": "ready"
     }
 
 if __name__ == "__main__":

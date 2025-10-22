@@ -2,14 +2,14 @@
 export const config = {
   // WebSocket configuration
   ws: {
-    url: 'ws://localhost:8000/api/v1/ws',
+    url: import.meta.env.VITE_WS_URL || 'ws://localhost:8000/api/v1/ws',
     reconnectInterval: 3000, // 3 seconds
     maxReconnectAttempts: 5,
   },
   
   // API configuration
   api: {
-    baseUrl: 'http://localhost:8000/api/v1',
+    baseUrl: import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1',
     timeout: 30000, // 30 seconds
   },
   

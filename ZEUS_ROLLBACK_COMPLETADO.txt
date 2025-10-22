@@ -1,0 +1,65 @@
+========================================
+ZEUS-IA - ROLLBACK COMPLETADO
+========================================
+
+Fecha: 2025-01-22
+Commit objetivo: bccc0c6
+Descripción: Fix: WebSocket error handling mejorado y token expiration extendido a 24h
+
+========================================
+RAZÓN DEL ROLLBACK
+========================================
+
+El sistema estaba experimentando:
+- Error 500 en endpoints API
+- WebSocket desconectándose
+- Problemas de configuración
+- Frontend no funcionando en producción
+
+========================================
+COMMIT RESTAURADO
+========================================
+
+bccc0c6 - Fix: WebSocket error handling mejorado y token expiration extendido a 24h
+
+Este commit representa el último estado estable conocido donde:
+✅ WebSocket funcionaba correctamente
+✅ Todos los endpoints operativos
+✅ Zeus conectado correctamente
+✅ Solo problemas menores con Vue
+
+========================================
+PRÓXIMOS PASOS
+========================================
+
+1. Iniciar sistema local:
+   - .\start.bat
+
+2. Verificar funcionamiento:
+   - Frontend: http://localhost:5173
+   - Backend: http://localhost:8000
+   - API Docs: http://localhost:8000/docs
+
+3. Login:
+   - Email: marketingdigitalper.seo@gmail.com
+   - Password: Carnay19
+
+4. Verificar WebSocket conectado
+
+5. Si todo funciona, entonces:
+   - Identificar qué cambios causaron el error
+   - Aplicarlos gradualmente
+   - Verificar cada paso
+
+========================================
+ESTADO ACTUAL
+========================================
+
+✅ Rollback completado
+⏳ Sistema listo para iniciar
+⏳ Verificar funcionamiento
+
+========================================
+
+¡Zeus restaurado a estado estable!
+

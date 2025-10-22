@@ -32,7 +32,7 @@ import TestRoute from '../views/TestRoute.vue'
 
 // Routes that don't require authentication
 const publicRoutes = [
-  'Login',
+  'AuthLogin',
   'Register',
   'ForgotPassword',
   'ResetPassword',
@@ -52,11 +52,11 @@ const setupNavigationGuards = (router) => {
 
     // If trying to access a protected route without being authenticated
     if (!isPublicRoute && !isAuthenticated) {
-      return next({ name: 'Login', query: { redirect: to.fullPath } })
+      return next({ name: 'AuthLogin', query: { redirect: to.fullPath } })
     }
 
     // If already authenticated and trying to access auth pages
-    if ((to.name === 'Login' || to.name === 'Register') && isAuthenticated) {
+    if ((to.name === 'AuthLogin' || to.name === 'Register') && isAuthenticated) {
       // Redirigir a la ruta original o al dashboard
       const redirectTo = to.query.redirect || '/dashboard'
       console.log('🔄 Usuario autenticado, redirigiendo a:', redirectTo)
@@ -98,7 +98,7 @@ const router = createRouter({
       .join('&');
     return result ? `?${result}` : '';
   },
-  parseQuery: (query) => {
+  parseQuery(query) {
     const result = {};
     query = query.replace(/^\?/, '');
     if (!query) return result;
@@ -111,22 +111,21 @@ const router = createRouter({
     return result;
   },
   routes: [
-    // Ruta raíz - Landing Page
+    // Ruta raíz - Dashboard (requiere autenticación)
     {
       path: '/',
-      name: 'LandingPage',
-      component: () => import('../views/LandingPage.vue'),
+      name: 'Dashboard',
+      component: Dashboard,
       meta: { 
-        title: 'ZEUS IA - Tu Negocio Autónomo Inteligente',
-        requiresAuth: false,
-        isLanding: true
+        title: 'Panel de control',
+        requiresAuth: true
       }
     },
     
     // Direct login route (redirect to auth/login)
     {
       path: '/login',
-      redirect: { name: 'Login' }
+      redirect: { name: 'AuthLogin' }
     },
     
     // Auth routes
@@ -136,7 +135,7 @@ const router = createRouter({
       children: [
         {
           path: 'login',
-          name: 'Login',
+          name: 'AuthLogin',
           component: Login,
           meta: { title: 'Iniciar sesión' }
         },
@@ -161,43 +160,29 @@ const router = createRouter({
         },
         {
           path: '',
-          redirect: { name: 'Login' }
+          redirect: { name: 'AuthLogin' }
         }
       ]
     },
     
     // Protected routes
     {
-      path: '/',
-      component: MainLayout,
-      meta: { requiresAuth: true },
-      children: [
-        {
-          path: 'dashboard',
-          name: 'Dashboard',
-          component: Dashboard,
-          meta: { 
-            title: 'Panel de control',
-            icon: 'fa-tachometer-alt',
-            requiresAuth: true
-          }
-        },
-        {
-          path: 'zeus-core',
-          name: 'ZeusCore',
-          component: ZeusCore,
-          meta: { 
-            title: 'Núcleo ZEUS-IA',
-            icon: 'fa-bolt',
-            requiresAuth: true
-          }
-        },
-        {
-          path: '',
-          redirect: { name: 'Dashboard' }
-        },
-        // Add more protected routes here
-      ]
+      path: '/dashboard',
+      name: 'DashboardProtected',
+      component: Dashboard,
+      meta: { 
+        title: 'Panel de control',
+        requiresAuth: true
+      }
+    },
+    {
+      path: '/zeus-core',
+      name: 'ZeusCore',
+      component: ZeusCore,
+      meta: { 
+        title: 'Núcleo ZEUS-IA',
+        requiresAuth: true
+      }
     },
     
         // Test routes (temporarily public)

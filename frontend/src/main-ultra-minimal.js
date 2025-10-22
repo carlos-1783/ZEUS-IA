@@ -5,6 +5,14 @@ import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
 
+// Font Awesome
+import { library } from '@fortawesome/fontawesome-svg-core';
+import { fas } from '@fortawesome/free-solid-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
+
+// Registrar iconos de Font Awesome
+library.add(fas);
+
 // Router ULTRA-SIMPLE sin auth store
 import { createRouter, createWebHistory } from 'vue-router';
 
@@ -64,6 +72,9 @@ async function initApp() {
     
     // Crear la aplicación
     const app = createApp(App);
+    
+    // Registrar Font Awesome
+    app.component('font-awesome-icon', FontAwesomeIcon);
     
     // Configurar Pinia (sin auth store)
     const pinia = createPinia();

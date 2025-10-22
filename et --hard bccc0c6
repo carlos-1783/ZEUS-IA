@@ -1,0 +1,50 @@
+[33mc5ea763[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m DevOps: Configure frontend for local backend - Railway has 500 error
+[33m608d2e2[m DevOps: Force Railway configuration in frontend
+[33mdec1d20[m DevOps: Configure frontend to connect to Railway backend
+[33m5c1078b[m DevOps: Add emergency fix for Railway 500 error
+[33m790b58e[m DevOps: Add force redeploy script for Railway
+[33m1c5ccc0[m DevOps: Add Railway diagnostic and rollback guide for Zeus restoration
+[33m50c0765[m Add: Commercial configuration guides for Zeus production deployment
+[33ma55e981[m Add: Railway frontend fix script - Copy frontend to backend/static
+[33m90450cb[m Add: Urgent frontend deployment scripts - Fix 404 error
+[33m78fad92[m Add: Local storage restoration scripts for Zeus recovery
+[33m90484cd[m Add: Railway configuration scripts for quick variable setup
+[33m2d9bed0[m Docs: Add final summary of Zeus stabilization - All tasks completed ✅
+[33m857ca71[m Docs: Add comprehensive testing guides and deployment README - Zeus Stable ✅
+[33mc1552ac[m Fix: WebSocket flow corrected (ACCEPT → AUTH → LISTEN), JWT secure config with env vars, deployment scripts and docs added - ZEUS STABLE ✅
+[33m6f9ce94[m Add: Railway WebSocket diagnostic endpoints y configuración
+[33ma39e6c8[m Fix: WebSocket Railway configuration y middleware específico
+[33mbccc0c6[m Fix: WebSocket error handling mejorado y token expiration extendido a 24h
+[33md5dc06d[m Build: Frontend compilado y copiado a backend/static para Railway
+[33m77bde6e[m Fix: Implementado sistema de heartbeat para WebSocket y corregidos errores de conexión
+[33m1530415[m Fix: Add missing asyncio and uuid imports
+[33m655babe[m Fix: Remove duplicate websocket.accept() call
+[33mca231ca[m Fix: WebSocket uses /api/v1/ws/{client_id} instead of /ws
+[33mad3b696[m Fix WebSocket URL - Use /api/v1/ws/{client_id} endpoint
+[33m4df9051[m Fix BACKEND_CORS_ORIGINS - Use correct Railway URL and port 8000
+[33m69a2930[m Add DATABASE_URL debug logging
+[33m8066660[m Add detailed startup logs for user creation debugging
+[33m7d24354[m Force Railway SQLite configuration
+[33m9ab04a6[m Force Railway redeploy with SQLite
+[33mbae1b4e[m Fix: Switch to SQLite for local development
+[33m223edbe[m Fix: Redirect to /dashboard instead of / after login
+[33m28cf1e2[m Fix vite.config.ts syntax and add local .env
+[33m539fdfb[m Fix Railway production config - PostgreSQL database
+[33m889f4cd[m FIX: Router redirection for authenticated users
+[33mabe18e2[m FIX: Force password update for existing user
+[33m5c2cc77[m FIX: Update test user password to match login credentials
+[33m2c00c67[m FORCE REDEPLOY: Trigger Railway rebuild for frontend fix
+[33mcb38ee6[m FIX: Use SQLite temporarily for Railway deployment
+[33mfa5493d[m FIX: Update frontend build for Railway deployment
+[33me069cf7[m FIX: Force redirect for authenticated users
+[33m9dc6c08[m FEAT: Configure Neon Database for Railway
+[33mc62a841[m FINAL FIX: Direct redirect without router complications
+[33m8365218[m CRITICAL FIX: Remove forced navigation causing redirect loop
+[33m3f5f257[m FIX: Resolve login redirect issue
+[33m26ac084[m FIX: Improve login redirect flow
+[33m55fa105[m PERF: Optimize frontend performance - Fix setInterval violations
+[33mc11e38f[m FEAT: Update ZEUS agents with real specializations
+[33m534abc6[m FEAT: Implement ZEUS Core System with 3D Holograms
+[33md56319a[m FIX: Correct ERP model imports - Order doesn't exist, use Payment instead
+[33m16b85cf[m FIX: Correct model name from Usuario to User
+[33m08f7ddb[m FIX: Resolve circular import by moving model imports inside create_tables function

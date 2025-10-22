@@ -6,6 +6,14 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import router from './router';
 
+// Font Awesome
+import { library } from '@fortawesome/fontawesome-svg-core';
+import { fas } from '@fortawesome/free-solid-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
+
+// Registrar iconos de Font Awesome
+library.add(fas);
+
 // DESHABILITAR SERVICIOS PESADOS TEMPORALMENTE
 console.log('🚫 Deshabilitando servicios pesados para evitar violaciones de rendimiento...');
 
@@ -16,6 +24,9 @@ async function initApp() {
     
     // Crear la aplicación
     const app = createApp(App);
+    
+    // Registrar Font Awesome
+    app.component('font-awesome-icon', FontAwesomeIcon);
     
     // Configurar Pinia
     const pinia = createPinia();

@@ -154,9 +154,9 @@ const webSocketService = {
       let wsUrl: string;
       
       if (isDev) {
-        // En desarrollo, usar el proxy de Vite con localhost
+        // En desarrollo, conectar directamente al backend en puerto 8000
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${protocol}//${window.location.host}/api/v1/ws/${clientId}`;
+        wsUrl = `${protocol}//localhost:8000/api/v1/ws/${clientId}`;
       } else {
         // En producción, usar la URL configurada en las variables de entorno
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';

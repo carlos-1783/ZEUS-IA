@@ -23,10 +23,11 @@ class Settings(BaseSettings):
     STATIC_DIR: str = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "static")
     
     # Security - Configuración de JWT SEGURA PARA PRODUCCIÓN
-    # Clave secreta como string puro - ULTRA SEGURA
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "zeus_ia_super_secure_secret_key_2024_production_ultra_strong_256_bits_minimum")
+    # IMPORTANTE: En producción, SIEMPRE usar variables de entorno para SECRET_KEY
+    # El valor por defecto es solo para desarrollo local
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "dev_default_secret_key_change_in_production_1b6ed3a2f7c62ea379032ddd1fa9b19b")
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 horas para desarrollo (1440 minutos)
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))  # 30 minutos por defecto
     
     # Configuración de JWT
     JWT_AUDIENCE: List[str] = ["zeus-ia:auth", "zeus-ia:access", "zeus-ia:websocket"]  # Lista de audiencias válidas
@@ -39,8 +40,9 @@ class Settings(BaseSettings):
         raise ValueError("La SECRET_KEY no puede estar vacía")
     
     # Token refresh settings
+    REFRESH_TOKEN_SECRET: str = os.getenv("REFRESH_TOKEN_SECRET", "dev_default_refresh_secret_934ce6750fb8c844e26972be922326cbd0ff924c")
     REFRESH_TOKEN_LENGTH: int = 64
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))  # 7 días por defecto
     REFRESH_TOKEN_GRACE_PERIOD_DAYS: int = 7  # Grace period for token reuse detection
     
     # Database
@@ -191,13 +193,15 @@ except ValueError as e:
     print(f"[ERROR] Error en la configuración de la clave secreta: {str(e)}")
     raise
 
-# Forzar valores importantes después de la inicialización para asegurar que no sean sobrescritos
-settings.ACCESS_TOKEN_EXPIRE_MINUTES = 30  # 30 minutos para mayor seguridad
-settings.REFRESH_TOKEN_EXPIRE_DAYS = 7  # 7 días para mayor seguridad
+# NOTA IMPORTANTE: Las claves SECRET_KEY deben ser configuradas en variables de entorno
+# NO usar valores hardcodeados en producción. Estos son valores por defecto solo para desarrollo.
+# En Railway/Vercel, configurar las variables de entorno según RAILWAY_VARIABLES_ZEUS_PRODUCTION.txt
 
-# Forzar la SECRET_KEY para asegurar consistencia - ULTRA SEGURA
-settings.SECRET_KEY = "zeus_ia_super_secure_secret_key_2024_production_ultra_strong_256_bits_minimum"
-settings.ALGORITHM = "HS256"
+# Los valores finales se obtienen de las variables de entorno o usan los defaults
+# settings.ACCESS_TOKEN_EXPIRE_MINUTES ya está configurado en la clase Settings (línea 29)
+# settings.REFRESH_TOKEN_EXPIRE_DAYS ya está configurado en la clase Settings (línea 43)
+# settings.SECRET_KEY ya está configurado y validado en ensure_secret_key_format()
+# settings.ALGORITHM ya está configurado en la clase Settings (línea 28)
 
 # Log de la configuración para depuración
 if settings.DEBUG:

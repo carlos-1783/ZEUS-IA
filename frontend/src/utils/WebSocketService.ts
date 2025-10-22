@@ -158,9 +158,9 @@ const webSocketService = {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         wsUrl = `${protocol}//localhost:8000/api/v1/ws/${clientId}`;
       } else {
-        // En producción, usar la URL configurada en las variables de entorno
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${protocol}//${window.location.host}/api/v1/ws/${clientId}`;
+        // En producción, deshabilitar WebSocket y usar HTTP polling
+        console.log('WebSocket deshabilitado en producción - usando HTTP polling');
+        return null;
       }
       
       console.log('WebSocket URL:', wsUrl);

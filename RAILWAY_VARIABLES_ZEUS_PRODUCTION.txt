@@ -1,0 +1,37 @@
+# ========================================
+# VARIABLES DE ENTORNO PARA RAILWAY
+# Backend ZEUS-IA Production
+# ========================================
+# Copiar estas variables al panel de Railway → Variables
+
+# === SECURITY - JWT ===
+SECRET_KEY=1b6ed3a2f7c62ea379032ddd1fa9b19b1cb7ddc2071ad633aee3c8568d62b13b
+REFRESH_TOKEN_SECRET=934ce6750fb8c844e26972be922326cbd0ff924c92189f25be3acd36ad07096d
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+REFRESH_TOKEN_EXPIRE_DAYS=7
+JWT_ISSUER=zeus-ia-backend
+
+# === APPLICATION ===
+DEBUG=False
+ENVIRONMENT=production
+HOST=0.0.0.0
+PORT=$PORT
+
+# === DATABASE ===
+# Railway auto-configura DATABASE_URL con PostgreSQL
+# O usar Neon Database URL si prefieres
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+
+# === CORS ===
+# Actualizar con tu dominio real de frontend
+BACKEND_CORS_ORIGINS=https://zeus-ia-frontend.vercel.app,https://zeus-ia.netlify.app,https://zeus-ia-production.up.railway.app
+
+# === FIRST SUPERUSER ===
+FIRST_SUPERUSER_EMAIL=marketingdigitalper.seo@gmail.com
+FIRST_SUPERUSER_PASSWORD=Carnay19
+
+# === RAILWAY SPECIFIC ===
+RAILWAY_ENVIRONMENT=production
+NIXPACKS_PYTHON_VERSION=3.11
+

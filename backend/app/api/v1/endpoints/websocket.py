@@ -129,20 +129,27 @@ async def websocket_endpoint(
     db: Session = Depends(get_db)
 ):
     """
-    WebSocket endpoint for real-time communication
+    WebSocket endpoint for real-time communication - FLOW CORRECTO
+    
+    FLUJO: ACEPTAR → AUTENTICAR → ESCUCHAR
     
     Args:
         websocket: The WebSocket connection
         client_id: Unique client identifier
         db: Database session
     """
-    # NO hacer accept aquí - se hace en manager.connect()
     # Initialize user as None for cleanup in finally block
     user = None
-    connection_active = True
+    connection_accepted = False
     
     try:
-        # Get token from query parameters or headers
+        # PASO 1: ACEPTAR CONEXIÓN PRIMERO (WebSocket handshake)
+        logger.info(f"[WebSocket] Aceptando conexión para client_id={client_id}")
+        await websocket.accept()
+        connection_accepted = True
+        logger.info(f"[WebSocket] Conexión aceptada para client_id={client_id}")
+        
+        # PASO 2: AUTENTICAR - Obtener y validar token
         token = (
             websocket.query_params.get("token") or
             websocket.headers.get("authorization", "").replace("Bearer ", "")
@@ -150,22 +157,13 @@ async def websocket_endpoint(
         
         if not token:
             error_msg = "No se proporcionó token de autenticación"
-            logger.warning(f"WebSocket connection rejected: {error_msg}")
-            # Aceptar conexión primero para poder enviar mensajes
-            try:
-                await websocket.accept()
-                await websocket.send_text(json.dumps({
-                    "type": "auth_error",
-                    "error": error_msg,
-                    "code": "missing_token"
-                }))
-            except Exception as e:
-                logger.error(f"Error enviando mensaje de error: {e}")
-            finally:
-                try:
-                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_msg)
-                except:
-                    pass
+            logger.warning(f"[WebSocket] Connection rejected: {error_msg}")
+            await websocket.send_text(json.dumps({
+                "type": "auth_error",
+                "error": error_msg,
+                "code": "missing_token"
+            }))
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_msg)
             return
         
         # Authenticate user with detailed error handling
@@ -174,47 +172,29 @@ async def websocket_endpoint(
             
             if not user:
                 error_msg = "Token de autenticación inválido o expirado"
-                logger.warning(f"WebSocket connection rejected: {error_msg}")
-                # Aceptar conexión primero para poder enviar mensajes
-                try:
-                    await websocket.accept()
-                    await websocket.send_text(json.dumps({
-                        "type": "auth_error",
-                        "error": error_msg,
-                        "code": "invalid_token"
-                    }))
-                except Exception as e:
-                    logger.error(f"Error enviando mensaje de error: {e}")
-                finally:
-                    try:
-                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_msg)
-                    except:
-                        pass
+                logger.warning(f"[WebSocket] Authentication failed: {error_msg}")
+                await websocket.send_text(json.dumps({
+                    "type": "auth_error",
+                    "error": error_msg,
+                    "code": "invalid_token"
+                }))
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_msg)
                 return
                 
             if not user.is_active:
                 error_msg = "La cuenta del usuario no está activa"
-                logger.warning(f"WebSocket connection rejected: {error_msg}")
-                # Aceptar conexión primero para poder enviar mensajes
-                try:
-                    await websocket.accept()
-                    await websocket.send_text(json.dumps({
-                        "type": "auth_error",
-                        "error": error_msg,
-                        "code": "inactive_user"
-                    }))
-                except Exception as e:
-                    logger.error(f"Error enviando mensaje de error: {e}")
-                finally:
-                    try:
-                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_msg)
-                    except:
-                        pass
+                logger.warning(f"[WebSocket] Inactive user: {error_msg}")
+                await websocket.send_text(json.dumps({
+                    "type": "auth_error",
+                    "error": error_msg,
+                    "code": "inactive_user"
+                }))
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_msg)
                 return
                 
         except (JWTError, JWTClaimsError, ExpiredSignatureError, JoseJWTError) as e:
             error_msg = f"Error de validación del token: {str(e)}"
-            logger.error(f"WebSocket JWT validation error: {error_msg}")
+            logger.error(f"[WebSocket] JWT validation error: {error_msg}")
             error_details = {
                 "type": "auth_error",
                 "error": "Token de autenticación inválido",
@@ -225,178 +205,174 @@ async def websocket_endpoint(
             else:
                 error_details["details"] = str(e)
             
-            # Aceptar conexión primero para poder enviar mensajes
-            try:
-                await websocket.accept()
-                await websocket.send_text(json.dumps(error_details))
-            except Exception as send_error:
-                logger.error(f"Error enviando mensaje de error: {send_error}")
-            finally:
-                try:
-                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_msg)
-                except:
-                    pass
+            await websocket.send_text(json.dumps(error_details))
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_msg)
             return
         
-        # Register the connection
-        try:
-            await manager.connect(websocket, client_id, user.id)
-            logger.info(f"WebSocket connected: client={client_id}, user_id={user.id}")
-            
-            # Send initial connection confirmation
-            await manager.send_personal_message(
-                json.dumps({
-                    "type": "connection_established",
-                    "client_id": client_id,
-                    "user_id": user.id,
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "status": "success"
-                }),
-                client_id
-            )
-            
-            # Track last activity for timeout
-            last_activity = datetime.utcnow()
-            
-            # Main message loop
-            while True:
+        # PASO 3: REGISTRAR CONEXIÓN Y COMENZAR A ESCUCHAR
+        logger.info(f"[WebSocket] Usuario autenticado: {user.email}, registrando conexión...")
+        
+        # Registrar en el manager (ya no hace accept porque ya lo hicimos)
+        manager.active_connections[client_id] = websocket
+        if user.id not in manager.user_connections:
+            manager.user_connections[user.id] = []
+        if client_id not in manager.user_connections[user.id]:
+            manager.user_connections[user.id].append(client_id)
+        
+        logger.info(f"[WebSocket] Conexión registrada: client={client_id}, user_id={user.id}")
+        
+        # Send initial connection confirmation
+        await manager.send_personal_message(
+            json.dumps({
+                "type": "connection_established",
+                "client_id": client_id,
+                "user_id": user.id,
+                "timestamp": datetime.utcnow().isoformat(),
+                "status": "success"
+            }),
+            client_id
+        )
+        
+        # Track last activity for timeout
+        last_activity = datetime.utcnow()
+        
+        # Main message loop - ESCUCHAR mensajes del cliente
+        while True:
+            try:
+                # Set a timeout for receiving messages (30 seconds)
+                data = await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=30.0
+                )
+                
+                # Update last activity time
+                last_activity = datetime.utcnow()
+                
                 try:
-                    # Set a timeout for receiving messages (30 seconds)
-                    data = await asyncio.wait_for(
-                        websocket.receive_text(),
-                        timeout=30.0
-                    )
-                    
-                    # Update last activity time
-                    last_activity = datetime.utcnow()
-                    
-                    try:
-                        message = json.loads(data)
-                    except json.JSONDecodeError:
-                        logger.warning(f"Received invalid JSON from {client_id}")
-                        await manager.send_personal_message(
-                            json.dumps({
-                                "type": "error",
-                                "message": "Invalid JSON format",
-                                "code": "invalid_json",
-                                "timestamp": datetime.utcnow().isoformat()
-                            }),
-                            client_id
-                        )
-                        continue
-                    
-                    # Log message (sensitive data should be redacted in production)
-                    log_msg = f"Received message from client={client_id}, user_id={user.id}"
-                    if message.get('type') not in ['heartbeat', 'ping']:  # Skip logging heartbeats/pings
-                        logger.debug(f"{log_msg}: {message}")
-                    
-                    # Handle different message types
-                    message_type = message.get("type")
-                    
-                    if message_type == "heartbeat":
-                        # Acknowledge heartbeat
-                        await manager.send_personal_message(
-                            json.dumps({
-                                "type": "heartbeat_ack",
-                                "timestamp": datetime.utcnow().isoformat()
-                            }),
-                            client_id
-                        )
-                    
-                    elif message_type == "auth":
-                        # Already authenticated, just acknowledge
-                        await manager.send_personal_message(
-                            json.dumps({
-                                "type": "auth_ack",
-                                "status": "authenticated",
-                                "user_id": user.id,
-                                "timestamp": datetime.utcnow().isoformat()
-                            }),
-                            client_id
-                        )
-                    
-                    elif message_type == "ping":
-                        # Respond to ping with pong
-                        await manager.send_personal_message(
-                            json.dumps({
-                                "type": "pong",
-                                "timestamp": datetime.utcnow().isoformat()
-                            }),
-                            client_id
-                        )
-                    
-                    else:
-                        # Echo back the message with additional metadata
-                        response = {
-                            "type": "message_ack",
-                            "message_id": message.get("message_id", str(uuid.uuid4())),
-                            "received_at": datetime.utcnow().isoformat(),
-                            "status": "received"
-                        }
-                        
-                        # Include the original message if it's not too large
-                        if len(data) < 1000:  # 1KB limit
-                            response["received"] = message
-                        
-                        await manager.send_personal_message(
-                            json.dumps(response),
-                            client_id
-                        )
-                
-                except asyncio.TimeoutError:
-                    # Check if we should close the connection due to inactivity
-                    if (datetime.utcnow() - last_activity).total_seconds() > 300:  # 5 minutes
-                        logger.info(f"Closing idle WebSocket connection: {client_id}")
-                        await websocket.close(
-                            code=status.WS_1000_NORMAL_CLOSURE,
-                            reason="Connection idle for too long"
-                        )
-                        break
-                    
-                    # Send a ping to check if the client is still there
-                    try:
-                        await manager.send_personal_message(
-                            json.dumps({
-                                "type": "ping",
-                                "timestamp": datetime.utcnow().isoformat()
-                            }),
-                            client_id
-                        )
-                    except Exception as ping_error:
-                        logger.warning(f"Failed to send ping to {client_id}: {str(ping_error)}")
-                        raise WebSocketDisconnect()
-                
-                except WebSocketDisconnect:
-                    logger.info(f"Client {client_id} disconnected")
-                    break
-                    
-                except Exception as msg_error:
-                    logger.error(f"Error processing message from {client_id}: {str(msg_error)}")
+                    message = json.loads(data)
+                except json.JSONDecodeError:
+                    logger.warning(f"Received invalid JSON from {client_id}")
                     await manager.send_personal_message(
                         json.dumps({
                             "type": "error",
-                            "message": "Error processing message",
-                            "code": "processing_error",
+                            "message": "Invalid JSON format",
+                            "code": "invalid_json",
                             "timestamp": datetime.utcnow().isoformat()
                         }),
                         client_id
                     )
-        
-        except WebSocketDisconnect:
-            logger.info(f"Client {client_id} disconnected")
+                    continue
+                
+                # Log message (sensitive data should be redacted in production)
+                log_msg = f"Received message from client={client_id}, user_id={user.id}"
+                if message.get('type') not in ['heartbeat', 'ping']:  # Skip logging heartbeats/pings
+                    logger.debug(f"{log_msg}: {message}")
+                
+                # Handle different message types
+                message_type = message.get("type")
+                
+                if message_type == "heartbeat":
+                    # Acknowledge heartbeat
+                    await manager.send_personal_message(
+                        json.dumps({
+                            "type": "heartbeat_ack",
+                            "timestamp": datetime.utcnow().isoformat()
+                        }),
+                        client_id
+                    )
+                
+                elif message_type == "auth":
+                    # Already authenticated, just acknowledge
+                    await manager.send_personal_message(
+                        json.dumps({
+                            "type": "auth_ack",
+                            "status": "authenticated",
+                            "user_id": user.id,
+                            "timestamp": datetime.utcnow().isoformat()
+                        }),
+                        client_id
+                    )
+                
+                elif message_type == "ping":
+                    # Respond to ping with pong
+                    await manager.send_personal_message(
+                        json.dumps({
+                            "type": "pong",
+                            "timestamp": datetime.utcnow().isoformat()
+                        }),
+                        client_id
+                    )
+                
+                else:
+                    # Echo back the message with additional metadata
+                    response = {
+                        "type": "message_ack",
+                        "message_id": message.get("message_id", str(uuid.uuid4())),
+                        "received_at": datetime.utcnow().isoformat(),
+                        "status": "received"
+                    }
+                    
+                    # Include the original message if it's not too large
+                    if len(data) < 1000:  # 1KB limit
+                        response["received"] = message
+                    
+                    await manager.send_personal_message(
+                        json.dumps(response),
+                        client_id
+                    )
             
-        except Exception as conn_error:
-            logger.error(f"WebSocket connection error for {client_id}: {str(conn_error)}")
+            except asyncio.TimeoutError:
+                # Check if we should close the connection due to inactivity
+                if (datetime.utcnow() - last_activity).total_seconds() > 300:  # 5 minutes
+                    logger.info(f"Closing idle WebSocket connection: {client_id}")
+                    await websocket.close(
+                        code=status.WS_1000_NORMAL_CLOSURE,
+                        reason="Connection idle for too long"
+                    )
+                    break
+                
+                # Send a ping to check if the client is still there
+                try:
+                    await manager.send_personal_message(
+                        json.dumps({
+                            "type": "ping",
+                            "timestamp": datetime.utcnow().isoformat()
+                        }),
+                        client_id
+                    )
+                except Exception as ping_error:
+                    logger.warning(f"Failed to send ping to {client_id}: {str(ping_error)}")
+                    raise WebSocketDisconnect()
+            
+            except WebSocketDisconnect:
+                logger.info(f"Client {client_id} disconnected")
+                break
+                
+            except Exception as msg_error:
+                logger.error(f"Error processing message from {client_id}: {str(msg_error)}")
+                await manager.send_personal_message(
+                    json.dumps({
+                        "type": "error",
+                        "message": "Error processing message",
+                        "code": "processing_error",
+                        "timestamp": datetime.utcnow().isoformat()
+                    }),
+                    client_id
+                )
+    
+    except WebSocketDisconnect:
+        logger.info(f"[WebSocket] Client {client_id} disconnected gracefully")
+        
+    except Exception as conn_error:
+        logger.error(f"[WebSocket] Connection error for {client_id}: {str(conn_error)}")
+        if connection_accepted:
             try:
                 await websocket.close(
                     code=status.WS_1011_INTERNAL_ERROR,
                     reason="Internal server error"
                 )
             except Exception as close_error:
-                logger.error(f"Error closing WebSocket: {str(close_error)}")
-            
-    except Exception as e:
-        logger.error(f"Unexpected WebSocket error for {client_id}: {str(e)}", exc_info=True)
+                logger.error(f"[WebSocket] Error closing connection: {str(close_error)}")
         
     finally:
         # Clean up the connection

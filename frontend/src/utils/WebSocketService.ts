@@ -164,6 +164,9 @@ const webSocketService = {
       }
       
       console.log('WebSocket URL:', wsUrl);
+      console.log('Environment:', isDev ? 'DEVELOPMENT' : 'PRODUCTION');
+      console.log('Protocol:', window.location.protocol);
+      console.log('Host:', window.location.host);
       
       // Añadir el token como query parameter
       const url = new URL(wsUrl);
@@ -172,6 +175,7 @@ const webSocketService = {
       return new Promise<boolean>((resolve, reject) => {
         console.log('Conectando a WebSocket:', url.toString());
         console.log('Token being sent:', token ? `${token.substring(0, 20)}...` : 'null');
+        console.log('Client ID:', clientId);
         
         try {
           ws = new WebSocket(url.toString());

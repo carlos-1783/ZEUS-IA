@@ -169,11 +169,35 @@ async def debug_info():
 # WebSocket test endpoint
 @app.get("/ws-test")
 async def websocket_test():
+    import os
     return {
         "message": "WebSocket endpoint available",
         "endpoint": "/api/v1/ws/{client_id}",
         "protocol": "wss://" if os.getenv("RAILWAY_ENVIRONMENT") else "ws://",
-        "status": "ready"
+        "status": "ready",
+        "railway_environment": os.getenv("RAILWAY_ENVIRONMENT", "NOT_SET"),
+        "port": os.getenv("PORT", "8000"),
+        "host": "0.0.0.0",
+        "websocket_support": "ENABLED"
+    }
+
+# Railway WebSocket diagnostic
+@app.get("/railway-ws-diagnostic")
+async def railway_ws_diagnostic():
+    import os
+    import platform
+    return {
+        "platform": platform.system(),
+        "python_version": platform.python_version(),
+        "railway_environment": os.getenv("RAILWAY_ENVIRONMENT", "NOT_SET"),
+        "port": os.getenv("PORT", "8000"),
+        "host": "0.0.0.0",
+        "websocket_endpoint": "/api/v1/ws/{client_id}",
+        "cors_origins": settings.BACKEND_CORS_ORIGINS,
+        "fastapi_version": "0.104.1",
+        "uvicorn_version": "0.24.0",
+        "websocket_support": "ENABLED",
+        "middleware_configured": True
     }
 
 if __name__ == "__main__":

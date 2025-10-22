@@ -32,17 +32,17 @@ app.add_middleware(
 )
 
 # Middleware específico para WebSockets en Railway
-@app.middleware("http")
-async def websocket_middleware(request: Request, call_next):
-    # Permitir WebSocket upgrades
-    if request.headers.get("upgrade") == "websocket":
-        # Asegurar que las cabeceras necesarias estén presentes
-        response = await call_next(request)
-        response.headers["Upgrade"] = "websocket"
-        response.headers["Connection"] = "Upgrade"
-        return response
-    
-    return await call_next(request)
+# @app.middleware("http")
+# async def websocket_middleware(request: Request, call_next):
+#     # Permitir WebSocket upgrades
+#     if request.headers.get("upgrade") == "websocket":
+#         # Asegurar que las cabeceras necesarias estén presentes
+#         response = await call_next(request)
+#         response.headers["Upgrade"] = "websocket"
+#         response.headers["Connection"] = "Upgrade"
+#         return response
+#     
+#     return await call_next(request)
 
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")

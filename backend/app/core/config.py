@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # Clave secreta como string puro - ULTRA SEGURA
     SECRET_KEY: str = os.getenv("SECRET_KEY", "zeus_ia_super_secure_secret_key_2024_production_ultra_strong_256_bits_minimum")
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30  # 30 minutos para mayor seguridad
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 horas para desarrollo (1440 minutos)
     
     # Configuración de JWT
     JWT_AUDIENCE: List[str] = ["zeus-ia:auth", "zeus-ia:access", "zeus-ia:websocket"]  # Lista de audiencias válidas

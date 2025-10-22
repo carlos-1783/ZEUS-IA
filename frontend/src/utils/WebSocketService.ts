@@ -160,7 +160,7 @@ const webSocketService = {
       } else {
         // En producción, deshabilitar WebSocket y usar HTTP polling
         console.log('WebSocket deshabilitado en producción - usando HTTP polling');
-        return null;
+        return false;
       }
       
       console.log('WebSocket URL:', wsUrl);

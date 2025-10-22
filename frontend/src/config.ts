@@ -2,15 +2,14 @@
 export const config = {
   // WebSocket configuration
   ws: {
-    url: import.meta.env.VITE_WS_URL || 
-      'wss://zeus-ia-production-16d8.up.railway.app/api/v1/ws',
+    url: 'wss://zeus-ia-production-16d8.up.railway.app/api/v1/ws',
     reconnectInterval: 3000, // 3 seconds
     maxReconnectAttempts: 5,
   },
   
   // API configuration
   api: {
-    baseUrl: import.meta.env.VITE_API_URL || 'https://zeus-ia-production-16d8.up.railway.app/api/v1',
+    baseUrl: 'https://zeus-ia-production-16d8.up.railway.app/api/v1',
     timeout: 30000, // 30 seconds
   },
   

@@ -7,16 +7,19 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { useAuthStore } from './stores/auth'
 
 const route = useRoute()
+const authStore = useAuthStore()
 
-onMounted(() => {
+onMounted(async () => {
   console.log('ZEUS IA Frontend iniciado correctamente')
   console.log('Current route:', route.path)
   console.log('Route name:', route.name)
   
-  // DESHABILITAR SERVICIOS PESADOS TEMPORALMENTE
-  console.log('🚫 Deshabilitando servicios pesados para evitar violaciones de rendimiento...')
+  // Inicializar autenticación
+  await authStore.initialize()
+  console.log('Auth initialized:', authStore.isAuthenticated)
 })
 </script>
 

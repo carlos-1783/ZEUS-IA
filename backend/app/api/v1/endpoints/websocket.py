@@ -151,21 +151,21 @@ async def websocket_endpoint(
         if not token:
             error_msg = "No se proporcionó token de autenticación"
             logger.warning(f"WebSocket connection rejected: {error_msg}")
-            await websocket.send_text(json.dumps({
-                "type": "auth_error",
-                "error": error_msg,
-                "code": "missing_token"
-            }))
-            await websocket.close(
-                code=status.WS_1008_POLICY_VIOLATION,
-                reason=error_msg
-            )
-            return
-            await websocket.close(
-                code=status.WS_1008_POLICY_VIOLATION,
-                reason=error_msg
-            )
-            connection_active = False
+            # Aceptar conexión primero para poder enviar mensajes
+            try:
+                await websocket.accept()
+                await websocket.send_text(json.dumps({
+                    "type": "auth_error",
+                    "error": error_msg,
+                    "code": "missing_token"
+                }))
+            except Exception as e:
+                logger.error(f"Error enviando mensaje de error: {e}")
+            finally:
+                try:
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_msg)
+                except:
+                    pass
             return
         
         # Authenticate user with detailed error handling
@@ -175,31 +175,41 @@ async def websocket_endpoint(
             if not user:
                 error_msg = "Token de autenticación inválido o expirado"
                 logger.warning(f"WebSocket connection rejected: {error_msg}")
-                await websocket.send_text(json.dumps({
-                    "type": "auth_error",
-                    "error": error_msg,
-                    "code": "invalid_token"
-                }))
-                await websocket.close(
-                    code=status.WS_1008_POLICY_VIOLATION,
-                    reason=error_msg
-                )
-                connection_active = False
+                # Aceptar conexión primero para poder enviar mensajes
+                try:
+                    await websocket.accept()
+                    await websocket.send_text(json.dumps({
+                        "type": "auth_error",
+                        "error": error_msg,
+                        "code": "invalid_token"
+                    }))
+                except Exception as e:
+                    logger.error(f"Error enviando mensaje de error: {e}")
+                finally:
+                    try:
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_msg)
+                    except:
+                        pass
                 return
                 
             if not user.is_active:
                 error_msg = "La cuenta del usuario no está activa"
                 logger.warning(f"WebSocket connection rejected: {error_msg}")
-                await websocket.send_text(json.dumps({
-                    "type": "auth_error",
-                    "error": error_msg,
-                    "code": "inactive_user"
-                }))
-                await websocket.close(
-                    code=status.WS_1008_POLICY_VIOLATION,
-                    reason=error_msg
-                )
-                connection_active = False
+                # Aceptar conexión primero para poder enviar mensajes
+                try:
+                    await websocket.accept()
+                    await websocket.send_text(json.dumps({
+                        "type": "auth_error",
+                        "error": error_msg,
+                        "code": "inactive_user"
+                    }))
+                except Exception as e:
+                    logger.error(f"Error enviando mensaje de error: {e}")
+                finally:
+                    try:
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_msg)
+                    except:
+                        pass
                 return
                 
         except (JWTError, JWTClaimsError, ExpiredSignatureError, JoseJWTError) as e:
@@ -214,13 +224,18 @@ async def websocket_endpoint(
                 error_details["details"] = "Audiencia del token no válida. Por favor, obtenga un nuevo token de autenticación."
             else:
                 error_details["details"] = str(e)
-                
-            await websocket.send_text(json.dumps(error_details))
-            await websocket.close(
-                code=status.WS_1008_POLICY_VIOLATION,
-                reason=error_msg
-            )
-            connection_active = False
+            
+            # Aceptar conexión primero para poder enviar mensajes
+            try:
+                await websocket.accept()
+                await websocket.send_text(json.dumps(error_details))
+            except Exception as send_error:
+                logger.error(f"Error enviando mensaje de error: {send_error}")
+            finally:
+                try:
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_msg)
+                except:
+                    pass
             return
         
         # Register the connection

@@ -252,7 +252,7 @@ router.beforeEach((to, from, next) => {
   
   // Redirect to login if route requires authentication and user is not authenticated
   if (requiresAuth && !isAuthenticated) {
-    next({ name: 'Login', query: { redirect: to.fullPath } })
+    next({ name: 'AuthLogin', query: { redirect: to.fullPath } })
   } 
   // Redirect to dashboard if user is authenticated and trying to access auth pages
   else if (isAuthenticated && publicRoutes.includes(to.name)) {

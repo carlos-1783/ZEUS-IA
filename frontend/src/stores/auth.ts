@@ -422,9 +422,25 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // Performance: Flag para prevenir múltiples inicializaciones
+  let isInitializing = false;
+  let hasInitialized = false;
+
   // Initialize the store
   async function initialize(): Promise<boolean> {
+    // Performance: Skip si ya está inicializado o inicializando
+    if (hasInitialized) {
+      console.log('⏩ [AuthStore] Already initialized, skip');
+      return isAuthenticated.value;
+    }
+    
+    if (isInitializing) {
+      console.log('⏩ [AuthStore] Initialization in progress, skip');
+      return false;
+    }
+    
     console.log('[AuthStore] Initializing...');
+    isInitializing = true;
     
     try {
       const currentToken = getToken();
@@ -433,6 +449,7 @@ export const useAuthStore = defineStore('auth', () => {
       // If no token is available, do nothing
       if (!currentToken || !currentRefreshToken) {
         console.log('[AuthStore] No stored tokens found');
+        hasInitialized = true;
         return false;
       }
 
@@ -448,7 +465,6 @@ export const useAuthStore = defineStore('auth', () => {
       
       console.log('[AuthStore] Token info:', {
         exp: decoded.exp ? new Date(decoded.exp * 1000).toISOString() : 'No expiration',
-        now: new Date(now * 1000).toISOString(),
         isExpired: isTokenExpired
       });
 
@@ -456,6 +472,7 @@ export const useAuthStore = defineStore('auth', () => {
       if (isTokenExpired) {
         console.log('[AuthStore] Token expired, clearing tokens');
         resetAuthState();
+        hasInitialized = true;
         return false;
       }
 
@@ -467,16 +484,21 @@ export const useAuthStore = defineStore('auth', () => {
       try {
         updateUserFromToken(currentToken);
         console.log('[AuthStore] Initialization successful');
+        hasInitialized = true;
         return true;
       } catch (userError) {
         console.warn('[AuthStore] Could not update user from token:', userError);
         // Don't reset auth state, just continue
+        hasInitialized = true;
         return true;
       }
     } catch (error) {
       console.error('[AuthStore] Error during initialization:', error);
+      hasInitialized = true;
       // Don't reset auth state during init, just log and continue
       return false;
+    } finally {
+      isInitializing = false;
     }
   }
 

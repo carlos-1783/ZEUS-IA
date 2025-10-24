@@ -95,6 +95,9 @@ let holographicObjects = []
 let animationId = null
 let isMouseDown = false
 let mouseX = 0, mouseY = 0
+let needsRender = true  // Performance: Lazy rendering flag
+let lastTime = 0  // Performance: FPS throttling
+const fpsInterval = 1000 / 30  // Performance: Limit to 30 FPS
 
 // Agentes ZEUS con especializaciones reales
 const agents = ref([
@@ -289,7 +292,7 @@ function getAgentColor(type) {
 }
 
 function createHolographicParticles() {
-  const particleCount = 100
+  const particleCount = 30  // Optimizado: Reducido de 100 a 30 para mejor rendimiento
   const geometry = new THREE.BufferGeometry()
   const positions = new Float32Array(particleCount * 3)
   
@@ -325,31 +328,48 @@ function createHolographicGrid() {
 // ANIMACIÓN Y CONTROLES
 // ========================================
 
-function animate() {
+function animate(currentTime = 0) {
   animationId = requestAnimationFrame(animate)
+  
+  // Performance: FPS Throttling - Limit to 30 FPS
+  const elapsed = currentTime - lastTime
+  if (elapsed < fpsInterval) return
+  lastTime = currentTime - (elapsed % fpsInterval)
   
   // Optimización: Reducir cálculos en cada frame
   const now = Date.now()
   const time = now * 0.0005
   
-  // Rotar objetos holográficos (optimizado)
+  // Rotar objetos holográficos (optimizado - solo objetos activos)
+  let hasActiveObjects = false
   holographicObjects.forEach((obj) => {
-    if (obj.userData && obj.userData.agent) {
-      obj.rotation.y += 0.005 // Reducir velocidad de rotación
+    if (obj.userData && obj.userData.agent && obj.userData.agent.status === 'active') {
+      obj.rotation.y += 0.005
       obj.rotation.x += 0.0025
+      hasActiveObjects = true
     }
   })
   
   // Rotar cámara suavemente (solo si no hay interacción)
+  let cameraMoving = false
   if (!isMouseDown) {
     const cameraRadius = 10
     camera.position.x = Math.sin(time) * cameraRadius
     camera.position.z = Math.cos(time) * cameraRadius
     camera.lookAt(0, 0, 0)
+    cameraMoving = true
   }
   
-  // Render solo cuando sea necesario
-  renderer.render(scene, camera)
+  // Performance: Solo renderizar si hay cambios o interacción
+  if (needsRender || hasActiveObjects || cameraMoving) {
+    renderer.render(scene, camera)
+    needsRender = false  // Reset flag after render
+  }
+}
+
+// Helper para forzar un nuevo render
+function requestRender() {
+  needsRender = true
 }
 
 // ========================================
@@ -359,6 +379,7 @@ function animate() {
 function onMouseDown(event) {
   isMouseDown = true
   mouseX = event.clientX
+  requestRender()  // Performance: Forzar render en interacción
   mouseY = event.clientY
 }
 
@@ -373,6 +394,7 @@ function onMouseMove(event) {
   
   mouseX = event.clientX
   mouseY = event.clientY
+  requestRender()  // Performance: Forzar render en movimiento
 }
 
 function onMouseUp() {
@@ -382,6 +404,7 @@ function onMouseUp() {
 function onWheel(event) {
   camera.position.z += event.deltaY * 0.01
   camera.position.z = Math.max(5, Math.min(20, camera.position.z))
+  requestRender()  // Performance: Forzar render en wheel
 }
 
 // ========================================
@@ -395,6 +418,7 @@ function selectAgent(agent) {
   camera.position.y = agent.position.y
   camera.position.z = agent.position.z + 5
   camera.lookAt(agent.position.x, agent.position.y, agent.position.z)
+  requestRender()  // Performance: Forzar render al seleccionar agente
 }
 
 async function executeCommand() {

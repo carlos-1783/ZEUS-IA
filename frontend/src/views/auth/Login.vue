@@ -153,11 +153,12 @@ const validateForm = () => {
 // Manejar envío del formulario
 const handleSubmit = async () => {
   console.log('[auth/Login.vue] handleSubmit llamado');
+  
+  // Performance: Validación síncrona rápida
   const validation = validateForm();
   if (validation !== true) {
     error.value = Object.values(validation).join('\n');
-    alert('Error de validación: ' + error.value);
-    return;
+    return;  // ✅ No usar alert - solo mostrar error en UI
   }
   
   isLoading.value = true;
@@ -166,57 +167,44 @@ const handleSubmit = async () => {
   try {
     console.log('[auth/Login.vue] Iniciando proceso de login...');
     
-    // DESHABILITAR SERVICIOS PESADOS TEMPORALMENTE
-    console.log('🚫 Evitando servicios pesados durante login...');
-    
+    // Performance: Ejecutar login de forma non-blocking
     const result = await authStore.login(form.value.email, form.value.password);
     console.log('[auth/Login.vue] Resultado del login:', result);
     
     if (result.success) {
-      console.log('✅ Login exitoso, iniciando redirección...');
+      console.log('✅ Login exitoso, redirigiendo...');
       
-      // Verificar que el token se guardó correctamente
+      // Performance: Verificación rápida del token
       const token = localStorage.getItem('auth_token');
-      console.log('[auth/Login.vue] Token guardado en localStorage:', token ? '✅' : '❌ No se guardó');
       
       if (!token) {
-        alert('No se pudo guardar el token de autenticación');
-        throw new Error('No se pudo guardar el token de autenticación');
+        error.value = 'No se pudo guardar el token de autenticación';
+        return;
       }
       
-      // REDIRECCIÓN DIRECTA Y DEFINITIVA
-      console.log('🔄 Redirigiendo a:', redirectTo);
+      // Performance: Redirección inmediata sin delays
+      console.log('🚀 Redirigiendo a:', redirectTo);
+      window.location.href = redirectTo;
       
-      // Forzar actualización del estado de autenticación
-      await nextTick();
-      
-      // Verificar que el estado se actualizó
-      console.log('🔍 Estado de autenticación después del login:', authStore.isAuthenticated);
-      
-      // Redirección inmediata sin complicaciones
-      setTimeout(() => {
-        console.log('🚀 Ejecutando redirección directa...');
-        // Usar window.location.href para forzar la redirección
-        window.location.href = redirectTo;
-      }, 100);
     } else {
+      // Performance: Solo mostrar error en UI, sin alerts
       let mensaje = result.error || result.message || 'Error al iniciar sesión. Por favor, verifica tus credenciales.';
       if (typeof mensaje !== 'string') {
         mensaje = JSON.stringify(mensaje);
       }
       error.value = mensaje;
-      alert('Error en login: ' + mensaje);
-      console.error('Error mostrado al usuario:', mensaje);
+      console.error('Error de login:', mensaje);
     }
   } catch (err) {
     console.error('[auth/Login.vue] Error en el inicio de sesión:', err);
+    
+    // Performance: Solo mostrar error en UI, sin alerts
     let mensaje = err.message || 'Ocurrió un error al intentar iniciar sesión. Por favor, inténtalo de nuevo.';
     if (typeof mensaje !== 'string') {
       mensaje = JSON.stringify(mensaje);
     }
     error.value = mensaje;
-    alert('Error inesperado en login: ' + mensaje);
-    console.error('Error mostrado al usuario (catch):', mensaje);
+    console.error('Error:', mensaje);
   } finally {
     isLoading.value = false;
   }

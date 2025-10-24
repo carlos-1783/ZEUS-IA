@@ -366,8 +366,14 @@ const handleClickOutside = (event) => {
 };
 
 // Inicialización del gráfico
+// Performance: Chart deshabilitado temporalmente para diagnóstico
 const initChart = () => {
-  // Destruir gráfico existente si hay uno
+  console.log('📊 Chart init skipped for performance');
+  // Chart.js temporalmente deshabilitado
+  // Se reactivará una vez confirmado que el dashboard carga correctamente
+  return;
+  
+  /* CÓDIGO DE CHART.JS COMENTADO
   if (salesChart.value) {
     const chartInstance = Chart.getChart(salesChart.value);
     if (chartInstance) {
@@ -383,46 +389,27 @@ const initChart = () => {
           const date = subDays(new Date(), 6 - i);
           return format(date, 'EEE', { locale: es });
         }),
-        datasets: [
-          {
-            label: 'Ventas',
-            data: [12, 19, 3, 5, 2, 3, 15],
-            borderColor: 'rgb(79, 70, 229)',
-            backgroundColor: 'rgba(79, 70, 229, 0.1)',
-            tension: 0.4,
-            fill: true
-          }
-        ]
+        datasets: [{
+          label: 'Ventas',
+          data: [12, 19, 3, 5, 2, 3, 15],
+          borderColor: 'rgb(79, 70, 229)',
+          backgroundColor: 'rgba(79, 70, 229, 0.1)',
+          tension: 0.4,
+          fill: true
+        }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: false
-          }
-        },
+        plugins: { legend: { display: false } },
         scales: {
-          y: {
-            beginAtZero: true,
-            grid: {
-              display: true,
-              drawBorder: false
-            },
-            ticks: {
-              stepSize: 5
-            }
-          },
-          x: {
-            grid: {
-              display: false,
-              drawBorder: false
-            }
-          }
+          y: { beginAtZero: true, grid: { display: true, drawBorder: false }, ticks: { stepSize: 5 } },
+          x: { grid: { display: false, drawBorder: false } }
         }
       }
     });
   }
+  */
 };
 
 // Watchers
@@ -455,14 +442,25 @@ onMounted(() => {
         // Performance: Cargar datos adicionales en background (opcional)
         // await api.getCurrentUser();  // ← Deshabilitado para performance
         
-        // Performance: Inicializar gráfico de forma lazy
-        setTimeout(() => {
-          try {
-            initChart();
-          } catch (chartError) {
-            console.warn('Chart init skipped:', chartError);
-          }
-        }, 1000);  // Delay de 1s para no bloquear el render inicial
+        // Performance: Inicializar gráfico de forma lazy con requestIdleCallback
+        if ('requestIdleCallback' in window) {
+          requestIdleCallback(() => {
+            try {
+              initChart();
+            } catch (chartError) {
+              console.warn('Chart init skipped:', chartError);
+            }
+          }, { timeout: 2000 });
+        } else {
+          // Fallback: setTimeout pero sin bloquear
+          Promise.resolve().then(() => {
+            try {
+              initChart();
+            } catch (chartError) {
+              console.warn('Chart init skipped:', chartError);
+            }
+          });
+        }
         
       } catch (err) {
         console.error('Error cargando dashboard:', err);

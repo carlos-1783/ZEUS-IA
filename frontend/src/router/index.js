@@ -15,20 +15,21 @@ const decodeParam = (param) => {
   return decodeURIComponent(String(param).replace(/\+/g, ' '));
 };
 
-// Layouts
+// Performance: Lazy loading para TODOS los componentes
+// Solo AuthLayout se carga síncronamente (es ligero)
 import AuthLayout from '../layouts/AuthLayout.vue'
-import MainLayout from '../layouts/MainLayout.vue'
 
-// Views
-import Dashboard from '../views/Dashboard.vue'
-import ZeusCore from '../views/ZeusCore.vue'
-import Login from '../views/auth/Login.vue'
-import Register from '../views/auth/Register.vue'
-import ForgotPassword from '../views/auth/ForgotPassword.vue'
-import ResetPassword from '../views/auth/ResetPassword.vue'
-import NotFound from '../views/errors/NotFound.vue'
-import AuthTest from '../views/AuthTest.vue'
-import TestRoute from '../views/TestRoute.vue'
+// Lazy loading de componentes pesados
+const MainLayout = () => import('../layouts/MainLayout.vue')
+const Dashboard = () => import('../views/Dashboard.vue')
+const ZeusCore = () => import('../views/ZeusCore.vue')
+const Login = () => import('../views/auth/Login.vue')
+const Register = () => import('../views/auth/Register.vue')
+const ForgotPassword = () => import('../views/auth/ForgotPassword.vue')
+const ResetPassword = () => import('../views/auth/ResetPassword.vue')
+const NotFound = () => import('../views/errors/NotFound.vue')
+const AuthTest = () => import('../views/AuthTest.vue')
+const TestRoute = () => import('../views/TestRoute.vue')
 
 // Routes that don't require authentication
 const publicRoutes = [

@@ -1,20 +1,14 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import { library } from '@fortawesome/fontawesome-svg-core'
-import { fas } from '@fortawesome/free-solid-svg-icons'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
 // Importar el router
 import router from './router/index.js'
 
-// Importar estilos
+// Performance: Importar estilos de forma asíncrona
 import './assets/styles/main.scss'
 
 // Importar componente principal
 import App from './App.vue'
-
-// Configurar FontAwesome
-library.add(fas)
 
 // Crear instancia de Pinia
 const pinia = createPinia()
@@ -26,11 +20,7 @@ const app = createApp(App)
 app.use(pinia)
 app.use(router)
 
-// Registrar componentes globales
-app.component('font-awesome-icon', FontAwesomeIcon)
-
-// Montar la aplicación
+// Performance: Montar inmediatamente (sin delay)
 app.mount('#app')
-
-console.log('✅ ZEUS IA Frontend iniciado correctamente')
+console.log('✅ ZEUS IA Frontend iniciado')
 

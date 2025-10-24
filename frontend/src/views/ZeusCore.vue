@@ -118,6 +118,10 @@ const systemLogs = ref([])
 const notifications = ref([])
 const startTime = ref(new Date())
 
+// Performance: Guardar IDs de intervalos para cleanup
+let statusUpdateInterval = null
+let logsUpdateInterval = null
+
 // Computed
 const userEmail = computed(() => authStore.user?.email || 'Usuario')
 const hologramWidth = computed(() => window.innerWidth - 300)
@@ -173,6 +177,16 @@ onMounted(async () => {
 
 onUnmounted(() => {
   console.log('🛑 Cerrando Núcleo ZEUS-IA...')
+  
+  // Performance: Limpiar intervalos
+  if (statusUpdateInterval) {
+    clearInterval(statusUpdateInterval)
+    statusUpdateInterval = null
+  }
+  if (logsUpdateInterval) {
+    clearInterval(logsUpdateInterval)
+    logsUpdateInterval = null
+  }
 })
 
 // ========================================
@@ -209,26 +223,22 @@ async function initializeZeusSystem() {
 }
 
 function setupPeriodicUpdates() {
-  // Actualizar estado cada 30 segundos (no bloqueante)
-  setInterval(() => {
-    requestAnimationFrame(async () => {
-      try {
-        await updateSystemStatus()
-      } catch (error) {
-        console.error('Error actualizando estado:', error)
-      }
-    })
+  // Performance: Actualizar estado cada 30 segundos (optimizado sin requestAnimationFrame)
+  statusUpdateInterval = setInterval(async () => {
+    try {
+      await updateSystemStatus()
+    } catch (error) {
+      console.error('Error actualizando estado:', error)
+    }
   }, 30000)
   
-  // Actualizar logs cada 10 segundos (no bloqueante)
-  setInterval(() => {
-    requestAnimationFrame(() => {
-      try {
-        updateSystemLogs()
-      } catch (error) {
-        console.error('Error actualizando logs:', error)
-      }
-    })
+  // Performance: Actualizar logs cada 10 segundos (optimizado sin requestAnimationFrame)
+  logsUpdateInterval = setInterval(() => {
+    try {
+      updateSystemLogs()
+    } catch (error) {
+      console.error('Error actualizando logs:', error)
+    }
   }, 10000)
 }
 
@@ -236,11 +246,22 @@ function setupPeriodicUpdates() {
 // FUNCIONES DEL SISTEMA
 // ========================================
 
+// Performance: Variable para evitar múltiples requests simultáneos
+let isUpdatingStatus = false
+
 async function updateSystemStatus() {
+  // Performance: Skip si ya hay un update en progreso
+  if (isUpdatingStatus) {
+    console.log('⏩ Skipping status update - already in progress')
+    return
+  }
+  
+  isUpdatingStatus = true
+  
   try {
-    // Timeout de 5 segundos para evitar bloqueos
+    // Performance: Timeout reducido de 5s a 3s
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000)
+    const timeoutId = setTimeout(() => controller.abort(), 3000)
     
     const response = await fetch('/api/v1/zeus/status', {
       headers: {
@@ -260,25 +281,28 @@ async function updateSystemStatus() {
     }
   } catch (error) {
     if (error.name === 'AbortError') {
-      console.warn('Timeout actualizando estado del sistema')
+      console.warn('⏱️ Timeout actualizando estado del sistema')
     } else {
-      console.error('Error actualizando estado:', error)
+      console.error('❌ Error actualizando estado:', error)
     }
+  } finally {
+    isUpdatingStatus = false
   }
 }
 
 function updateSystemLogs() {
-  // Simular logs del sistema
-  const logTypes = ['info', 'success', 'warning', 'error']
-  const messages = [
-    'Sistema funcionando normalmente',
-    'Agente THALOS ejecutando verificación de seguridad',
-    'Análisis de datos completado',
-    'Usuario interactuando con el sistema',
-    'Comando ejecutado exitosamente'
-  ]
-  
-  if (Math.random() > 0.7) {
+  // Performance: Reducir probabilidad de 30% a 10% para menos operaciones
+  if (Math.random() > 0.9) {
+    // Performance: Usar array estático pre-definido
+    const logTypes = ['info', 'success', 'warning', 'error']
+    const messages = [
+      'Sistema funcionando normalmente',
+      'Agente THALOS ejecutando verificación de seguridad',
+      'Análisis de datos completado',
+      'Usuario interactuando con el sistema',
+      'Comando ejecutado exitosamente'
+    ]
+    
     const type = logTypes[Math.floor(Math.random() * logTypes.length)]
     const message = messages[Math.floor(Math.random() * messages.length)]
     addSystemLog(type, message)
@@ -356,9 +380,9 @@ function addSystemLog(type, message) {
   
   systemLogs.value.push(log)
   
-  // Mantener solo los últimos 50 logs
+  // Performance: Mantener solo los últimos 50 logs (optimizado con shift)
   if (systemLogs.value.length > 50) {
-    systemLogs.value = systemLogs.value.slice(-50)
+    systemLogs.value.shift()  // ✅ Más eficiente que slice
   }
 }
 

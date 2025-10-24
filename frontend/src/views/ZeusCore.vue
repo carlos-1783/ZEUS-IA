@@ -165,11 +165,17 @@ onMounted(async () => {
     return
   }
   
-  // Inicializar sistema
-  await initializeZeusSystem()
+  // Performance: Inicialización non-blocking
+  Promise.resolve().then(async () => {
+    try {
+      await initializeZeusSystem()
+    } catch (error) {
+      console.error('Error init ZEUS:', error)
+    }
+  })
   
-  // Configurar actualizaciones periódicas
-  setupPeriodicUpdates()
+  // Performance: NO configurar actualizaciones periódicas (causa setInterval pesado)
+  // setupPeriodicUpdates()  // ← DESHABILITADO
   
   addSystemLog('info', 'Núcleo ZEUS-IA inicializado correctamente')
   showNotification('success', 'Sistema Activado', 'Núcleo ZEUS-IA operativo')

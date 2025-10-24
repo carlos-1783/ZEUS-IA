@@ -325,12 +325,16 @@ const initAudioSystem = () => {
   // Preload on module load
   preloadAudio();
   
-  // Auto-resume audio context when page becomes visible
+  // Performance: Optimized visibilitychange handler
   document.addEventListener('visibilitychange', () => {
+    // Performance: Solo ejecutar si es visible y suspended
     if (document.visibilityState === 'visible' && audioContext && audioContext.state === 'suspended') {
-      audioContext.resume().catch(console.error);
+      // Performance: Defer execution para no bloquear el event handler
+      Promise.resolve().then(() => {
+        audioContext.resume().catch(console.error);
+      });
     }
-  });
+  }, { passive: true });  // Passive listener para mejor rendimiento
 };
 
 // Initialize audio system on module load

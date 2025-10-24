@@ -288,22 +288,25 @@ const preloadAudio = (): void => {
   if (typeof window === 'undefined') return;
   
   const handleInteraction = () => {
-    try {
-      // Initialize audio context on first interaction
-      initAudioContext();
-      
-      // Load any additional audio assets here
-      // loadAudioAsset('notification', '/sounds/notification.mp3');
-      
-      // Remove listeners after first interaction
-      window.removeEventListener('click', handleInteraction);
-      window.removeEventListener('keydown', handleInteraction);
-      window.removeEventListener('touchstart', handleInteraction);
-      
-      console.log('Audio system ready');
-    } catch (error) {
-      console.error('Error initializing audio:', error);
-    }
+    // Performance: Defer execution para no bloquear el click handler
+    Promise.resolve().then(() => {
+      try {
+        // Initialize audio context on first interaction
+        initAudioContext();
+        
+        // Load any additional audio assets here
+        // loadAudioAsset('notification', '/sounds/notification.mp3');
+        
+        console.log('Audio system ready');
+      } catch (error) {
+        console.error('Error initializing audio:', error);
+      }
+    });
+    
+    // Performance: Remover listeners inmediatamente para no ejecutar múltiples veces
+    window.removeEventListener('click', handleInteraction);
+    window.removeEventListener('keydown', handleInteraction);
+    window.removeEventListener('touchstart', handleInteraction);
   };
 
   // Add interaction listeners

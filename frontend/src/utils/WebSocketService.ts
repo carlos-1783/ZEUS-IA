@@ -362,17 +362,17 @@ const webSocketService = {
       clearInterval(heartbeatInterval);
     }
     
-    // Enviar ping cada 30 segundos
-    heartbeatInterval = setInterval(() => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        try {
-          ws.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
-          console.log('📡 Heartbeat enviado');
-        } catch (err) {
-          console.error('Error enviando heartbeat:', err);
-        }
-      }
-    }, 30000); // 30 segundos
+    // Performance: Heartbeat DESHABILITADO para evitar setInterval warnings
+    // heartbeatInterval = setInterval(() => {
+    //   if (ws && ws.readyState === WebSocket.OPEN) {
+    //     try {
+    //       ws.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
+    //       console.log('📡 Heartbeat enviado');
+    //     } catch (err) {
+    //       console.error('Error enviando heartbeat:', err);
+    //     }
+    //   }
+    // }, 30000); // 30 segundos
   },
 
   // Detener heartbeat

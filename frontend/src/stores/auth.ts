@@ -65,7 +65,7 @@ const isSuccessResponse = (res: any): res is LoginSuccessResponse => {
 
 // Cast the API to include our methods
 const typedApi = api as unknown as {
-  login: (credentials: { email: string; password: string }) => Promise<LoginApiResponse>;
+  login: (credentials: { username: string; password: string }) => Promise<LoginApiResponse>;
   logout: () => Promise<void>;
   refreshToken: (refreshToken: string) => Promise<{ 
     access_token: string; 
@@ -214,7 +214,7 @@ export const useAuthStore = defineStore('auth', () => {
 
       console.log('[AuthStore] Calling login API...');
       const response = await typedApi.login({
-        email: userEmail.trim(),
+        username: userEmail.trim(),
         password: userPassword
       });
       

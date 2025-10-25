@@ -129,14 +129,8 @@
         <div class="bg-white rounded-lg shadow overflow-hidden">
           <div class="p-6">
             <h2 class="text-lg font-medium text-gray-900 mb-4">Vista 3D</h2>
-            <div class="h-64 flex items-center justify-center bg-gradient-to-br from-indigo-50 to-blue-50">
-              <!-- Performance: Zeus3D temporalmente deshabilitado -->
-              <!-- <Zeus3D class="h-full w-full" /> -->
-              <div class="text-center">
-                <div class="text-6xl mb-2">⚡</div>
-                <p class="text-gray-600">Vista 3D</p>
-                <p class="text-sm text-gray-400">Próximamente</p>
-              </div>
+            <div class="h-64">
+              <Zeus3D class="h-full w-full" />
             </div>
           </div>
         </div>
@@ -229,7 +223,7 @@ Chart.register(...registerables);
 
 // Componentes
 import SystemStatusBadge from '@/components/SystemStatusBadge.vue';
-// import Zeus3D from '@/components/Zeus3D.vue';  // Performance: Deshabilitado temporalmente
+import Zeus3D from '@/components/Zeus3D.vue';
 import DashboardMetric from '@/components/DashboardMetric.vue';
 
 // Estado reactivo

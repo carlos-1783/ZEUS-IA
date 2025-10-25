@@ -23,6 +23,7 @@ import AuthLayout from '../layouts/AuthLayout.vue'
 const MainLayout = () => import('../layouts/MainLayout.vue')
 const Dashboard = () => import('../views/Dashboard.vue')
 const DashboardHolographic = () => import('../views/DashboardHolographic.vue')
+const OlymposDashboard = () => import('../views/OlymposDashboard.vue')
 const ZeusCore = () => import('../views/ZeusCore.vue')
 const Login = () => import('../views/auth/Login.vue')
 const Register = () => import('../views/auth/Register.vue')
@@ -113,13 +114,13 @@ const router = createRouter({
     return result;
   },
   routes: [
-    // Ruta raíz - Dashboard Holográfico (requiere autenticación)
+    // Ruta raíz - Olimpos Dashboard (requiere autenticación)
     {
       path: '/',
       name: 'Dashboard',
-      component: DashboardHolographic,
+      component: OlymposDashboard,
       meta: { 
-        title: 'Panel de control',
+        title: 'El Olimpo - Panel de Zeus',
         requiresAuth: true
       }
     },

@@ -430,16 +430,13 @@ export const useAuthStore = defineStore('auth', () => {
   async function initialize(): Promise<boolean> {
     // Performance: Skip si ya está inicializado o inicializando
     if (hasInitialized) {
-      console.log('⏩ [AuthStore] Already initialized, skip');
       return isAuthenticated.value;
     }
     
     if (isInitializing) {
-      console.log('⏩ [AuthStore] Initialization in progress, skip');
       return false;
     }
     
-    console.log('[AuthStore] Initializing...');
     isInitializing = true;
     
     try {

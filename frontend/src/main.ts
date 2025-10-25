@@ -20,7 +20,9 @@ const app = createApp(App)
 app.use(pinia)
 app.use(router)
 
-// Performance: Montar inmediatamente (sin delay)
-app.mount('#app')
-console.log('✅ ZEUS IA Frontend iniciado')
+// Performance: Defer mount con requestAnimationFrame
+requestAnimationFrame(() => {
+  app.mount('#app')
+  console.log('✅ ZEUS IA iniciado')
+})
 

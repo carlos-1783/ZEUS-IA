@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZEUS IA - Verificación de Versión</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 40px;
+            background: linear-gradient(135deg, #0a1628 0%, #1a2f4a 50%, #2a4560 100%);
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            max-width: 800px;
+            background: rgba(10, 35, 66, 0.9);
+            border: 2px solid rgba(59, 130, 246, 0.5);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 0 40px rgba(59, 130, 246, 0.3);
+        }
+        h1 {
+            color: #ffd700;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5rem;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+        }
+        .version-info {
+            background: rgba(59, 130, 246, 0.2);
+            border-left: 4px solid #3b82f6;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .version-info h2 {
+            margin-top: 0;
+            color: #3b82f6;
+        }
+        .version-info p {
+            margin: 10px 0;
+            line-height: 1.8;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            background: #10b981;
+            color: #fff;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .commit {
+            background: rgba(10, 35, 66, 0.6);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+        }
+        .features {
+            list-style: none;
+            padding: 0;
+        }
+        .features li {
+            padding: 10px;
+            margin: 8px 0;
+            background: rgba(59, 130, 246, 0.1);
+            border-left: 3px solid #ffd700;
+            border-radius: 4px;
+        }
+        .features li::before {
+            content: '✅ ';
+            margin-right: 10px;
+        }
+        .btn {
+            display: inline-block;
+            margin: 10px 5px;
+            padding: 15px 30px;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.8), rgba(10, 35, 66, 0.9));
+            border: 2px solid rgba(255, 215, 0, 0.5);
+            border-radius: 50px;
+            color: #ffd700;
+            text-decoration: none;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        .btn:hover {
+            background: linear-gradient(135deg, rgba(10, 35, 66, 0.9), rgba(59, 130, 246, 0.8));
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
+        }
+        .actions {
+            text-align: center;
+            margin-top: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚡ ZEUS IA - Verificación de Versión</h1>
+        
+        <div class="version-info">
+            <h2>📦 Información de Deployment</h2>
+            <p><strong>Versión actual:</strong> <span class="status">EL OLIMPO v1.0</span></p>
+            <p><strong>Fecha de deploy:</strong> 25 Octubre 2024</p>
+            <p><strong>Deployment ID:</strong> #17</p>
+        </div>
+
+        <div class="commit">
+            <strong>Último commit:</strong><br>
+            <code>0aa2d62 - feat: EL OLIMPO - DASHBOARD DIVINO COMPLETO</code>
+        </div>
+
+        <div class="version-info">
+            <h2>🏛️ Características del Olimpo Dashboard</h2>
+            <ul class="features">
+                <li>Fondo del Olimpo con templo griego (columnas doradas)</li>
+                <li>Luz celestial circular superior con anillos divinos</li>
+                <li>Zeus central con ojos brillantes azul eléctrico</li>
+                <li>Rayos emanando de las manos de Zeus</li>
+                <li>Aura dorada pulsante alrededor de Zeus</li>
+                <li>Nubes etéreas en la base</li>
+                <li>6 Agentes del Olimpo (ZEUS, PERSEO, THALOS, ATENEA, HERMES, HEFESTO)</li>
+                <li>Panel de Agentes interactivo (botón "INVOCAR AGENTES")</li>
+                <li>Métricas flotantes con toggle</li>
+                <li>Notificaciones divinas con glow</li>
+                <li>Animaciones CSS GPU-accelerated</li>
+            </ul>
+        </div>
+
+        <div class="version-info">
+            <h2>📊 Estadísticas del Build</h2>
+            <p><strong>Archivos desplegados:</strong> 101 archivos</p>
+            <p><strong>CSS del Olimpo:</strong> 11.58 KB</p>
+            <p><strong>JS del Olimpo:</strong> 4.94 KB</p>
+            <p><strong>Performance:</strong> GPU-accelerated, lazy loading activo</p>
+        </div>
+
+        <div class="actions">
+            <a href="/" class="btn">🏛️ IR AL OLIMPO DASHBOARD</a>
+            <a href="/auth/login" class="btn">🔐 LOGIN</a>
+        </div>
+
+        <div class="version-info" style="margin-top: 30px; background: rgba(239, 68, 68, 0.2); border-left-color: #ef4444;">
+            <h2 style="color: #ef4444;">⚠️ ¿No ves el Olimpo?</h2>
+            <p><strong>SI TODAVÍA VES EL DASHBOARD VIEJO:</strong></p>
+            <ul style="padding-left: 20px;">
+                <li>Es cache del navegador</li>
+                <li>Presiona: <code>Ctrl + Shift + R</code> (Windows) o <code>Cmd + Shift + R</code> (Mac)</li>
+                <li>O borra cache completo: <code>Ctrl + Shift + Delete</code></li>
+                <li>O usa modo incógnito para verificar</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
+

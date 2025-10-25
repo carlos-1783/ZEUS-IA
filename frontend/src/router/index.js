@@ -114,9 +114,18 @@ const router = createRouter({
     return result;
   },
   routes: [
-    // Ruta raíz - Olimpos Dashboard (requiere autenticación)
+    // Ruta raíz - Redirecciona según estado de auth
     {
       path: '/',
+      redirect: () => {
+        const authStore = useAuthStore()
+        return authStore.isAuthenticated ? '/dashboard' : '/auth/login'
+      }
+    },
+    
+    // Dashboard Olimpo (requiere autenticación)
+    {
+      path: '/dashboard',
       name: 'Dashboard',
       component: OlymposDashboard,
       meta: { 
@@ -252,29 +261,22 @@ router.beforeEach((to, from, next) => {
     ? `${to.meta.title} | ${import.meta.env.VITE_APP_NAME || 'ZEUS-IA'}`
     : import.meta.env.VITE_APP_NAME || 'ZEUS-IA'
   
-  // CRITICAL FIX: Validar token antes de permitir acceso
-  if (requiresAuth) {
-    const hasValidToken = authStore.isAuthenticated && authStore.user
-    
-    if (!hasValidToken) {
-      console.log('❌ No hay usuario válido, redirigiendo a login')
-      // Limpiar cualquier token inválido (sin await para no bloquear)
-      authStore.logout().catch(() => {})
-      next({ name: 'AuthLogin', query: { redirect: to.fullPath } })
-      return
-    }
-  } 
-  // Redirect to dashboard if user is authenticated and trying to access auth pages
-  if (authStore.isAuthenticated && authStore.user && publicRoutes.includes(to.name)) {
-    // Redirigir a la ruta original o al dashboard
-    const redirectTo = to.query.redirect || '/dashboard'
-    console.log('🔄 Usuario autenticado, redirigiendo a:', redirectTo)
-    // Forzar redirección con window.location
-    window.location.href = redirectTo
+  // Proteger rutas que requieren autenticación
+  if (requiresAuth && !authStore.isAuthenticated) {
+    console.log('❌ Ruta protegida sin autenticación, redirigiendo a login')
+    next({ name: 'AuthLogin', query: { redirect: to.fullPath } })
     return
   }
   
-  // Proceed to the route
+  // Redirigir a dashboard si ya está autenticado e intenta acceder a páginas públicas
+  if (authStore.isAuthenticated && publicRoutes.includes(to.name)) {
+    const redirectTo = to.query.redirect || '/dashboard'
+    console.log('✅ Usuario autenticado, redirigiendo a:', redirectTo)
+    next(redirectTo)
+    return
+  }
+  
+  // Continuar normalmente
   next()
 })
 

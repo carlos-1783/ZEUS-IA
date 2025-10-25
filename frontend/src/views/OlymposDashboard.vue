@@ -124,6 +124,11 @@
       </transition-group>
     </div>
 
+    <!-- Indicador de Versión (debug - removible después) -->
+    <div class="version-indicator">
+      🏛️ OLIMPO v1.0
+    </div>
+
     <!-- Comandos de Voz Zeus (simulado) -->
     <div class="zeus-voice-commands" v-if="activeAgent">
       <div class="voice-wave"></div>
@@ -777,6 +782,23 @@ onMounted(() => {
 .notification-slide-leave-to {
   opacity: 0;
   transform: translateY(30px);
+}
+
+/* ========== VERSION INDICATOR ========== */
+.version-indicator {
+  position: fixed;
+  bottom: 10px;
+  left: 10px;
+  padding: 8px 15px;
+  background: rgba(10, 35, 66, 0.9);
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  border-radius: 20px;
+  color: #ffd700;
+  font-size: 0.85rem;
+  font-weight: bold;
+  z-index: 9999;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
 }
 
 /* ========== RESPONSIVE ========== */

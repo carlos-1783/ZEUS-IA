@@ -19,15 +19,17 @@ onMounted(() => {
   
   console.log('✅ ZEUS IA Frontend iniciado')
   
-  // Performance: Inicialización non-blocking con Promise
-  Promise.resolve().then(async () => {
-    try {
-      await authStore.initialize()
-      console.log('✅ Auth initialized:', authStore.isAuthenticated)
-    } catch (error) {
-      console.error('❌ Auth init error:', error)
-    }
-  })
+  // Performance: Defer auth init completamente (requestIdleCallback si disponible)
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(() => {
+      authStore.initialize().catch(console.error)
+    })
+  } else {
+    // Fallback: setTimeout con delay largo
+    setTimeout(() => {
+      authStore.initialize().catch(console.error)
+    }, 100)
+  }
   
   isInitialized = true
 })

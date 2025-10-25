@@ -318,30 +318,8 @@ const preloadAudio = (): void => {
   window.addEventListener('beforeunload', cleanupAudio);
 };
 
-// Initialize audio system
-const initAudioSystem = () => {
-  if (typeof window === 'undefined') return;
-  
-  // Check saved audio preference
-  isAudioEnabled();
-  
-  // Preload on module load
-  preloadAudio();
-  
-  // Performance: Optimized visibilitychange handler
-  document.addEventListener('visibilitychange', () => {
-    // Performance: Solo ejecutar si es visible y suspended
-    if (document.visibilityState === 'visible' && audioContext && audioContext.state === 'suspended') {
-      // Performance: Defer execution para no bloquear el event handler
-      Promise.resolve().then(() => {
-        audioContext.resume().catch(console.error);
-      });
-    }
-  }, { passive: true });  // Passive listener para mejor rendimiento
-};
-
-// Initialize audio system on module load
-initAudioSystem();
+// Performance: Audio COMPLETAMENTE DESHABILITADO para eliminar violations
+// initAudioSystem() NO se llama nunca - sin listeners de visibilitychange
 
 // Export all functions as a default object
 export default {

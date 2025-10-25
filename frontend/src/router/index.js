@@ -245,7 +245,6 @@ router.beforeEach((to, from, next) => {
   
   // Continue with the regular authentication check
   const authStore = useAuthStore()
-  const isAuthenticated = authStore.isAuthenticated
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
   
   // Set page title
@@ -253,23 +252,30 @@ router.beforeEach((to, from, next) => {
     ? `${to.meta.title} | ${import.meta.env.VITE_APP_NAME || 'ZEUS-IA'}`
     : import.meta.env.VITE_APP_NAME || 'ZEUS-IA'
   
-  // Redirect to login if route requires authentication and user is not authenticated
-  if (requiresAuth && !isAuthenticated) {
-    next({ name: 'AuthLogin', query: { redirect: to.fullPath } })
+  // CRITICAL FIX: Validar token antes de permitir acceso
+  if (requiresAuth) {
+    const hasValidToken = authStore.isAuthenticated && authStore.user
+    
+    if (!hasValidToken) {
+      console.log('❌ No hay usuario válido, redirigiendo a login')
+      // Limpiar cualquier token inválido (sin await para no bloquear)
+      authStore.logout().catch(() => {})
+      next({ name: 'AuthLogin', query: { redirect: to.fullPath } })
+      return
+    }
   } 
   // Redirect to dashboard if user is authenticated and trying to access auth pages
-  else if (isAuthenticated && publicRoutes.includes(to.name)) {
+  if (authStore.isAuthenticated && authStore.user && publicRoutes.includes(to.name)) {
     // Redirigir a la ruta original o al dashboard
     const redirectTo = to.query.redirect || '/dashboard'
     console.log('🔄 Usuario autenticado, redirigiendo a:', redirectTo)
     // Forzar redirección con window.location
     window.location.href = redirectTo
     return
-  } 
-  // Proceed to the route
-  else {
-    next()
   }
+  
+  // Proceed to the route
+  next()
 })
 
 // Handle navigation errors

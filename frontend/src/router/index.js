@@ -22,6 +22,7 @@ import AuthLayout from '../layouts/AuthLayout.vue'
 // Lazy loading de componentes pesados
 const MainLayout = () => import('../layouts/MainLayout.vue')
 const Dashboard = () => import('../views/Dashboard.vue')
+const DashboardHolographic = () => import('../views/DashboardHolographic.vue')
 const ZeusCore = () => import('../views/ZeusCore.vue')
 const Login = () => import('../views/auth/Login.vue')
 const Register = () => import('../views/auth/Register.vue')
@@ -112,11 +113,11 @@ const router = createRouter({
     return result;
   },
   routes: [
-    // Ruta raíz - Dashboard (requiere autenticación)
+    // Ruta raíz - Dashboard Holográfico (requiere autenticación)
     {
       path: '/',
       name: 'Dashboard',
-      component: Dashboard,
+      component: DashboardHolographic,
       meta: { 
         title: 'Panel de control',
         requiresAuth: true

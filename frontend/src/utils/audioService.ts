@@ -337,8 +337,8 @@ export default {
   
   // Utility functions
   preloadAudio,
-  cleanupAudio,
-  initAudioSystem
+  cleanupAudio
+  // initAudioSystem - REMOVED: Deshabilitado para eliminar violations
 };
 
 // Export types separately

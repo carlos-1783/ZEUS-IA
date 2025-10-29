@@ -1,4 +1,18 @@
-# Python
+# ZEUS-IA - Git Ignore
+
+# =============================================================================
+# ENVIRONMENT & SECRETS
+# =============================================================================
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*.pfx
+
+# =============================================================================
+# PYTHON
+# =============================================================================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -16,40 +30,42 @@ parts/
 sdist/
 var/
 wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
-*.manifest
-*.spec
-pip-log.txt
-pip-delete-this-directory.txt
-.venv
+
+# Virtual environments
 venv/
 ENV/
 env/
-.env
-.env.local
-.env.development
-.env.production
-.venv/
+.venv
 
-# Node
+# =============================================================================
+# DATABASE
+# =============================================================================
+*.db
+*.sqlite
+*.sqlite3
+zeus_ia.db
+
+# =============================================================================
+# NODE / FRONTEND
+# =============================================================================
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-lerna-debug.log*
 .pnpm-debug.log*
-package-lock.json
-pnpm-lock.yaml
-.npm
-.eslintcache
-.node_repl_history
 
-# IDE
+# Frontend build
+frontend/dist/
+frontend/.next/
+frontend/out/
+frontend/build/
+
+# =============================================================================
+# IDE / EDITOR
+# =============================================================================
 .vscode/
 .idea/
 *.swp
@@ -57,56 +73,35 @@ pnpm-lock.yaml
 *~
 .DS_Store
 
-# Logs
-logs/
+# =============================================================================
+# LOGS
+# =============================================================================
 *.log
+logs/
 *.log.*
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
-zeus.db
-zeus.sqbpro
-sql_app.db
-test.db
-test_sqlite.db
-*.db.backup*
+# =============================================================================
+# TESTING
+# =============================================================================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
 
-# Environment files
-neon.env
-railway.env
-vercel.env
-.env.local
-.env.*.local
-
-# Build outputs
-dist/
-dist-electron/
-out/
-build/
-
-# Test files
-test-*.html
-clear_storage.html
-debug_token.html
-fix_token.html
-
-# Temporary files
-*.bak
-*.backup
+# =============================================================================
+# TEMPORARY
+# =============================================================================
 *.tmp
-query
+*.temp
+.cache/
 
-# Windows
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/
+# =============================================================================
+# RAILWAY
+# =============================================================================
+.railway/
 
-# Service configuration
-zeus-service-config.ini
-
-# Scripts
-*.bat.backup
-run-local.bak
+# =============================================================================
+# OTHERS
+# =============================================================================
+*.bak
+*.old

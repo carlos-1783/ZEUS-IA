@@ -1,0 +1,30 @@
+[33m14f501f[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m fix: Fix remaining db.func references
+[33m5eee899[m fix: Use sqlalchemy.func instead of db.func - fixes 500 error
+[33m655545d[m fix: Make /api/agents/status and /api/metrics/dashboard public endpoints
+[33ma9d5cda[m fix: DELETE ALL old static files with /api/v1 - force fresh build
+[33mba36c2d[m fix: INVALIDATE ALL CACHE - force /api build with explicit env vars
+[33me469bce[m fix: FORCE complete rebuild - verify no /api/v1 in compiled JS
+[33mfc3d8cd[m fix: Force frontend rebuild - remove /api/v1 cache + clean build
+[33m45f5dd2[m trigger: force Railway rebuild - clear cache
+[33m8d5994f[m fix: eliminar TODOS los /v1 del frontend
+[33m5c4fd64[m fix: remove /v1 from remaining files
+[33mb330de1[m fix: remove /v1 from all API routes
+[33mf917558[m fix: import openai_service module not class
+[33m1fc4429[m fix: add openai package to requirements.txt
+[33m314dee2[m feat: script automático para configurar .env
+[33m9066fce[m fix(docker): install curl for HEALTHCHECK to avoid 502 during deploy
+[33m96137d2[m fix: serve /favicon.ico to prevent proxy 502
+[33m85c19b7[m fix(docker): package backend correctly for uvicorn import\n\n- COPY backend -> /app/backend to keep package path\n- Add backend/__init__.py to ensure it is a package\n- Keep start cmd: uvicorn backend.main:app\n\nResolves ModuleNotFoundError: 'backend' in container startup.
+[33ma57c477[m fix: serve SPA static assets and correct Docker start
+[33me684179[m docs: Resumen completo del sistema ZEUS-IA
+[33m07aecb8[m feat: 4 Vistas nuevas del dashboard + Routes
+[33m1649363[m perf: Optimizar dashboard y marcar todos los agentes como online
+[33m4cf0cb9[m fix: Remove TypeScript annotation from Vue template
+[33m96e9554[m feat: Frontend conectado con Backend APIs
+[33m826eba5[m feat: Agentes THALOS y JUSTICIA completados
+[33m7f603f2[m feat: APIs REST completas - 6 endpoints FastAPI
+[33mcddec4b[m feat: Fundación completa ZEUS-IA - DB + 4 Servicios Enterprise
+[33m6e83541[m fix: TypeScript error - Remove initAudioSystem from exports
+[33mb298a12[m fix: ELIMINAR visibilitychange violations - App.vue simplificado
+[33m995e63a[m fix: ROUTING SIMPLE Y LÓGICO - / redirect según auth
+[33m8ab30d1[m fix: CRITICAL - Forzar redirección a LOGIN si no hay usuario válido

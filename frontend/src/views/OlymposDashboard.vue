@@ -76,7 +76,13 @@
           >
             <div class="agent-hologram">
               <div class="hologram-effect"></div>
-              <div class="agent-icon">{{ agent.icon }}</div>
+              <img 
+                v-if="agent.image" 
+                :src="agent.image" 
+                :alt="agent.name"
+                class="agent-avatar-3d"
+              />
+              <div v-else class="agent-icon">{{ agent.icon }}</div>
             </div>
             <div class="agent-name">{{ agent.name }}</div>
             <div class="agent-status" :class="agent.active ? 'status-active' : 'status-idle'">
@@ -153,13 +159,53 @@ const showMetrics = ref(true)
 const activeAgent = ref(null)
 const notifications = ref([])
 
-// Agentes del Olimpo - SIEMPRE VISIBLES
+// Agentes del Olimpo - SIEMPRE VISIBLES CON IMÁGENES 3D
 const olymposAgents = ref([
-  { id: 1, name: 'ZEUS CORE', icon: '⚡', active: false, description: 'Orquestador Supremo', status: 'online' },
-  { id: 2, name: 'PERSEO', icon: '🎯', active: false, description: 'Estratega de Crecimiento', status: 'online' },
-  { id: 3, name: 'RAFAEL', icon: '📊', active: false, description: 'Guardián Fiscal', status: 'online' },
-  { id: 4, name: 'THALOS', icon: '🛡️', active: false, description: 'Defensor Cibernético', status: 'online' },
-  { id: 5, name: 'JUSTICIA', icon: '⚖️', active: false, description: 'Asesora Legal y GDPR', status: 'online' }
+  { 
+    id: 1, 
+    name: 'ZEUS CORE', 
+    icon: '⚡', 
+    image: '/images/zues-3d-main.png',
+    active: false, 
+    description: 'Orquestador Supremo', 
+    status: 'online' 
+  },
+  { 
+    id: 2, 
+    name: 'PERSEO', 
+    icon: '🎯', 
+    image: '/images/avatars/perseo-avatar.jpg',
+    active: false, 
+    description: 'Estratega de Crecimiento', 
+    status: 'online' 
+  },
+  { 
+    id: 3, 
+    name: 'RAFAEL', 
+    icon: '📊', 
+    image: '/images/avatars/perseo-avatar.jpg',
+    active: false, 
+    description: 'Guardián Fiscal', 
+    status: 'online' 
+  },
+  { 
+    id: 4, 
+    name: 'THALOS', 
+    icon: '🛡️', 
+    image: '/images/avatars/perseo-avatar.jpg',
+    active: false, 
+    description: 'Defensor Cibernético', 
+    status: 'online' 
+  },
+  { 
+    id: 5, 
+    name: 'JUSTICIA', 
+    icon: '⚖️', 
+    image: '/images/avatars/perseo-avatar.jpg',
+    active: false, 
+    description: 'Asesora Legal y GDPR', 
+    status: 'online' 
+  }
 ])
 
 // Actualizar estado desde el backend (sin bloquear la UI)
@@ -592,6 +638,75 @@ onMounted(() => {
 .agent-icon {
   font-size: 3rem;
   filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.8));
+}
+
+/* Avatar 3D de agente con efectos holográficos */
+.agent-avatar-3d {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid rgba(59, 130, 246, 0.6);
+  box-shadow: 
+    0 0 20px rgba(59, 130, 246, 0.8),
+    0 0 40px rgba(59, 130, 246, 0.4),
+    inset 0 0 20px rgba(59, 130, 246, 0.2);
+  animation: avatar-pulse 2s ease-in-out infinite;
+  transition: all 0.3s ease;
+  filter: brightness(1.1) saturate(1.2);
+}
+
+.agent-card:hover .agent-avatar-3d {
+  transform: scale(1.15) rotateY(15deg);
+  box-shadow: 
+    0 0 30px rgba(59, 130, 246, 1),
+    0 0 60px rgba(59, 130, 246, 0.6),
+    inset 0 0 30px rgba(59, 130, 246, 0.3);
+  border-color: rgba(255, 215, 0, 0.8);
+  filter: brightness(1.3) saturate(1.4);
+}
+
+.agent-active .agent-avatar-3d {
+  border-color: rgba(16, 185, 129, 0.8);
+  box-shadow: 
+    0 0 40px rgba(16, 185, 129, 1),
+    0 0 80px rgba(16, 185, 129, 0.6),
+    inset 0 0 40px rgba(16, 185, 129, 0.4);
+  animation: avatar-pulse-active 1.5s ease-in-out infinite;
+}
+
+@keyframes avatar-pulse {
+  0%, 100% { 
+    transform: scale(1);
+    box-shadow: 
+      0 0 20px rgba(59, 130, 246, 0.8),
+      0 0 40px rgba(59, 130, 246, 0.4),
+      inset 0 0 20px rgba(59, 130, 246, 0.2);
+  }
+  50% { 
+    transform: scale(1.05);
+    box-shadow: 
+      0 0 30px rgba(59, 130, 246, 1),
+      0 0 60px rgba(59, 130, 246, 0.6),
+      inset 0 0 30px rgba(59, 130, 246, 0.3);
+  }
+}
+
+@keyframes avatar-pulse-active {
+  0%, 100% { 
+    transform: scale(1.05) rotate(0deg);
+    box-shadow: 
+      0 0 40px rgba(16, 185, 129, 1),
+      0 0 80px rgba(16, 185, 129, 0.6),
+      inset 0 0 40px rgba(16, 185, 129, 0.4);
+  }
+  50% { 
+    transform: scale(1.1) rotate(5deg);
+    box-shadow: 
+      0 0 50px rgba(16, 185, 129, 1),
+      0 0 100px rgba(16, 185, 129, 0.8),
+      inset 0 0 50px rgba(16, 185, 129, 0.5);
+  }
 }
 
 .agent-name {

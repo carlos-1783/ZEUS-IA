@@ -70,7 +70,7 @@
           <div 
             v-for="agent in olymposAgents" 
             :key="agent.id"
-            @click="activateAgent(agent)"
+            @click="openChat(agent)"
             class="agent-card"
             :class="{ 'agent-active': agent.active }"
           >
@@ -92,6 +92,65 @@
         </div>
       </transition>
     </div>
+
+    <!-- Panel de Chat con Agente -->
+    <transition name="chat-slide">
+      <div v-if="chatOpen && activeAgent" class="chat-panel">
+        <div class="chat-header">
+          <div class="chat-agent-info">
+            <img 
+              v-if="activeAgent.image" 
+              :src="activeAgent.image" 
+              :alt="activeAgent.name"
+              class="chat-avatar"
+            />
+            <div>
+              <div class="chat-agent-name">{{ activeAgent.name }}</div>
+              <div class="chat-agent-desc">{{ activeAgent.description }}</div>
+            </div>
+          </div>
+          <button @click="closeChat" class="chat-close">✕</button>
+        </div>
+
+        <div class="chat-messages" ref="chatMessages">
+          <div 
+            v-for="(msg, index) in chatHistory" 
+            :key="index"
+            class="chat-message"
+            :class="msg.role"
+          >
+            <div class="message-content">{{ msg.content }}</div>
+            <div class="message-time">{{ msg.time }}</div>
+          </div>
+          
+          <div v-if="isTyping" class="chat-message agent typing">
+            <div class="message-content">
+              <span class="typing-indicator">
+                <span></span><span></span><span></span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-input-container">
+          <input 
+            v-model="chatMessage"
+            @keyup.enter="sendMessage"
+            type="text"
+            class="chat-input"
+            :placeholder="`Pregunta a ${activeAgent.name}...`"
+            :disabled="isTyping"
+          />
+          <button 
+            @click="sendMessage" 
+            class="chat-send"
+            :disabled="!chatMessage.trim() || isTyping"
+          >
+            ⚡ ENVIAR
+          </button>
+        </div>
+      </div>
+    </transition>
 
     <!-- Métricas Flotantes -->
     <div class="metrics-olympos" v-if="showMetrics">
@@ -158,6 +217,13 @@ const showAgents = ref(true)  // Mostrar agentes por defecto
 const showMetrics = ref(true)
 const activeAgent = ref(null)
 const notifications = ref([])
+
+// Estado del chat
+const chatOpen = ref(false)
+const chatMessage = ref('')
+const chatHistory = ref([])
+const isTyping = ref(false)
+const chatMessages = ref(null)
 
 // Agentes del Olimpo - SIEMPRE VISIBLES CON IMÁGENES 3D
 const olymposAgents = ref([
@@ -253,24 +319,105 @@ const toggleAgentsPanel = () => {
   }
 }
 
-// Activar agente
-const activateAgent = (agent) => {
+// Abrir chat con agente
+const openChat = (agent) => {
   // Desactivar todos
   olymposAgents.value.forEach(a => a.active = false)
   
   // Activar el seleccionado
   agent.active = true
   activeAgent.value = agent
+  chatOpen.value = true
   
-  showNotification('success', `${agent.icon} ${agent.name} activado: ${agent.description}`)
+  // Mensaje de bienvenida si el historial está vacío
+  if (chatHistory.value.length === 0) {
+    chatHistory.value.push({
+      role: 'agent',
+      content: `Soy ${agent.name}, ${agent.description}. ¿En qué puedo ayudarte?`,
+      time: new Date().toLocaleTimeString()
+    })
+  }
   
-  // Auto-desactivar después de 5 segundos
+  showNotification('success', `💬 Chat con ${agent.name} iniciado`)
+}
+
+// Cerrar chat
+const closeChat = () => {
+  chatOpen.value = false
+  if (activeAgent.value) {
+    activeAgent.value.active = false
+  }
+}
+
+// Enviar mensaje
+const sendMessage = async () => {
+  if (!chatMessage.value.trim() || !activeAgent.value) return
+  
+  const userMessage = chatMessage.value.trim()
+  chatMessage.value = ''
+  
+  // Agregar mensaje del usuario al historial
+  chatHistory.value.push({
+    role: 'user',
+    content: userMessage,
+    time: new Date().toLocaleTimeString()
+  })
+  
+  // Scroll al final
   setTimeout(() => {
-    agent.active = false
-    if (activeAgent.value?.id === agent.id) {
-      activeAgent.value = null
+    if (chatMessages.value) {
+      chatMessages.value.scrollTop = chatMessages.value.scrollHeight
     }
-  }, 5000)
+  }, 100)
+  
+  // Mostrar indicador de "escribiendo"
+  isTyping.value = true
+  
+  try {
+    // Llamar al endpoint de chat
+    const agentNameUrl = activeAgent.value.name.toLowerCase().replace(/ /g, '-')
+    const response = await fetch(`/api/v1/chat/${agentNameUrl}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: userMessage,
+        context: {}
+      })
+    })
+    
+    const data = await response.json()
+    
+    // Agregar respuesta del agente
+    chatHistory.value.push({
+      role: 'agent',
+      content: data.message || 'Lo siento, no pude procesar tu solicitud.',
+      time: new Date().toLocaleTimeString()
+    })
+    
+    if (data.hitl_required) {
+      showNotification('warning', '⚠️ Esta acción requiere aprobación humana')
+    }
+    
+  } catch (error) {
+    console.error('Error en chat:', error)
+    chatHistory.value.push({
+      role: 'agent',
+      content: 'Error: No pude conectar con el agente. Verifica que el backend esté funcionando.',
+      time: new Date().toLocaleTimeString()
+    })
+    showNotification('error', '❌ Error al comunicarse con el agente')
+  } finally {
+    isTyping.value = false
+    
+    // Scroll al final
+    setTimeout(() => {
+      if (chatMessages.value) {
+        chatMessages.value.scrollTop = chatMessages.value.scrollHeight
+      }
+    }, 100)
+  }
 }
 
 // Mostrar notificación
@@ -942,6 +1089,262 @@ onMounted(() => {
   z-index: 9999;
   backdrop-filter: blur(10px);
   box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+}
+
+/* ========== CHAT PANEL ========== */
+.chat-panel {
+  position: fixed;
+  right: 30px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 450px;
+  height: 700px;
+  background: rgba(10, 35, 66, 0.95);
+  backdrop-filter: blur(20px);
+  border: 2px solid rgba(59, 130, 246, 0.6);
+  border-radius: 20px;
+  box-shadow: 0 0 50px rgba(59, 130, 246, 0.5);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chat-header {
+  padding: 20px;
+  background: rgba(59, 130, 246, 0.2);
+  border-bottom: 2px solid rgba(59, 130, 246, 0.4);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chat-agent-info {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.chat-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 215, 0, 0.6);
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+}
+
+.chat-agent-name {
+  color: #ffd700;
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+.chat-agent-desc {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
+}
+
+.chat-close {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 5px 10px;
+  transition: all 0.3s ease;
+}
+
+.chat-close:hover {
+  color: #ff4444;
+  transform: scale(1.2);
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.chat-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.5);
+  border-radius: 10px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.8);
+}
+
+.chat-message {
+  display: flex;
+  flex-direction: column;
+  max-width: 80%;
+  animation: message-appear 0.3s ease;
+}
+
+@keyframes message-appear {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chat-message.user {
+  align-self: flex-end;
+}
+
+.chat-message.agent {
+  align-self: flex-start;
+}
+
+.message-content {
+  padding: 12px 18px;
+  border-radius: 15px;
+  word-wrap: break-word;
+}
+
+.chat-message.user .message-content {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.8), rgba(59, 130, 246, 0.6));
+  color: #fff;
+  border-bottom-right-radius: 5px;
+}
+
+.chat-message.agent .message-content {
+  background: rgba(255, 215, 0, 0.2);
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  color: #ffd700;
+  border-bottom-left-radius: 5px;
+}
+
+.message-time {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 5px;
+  padding: 0 5px;
+}
+
+.chat-message.user .message-time {
+  text-align: right;
+}
+
+.typing-indicator {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.typing-indicator span {
+  width: 8px;
+  height: 8px;
+  background: rgba(255, 215, 0, 0.8);
+  border-radius: 50%;
+  animation: typing-bounce 1.4s infinite ease-in-out;
+}
+
+.typing-indicator span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes typing-bounce {
+  0%, 80%, 100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
+}
+
+.chat-input-container {
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.3);
+  border-top: 2px solid rgba(59, 130, 246, 0.4);
+  display: flex;
+  gap: 10px;
+}
+
+.chat-input {
+  flex: 1;
+  padding: 12px 18px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  border-radius: 25px;
+  color: #fff;
+  font-size: 1rem;
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+.chat-input:focus {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+}
+
+.chat-input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.chat-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chat-send {
+  padding: 12px 25px;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.8), rgba(255, 215, 0, 0.6));
+  border: none;
+  border-radius: 25px;
+  color: #0a1628;
+  font-weight: bold;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.chat-send:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 1), rgba(255, 215, 0, 0.8));
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
+}
+
+.chat-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Chat slide transition */
+.chat-slide-enter-active,
+.chat-slide-leave-active {
+  transition: all 0.4s ease;
+}
+
+.chat-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-50%) translateX(100px);
+}
+
+.chat-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-50%) translateX(100px);
 }
 
 /* ========== RESPONSIVE ========== */

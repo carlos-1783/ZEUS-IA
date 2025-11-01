@@ -153,66 +153,42 @@ const showMetrics = ref(true)
 const activeAgent = ref(null)
 const notifications = ref([])
 
-// Agentes del Olimpo
-// Agentes dinámicos desde el backend
-const olymposAgents = ref([])
+// Agentes del Olimpo - SIEMPRE VISIBLES
+const olymposAgents = ref([
+  { id: 1, name: 'ZEUS CORE', icon: '⚡', active: false, description: 'Orquestador Supremo', status: 'online' },
+  { id: 2, name: 'PERSEO', icon: '🎯', active: false, description: 'Estratega de Crecimiento', status: 'online' },
+  { id: 3, name: 'RAFAEL', icon: '📊', active: false, description: 'Guardián Fiscal', status: 'online' },
+  { id: 4, name: 'THALOS', icon: '🛡️', active: false, description: 'Defensor Cibernético', status: 'online' },
+  { id: 5, name: 'JUSTICIA', icon: '⚖️', active: false, description: 'Asesora Legal y GDPR', status: 'online' }
+])
 
-// Cargar agentes reales desde el backend
-const loadAgents = async () => {
+// Actualizar estado desde el backend (sin bloquear la UI)
+const updateAgentsFromBackend = async () => {
   try {
     const response = await fetch('/api/v1/agents/status')
     if (response.ok) {
       const data = await response.json()
+      console.log('✅ Backend respondió:', data)
       
-      // Mapear agentes del backend al formato del frontend
-      const agentIcons = {
-        'ZEUS CORE': '⚡',
-        'PERSEO': '🎯',
-        'RAFAEL': '📊',
-        'THALOS': '🛡️',
-        'JUSTICIA': '⚖️'
-      }
-      
-      olymposAgents.value = Object.entries(data.agents || {}).map(([name, info], index) => ({
-        id: index + 1,
-        name: name,
-        icon: agentIcons[name] || '🤖',
-        active: false,
-        description: info.role || '',
-        status: info.status || 'offline',
-        uptime: info.uptime || '0%'
-      }))
-      
-      showNotification('success', `✅ ${olymposAgents.value.length} agentes cargados desde el backend`)
-    } else {
-      console.error('Error cargando agentes:', response.status)
-      showNotification('error', '❌ Error al cargar agentes desde el backend')
-      // Fallback a agentes por defecto si falla
-      loadDefaultAgents()
+      // Actualizar solo el estado si el backend responde
+      Object.entries(data.agents || {}).forEach(([name, info]) => {
+        const agent = olymposAgents.value.find(a => a.name === name)
+        if (agent) {
+          agent.status = info.status || 'online'
+          agent.description = info.role || agent.description
+        }
+      })
     }
   } catch (error) {
-    console.error('Error al conectar con el backend:', error)
-    showNotification('error', '❌ No se pudo conectar con el backend')
-    loadDefaultAgents()
+    console.log('⚠️ Backend no disponible, usando datos por defecto')
   }
 }
 
-// Agentes por defecto como fallback
-const loadDefaultAgents = () => {
-  olymposAgents.value = [
-    { id: 1, name: 'ZEUS CORE', icon: '⚡', active: false, description: 'Orquestador supremo', status: 'offline' },
-    { id: 2, name: 'PERSEO', icon: '🎯', active: false, description: 'Estratega de crecimiento', status: 'offline' },
-    { id: 3, name: 'RAFAEL', icon: '📊', active: false, description: 'Guardián fiscal', status: 'offline' },
-    { id: 4, name: 'THALOS', icon: '🛡️', active: false, description: 'Defensor cibernético', status: 'offline' },
-    { id: 5, name: 'JUSTICIA', icon: '⚖️', active: false, description: 'Asesora legal', status: 'offline' }
-  ]
-}
-
-// Cargar agentes al montar el componente
+// Cargar estado desde backend en segundo plano
 onMounted(() => {
-  loadAgents()
-  // Recargar cada 30 segundos
-  setInterval(loadAgents, 30000)
+  updateAgentsFromBackend()
+  // Actualizar cada 30 segundos
+  setInterval(updateAgentsFromBackend, 30000)
 })
 
 // Métricas

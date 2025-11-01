@@ -148,7 +148,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 // Estado
-const showAgents = ref(false)
+const showAgents = ref(true)  // Mostrar agentes por defecto
 const showMetrics = ref(true)
 const activeAgent = ref(null)
 const notifications = ref([])

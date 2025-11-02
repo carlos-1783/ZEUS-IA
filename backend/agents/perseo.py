@@ -5,7 +5,7 @@ Agente especializado en Marketing, SEO y Growth
 
 import json
 from typing import Dict, Any
-from backend.agents.base_agent import BaseAgent
+from agents.base_agent import BaseAgent
 
 
 class Perseo(BaseAgent):

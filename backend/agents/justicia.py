@@ -5,7 +5,7 @@ Agente especializado en Legal y Protección de Datos
 
 import json
 from typing import Dict, Any
-from backend.agents.base_agent import BaseAgent
+from agents.base_agent import BaseAgent
 
 
 class Justicia(BaseAgent):

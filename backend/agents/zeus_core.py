@@ -5,7 +5,7 @@ El cerebro central que coordina todos los agentes
 
 import json
 from typing import Dict, List, Optional, Any
-from backend.agents.base_agent import BaseAgent
+from agents.base_agent import BaseAgent
 
 
 class ZeusCore(BaseAgent):

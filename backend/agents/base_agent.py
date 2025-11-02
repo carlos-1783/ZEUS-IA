@@ -8,8 +8,8 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 from abc import ABC, abstractmethod
 
-from backend.services.openai_service import chat_completion, parse_json_response
-from backend.config.settings import settings
+from services.openai_service import chat_completion, parse_json_response
+from config.settings import settings
 
 
 class BaseAgent(ABC):

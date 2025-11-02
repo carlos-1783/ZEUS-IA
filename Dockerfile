@@ -25,9 +25,13 @@ RUN npm install --legacy-peer-deps --no-optional
 # Copy frontend source
 COPY frontend/ ./
 
-# Build frontend (sin optimizaciones problemáticas)
+# FORZAR REBUILD LIMPIO - eliminar todo caché
+RUN rm -rf dist/ node_modules/.vite .vite/ .cache/ || true
+
+# Build frontend con forzado
 ENV NODE_ENV=production
-RUN npm run build || (echo "Build failed, trying without cache..." && rm -rf node_modules/.vite && npm run build)
+ENV VITE_FORCE_BUILD=true
+RUN npm run build -- --force
 
 # Debug: Show build output
 RUN echo "=== BUILD OUTPUT ===" && ls -la dist/

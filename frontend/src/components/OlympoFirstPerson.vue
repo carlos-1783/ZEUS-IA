@@ -25,7 +25,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import * as THREE from 'three'
-import { Character3D } from '@/utils/Character3D.js'
 
 const props = defineProps({
   agents: Array
@@ -47,78 +46,116 @@ let moveForward = false, moveBackward = false, moveLeft = false, moveRight = fal
 let velocity = new THREE.Vector3()
 let direction = new THREE.Vector3()
 
-const MOVE_SPEED = 5.0
-const LOOK_SPEED = 0.002
+const MOVE_SPEED = 8.0
 
-let mouseX = 0, mouseY = 0
+// Mouse
 let isDragging = false
+let previousMousePosition = { x: 0, y: 0 }
+let cameraRotation = { yaw: 0, pitch: 0 }
 
-onMounted(() => {
-  initScene()
-  createOlymposEnvironment()
-  createCharacters()
-  setupControls()
-  animate()
-})
-
-onUnmounted(() => {
-  if (animationId) cancelAnimationFrame(animationId)
-  window.removeEventListener('keydown', onKeyDown)
-  window.removeEventListener('keyup', onKeyUp)
-  if (renderer) renderer.dispose()
-})
-
-const initScene = () => {
-  // Escena
+const setupScene = () => {
   scene = new THREE.Scene()
-  scene.background = new THREE.Color(0x87CEEB) // Cielo azul claro
-  scene.fog = new THREE.Fog(0x87CEEB, 20, 60)
   
-  // Cámara en primera persona
+  // ✅ SKYBOX ULTRA REALISTA CON SHADER
+  const skyGeometry = new THREE.SphereGeometry(500, 64, 64)
+  const skyMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      topColor: { value: new THREE.Color(0x0066cc) },  // Azul profundo
+      bottomColor: { value: new THREE.Color(0xccddff) },  // Azul claro
+      offset: { value: 33 },
+      exponent: { value: 0.6 }
+    },
+    vertexShader: `
+      varying vec3 vWorldPosition;
+      void main() {
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPosition.xyz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 topColor;
+      uniform vec3 bottomColor;
+      uniform float offset;
+      uniform float exponent;
+      varying vec3 vWorldPosition;
+      void main() {
+        float h = normalize(vWorldPosition + offset).y;
+        gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+      }
+    `,
+    side: THREE.BackSide
+  })
+  const sky = new THREE.Mesh(skyGeometry, skyMaterial)
+  scene.add(sky)
+  
+  // Niebla atmosférica
+  scene.fog = new THREE.FogExp2(0xccddff, 0.003)
+  
+  // Cámara
   camera = new THREE.PerspectiveCamera(
     75,
     window.innerWidth / window.innerHeight,
     0.1,
     1000
   )
-  camera.position.set(0, 1.6, 5) // Altura de ojos humano
+  camera.position.set(0, 2, 8)
   
-  // Renderer
+  // Renderer CALIDAD ULTRA
   renderer = new THREE.WebGLRenderer({ 
     canvas: canvas.value,
-    antialias: true 
+    antialias: true,
+    powerPreference: 'high-performance'
   })
   renderer.setSize(window.innerWidth, window.innerHeight)
-  renderer.setPixelRatio(window.devicePixelRatio)
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  renderer.toneMapping = THREE.ACESFilmicToneMapping
+  renderer.toneMappingExposure = 1.3
   
-  // Luces MUY BRILLANTES para ver todo
-  const ambientLight = new THREE.AmbientLight(0xffffff, 2.5)
+  // ✅ ILUMINACIÓN ULTRA REALISTA
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.8)
   scene.add(ambientLight)
   
-  const sunLight = new THREE.DirectionalLight(0xffffff, 3)
-  sunLight.position.set(10, 30, 10)
+  // Sol divino
+  const sunLight = new THREE.DirectionalLight(0xfffacd, 4)
+  sunLight.position.set(50, 60, 30)
   sunLight.castShadow = true
-  sunLight.shadow.camera.far = 100
-  sunLight.shadow.mapSize.width = 2048
-  sunLight.shadow.mapSize.height = 2048
+  sunLight.shadow.mapSize.width = 4096
+  sunLight.shadow.mapSize.height = 4096
+  sunLight.shadow.camera.far = 200
+  sunLight.shadow.camera.left = -80
+  sunLight.shadow.camera.right = 80
+  sunLight.shadow.camera.top = 80
+  sunLight.shadow.camera.bottom = -80
+  sunLight.shadow.bias = -0.0001
   scene.add(sunLight)
   
-  // Luces de relleno
-  const fillLight1 = new THREE.PointLight(0xffd700, 2, 50)
-  fillLight1.position.set(-10, 10, -10)
-  scene.add(fillLight1)
+  // Luz hemisférica
+  const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0xffffff, 1.2)
+  hemiLight.position.set(0, 50, 0)
+  scene.add(hemiLight)
   
-  const fillLight2 = new THREE.PointLight(0xffd700, 2, 50)
-  fillLight2.position.set(10, 10, 10)
-  scene.add(fillLight2)
+  // 8 luces doradas en círculo
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2
+    const pointLight = new THREE.PointLight(0xffd700, 1.5, 60)
+    pointLight.position.set(
+      Math.cos(angle) * 18,
+      10,
+      Math.sin(angle) * 18
+    )
+    scene.add(pointLight)
+  }
   
   window.addEventListener('resize', onWindowResize)
 }
 
 const createOlymposEnvironment = () => {
-  // SUELO - Mármol blanco con patrón de baldosas doradas REALISTA
+  console.log('🏛️ CREANDO ENTORNO DEL OLIMPO')
+  
+  // SUELO - Mármol blanco con baldosas doradas REALISTA
   const floorGeometry = new THREE.PlaneGeometry(150, 150, 30, 30)
   
   // Textura procedural de mármol
@@ -146,8 +183,8 @@ const createOlymposEnvironment = () => {
   }
   
   // Baldosas doradas
-  ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)'
-  ctx.lineWidth = 4
+  ctx.strokeStyle = 'rgba(255, 215, 0, 0.4)'
+  ctx.lineWidth = 6
   for (let x = 0; x < 512; x += 64) {
     ctx.beginPath()
     ctx.moveTo(x, 0)
@@ -164,21 +201,21 @@ const createOlymposEnvironment = () => {
   const floorTexture = new THREE.CanvasTexture(canvas)
   floorTexture.wrapS = THREE.RepeatWrapping
   floorTexture.wrapT = THREE.RepeatWrapping
-  floorTexture.repeat.set(10, 10)
+  floorTexture.repeat.set(12, 12)
   
   const floorMaterial = new THREE.MeshStandardMaterial({ 
     map: floorTexture,
-    roughness: 0.2,
-    metalness: 0.7,
+    roughness: 0.15,
+    metalness: 0.8,
     emissive: 0xffd700,
-    emissiveIntensity: 0.1
+    emissiveIntensity: 0.12
   })
   const floor = new THREE.Mesh(floorGeometry, floorMaterial)
   floor.rotation.x = -Math.PI / 2
   floor.receiveShadow = true
   scene.add(floor)
   
-  // COLUMNAS GRIEGAS MASIVAS (como templo real)
+  // COLUMNAS GRIEGAS MONUMENTALES
   const columnPositions = [
     // Fila frontal
     [-12, 0, -15], [-6, 0, -15], [0, 0, -15], [6, 0, -15], [12, 0, -15],
@@ -190,30 +227,30 @@ const createOlymposEnvironment = () => {
   ]
   
   columnPositions.forEach(pos => {
-    // Base de columna DETALLADA
-    const baseGeometry = new THREE.CylinderGeometry(0.8, 1.2, 0.8, 24)
+    // Base
+    const baseGeometry = new THREE.CylinderGeometry(0.8, 1.2, 0.8, 32)
     const marbleMaterial = new THREE.MeshStandardMaterial({ 
       color: 0xffffff,
-      roughness: 0.15,
-      metalness: 0.4,
+      roughness: 0.1,
+      metalness: 0.5,
       emissive: 0xffffff,
-      emissiveIntensity: 0.05
+      emissiveIntensity: 0.08
     })
     const base = new THREE.Mesh(baseGeometry, marbleMaterial)
     base.position.set(pos[0], 0.4, pos[2])
     base.castShadow = true
     scene.add(base)
     
-    // Fuste (columna principal) con ACANALADURAS
+    // Fuste con acanaladuras
     const shaftGroup = new THREE.Group()
-    const mainShaft = new THREE.CylinderGeometry(0.65, 0.65, 12, 32)
+    const mainShaft = new THREE.CylinderGeometry(0.65, 0.65, 14, 48)
     const shaft = new THREE.Mesh(mainShaft, marbleMaterial)
     shaftGroup.add(shaft)
     
-    // Acanaladuras (detalles verticales)
+    // Acanaladuras (16 detalles verticales)
     for (let i = 0; i < 16; i++) {
       const angle = (i / 16) * Math.PI * 2
-      const grooveGeometry = new THREE.BoxGeometry(0.05, 12, 0.1)
+      const grooveGeometry = new THREE.BoxGeometry(0.06, 14, 0.12)
       const groove = new THREE.Mesh(grooveGeometry, marbleMaterial)
       groove.position.set(
         Math.cos(angle) * 0.68,
@@ -223,98 +260,86 @@ const createOlymposEnvironment = () => {
       shaftGroup.add(groove)
     }
     
-    shaftGroup.position.set(pos[0], 6.5, pos[2])
+    shaftGroup.position.set(pos[0], 7.5, pos[2])
     shaftGroup.castShadow = true
     scene.add(shaftGroup)
     
-    // Capitel dorado ORNAMENTADO
+    // Capitel dorado ornamentado
     const capitalGroup = new THREE.Group()
     
-    const capitalMain = new THREE.CylinderGeometry(1.1, 0.75, 1.2, 24)
+    const capitalMain = new THREE.CylinderGeometry(1.2, 0.75, 1.5, 32)
     const goldMaterial = new THREE.MeshStandardMaterial({ 
       color: 0xffd700,
-      roughness: 0.1,
-      metalness: 0.95,
+      roughness: 0.08,
+      metalness: 0.98,
       emissive: 0xffd700,
-      emissiveIntensity: 0.3
+      emissiveIntensity: 0.35
     })
     const capital = new THREE.Mesh(capitalMain, goldMaterial)
     capitalGroup.add(capital)
     
-    // Decoración del capitel
-    const ringGeometry = new THREE.TorusGeometry(0.9, 0.08, 16, 24)
+    // Anillo decorativo
+    const ringGeometry = new THREE.TorusGeometry(0.95, 0.1, 20, 32)
     const ring = new THREE.Mesh(ringGeometry, goldMaterial)
     ring.rotation.x = Math.PI / 2
-    ring.position.y = -0.3
+    ring.position.y = -0.4
     capitalGroup.add(ring)
     
-    capitalGroup.position.set(pos[0], 13, pos[2])
+    capitalGroup.position.set(pos[0], 15, pos[2])
     capitalGroup.castShadow = true
     scene.add(capitalGroup)
   })
   
-  // TECHO DORADO (entre columnas)
-  const ceilingGeometry = new THREE.PlaneGeometry(40, 35)
+  // TECHO DORADO
+  const ceilingGeometry = new THREE.PlaneGeometry(42, 37)
   const ceilingMaterial = new THREE.MeshStandardMaterial({
     color: 0xffd700,
-    roughness: 0.2,
-    metalness: 0.8,
+    roughness: 0.15,
+    metalness: 0.9,
     emissive: 0xffd700,
-    emissiveIntensity: 0.15,
+    emissiveIntensity: 0.2,
     side: THREE.DoubleSide
   })
   const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial)
-  ceiling.position.set(0, 12, 0)
+  ceiling.position.set(0, 16, 0)
   ceiling.rotation.x = Math.PI / 2
   scene.add(ceiling)
   
   // MONTAÑAS AL FONDO
-  for (let i = 0; i < 5; i++) {
-    const mountainGeometry = new THREE.ConeGeometry(8 + Math.random() * 4, 15 + Math.random() * 5, 8)
+  for (let i = 0; i < 6; i++) {
+    const mountainGeometry = new THREE.ConeGeometry(10 + Math.random() * 6, 18 + Math.random() * 8, 12)
     const mountainMaterial = new THREE.MeshStandardMaterial({
-      color: 0xe0e0e0,
-      roughness: 0.8
+      color: 0xe5e5e5,
+      roughness: 0.85
     })
     const mountain = new THREE.Mesh(mountainGeometry, mountainMaterial)
     mountain.position.set(
-      (i - 2) * 15,
-      5,
-      -40 - Math.random() * 10
+      (i - 2.5) * 18,
+      6,
+      -45 - Math.random() * 15
     )
+    mountain.castShadow = true
     scene.add(mountain)
   }
   
   // NUBES FLOTANTES
-  for (let i = 0; i < 15; i++) {
-    const cloudGeometry = new THREE.SphereGeometry(2 + Math.random() * 2, 16, 16)
+  for (let i = 0; i < 20; i++) {
+    const cloudGeometry = new THREE.SphereGeometry(2.5 + Math.random() * 2.5, 20, 20)
     const cloudMaterial = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
-      opacity: 0.7
+      opacity: 0.75
     })
     const cloud = new THREE.Mesh(cloudGeometry, cloudMaterial)
     cloud.position.set(
-      (Math.random() - 0.5) * 60,
-      8 + Math.random() * 8,
-      (Math.random() - 0.5) * 60
+      (Math.random() - 0.5) * 70,
+      10 + Math.random() * 12,
+      (Math.random() - 0.5) * 70
     )
     scene.add(cloud)
   }
   
-  // ESTATUAS GRIEGAS (decoración)
-  const statuePositions = [[-10, 0, -10], [10, 0, -10]]
-  statuePositions.forEach(pos => {
-    const statueGeometry = new THREE.CylinderGeometry(0.3, 0.4, 2, 16)
-    const statueMaterial = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      roughness: 0.4,
-      metalness: 0.1
-    })
-    const statue = new THREE.Mesh(statueGeometry, statueMaterial)
-    statue.position.set(pos[0], 1, pos[2])
-    statue.castShadow = true
-    scene.add(statue)
-  })
+  console.log('✅ Entorno del Olimpo creado')
 }
 
 const createCharacters = () => {
@@ -342,11 +367,11 @@ const createCharacters = () => {
 const createSingleCharacter = (agent, index) => {
   // Posiciones de vuelo - distribuidos en círculo
   const angle = (index / 5) * Math.PI * 2
-  const radius = 12
+  const radius = 14
   const pos = {
     x: Math.cos(angle) * radius,
     z: Math.sin(angle) * radius,
-    y: 6 + Math.random() * 4  // Volando alto
+    y: 7 + Math.random() * 5  // Volando alto (7-12m)
   }
   
   console.log(`✅ Creando ${agent.name} en posición:`, pos)
@@ -367,40 +392,64 @@ const createSingleCharacter = (agent, index) => {
   )
   
   // BILLBOARD GIGANTE Y BRILLANTE
-  const geometry = new THREE.PlaneGeometry(4, 5)  // GIGANTE: 4m x 5m
+  const geometry = new THREE.PlaneGeometry(5, 6)  // GIGANTE: 5m x 6m
   const material = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
-    alphaTest: 0.1,
+    alphaTest: 0.05,
     side: THREE.DoubleSide,
     opacity: 1,
-    depthWrite: false  // Para que se vea siempre
+    depthWrite: false
   })
   
   const mesh = new THREE.Mesh(geometry, material)
   mesh.position.set(pos.x, pos.y, pos.z)
   
-  // HALO DORADO ALREDEDOR (como dios griego)
-  const haloGeometry = new THREE.RingGeometry(2.5, 3, 32)
+  // HALO DORADO BRILLANTE (como dios griego)
+  const haloGeometry = new THREE.RingGeometry(3, 3.5, 48)
   const haloMaterial = new THREE.MeshBasicMaterial({
     color: 0xffd700,
     transparent: true,
-    opacity: 0.3,
+    opacity: 0.4,
     side: THREE.DoubleSide
   })
   const halo = new THREE.Mesh(haloGeometry, haloMaterial)
-  halo.position.set(0, 2, -0.1)
+  halo.position.set(0, 2.5, -0.1)
   mesh.add(halo)
+  
+  // Partículas doradas alrededor
+  const particlesGeometry = new THREE.BufferGeometry()
+  const particlesCount = 50
+  const positions = new Float32Array(particlesCount * 3)
+  
+  for (let i = 0; i < particlesCount; i++) {
+    positions[i * 3] = (Math.random() - 0.5) * 4
+    positions[i * 3 + 1] = (Math.random() - 0.5) * 6
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 2
+  }
+  
+  particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  
+  const particlesMaterial = new THREE.PointsMaterial({
+    color: 0xffd700,
+    size: 0.1,
+    transparent: true,
+    opacity: 0.6
+  })
+  
+  const particles = new THREE.Points(particlesGeometry, particlesMaterial)
+  mesh.add(particles)
   
   // Metadata para vuelo
   mesh.userData = {
     agent: agent,
     targetPosition: new THREE.Vector3(pos.x, pos.y, pos.z),
-    flySpeed: 2.5,  // Velocidad de vuelo
+    flySpeed: 3,  // Velocidad de vuelo
     idleTime: 0,
     flyPhase: Math.random() * Math.PI * 2,
     floatPhase: Math.random() * Math.PI * 2,
     halo: halo,
+    particles: particles,
     isFlying: true
   }
   
@@ -411,47 +460,31 @@ const createSingleCharacter = (agent, index) => {
 }
 
 const setupControls = () => {
-  // Teclado
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
   
-  // Mouse para mirar
-  canvas.value.addEventListener('mousedown', (e) => {
-    isDragging = true
-  })
-  
-  window.addEventListener('mousemove', (e) => {
-    if (isDragging) {
-      mouseX += e.movementX * LOOK_SPEED
-      mouseY += e.movementY * LOOK_SPEED
-      mouseY = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, mouseY))
-    }
-  })
-  
-  window.addEventListener('mouseup', () => {
-    isDragging = false
-  })
-  
-  // Click en personaje
+  canvas.value.addEventListener('mousedown', onMouseDown)
+  canvas.value.addEventListener('mousemove', onMouseMove)
+  canvas.value.addEventListener('mouseup', onMouseUp)
   canvas.value.addEventListener('click', onCanvasClick)
 }
 
 const onKeyDown = (event) => {
   switch (event.code) {
-    case 'ArrowUp':
     case 'KeyW':
+    case 'ArrowUp':
       moveForward = true
       break
-    case 'ArrowLeft':
-    case 'KeyA':
-      moveLeft = true
-      break
-    case 'ArrowDown':
     case 'KeyS':
+    case 'ArrowDown':
       moveBackward = true
       break
-    case 'ArrowRight':
+    case 'KeyA':
+    case 'ArrowLeft':
+      moveLeft = true
+      break
     case 'KeyD':
+    case 'ArrowRight':
       moveRight = true
       break
   }
@@ -459,38 +492,70 @@ const onKeyDown = (event) => {
 
 const onKeyUp = (event) => {
   switch (event.code) {
-    case 'ArrowUp':
     case 'KeyW':
+    case 'ArrowUp':
       moveForward = false
       break
-    case 'ArrowLeft':
-    case 'KeyA':
-      moveLeft = false
-      break
-    case 'ArrowDown':
     case 'KeyS':
+    case 'ArrowDown':
       moveBackward = false
       break
-    case 'ArrowRight':
+    case 'KeyA':
+    case 'ArrowLeft':
+      moveLeft = false
+      break
     case 'KeyD':
+    case 'ArrowRight':
       moveRight = false
       break
   }
 }
 
+const onMouseDown = (event) => {
+  isDragging = true
+  previousMousePosition = {
+    x: event.clientX,
+    y: event.clientY
+  }
+}
+
+const onMouseMove = (event) => {
+  if (!isDragging) return
+  
+  const deltaX = event.clientX - previousMousePosition.x
+  const deltaY = event.clientY - previousMousePosition.y
+  
+  cameraRotation.yaw -= deltaX * 0.002
+  cameraRotation.pitch -= deltaY * 0.002
+  
+  cameraRotation.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, cameraRotation.pitch))
+  
+  previousMousePosition = {
+    x: event.clientX,
+    y: event.clientY
+  }
+}
+
+const onMouseUp = () => {
+  isDragging = false
+}
+
 const onCanvasClick = (event) => {
-  // Raycast para detectar click en personaje
-  const mouse = new THREE.Vector2()
-  mouse.x = (event.clientX / window.innerWidth) * 2 - 1
-  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1
+  const rect = canvas.value.getBoundingClientRect()
+  const mouse = new THREE.Vector2(
+    ((event.clientX - rect.left) / rect.width) * 2 - 1,
+    -((event.clientY - rect.top) / rect.height) * 2 + 1
+  )
   
   const raycaster = new THREE.Raycaster()
   raycaster.setFromCamera(mouse, camera)
   
   const intersects = raycaster.intersectObjects(characters)
+  
   if (intersects.length > 0) {
-    const character = intersects[0].object
-    emit('agentClicked', character.userData.agent)
+    const clickedAgent = intersects[0].object.userData.agent
+    console.log('🎯 Agente clickeado:', clickedAgent.name)
+    emit('agentClicked', clickedAgent)
   }
 }
 
@@ -501,10 +566,9 @@ const onWindowResize = () => {
 }
 
 const updateCharacters = (delta) => {
-  characters.forEach((mesh) => {
+  characters.forEach(mesh => {
     const data = mesh.userData
     
-    // IA simple - movimiento aleatorio
     data.idleTime += delta
     
     // VUELO COMO DIOSES GRIEGOS
@@ -512,10 +576,10 @@ const updateCharacters = (delta) => {
       if (data.idleTime > 6 + Math.random() * 4) {
         // Nuevo destino de vuelo aleatorio
         const angle = Math.random() * Math.PI * 2
-        const radius = 8 + Math.random() * 8
+        const radius = 10 + Math.random() * 10
         data.targetPosition.set(
           Math.cos(angle) * radius,
-          5 + Math.random() * 6,  // Vuelan alto
+          6 + Math.random() * 8,  // Vuelan alto (6-14m)
           Math.sin(angle) * radius
         )
         data.idleTime = 0
@@ -534,34 +598,44 @@ const updateCharacters = (delta) => {
         mesh.position.z += (dz / distance) * data.flySpeed * delta
         
         // Animación de vuelo - ondulación elegante
-        data.flyPhase += delta * 3
-        data.floatPhase += delta * 2
+        data.flyPhase += delta * 2.5
+        data.floatPhase += delta * 1.8
         
         // Balanceo vertical suave (flotando)
-        mesh.position.y += Math.sin(data.floatPhase) * 0.015
+        mesh.position.y += Math.sin(data.floatPhase) * 0.02
         
         // Inclinación al volar
-        const tilt = Math.sin(data.flyPhase) * 0.05
+        const tilt = Math.sin(data.flyPhase) * 0.06
         mesh.rotation.z = tilt
         
         // Escala respiratoria
-        const breathe = 1 + Math.sin(data.floatPhase * 1.5) * 0.03
-        mesh.scale.set(4 * breathe, 5 * breathe, 1)
+        const breathe = 1 + Math.sin(data.floatPhase * 1.5) * 0.04
+        mesh.scale.set(5 * breathe, 6 * breathe, 1)
         
         // Halo pulsante
         if (data.halo) {
-          data.halo.material.opacity = 0.2 + Math.abs(Math.sin(data.floatPhase)) * 0.3
-          data.halo.rotation.z += delta * 0.5
+          data.halo.material.opacity = 0.3 + Math.abs(Math.sin(data.floatPhase)) * 0.35
+          data.halo.rotation.z += delta * 0.6
+        }
+        
+        // Partículas girando
+        if (data.particles) {
+          data.particles.rotation.y += delta * 0.5
+          data.particles.rotation.z += delta * 0.3
         }
       } else {
         // Hover en el lugar
         data.floatPhase += delta * 2
-        mesh.position.y += Math.sin(data.floatPhase) * 0.01
-        mesh.scale.set(4, 5, 1)
+        mesh.position.y += Math.sin(data.floatPhase) * 0.015
+        mesh.scale.set(5, 6, 1)
         
         if (data.halo) {
-          data.halo.material.opacity = 0.3
-          data.halo.rotation.z += delta * 0.3
+          data.halo.material.opacity = 0.4
+          data.halo.rotation.z += delta * 0.4
+        }
+        
+        if (data.particles) {
+          data.particles.rotation.y += delta * 0.3
         }
       }
     }
@@ -570,43 +644,36 @@ const updateCharacters = (delta) => {
     mesh.lookAt(camera.position)
     
     // Actualizar posición en pantalla para UI
-    updateAgentScreenPosition(mesh, data.agent)
+    updateAgentScreenPosition(mesh)
   })
 }
 
-const updateAgentScreenPosition = (mesh, agent) => {
-  // Proyectar posición 3D a 2D para el nameplate
-  const headPos = mesh.position.clone()
-  headPos.y += 1.8 // Sobre la cabeza
-  headPos.project(camera)
+const updateAgentScreenPosition = (mesh) => {
+  const vector = mesh.position.clone()
+  vector.project(camera)
   
-  const x = (headPos.x * 0.5 + 0.5) * window.innerWidth
-  const y = (headPos.y * -0.5 + 0.5) * window.innerHeight
+  const x = (vector.x * 0.5 + 0.5) * window.innerWidth
+  const y = (vector.y * -0.5 + 0.5) * window.innerHeight
   
-  // Solo mostrar si está delante de la cámara
-  if (headPos.z < 1) {
-    const existing = nearbyAgents.value.find(a => a.id === agent.id)
-    const screenPos = {
+  const existingAgent = nearbyAgents.value.find(a => a.id === mesh.userData.agent.id)
+  
+  if (existingAgent) {
+    existingAgent.screenPosition = {
       left: `${x}px`,
       top: `${y}px`
     }
-    
-    if (existing) {
-      existing.screenPosition = screenPos
-    } else {
-      nearbyAgents.value.push({
-        ...agent,
-        screenPosition: screenPos
-      })
-    }
   } else {
-    // Quitar si está detrás
-    nearbyAgents.value = nearbyAgents.value.filter(a => a.id !== agent.id)
+    nearbyAgents.value.push({
+      ...mesh.userData.agent,
+      screenPosition: {
+        left: `${x}px`,
+        top: `${y}px`
+      }
+    })
   }
 }
 
 const updatePlayer = (delta) => {
-  // Movimiento del jugador
   velocity.x -= velocity.x * 10.0 * delta
   velocity.z -= velocity.z * 10.0 * delta
   
@@ -618,26 +685,24 @@ const updatePlayer = (delta) => {
   if (moveLeft || moveRight) velocity.x -= direction.x * MOVE_SPEED * delta
   
   // Aplicar rotación de cámara
-  camera.rotation.y = mouseX
-  camera.rotation.x = mouseY
+  camera.rotation.order = 'YXZ'
+  camera.rotation.y = cameraRotation.yaw
+  camera.rotation.x = cameraRotation.pitch
   
-  // Mover cámara
-  const forward = new THREE.Vector3(0, 0, -1)
-  forward.applyQuaternion(camera.quaternion)
+  // Moverse en la dirección de la cámara
+  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
   forward.y = 0
   forward.normalize()
   
-  const right = new THREE.Vector3(1, 0, 0)
-  right.applyQuaternion(camera.quaternion)
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion)
   right.y = 0
   right.normalize()
   
   camera.position.addScaledVector(forward, velocity.z)
   camera.position.addScaledVector(right, velocity.x)
   
-  // Límites del Olimpo
-  camera.position.x = Math.max(-45, Math.min(45, camera.position.x))
-  camera.position.z = Math.max(-45, Math.min(45, camera.position.z))
+  // Limitar altura
+  camera.position.y = Math.max(0.5, Math.min(camera.position.y, 20))
 }
 
 const animate = () => {
@@ -650,68 +715,81 @@ const animate = () => {
   
   renderer.render(scene, camera)
 }
+
+onMounted(() => {
+  console.log('🚀 INICIANDO OLIMPO 3D')
+  setupScene()
+  createOlymposEnvironment()
+  createCharacters()
+  setupControls()
+  animate()
+})
+
+onUnmounted(() => {
+  cancelAnimationFrame(animationId)
+  window.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('keyup', onKeyUp)
+  window.removeEventListener('resize', onWindowResize)
+  
+  if (renderer) {
+    renderer.dispose()
+  }
+})
 </script>
 
 <style scoped>
 .olimpo-3d-world {
   position: fixed;
-  inset: 0;
-  z-index: 1000;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
   background: #000;
 }
 
 canvas {
-  display: block;
   width: 100%;
   height: 100%;
-  cursor: grab;
-}
-
-canvas:active {
-  cursor: grabbing;
+  display: block;
 }
 
 .world-ui {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
 }
 
 .agent-nameplate {
   position: absolute;
-  transform: translate(-50%, -100%);
-  pointer-events: all;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  transform: translate(-50%, -120%);
+  pointer-events: none;
 }
 
 .nameplate-bg {
-  background: rgba(10, 35, 66, 0.9);
+  background: rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(10px);
-  border: 2px solid rgba(255, 215, 0, 0.6);
-  border-radius: 15px;
   padding: 8px 16px;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 215, 0, 0.6);
   box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
 }
 
-.agent-nameplate:hover .nameplate-bg {
-  border-color: rgba(255, 215, 0, 1);
-  box-shadow: 0 0 30px rgba(255, 215, 0, 0.8);
-  transform: scale(1.1);
-}
-
 .agent-name-3d {
-  font-size: 1.2rem;
-  font-weight: bold;
   color: #ffd700;
+  font-weight: 700;
+  font-size: 14px;
   text-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
+  margin-bottom: 2px;
 }
 
 .agent-status-3d {
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.8);
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  color: #fff;
+  font-size: 11px;
+  opacity: 0.9;
 }
 
 .controls-hint {
@@ -719,20 +797,20 @@ canvas:active {
   bottom: 30px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(10, 35, 66, 0.95);
+  background: rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(15px);
-  border: 2px solid rgba(59, 130, 246, 0.5);
-  border-radius: 20px;
-  padding: 20px 40px;
-  color: #fff;
-  text-align: center;
-  pointer-events: none;
+  padding: 20px 30px;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 215, 0, 0.5);
+  box-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
 }
 
 .controls-hint p {
-  margin: 5px 0;
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.9);
+  margin: 6px 0;
+  color: #ffd700;
+  font-size: 14px;
+  font-weight: 600;
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.6);
 }
 </style>
 

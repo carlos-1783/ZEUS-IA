@@ -25,6 +25,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import * as THREE from 'three'
+import { Character3D } from '@/utils/Character3D.js'
 
 const props = defineProps({
   agents: Array
@@ -169,30 +170,21 @@ const createCharacters = () => {
   props.agents.filter(a => a.id !== 1).forEach((agent, index) => {
     const pos = spawnPositions[index] || { x: 0, z: 0 }
     
-    // Crear personaje como billboard (sprite)
-    const textureLoader = new THREE.TextureLoader()
-    const texture = textureLoader.load(agent.image || '/images/avatars/perseo-avatar.jpg')
-    
-    const spriteMaterial = new THREE.SpriteMaterial({ 
-      map: texture,
-      sizeAttenuation: true
-    })
-    const sprite = new THREE.Sprite(spriteMaterial)
-    sprite.scale.set(1.5, 2, 1) // Tamaño persona
-    sprite.position.set(pos.x, 1, pos.z)
+    // Crear personaje 3D con cuerpo completo
+    const character = new Character3D(agent)
+    character.setPosition(pos.x, 0, pos.z)
     
     // Metadata
-    sprite.userData = {
+    character.userData = {
       agent: agent,
-      targetPosition: new THREE.Vector3(pos.x, 1, pos.z),
-      velocity: new THREE.Vector3(),
-      walkSpeed: 0.5 + Math.random() * 0.3,
-      walkPhase: Math.random() * Math.PI * 2,
-      idleTime: 0
+      targetPosition: new THREE.Vector3(pos.x, 0, pos.z),
+      walkSpeed: 0.8 + Math.random() * 0.4,
+      idleTime: 0,
+      character3D: character
     }
     
-    scene.add(sprite)
-    characters.push(sprite)
+    scene.add(character.getGroup())
+    characters.push(character.getGroup())
   })
 }
 
@@ -287,8 +279,9 @@ const onWindowResize = () => {
 }
 
 const updateCharacters = (delta) => {
-  characters.forEach((char) => {
-    const data = char.userData
+  characters.forEach((charGroup) => {
+    const data = charGroup.userData
+    const character = data.character3D
     
     // IA simple - movimiento aleatorio
     data.idleTime += delta
@@ -297,62 +290,66 @@ const updateCharacters = (delta) => {
       // Nuevo destino aleatorio
       data.targetPosition.set(
         (Math.random() - 0.5) * 15,
-        1,
+        0,
         (Math.random() - 0.5) * 15
       )
       data.idleTime = 0
     }
     
     // Moverse hacia el objetivo
-    const dx = data.targetPosition.x - char.position.x
-    const dz = data.targetPosition.z - char.position.z
+    const dx = data.targetPosition.x - charGroup.position.x
+    const dz = data.targetPosition.z - charGroup.position.z
     const distance = Math.sqrt(dx * dx + dz * dz)
     
     if (distance > 0.5) {
       // Normalizar y aplicar velocidad
-      char.position.x += (dx / distance) * data.walkSpeed * delta
-      char.position.z += (dz / distance) * data.walkSpeed * delta
-      
-      // Animación de caminar (balanceo)
-      data.walkPhase += delta * 8
-      char.position.y = 1 + Math.sin(data.walkPhase) * 0.1
-      char.scale.x = 1.5 + Math.sin(data.walkPhase * 2) * 0.05
+      charGroup.position.x += (dx / distance) * data.walkSpeed * delta
+      charGroup.position.z += (dz / distance) * data.walkSpeed * delta
       
       // Rotar hacia dirección de movimiento
       const angle = Math.atan2(dx, dz)
-      char.material.rotation = angle
+      charGroup.rotation.y = angle
+      
+      // Animación de caminar (mover brazos y piernas)
+      character.update(delta)
+      character.setWalking(true)
+    } else {
+      character.setWalking(false)
     }
     
-    // Siempre mirar a la cámara
-    char.lookAt(camera.position)
-    
     // Actualizar posición en pantalla para UI
-    updateAgentScreenPosition(char, data.agent)
+    updateAgentScreenPosition(charGroup, data.agent)
   })
 }
 
-const updateAgentScreenPosition = (sprite, agent) => {
-  const vector = sprite.position.clone()
-  vector.project(camera)
+const updateAgentScreenPosition = (charGroup, agent) => {
+  // Proyectar posición 3D a 2D para el nameplate
+  const headPos = charGroup.position.clone()
+  headPos.y += 2 // Sobre la cabeza
+  headPos.project(camera)
   
-  const x = (vector.x * 0.5 + 0.5) * window.innerWidth
-  const y = (vector.y * -0.5 + 0.5) * window.innerHeight
+  const x = (headPos.x * 0.5 + 0.5) * window.innerWidth
+  const y = (headPos.y * -0.5 + 0.5) * window.innerHeight
   
-  // Actualizar array para UI
-  const existing = nearbyAgents.value.find(a => a.id === agent.id)
-  if (existing) {
-    existing.screenPosition = {
+  // Solo mostrar si está delante de la cámara
+  if (headPos.z < 1) {
+    const existing = nearbyAgents.value.find(a => a.id === agent.id)
+    const screenPos = {
       left: `${x}px`,
-      top: `${y - 100}px`
+      top: `${y}px`
     }
-  } else if (vector.z < 1) {
-    nearbyAgents.value.push({
-      ...agent,
-      screenPosition: {
-        left: `${x}px`,
-        top: `${y - 100}px`
-      }
-    })
+    
+    if (existing) {
+      existing.screenPosition = screenPos
+    } else {
+      nearbyAgents.value.push({
+        ...agent,
+        screenPosition: screenPos
+      })
+    }
+  } else {
+    // Quitar si está detrás
+    nearbyAgents.value = nearbyAgents.value.filter(a => a.id !== agent.id)
   }
 }
 

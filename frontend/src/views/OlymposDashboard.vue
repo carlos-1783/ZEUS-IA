@@ -59,38 +59,37 @@
       </div>
     </div>
 
-    <!-- Panel de Control - Agentes del Olimpo -->
-    <div class="agents-panel" :class="{ 'panel-visible': showAgents }">
-      <button @click="toggleAgentsPanel" class="panel-toggle">
-        {{ showAgents ? '⚡ OCULTAR AGENTES' : '⚡ INVOCAR AGENTES' }}
-      </button>
-
-      <transition name="agents-fade">
-        <div v-if="showAgents" class="agents-grid">
-          <div 
-            v-for="agent in olymposAgents" 
-            :key="agent.id"
-            @click="openChat(agent)"
-            class="agent-card"
-            :class="{ 'agent-active': agent.active }"
-          >
-            <div class="agent-hologram">
-              <div class="hologram-effect"></div>
-              <img 
-                v-if="agent.image" 
-                :src="agent.image" 
-                :alt="agent.name"
-                class="agent-avatar-3d"
-              />
-              <div v-else class="agent-icon">{{ agent.icon }}</div>
-            </div>
-            <div class="agent-name">{{ agent.name }}</div>
-            <div class="agent-status" :class="agent.active ? 'status-active' : 'status-idle'">
-              {{ agent.active ? 'ACTIVO' : 'LISTO' }}
-            </div>
+    <!-- Agentes paseando por el Olimpo (solo los 4 subordinados) -->
+    <div class="olympos-wandering-agents">
+      <div 
+        v-for="agent in olymposAgents.filter(a => a.id !== 1)" 
+        :key="agent.id"
+        @click="summonAgent(agent)"
+        class="wandering-agent"
+        :class="{ 
+          'summoned': agent.active,
+          'idle': !agent.active
+        }"
+        :style="getAgentPosition(agent.id)"
+      >
+        <div class="agent-floating-container">
+          <!-- Avatar con aura -->
+          <div class="agent-aura"></div>
+          <img 
+            v-if="agent.image" 
+            :src="agent.image" 
+            :alt="agent.name"
+            class="agent-wandering-avatar"
+          />
+          <!-- Partículas flotando -->
+          <div class="agent-particles">
+            <div class="particle" v-for="i in 4" :key="i" :style="{ '--delay': i * 0.5 }"></div>
           </div>
+          <!-- Nombre del agente -->
+          <div class="agent-wandering-name">{{ agent.name }}</div>
+          <div class="agent-wandering-status">{{ agent.status }}</div>
         </div>
-      </transition>
+      </div>
     </div>
 
     <!-- Panel de Conversación por Voz -->
@@ -384,27 +383,42 @@ const initSpeechRecognition = () => {
   }
 }
 
-// Abrir conversación por voz
-const openChat = (agent) => {
+// Posiciones de agentes paseando por el Olimpo
+const getAgentPosition = (agentId) => {
+  const positions = {
+    2: { left: '15%', top: '25%', animationDelay: '0s' },      // PERSEO - izquierda arriba
+    3: { right: '15%', top: '30%', animationDelay: '1s' },     // RAFAEL - derecha arriba
+    4: { left: '20%', bottom: '20%', animationDelay: '2s' },   // THALOS - izquierda abajo
+    5: { right: '20%', bottom: '25%', animationDelay: '3s' }   // JUSTICIA - derecha abajo
+  }
+  return positions[agentId] || {}
+}
+
+// Convocar agente (se acerca al centro y abre conversación)
+const summonAgent = (agent) => {
   // Desactivar todos
   olymposAgents.value.forEach(a => a.active = false)
   
   // Activar el seleccionado
   agent.active = true
   activeAgent.value = agent
-  voiceActive.value = true
   
-  // Inicializar speech recognition si no existe
-  if (!recognition) {
-    initSpeechRecognition()
-  }
-  
-  // Mensaje de bienvenida con voz
-  const greeting = `Soy ${agent.name}, ${agent.description}. ¿En qué puedo ayudarte?`
-  agentResponse.value = greeting
-  speakText(greeting)
-  
-  showNotification('success', `🎤 Conversación con ${agent.name} iniciada`)
+  // Esperar animación de acercamiento
+  setTimeout(() => {
+    voiceActive.value = true
+    
+    // Inicializar speech recognition si no existe
+    if (!recognition) {
+      initSpeechRecognition()
+    }
+    
+    // Mensaje de bienvenida con voz
+    const greeting = `Soy ${agent.name}, ${agent.description}. ¿En qué puedo ayudarte?`
+    agentResponse.value = greeting
+    speakText(greeting)
+    
+    showNotification('success', `🎤 ${agent.name} se acerca para conversar`)
+  }, 800) // Esperar animación de acercamiento
 }
 
 // Cerrar conversación por voz
@@ -801,13 +815,192 @@ onMounted(() => {
   35% { opacity: 0; transform: scaleY(0); }
 }
 
-/* ========== PANEL DE AGENTES ========== */
-.agents-panel {
-  position: fixed;
-  bottom: 30px;
+/* ========== AGENTES PASEANDO POR EL OLIMPO ========== */
+.olympos-wandering-agents {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.wandering-agent {
+  position: absolute;
+  width: 120px;
+  height: 160px;
+  cursor: pointer;
+  pointer-events: all;
+  transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 20;
+}
+
+/* IDLE - Paseando flotando por el Olimpo */
+.wandering-agent.idle {
+  animation: agent-wander 12s ease-in-out infinite;
+}
+
+@keyframes agent-wander {
+  0%, 100% { 
+    transform: translateY(0) translateX(0) scale(1);
+  }
+  20% { 
+    transform: translateY(-30px) translateX(20px) scale(1.05) rotate(3deg);
+  }
+  40% { 
+    transform: translateY(-15px) translateX(-25px) scale(0.98) rotate(-2deg);
+  }
+  60% { 
+    transform: translateY(-35px) translateX(15px) scale(1.03) rotate(2deg);
+  }
+  80% { 
+    transform: translateY(-20px) translateX(-10px) scale(1.02) rotate(-3deg);
+  }
+}
+
+/* SUMMONED - Se mueve al centro para conversar */
+.wandering-agent.summoned {
+  left: 50% !important;
+  top: 30% !important;
+  right: auto !important;
+  bottom: auto !important;
+  transform: translate(-50%, -50%) scale(1.5);
+  z-index: 150;
+  filter: brightness(1.4);
+  pointer-events: none;
+}
+
+.agent-floating-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  animation: gentle-float 4s ease-in-out infinite;
+}
+
+@keyframes gentle-float {
+  0%, 100% { 
+    transform: translateY(0);
+  }
+  50% { 
+    transform: translateY(-20px);
+  }
+}
+
+.agent-aura {
+  position: absolute;
+  inset: -20px;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.4) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: aura-pulse-wander 3s ease-in-out infinite;
+  z-index: -1;
+}
+
+.wandering-agent:hover .agent-aura {
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.5) 0%, transparent 70%);
+}
+
+@keyframes aura-pulse-wander {
+  0%, 100% { 
+    opacity: 0.5;
+    transform: scale(0.9);
+  }
+  50% { 
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+.agent-wandering-avatar {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid rgba(59, 130, 246, 0.7);
+  box-shadow: 
+    0 0 30px rgba(59, 130, 246, 0.6),
+    inset 0 0 20px rgba(255, 215, 0, 0.2);
+  transition: all 0.5s ease;
+  animation: avatar-breathe-wander 5s ease-in-out infinite;
+}
+
+@keyframes avatar-breathe-wander {
+  0%, 100% { 
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% { 
+    transform: scale(1.04);
+    filter: brightness(1.15);
+  }
+}
+
+.wandering-agent:hover .agent-wandering-avatar {
+  transform: scale(1.2);
+  border-color: rgba(255, 215, 0, 1);
+  box-shadow: 
+    0 0 50px rgba(255, 215, 0, 0.9),
+    inset 0 0 30px rgba(255, 215, 0, 0.4);
+}
+
+.agent-particles {
+  position: absolute;
+  top: 10px;
   left: 50%;
+  width: 120px;
+  height: 120px;
   transform: translateX(-50%);
-  z-index: 50;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.agent-particles .particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: rgba(255, 215, 0, 0.8);
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  animation: particle-orbit-wander 5s ease-in-out infinite;
+  animation-delay: calc(var(--delay) * 1s);
+}
+
+@keyframes particle-orbit-wander {
+  0%, 100% {
+    transform: translate(-50%, -50%) rotate(0deg) translateX(45px);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translate(-50%, -50%) rotate(360deg) translateX(55px);
+    opacity: 1;
+  }
+}
+
+.agent-wandering-name {
+  font-size: 1rem;
+  font-weight: bold;
+  color: #ffd700;
+  text-shadow: 
+    0 0 15px rgba(255, 215, 0, 0.9),
+    0 2px 4px rgba(0, 0, 0, 0.5);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.agent-wandering-status {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.8);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  text-shadow: 0 0 10px rgba(59, 130, 246, 0.6);
+}
+
+/* ========== PANEL DE AGENTES (OCULTO) ========== */
+.agents-panel {
+  display: none;
 }
 
 .panel-toggle {

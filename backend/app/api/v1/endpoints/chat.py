@@ -8,13 +8,15 @@ import sys
 import os
 
 # Agregar el directorio raíz al path para importar agentes
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../..')))
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../..')))
 
-from backend.agents.zeus_core import ZeusCore
-from backend.agents.perseo import Perseo
-from backend.agents.rafael import Rafael
-from backend.agents.thalos import Thalos
-from backend.agents.justicia import Justicia
+from agents.zeus_core import ZeusCore
+from agents.perseo import Perseo
+from agents.rafael import Rafael
+from agents.thalos import Thalos
+from agents.justicia import Justicia
 
 router = APIRouter()
 

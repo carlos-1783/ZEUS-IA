@@ -17,16 +17,17 @@ WORKDIR /app/frontend
 
 # Copy frontend package files
 COPY frontend/package*.json ./
-RUN npm install --legacy-peer-deps
 
-# Rebuild lightningcss native bindings
-RUN npm rebuild lightningcss --build-from-source || true
+# Install dependencies (limpiar cache primero)
+RUN npm cache clean --force || true
+RUN npm install --legacy-peer-deps --no-optional
 
 # Copy frontend source
 COPY frontend/ ./
 
-# Build frontend
-RUN npm run build
+# Build frontend (sin optimizaciones problemáticas)
+ENV NODE_ENV=production
+RUN npm run build || (echo "Build failed, trying without cache..." && rm -rf node_modules/.vite && npm run build)
 
 # Debug: Show build output
 RUN echo "=== BUILD OUTPUT ===" && ls -la dist/

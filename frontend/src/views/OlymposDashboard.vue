@@ -278,7 +278,7 @@ const olymposAgents = ref([
     id: 3, 
     name: 'RAFAEL', 
     icon: '📊', 
-    image: '/images/avatars/perseo-avatar.jpg',
+    image: '/images/avatars/rafael-avatar.jpg',
     active: false, 
     description: 'Guardián Fiscal', 
     status: 'online' 
@@ -287,7 +287,7 @@ const olymposAgents = ref([
     id: 4, 
     name: 'THALOS', 
     icon: '🛡️', 
-    image: '/images/avatars/perseo-avatar.jpg',
+    image: '/images/avatars/thalos-avatar.jpg',
     active: false, 
     description: 'Defensor Cibernético', 
     status: 'online' 
@@ -296,7 +296,7 @@ const olymposAgents = ref([
     id: 5, 
     name: 'JUSTICIA', 
     icon: '⚖️', 
-    image: '/images/avatars/perseo-avatar.jpg',
+    image: '/images/avatars/justicia-avatar.jpg',
     active: false, 
     description: 'Asesora Legal y GDPR', 
     status: 'online' 

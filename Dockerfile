@@ -4,7 +4,7 @@
 # Multi-stage build for Railway deployment
 
 # Stage 1: Build Frontend
-FROM mirror.gcr.io/library/node:18-alpine AS frontend-builder
+FROM mirror.gcr.io/library/node:18-slim AS frontend-builder
 
 WORKDIR /app/frontend
 

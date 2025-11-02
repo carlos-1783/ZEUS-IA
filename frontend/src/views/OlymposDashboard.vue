@@ -1,6 +1,6 @@
 <template>
-  <!-- Modo 3D Primera Persona -->
-  <OlympoFirstPerson 
+  <!-- Modo 3D con Avatares GLB Humanizados -->
+  <OlympoGLB 
     v-if="firstPersonMode"
     :agents="olymposAgents"
     @agentClicked="summonAgent"
@@ -240,7 +240,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Agent3DAvatar from '@/components/Agent3DAvatar.vue'
-import OlympoFirstPerson from '@/components/OlympoFirstPerson.vue'
+import OlympoGLB from '@/components/OlympoGLB.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()

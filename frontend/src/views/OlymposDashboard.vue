@@ -222,7 +222,7 @@
 
     <!-- Indicador de Versión (debug - removible después) -->
     <div class="version-indicator">
-      🏛️ OLIMPO v1.0
+      🏛️ OLIMPO v1.0.5 GLB
     </div>
 
     <!-- Comandos de Voz Zeus (simulado) -->

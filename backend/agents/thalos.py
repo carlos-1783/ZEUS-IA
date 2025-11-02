@@ -6,7 +6,7 @@ Agente especializado en Seguridad y Ciberdefensa
 
 import json
 from typing import Dict, Any
-from backend.agents.base_agent import BaseAgent
+from agents.base_agent import BaseAgent
 
 
 class Thalos(BaseAgent):

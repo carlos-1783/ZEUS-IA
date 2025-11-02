@@ -8,7 +8,7 @@ import time
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from openai import OpenAI
-from backend.config.settings import settings
+from config.settings import settings
 
 # Cliente OpenAI global
 client = None

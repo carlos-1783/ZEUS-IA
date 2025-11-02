@@ -1,5 +1,13 @@
 <template>
-  <div class="olympos-dashboard">
+  <!-- Modo 3D Primera Persona -->
+  <OlympoFirstPerson 
+    v-if="firstPersonMode"
+    :agents="olymposAgents"
+    @agentClicked="summonAgent"
+  />
+  
+  <!-- Modo Dashboard 2D -->
+  <div v-else class="olympos-dashboard">
     <!-- Fondo del Olimpo con columnas y cielo divino -->
     <div class="olympos-background">
       <!-- Luz celestial circular superior -->

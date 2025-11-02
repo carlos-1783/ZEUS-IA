@@ -96,14 +96,27 @@
     <!-- Panel de Conversación por Voz -->
     <transition name="voice-slide">
       <div v-if="voiceActive && activeAgent" class="voice-panel">
-        <!-- Avatar animado del agente -->
-        <div class="voice-agent-avatar" :class="{ 'speaking': agentSpeaking }">
-          <img 
-            v-if="activeAgent.image" 
-            :src="activeAgent.image" 
-            :alt="activeAgent.name"
-            class="avatar-voice-img"
-          />
+        <!-- Avatar VIVO con animaciones -->
+        <div class="voice-agent-avatar" :class="{ 'speaking': agentSpeaking, 'breathing': !agentSpeaking }">
+          <div class="avatar-container">
+            <img 
+              v-if="activeAgent.image" 
+              :src="activeAgent.image" 
+              :alt="activeAgent.name"
+              class="avatar-voice-img"
+            />
+            <!-- Ojos animados superpuestos -->
+            <div class="eyes-layer" v-if="activeAgent.id <= 2">
+              <div class="eye eye-left"></div>
+              <div class="eye eye-right"></div>
+            </div>
+            <!-- Efecto de respiración (partículas de energía) -->
+            <div class="breath-particles">
+              <div class="particle" v-for="i in 8" :key="i" :style="{ '--i': i }"></div>
+            </div>
+            <!-- Labios hablando (cuando activo) -->
+            <div v-if="agentSpeaking" class="mouth-indicator"></div>
+          </div>
           <div class="voice-glow"></div>
           <div class="voice-rings">
             <div class="ring ring-1"></div>

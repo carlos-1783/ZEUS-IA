@@ -2,9 +2,15 @@
 
 .voice-agent-avatar {
   position: relative;
-  width: 200px;
-  height: 200px;
+  width: 250px;
+  height: 250px;
   margin: 20px 0;
+}
+
+.avatar-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
 }
 
 .avatar-voice-img {
@@ -19,8 +25,23 @@
   transition: all 0.3s ease;
 }
 
+/* RESPIRACIÓN - Movimiento sutil constante */
+.voice-agent-avatar.breathing .avatar-voice-img {
+  animation: breathing-motion 4s ease-in-out infinite;
+}
+
+@keyframes breathing-motion {
+  0%, 100% { 
+    transform: scale(1) translateY(0);
+  }
+  50% { 
+    transform: scale(1.02) translateY(-3px);
+  }
+}
+
+/* HABLANDO - Movimiento más rápido y energético */
 .voice-agent-avatar.speaking .avatar-voice-img {
-  animation: speaking-pulse 0.5s ease-in-out infinite;
+  animation: speaking-pulse 0.4s ease-in-out infinite;
   box-shadow: 
     0 0 60px rgba(16, 185, 129, 0.9),
     inset 0 0 50px rgba(16, 185, 129, 0.5);
@@ -28,8 +49,117 @@
 }
 
 @keyframes speaking-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
+  0%, 100% { 
+    transform: scale(1) rotate(0deg);
+  }
+  25% { 
+    transform: scale(1.03) rotate(-1deg);
+  }
+  75% { 
+    transform: scale(1.03) rotate(1deg);
+  }
+}
+
+/* OJOS ANIMADOS */
+.eyes-layer {
+  position: absolute;
+  top: 35%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 30%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.eye {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: radial-gradient(circle, #fff 30%, #3b82f6 70%);
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+  animation: eye-blink 5s ease-in-out infinite;
+}
+
+.eye-left {
+  left: 25%;
+  animation-delay: 0.1s;
+}
+
+.eye-right {
+  right: 25%;
+  animation-delay: 0.15s;
+}
+
+@keyframes eye-blink {
+  0%, 94%, 96%, 100% { 
+    transform: scaleY(1);
+    opacity: 1;
+  }
+  95%, 97% { 
+    transform: scaleY(0.1);
+    opacity: 0.5;
+  }
+}
+
+/* PARTÍCULAS DE ENERGÍA (respiración) */
+.breath-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: rgba(255, 215, 0, 0.6);
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  animation: particle-float 3s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.4s);
+  opacity: 0;
+}
+
+@keyframes particle-float {
+  0% {
+    transform: translate(-50%, -50%) translateY(0) scale(0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(-50%, -50%) translateY(-80px) translateX(calc((var(--i) - 4) * 20px)) scale(1.5);
+    opacity: 0;
+  }
+}
+
+/* INDICADOR DE BOCA HABLANDO */
+.mouth-indicator {
+  position: absolute;
+  bottom: 30%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 20px;
+  background: rgba(16, 185, 129, 0.6);
+  border-radius: 50% 50% 50% 50% / 0% 0% 100% 100%;
+  animation: mouth-speaking 0.3s ease-in-out infinite;
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.8);
+  z-index: 15;
+}
+
+@keyframes mouth-speaking {
+  0%, 100% { 
+    transform: translateX(-50%) scaleY(0.3);
+  }
+  50% { 
+    transform: translateX(-50%) scaleY(1);
+  }
 }
 
 .voice-glow {

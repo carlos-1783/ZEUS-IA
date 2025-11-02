@@ -196,23 +196,33 @@ const createCharacters = () => {
   props.agents.filter(a => a.id !== 1).forEach((agent, index) => {
     const pos = spawnPositions[index] || { x: 0, z: 0 }
     
-    // Crear personaje 3D articulado con tu foto
-    const character = new Character3D(agent)
-    character.setPosition(pos.x, 0, pos.z)
+    // Cargar imagen del avatar
+    const textureLoader = new THREE.TextureLoader()
+    const texture = textureLoader.load(agent.image || '/images/avatars/Perseo-avatar.jpg')
     
-    const charGroup = character.getGroup()
+    // Crear plano 2D con la imagen (billboard grande)
+    const geometry = new THREE.PlaneGeometry(2, 3)  // Más grande: 2m ancho x 3m alto
+    const material = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      alphaTest: 0.5,
+      side: THREE.DoubleSide
+    })
+    
+    const mesh = new THREE.Mesh(geometry, material)
+    mesh.position.set(pos.x, 1.5, pos.z)
     
     // Metadata
-    charGroup.userData = {
+    mesh.userData = {
       agent: agent,
-      targetPosition: new THREE.Vector3(pos.x, 0, pos.z),
-      walkSpeed: 0.8 + Math.random() * 0.4,
+      targetPosition: new THREE.Vector3(pos.x, 1.5, pos.z),
+      walkSpeed: 1.2,
       idleTime: 0,
-      character3D: character
+      walkPhase: Math.random() * Math.PI * 2
     }
     
-    scene.add(charGroup)
-    characters.push(charGroup)
+    scene.add(mesh)
+    characters.push(mesh)
   })
 }
 
@@ -307,55 +317,53 @@ const onWindowResize = () => {
 }
 
 const updateCharacters = (delta) => {
-  characters.forEach((charGroup) => {
-    const data = charGroup.userData
-    const character = data.character3D
+  characters.forEach((mesh) => {
+    const data = mesh.userData
     
     // IA simple - movimiento aleatorio
     data.idleTime += delta
     
-    if (data.idleTime > 3 + Math.random() * 2) {
+    if (data.idleTime > 4 + Math.random() * 3) {
       // Nuevo destino aleatorio
       data.targetPosition.set(
-        (Math.random() - 0.5) * 15,
-        0,
-        (Math.random() - 0.5) * 15
+        (Math.random() - 0.5) * 20,
+        1.5,
+        (Math.random() - 0.5) * 20
       )
       data.idleTime = 0
     }
     
     // Moverse hacia el objetivo
-    const dx = data.targetPosition.x - charGroup.position.x
-    const dz = data.targetPosition.z - charGroup.position.z
+    const dx = data.targetPosition.x - mesh.position.x
+    const dz = data.targetPosition.z - mesh.position.z
     const distance = Math.sqrt(dx * dx + dz * dz)
     
-    if (distance > 0.5) {
+    if (distance > 1) {
       // Normalizar y aplicar velocidad
-      charGroup.position.x += (dx / distance) * data.walkSpeed * delta
-      charGroup.position.z += (dz / distance) * data.walkSpeed * delta
+      mesh.position.x += (dx / distance) * data.walkSpeed * delta
+      mesh.position.z += (dz / distance) * data.walkSpeed * delta
       
-      // Rotar hacia dirección de movimiento
-      const angle = Math.atan2(dx, dz)
-      charGroup.rotation.y = angle
+      // Animación de caminar - balanceo
+      data.walkPhase += delta * 5
+      mesh.position.y = 1.5 + Math.abs(Math.sin(data.walkPhase)) * 0.2
       
-      // Animación de caminar (brazos, piernas, cuerpo)
-      character.update(delta)
-      character.setWalking(true)
-    } else {
-      // Animación idle (respiración)
-      character.update(delta * 0.3)
-      character.setWalking(false)
+      // Escala ligeramente (simula paso)
+      const bounce = 1 + Math.sin(data.walkPhase * 2) * 0.08
+      mesh.scale.set(2 * bounce, 3 * bounce, 1)
     }
     
+    // Siempre mirar a la cámara (billboard)
+    mesh.lookAt(camera.position)
+    
     // Actualizar posición en pantalla para UI
-    updateAgentScreenPosition(charGroup, data.agent)
+    updateAgentScreenPosition(mesh, data.agent)
   })
 }
 
-const updateAgentScreenPosition = (charGroup, agent) => {
+const updateAgentScreenPosition = (mesh, agent) => {
   // Proyectar posición 3D a 2D para el nameplate
-  const headPos = charGroup.position.clone()
-  headPos.y += 2.2 // Sobre la cabeza del personaje
+  const headPos = mesh.position.clone()
+  headPos.y += 1.8 // Sobre la cabeza
   headPos.project(camera)
   
   const x = (headPos.x * 0.5 + 0.5) * window.innerWidth

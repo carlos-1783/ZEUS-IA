@@ -7,7 +7,7 @@
   />
   
   <!-- Modo Dashboard 2D -->
-  <div v-else class="olympos-dashboard">
+  <div v-else class="olympos-dashboard" data-version="3.0">
     <!-- Fondo del Olimpo con columnas y cielo divino -->
     <div class="olympos-background">
       <!-- Luz celestial circular superior -->

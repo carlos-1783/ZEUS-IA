@@ -93,61 +93,72 @@
       </transition>
     </div>
 
-    <!-- Panel de Chat con Agente -->
-    <transition name="chat-slide">
-      <div v-if="chatOpen && activeAgent" class="chat-panel">
-        <div class="chat-header">
-          <div class="chat-agent-info">
-            <img 
-              v-if="activeAgent.image" 
-              :src="activeAgent.image" 
-              :alt="activeAgent.name"
-              class="chat-avatar"
-            />
-            <div>
-              <div class="chat-agent-name">{{ activeAgent.name }}</div>
-              <div class="chat-agent-desc">{{ activeAgent.description }}</div>
-            </div>
-          </div>
-          <button @click="closeChat" class="chat-close">✕</button>
-        </div>
-
-        <div class="chat-messages" ref="chatMessages">
-          <div 
-            v-for="(msg, index) in chatHistory" 
-            :key="index"
-            class="chat-message"
-            :class="msg.role"
-          >
-            <div class="message-content">{{ msg.content }}</div>
-            <div class="message-time">{{ msg.time }}</div>
-          </div>
-          
-          <div v-if="isTyping" class="chat-message agent typing">
-            <div class="message-content">
-              <span class="typing-indicator">
-                <span></span><span></span><span></span>
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div class="chat-input-container">
-          <input 
-            v-model="chatMessage"
-            @keyup.enter="sendMessage"
-            type="text"
-            class="chat-input"
-            :placeholder="`Pregunta a ${activeAgent.name}...`"
-            :disabled="isTyping"
+    <!-- Panel de Conversación por Voz -->
+    <transition name="voice-slide">
+      <div v-if="voiceActive && activeAgent" class="voice-panel">
+        <!-- Avatar animado del agente -->
+        <div class="voice-agent-avatar" :class="{ 'speaking': agentSpeaking }">
+          <img 
+            v-if="activeAgent.image" 
+            :src="activeAgent.image" 
+            :alt="activeAgent.name"
+            class="avatar-voice-img"
           />
+          <div class="voice-glow"></div>
+          <div class="voice-rings">
+            <div class="ring ring-1"></div>
+            <div class="ring ring-2"></div>
+            <div class="ring ring-3"></div>
+          </div>
+        </div>
+
+        <!-- Nombre y estado -->
+        <div class="voice-agent-info">
+          <div class="voice-agent-name">{{ activeAgent.name }}</div>
+          <div class="voice-agent-status">
+            <span v-if="listening">🎤 Escuchando...</span>
+            <span v-else-if="agentSpeaking">🗣️ Hablando...</span>
+            <span v-else>💬 Listo para conversar</span>
+          </div>
+        </div>
+
+        <!-- Subtítulos / Transcripción -->
+        <div class="voice-subtitles">
+          <div v-if="currentTranscript" class="subtitle user">
+            <strong>Tú:</strong> {{ currentTranscript }}
+          </div>
+          <div v-if="agentResponse" class="subtitle agent" :class="{ 'speaking': agentSpeaking }">
+            <strong>{{ activeAgent.name }}:</strong> {{ agentResponse }}
+          </div>
+        </div>
+
+        <!-- Controles de voz -->
+        <div class="voice-controls">
           <button 
-            @click="sendMessage" 
-            class="chat-send"
-            :disabled="!chatMessage.trim() || isTyping"
+            @click="toggleVoiceListening" 
+            class="voice-btn"
+            :class="{ 'active': listening }"
           >
-            ⚡ ENVIAR
+            <span v-if="listening">⏸️ PARAR</span>
+            <span v-else>🎤 HABLAR</span>
           </button>
+          
+          <button 
+            @click="stopAgentSpeaking" 
+            class="voice-btn secondary"
+            v-if="agentSpeaking"
+          >
+            🔇 SILENCIAR
+          </button>
+
+          <button @click="closeVoice" class="voice-btn close">
+            ✕ CERRAR
+          </button>
+        </div>
+
+        <!-- Onda de voz visual -->
+        <div v-if="listening" class="voice-wave-container">
+          <div class="voice-wave" v-for="i in 5" :key="i" :style="{ animationDelay: `${i * 0.1}s` }"></div>
         </div>
       </div>
     </transition>
@@ -218,12 +229,17 @@ const showMetrics = ref(true)
 const activeAgent = ref(null)
 const notifications = ref([])
 
-// Estado del chat
-const chatOpen = ref(false)
-const chatMessage = ref('')
-const chatHistory = ref([])
-const isTyping = ref(false)
-const chatMessages = ref(null)
+// Estado de conversación por voz
+const voiceActive = ref(false)
+const listening = ref(false)
+const agentSpeaking = ref(false)
+const currentTranscript = ref('')
+const agentResponse = ref('')
+
+// Web Speech API
+let recognition = null
+let speechSynthesis = window.speechSynthesis
+let currentUtterance = null
 
 // Agentes del Olimpo - SIEMPRE VISIBLES CON IMÁGENES 3D
 const olymposAgents = ref([
@@ -319,7 +335,43 @@ const toggleAgentsPanel = () => {
   }
 }
 
-// Abrir chat con agente
+// Inicializar Speech Recognition
+const initSpeechRecognition = () => {
+  if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    recognition = new SpeechRecognition()
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = 'es-ES'
+    
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map(result => result[0].transcript)
+        .join('')
+      
+      currentTranscript.value = transcript
+      
+      // Si es final, enviar al agente
+      if (event.results[event.results.length - 1].isFinal) {
+        sendVoiceMessage(transcript)
+      }
+    }
+    
+    recognition.onerror = (event) => {
+      console.error('Error de reconocimiento:', event.error)
+      listening.value = false
+      showNotification('error', '❌ Error en reconocimiento de voz')
+    }
+    
+    recognition.onend = () => {
+      listening.value = false
+    }
+  } else {
+    showNotification('error', '❌ Tu navegador no soporta reconocimiento de voz')
+  }
+}
+
+// Abrir conversación por voz
 const openChat = (agent) => {
   // Desactivar todos
   olymposAgents.value.forEach(a => a.active = false)
@@ -327,51 +379,64 @@ const openChat = (agent) => {
   // Activar el seleccionado
   agent.active = true
   activeAgent.value = agent
-  chatOpen.value = true
+  voiceActive.value = true
   
-  // Mensaje de bienvenida si el historial está vacío
-  if (chatHistory.value.length === 0) {
-    chatHistory.value.push({
-      role: 'agent',
-      content: `Soy ${agent.name}, ${agent.description}. ¿En qué puedo ayudarte?`,
-      time: new Date().toLocaleTimeString()
-    })
+  // Inicializar speech recognition si no existe
+  if (!recognition) {
+    initSpeechRecognition()
   }
   
-  showNotification('success', `💬 Chat con ${agent.name} iniciado`)
+  // Mensaje de bienvenida con voz
+  const greeting = `Soy ${agent.name}, ${agent.description}. ¿En qué puedo ayudarte?`
+  agentResponse.value = greeting
+  speakText(greeting)
+  
+  showNotification('success', `🎤 Conversación con ${agent.name} iniciada`)
 }
 
-// Cerrar chat
-const closeChat = () => {
-  chatOpen.value = false
+// Cerrar conversación por voz
+const closeVoice = () => {
+  voiceActive.value = false
+  stopListening()
+  stopAgentSpeaking()
+  currentTranscript.value = ''
+  agentResponse.value = ''
+  
   if (activeAgent.value) {
     activeAgent.value.active = false
   }
 }
 
-// Enviar mensaje
-const sendMessage = async () => {
-  if (!chatMessage.value.trim() || !activeAgent.value) return
+// Iniciar/detener escucha
+const toggleVoiceListening = () => {
+  if (listening.value) {
+    stopListening()
+  } else {
+    startListening()
+  }
+}
+
+const startListening = () => {
+  if (recognition) {
+    currentTranscript.value = ''
+    recognition.start()
+    listening.value = true
+    showNotification('info', '🎤 Escuchando...')
+  }
+}
+
+const stopListening = () => {
+  if (recognition && listening.value) {
+    recognition.stop()
+    listening.value = false
+  }
+}
+
+// Enviar mensaje de voz al backend
+const sendVoiceMessage = async (transcript) => {
+  if (!transcript.trim() || !activeAgent.value) return
   
-  const userMessage = chatMessage.value.trim()
-  chatMessage.value = ''
-  
-  // Agregar mensaje del usuario al historial
-  chatHistory.value.push({
-    role: 'user',
-    content: userMessage,
-    time: new Date().toLocaleTimeString()
-  })
-  
-  // Scroll al final
-  setTimeout(() => {
-    if (chatMessages.value) {
-      chatMessages.value.scrollTop = chatMessages.value.scrollHeight
-    }
-  }, 100)
-  
-  // Mostrar indicador de "escribiendo"
-  isTyping.value = true
+  stopListening()
   
   try {
     // Llamar al endpoint de chat
@@ -382,42 +447,75 @@ const sendMessage = async () => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        message: userMessage,
+        message: transcript,
         context: {}
       })
     })
     
     const data = await response.json()
     
-    // Agregar respuesta del agente
-    chatHistory.value.push({
-      role: 'agent',
-      content: data.message || 'Lo siento, no pude procesar tu solicitud.',
-      time: new Date().toLocaleTimeString()
-    })
+    // Mostrar y hablar la respuesta
+    const responseText = data.message || 'Lo siento, no pude procesar tu solicitud.'
+    agentResponse.value = responseText
+    speakText(responseText)
     
     if (data.hitl_required) {
       showNotification('warning', '⚠️ Esta acción requiere aprobación humana')
     }
     
   } catch (error) {
-    console.error('Error en chat:', error)
-    chatHistory.value.push({
-      role: 'agent',
-      content: 'Error: No pude conectar con el agente. Verifica que el backend esté funcionando.',
-      time: new Date().toLocaleTimeString()
-    })
+    console.error('Error en conversación:', error)
+    const errorMsg = 'Lo siento, tuve un problema al procesarlo.'
+    agentResponse.value = errorMsg
+    speakText(errorMsg)
     showNotification('error', '❌ Error al comunicarse con el agente')
-  } finally {
-    isTyping.value = false
-    
-    // Scroll al final
-    setTimeout(() => {
-      if (chatMessages.value) {
-        chatMessages.value.scrollTop = chatMessages.value.scrollHeight
-      }
-    }, 100)
   }
+}
+
+// Hablar texto (Text-to-Speech)
+const speakText = (text) => {
+  // Detener cualquier voz anterior
+  stopAgentSpeaking()
+  
+  // Crear nueva utterance
+  currentUtterance = new SpeechSynthesisUtterance(text)
+  currentUtterance.lang = 'es-ES'
+  currentUtterance.rate = 1.0
+  currentUtterance.pitch = 1.0
+  
+  // Seleccionar voz española si está disponible
+  const voices = speechSynthesis.getVoices()
+  const spanishVoice = voices.find(voice => voice.lang.startsWith('es'))
+  if (spanishVoice) {
+    currentUtterance.voice = spanishVoice
+  }
+  
+  // Eventos
+  currentUtterance.onstart = () => {
+    agentSpeaking.value = true
+  }
+  
+  currentUtterance.onend = () => {
+    agentSpeaking.value = false
+    currentUtterance = null
+  }
+  
+  currentUtterance.onerror = () => {
+    agentSpeaking.value = false
+    currentUtterance = null
+  }
+  
+  // Hablar
+  speechSynthesis.speak(currentUtterance)
+}
+
+// Detener voz del agente
+const stopAgentSpeaking = () => {
+  if (speechSynthesis.speaking) {
+    speechSynthesis.cancel()
+  }
+  agentSpeaking.value = false
+  currentUtterance = null
 }
 
 // Mostrar notificación
@@ -1091,23 +1189,39 @@ onMounted(() => {
   box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
 }
 
-/* ========== CHAT PANEL ========== */
-.chat-panel {
+/* ========== VOICE PANEL ========== */
+.voice-panel {
   position: fixed;
-  right: 30px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 450px;
-  height: 700px;
-  background: rgba(10, 35, 66, 0.95);
-  backdrop-filter: blur(20px);
-  border: 2px solid rgba(59, 130, 246, 0.6);
-  border-radius: 20px;
-  box-shadow: 0 0 50px rgba(59, 130, 246, 0.5);
-  z-index: 100;
+  left: 50%;
+  bottom: 100px;
+  transform: translateX(-50%);
+  width: 600px;
+  min-height: 400px;
+  background: rgba(10, 35, 66, 0.98);
+  backdrop-filter: blur(25px);
+  border: 3px solid rgba(255, 215, 0, 0.6);
+  border-radius: 30px;
+  box-shadow: 
+    0 0 60px rgba(255, 215, 0, 0.5),
+    inset 0 0 40px rgba(59, 130, 246, 0.2);
+  z-index: 200;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  align-items: center;
+  padding: 40px;
+  gap: 25px;
+  animation: voice-panel-appear 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes voice-panel-appear {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(100px) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
 }
 
 .chat-header {

@@ -174,8 +174,10 @@ const createCharacters = () => {
     const character = new Character3D(agent)
     character.setPosition(pos.x, 0, pos.z)
     
-    // Metadata
-    character.userData = {
+    const charGroup = character.getGroup()
+    
+    // Metadata en el Group (no en character)
+    charGroup.userData = {
       agent: agent,
       targetPosition: new THREE.Vector3(pos.x, 0, pos.z),
       walkSpeed: 0.8 + Math.random() * 0.4,
@@ -183,8 +185,8 @@ const createCharacters = () => {
       character3D: character
     }
     
-    scene.add(character.getGroup())
-    characters.push(character.getGroup())
+    scene.add(charGroup)
+    characters.push(charGroup)
   })
 }
 

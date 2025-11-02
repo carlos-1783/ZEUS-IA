@@ -162,6 +162,48 @@
   }
 }
 
+/* PARTÍCULAS 3D ORBITANDO */
+.breath-particles-3d {
+  position: absolute;
+  inset: -40px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.particle-3d {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: radial-gradient(circle, rgba(255, 215, 0, 1), rgba(255, 215, 0, 0.3));
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.9);
+  animation: particle-orbit-3d 6s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.5s);
+}
+
+@keyframes particle-orbit-3d {
+  0%, 100% {
+    transform: 
+      translate(-50%, -50%)
+      rotate(calc(var(--i) * 30deg))
+      translateX(100px)
+      translateZ(20px)
+      scale(0.5);
+    opacity: 0;
+  }
+  50% {
+    transform: 
+      translate(-50%, -50%)
+      rotate(calc(var(--i) * 30deg + 180deg))
+      translateX(120px)
+      translateZ(-20px)
+      scale(1.2);
+    opacity: 1;
+  }
+}
+
 .voice-glow {
   position: absolute;
   inset: -20px;

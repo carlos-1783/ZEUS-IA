@@ -1,5 +1,5 @@
 <template>
-  <div class="olympos-dashboard" data-version="2.0">
+  <div class="olympos-dashboard">
     <!-- Fondo del Olimpo con columnas y cielo divino -->
     <div class="olympos-background">
       <!-- Luz celestial circular superior -->
@@ -95,23 +95,32 @@
     <!-- Panel de Conversación por Voz -->
     <transition name="voice-slide">
       <div v-if="voiceActive && activeAgent" class="voice-panel">
-        <!-- Avatar VIVO en 3D con Three.js -->
+        <!-- Avatar VIVO con animaciones -->
         <div class="voice-agent-avatar" :class="{ 'speaking': agentSpeaking, 'breathing': !agentSpeaking }">
-          <Agent3DAvatar 
-            :agent-name="activeAgent.name"
-            :image-path="activeAgent.image"
-            :is-active="true"
-            :is-speaking="agentSpeaking"
-          />
+          <div class="avatar-container">
+            <img 
+              v-if="activeAgent.image" 
+              :src="activeAgent.image" 
+              :alt="activeAgent.name"
+              class="avatar-voice-img"
+            />
+            <!-- Ojos animados superpuestos -->
+            <div class="eyes-layer" v-if="activeAgent.id <= 2">
+              <div class="eye eye-left"></div>
+              <div class="eye eye-right"></div>
+            </div>
+            <!-- Efecto de respiración (partículas de energía) -->
+            <div class="breath-particles">
+              <div class="particle" v-for="i in 8" :key="i" :style="{ '--i': i }"></div>
+            </div>
+            <!-- Labios hablando (cuando activo) -->
+            <div v-if="agentSpeaking" class="mouth-indicator"></div>
+          </div>
           <div class="voice-glow"></div>
           <div class="voice-rings">
             <div class="ring ring-1"></div>
             <div class="ring ring-2"></div>
             <div class="ring ring-3"></div>
-          </div>
-          <!-- Partículas de energía 3D -->
-          <div class="breath-particles-3d">
-            <div class="particle-3d" v-for="i in 12" :key="i" :style="{ '--i': i }"></div>
           </div>
         </div>
 
@@ -222,7 +231,6 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import Agent3DAvatar from '@/components/Agent3DAvatar.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -245,7 +253,7 @@ let recognition = null
 let speechSynthesis = window.speechSynthesis
 let currentUtterance = null
 
-// Agentes del Olimpo - CON IMÁGENES ÚNICAS
+// Agentes del Olimpo - SIEMPRE VISIBLES CON IMÁGENES 3D
 const olymposAgents = ref([
   { 
     id: 1, 
@@ -269,7 +277,7 @@ const olymposAgents = ref([
     id: 3, 
     name: 'RAFAEL', 
     icon: '📊', 
-    image: '/images/avatars/rafael-avatar.jpg',  // ⬅️ CAMBIADA
+    image: '/images/avatars/perseo-avatar.jpg',
     active: false, 
     description: 'Guardián Fiscal', 
     status: 'online' 
@@ -278,7 +286,7 @@ const olymposAgents = ref([
     id: 4, 
     name: 'THALOS', 
     icon: '🛡️', 
-    image: '/images/avatars/thalos-avatar.jpg',  // ⬅️ CAMBIADA
+    image: '/images/avatars/perseo-avatar.jpg',
     active: false, 
     description: 'Defensor Cibernético', 
     status: 'online' 
@@ -287,7 +295,7 @@ const olymposAgents = ref([
     id: 5, 
     name: 'JUSTICIA', 
     icon: '⚖️', 
-    image: '/images/avatars/justicia-avatar.jpg',  // ⬅️ CAMBIADA
+    image: '/images/avatars/perseo-avatar.jpg',
     active: false, 
     description: 'Asesora Legal y GDPR', 
     status: 'online' 

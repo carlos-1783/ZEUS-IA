@@ -25,6 +25,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import * as THREE from 'three'
+import { ProceduralCharacter, AGENT_COLORS, createAgent } from '@/utils/ProceduralCharacter'
 
 const props = defineProps({
   agents: Array
@@ -40,6 +41,8 @@ let scene, camera, renderer
 let characters = []
 let animationId
 let clock = new THREE.Clock()
+let raycaster = new THREE.Raycaster()
+let mouse = new THREE.Vector2()
 
 // Controls
 let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false
@@ -343,28 +346,73 @@ const createOlymposEnvironment = () => {
 }
 
 const createCharacters = () => {
-  console.log('🔥 CREANDO PERSONAJES - props.agents:', props.agents)
+  console.log('🔥 CREANDO PERSONAJES PROCEDURALES')
   
-  // SIEMPRE CREAR PERSONAJES POR DEFECTO
-  const defaultAgents = [
-    { id: 2, name: 'PERSEO', image: '/images/avatars/Perseo-avatar.jpg', status: 'Volando' },
-    { id: 3, name: 'RAFAEL', image: '/images/avatars/Rafael-avatar.jpg', status: 'Vigilando' },
-    { id: 4, name: 'THALOS', image: '/images/avatars/Thalos-avatar.jpg', status: 'Protegiendo' },
-    { id: 5, name: 'JUSTICIA', image: '/images/avatars/Justicia-avatar.jpg', status: 'Juzgando' },
-    { id: 1, name: 'ZEUS', image: '/images/avatars/Zeus-avatar.jpg', status: 'Reinando' }
+  // Agentes con posiciones específicas
+  const agentConfig = [
+    { name: 'ZEUS CORE', position: { x: 0, y: 0, z: 0 }, status: 'Reinando' },
+    { name: 'PERSEO', position: { x: -8, y: 0, z: 6 }, status: 'Estrategia' },
+    { name: 'RAFAEL', position: { x: 8, y: 0, z: 6 }, status: 'Contabilidad' },
+    { name: 'THALOS', position: { x: -8, y: 0, z: -6 }, status: 'Vigilando' },
+    { name: 'JUSTICIA', position: { x: 8, y: 0, z: -6 }, status: 'Juzgando' }
   ]
   
-  console.log('✅ Creando 5 personajes por defecto')
-  
-  defaultAgents.forEach((agent, index) => {
-    console.log(`📌 Creando agente ${index + 1}/${defaultAgents.length}:`, agent.name)
-    createSingleCharacter(agent, index)
+  agentConfig.forEach((config) => {
+    console.log(`📌 Creando ${config.name}...`)
+    
+    // Crear personaje procedural
+    const character = createAgent(config.name, config.position)
+    
+    // Añadir metadata
+    character.group.userData = {
+      name: config.name,
+      status: config.status,
+      isAgent: true,
+      character: character
+    }
+    
+    // Añadir a la escena
+    scene.add(character.getGroup())
+    
+    // Guardar referencia
+    characters.push({
+      name: config.name,
+      status: config.status,
+      instance: character
+    })
+    
+    // Hacer que caminen en patrulla aleatoria
+    setRandomPatrol(character)
+    
+    console.log(`✅ ${config.name} creado en`, config.position)
   })
   
-  console.log(`✅ Total de ${characters.length} personajes creados en la escena`)
+  console.log(`✅ Total: ${characters.length} agentes procedurales listos`)
 }
 
-const createSingleCharacter = (agent, index) => {
+const setRandomPatrol = (character) => {
+  const patrol = () => {
+    // Generar posición aleatoria dentro del área
+    const randomPos = {
+      x: (Math.random() - 0.5) * 20,
+      y: 0,
+      z: (Math.random() - 0.5) * 20
+    }
+    
+    character.walkTo(randomPos)
+    
+    // Siguiente patrulla en 5-10 segundos
+    setTimeout(() => {
+      if (character) patrol()
+    }, 5000 + Math.random() * 5000)
+  }
+  
+  // Iniciar patrulla después de 2 segundos
+  setTimeout(patrol, 2000)
+}
+
+const createSingleCharacter_OLD_DISABLED = (agent, index) => {
+  // FUNCIÓN DESHABILITADA - AHORA SE USA createCharacters con ProceduralCharacter
   // Posiciones de vuelo - distribuidos en círculo
   const angle = (index / 5) * Math.PI * 2
   const radius = 14
@@ -542,20 +590,42 @@ const onMouseUp = () => {
 
 const onCanvasClick = (event) => {
   const rect = canvas.value.getBoundingClientRect()
-  const mouse = new THREE.Vector2(
-    ((event.clientX - rect.left) / rect.width) * 2 - 1,
-    -((event.clientY - rect.top) / rect.height) * 2 + 1
-  )
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
   
-  const raycaster = new THREE.Raycaster()
   raycaster.setFromCamera(mouse, camera)
   
-  const intersects = raycaster.intersectObjects(characters)
+  // Raycast contra todos los objetos de la escena
+  const intersects = raycaster.intersectObjects(scene.children, true)
   
   if (intersects.length > 0) {
-    const clickedAgent = intersects[0].object.userData.agent
-    console.log('🎯 Agente clickeado:', clickedAgent.name)
-    emit('agentClicked', clickedAgent)
+    // Buscar el objeto clickeado con userData de agente
+    for (const intersect of intersects) {
+      let obj = intersect.object
+      
+      // Subir en la jerarquía hasta encontrar userData.isAgent
+      while (obj) {
+        if (obj.userData && obj.userData.isAgent) {
+          const agentName = obj.userData.name
+          console.log('🎯 Agente clickeado:', agentName)
+          
+          // Encontrar el personaje y hacer animación
+          const character = characters.find(c => c.name === agentName)
+          if (character && character.instance) {
+            character.instance.talk(2000)
+          }
+          
+          // Emitir evento
+          emit('agentClicked', {
+            name: agentName,
+            status: obj.userData.status
+          })
+          
+          return
+        }
+        obj = obj.parent
+      }
+    }
   }
 }
 
@@ -566,6 +636,54 @@ const onWindowResize = () => {
 }
 
 const updateCharacters = (delta) => {
+  characters.forEach(char => {
+    // Actualizar animaciones del personaje procedural
+    if (char.instance && char.instance.update) {
+      char.instance.update(delta)
+    }
+  })
+  
+  // Actualizar nameplates (etiquetas sobre personajes)
+  updateNameplates()
+}
+
+const updateNameplates = () => {
+  const visible = []
+  
+  characters.forEach(char => {
+    if (!char.instance) return
+    
+    const charPos = char.instance.getPosition()
+    const distance = camera.position.distanceTo(charPos)
+    
+    // Solo mostrar si está cerca (< 15m)
+    if (distance < 15) {
+      // Proyectar posición 3D a 2D
+      const screenPos = charPos.clone()
+      screenPos.y += 5  // Sobre la cabeza
+      screenPos.project(camera)
+      
+      const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth
+      const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight
+      
+      visible.push({
+        id: char.name,
+        name: char.name,
+        status: char.status,
+        screenPosition: {
+          left: `${x}px`,
+          top: `${y}px`,
+          transform: 'translate(-50%, -100%)',
+          position: 'absolute'
+        }
+      })
+    }
+  })
+  
+  nearbyAgents.value = visible
+}
+
+const updateCharacters_OLD_DISABLED = (delta) => {
   characters.forEach(mesh => {
     const data = mesh.userData
     

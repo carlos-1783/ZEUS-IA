@@ -50,8 +50,8 @@ class SecurityMiddleware:
                 "default-src 'self'; "
                 "script-src 'self' 'unsafe-inline'; "
                 "style-src 'self' 'unsafe-inline'; "
-                "img-src 'self' data: https:; "
-                "connect-src 'self' wss: https:;"
+                "img-src 'self' data: https: blob:; "
+                "connect-src 'self' wss: https: blob: data: https://models.readyplayer.me;"
             )
         
         return response

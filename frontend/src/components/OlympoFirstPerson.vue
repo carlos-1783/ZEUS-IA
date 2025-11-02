@@ -71,8 +71,8 @@ onUnmounted(() => {
 const initScene = () => {
   // Escena
   scene = new THREE.Scene()
-  scene.background = new THREE.Color(0x0a1628)
-  scene.fog = new THREE.Fog(0x0a1628, 10, 50)
+  scene.background = new THREE.Color(0x87CEEB) // Cielo azul claro
+  scene.fog = new THREE.Fog(0x87CEEB, 20, 60)
   
   // Cámara en primera persona
   camera = new THREE.PerspectiveCamera(
@@ -93,33 +93,39 @@ const initScene = () => {
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
   
-  // Luces
-  const ambientLight = new THREE.AmbientLight(0x404040, 1.5)
+  // Luces MUY BRILLANTES para ver todo
+  const ambientLight = new THREE.AmbientLight(0xffffff, 2.5)
   scene.add(ambientLight)
   
-  const sunLight = new THREE.DirectionalLight(0xffd700, 2)
-  sunLight.position.set(10, 20, 10)
+  const sunLight = new THREE.DirectionalLight(0xffffff, 3)
+  sunLight.position.set(10, 30, 10)
   sunLight.castShadow = true
-  sunLight.shadow.camera.far = 50
+  sunLight.shadow.camera.far = 100
   sunLight.shadow.mapSize.width = 2048
   sunLight.shadow.mapSize.height = 2048
   scene.add(sunLight)
   
-  // Luz de relleno
-  const fillLight = new THREE.PointLight(0x3b82f6, 1, 30)
-  fillLight.position.set(-5, 5, -5)
-  scene.add(fillLight)
+  // Luces de relleno
+  const fillLight1 = new THREE.PointLight(0xffd700, 2, 50)
+  fillLight1.position.set(-10, 10, -10)
+  scene.add(fillLight1)
+  
+  const fillLight2 = new THREE.PointLight(0xffd700, 2, 50)
+  fillLight2.position.set(10, 10, 10)
+  scene.add(fillLight2)
   
   window.addEventListener('resize', onWindowResize)
 }
 
 const createOlymposEnvironment = () => {
-  // Suelo del Olimpo (mármol)
+  // Suelo del Olimpo (mármol blanco brillante)
   const floorGeometry = new THREE.PlaneGeometry(100, 100)
   const floorMaterial = new THREE.MeshStandardMaterial({ 
-    color: 0xe8e8e8,
-    roughness: 0.3,
-    metalness: 0.1
+    color: 0xffffff,
+    roughness: 0.2,
+    metalness: 0.3,
+    emissive: 0xffffff,
+    emissiveIntensity: 0.1
   })
   const floor = new THREE.Mesh(floorGeometry, floorMaterial)
   floor.rotation.x = -Math.PI / 2
@@ -137,8 +143,11 @@ const createOlymposEnvironment = () => {
   columnPositions.forEach(pos => {
     const columnGeometry = new THREE.CylinderGeometry(0.5, 0.5, 6, 16)
     const columnMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0xf5f5dc,
-      roughness: 0.7
+      color: 0xffffff,
+      roughness: 0.3,
+      metalness: 0.2,
+      emissive: 0xffd700,
+      emissiveIntensity: 0.05
     })
     const column = new THREE.Mesh(columnGeometry, columnMaterial)
     column.position.set(pos[0], 3, pos[2])
@@ -146,14 +155,31 @@ const createOlymposEnvironment = () => {
     scene.add(column)
   })
   
-  // Cielo/cúpula dorada
+  // Cielo azul brillante
   const skyGeometry = new THREE.SphereGeometry(50, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2)
   const skyMaterial = new THREE.MeshBasicMaterial({ 
-    color: 0x1a2f4a,
+    color: 0x87CEEB,
     side: THREE.BackSide
   })
   const sky = new THREE.Mesh(skyGeometry, skyMaterial)
   scene.add(sky)
+  
+  // Nubes
+  for (let i = 0; i < 10; i++) {
+    const cloudGeometry = new THREE.SphereGeometry(2 + Math.random(), 16, 16)
+    const cloudMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.6
+    })
+    const cloud = new THREE.Mesh(cloudGeometry, cloudMaterial)
+    cloud.position.set(
+      (Math.random() - 0.5) * 40,
+      10 + Math.random() * 5,
+      (Math.random() - 0.5) * 40
+    )
+    scene.add(cloud)
+  }
 }
 
 const createCharacters = () => {

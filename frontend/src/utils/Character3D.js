@@ -26,18 +26,45 @@ export class Character3D {
     const skinColor = 0xffdbac
     const clothColor = 0x3b82f6
     
-    // CABEZA - Esfera con textura de la foto
-    const headGeometry = new THREE.SphereGeometry(0.25, 32, 32)
+    // CUERPO COMPLETO - Usar cilindro ancho con tu foto mapeada
+    const bodyGeometry = new THREE.CylinderGeometry(0.4, 0.3, 1.8, 32, 4, true)
     const textureLoader = new THREE.TextureLoader()
-    const headTexture = textureLoader.load(this.agentData.image || '/images/avatars/perseo-avatar.jpg')
-    const headMaterial = new THREE.MeshStandardMaterial({ 
-      map: headTexture,
-      roughness: 0.8,
+    
+    // Cargar la imagen del avatar y mapearla al cilindro
+    const bodyTexture = textureLoader.load(
+      this.agentData.image || '/images/avatars/perseo-avatar.jpg',
+      (texture) => {
+        // Configurar textura para que cubra todo el cilindro
+        texture.wrapS = THREE.RepeatWrapping
+        texture.wrapT = THREE.ClampToEdgeWrapping
+        texture.colorSpace = THREE.SRGBColorSpace
+      }
+    )
+    
+    const bodyMaterial = new THREE.MeshStandardMaterial({ 
+      map: bodyTexture,
+      side: THREE.DoubleSide,
+      transparent: true,
+      alphaTest: 0.5,
+      roughness: 0.7,
       metalness: 0.1
     })
+    
+    this.body = new THREE.Mesh(bodyGeometry, bodyMaterial)
+    this.body.position.y = 0.9
+    this.body.castShadow = true
+    this.body.receiveShadow = true
+    this.group.add(this.body)
+    
+    // CABEZA - Esfera pequeña encima (invisible, solo para estructura)
+    const headGeometry = new THREE.SphereGeometry(0.2, 16, 16)
+    const headMaterial = new THREE.MeshStandardMaterial({ 
+      color: skinColor,
+      transparent: true,
+      opacity: 0  // Invisible - la foto del cuerpo ya incluye la cabeza
+    })
     this.head = new THREE.Mesh(headGeometry, headMaterial)
-    this.head.position.y = 1.5
-    this.head.castShadow = true
+    this.head.position.y = 1.8
     this.group.add(this.head)
     
     // CUELLO

@@ -6,11 +6,21 @@
 # Stage 1: Build Frontend
 FROM mirror.gcr.io/library/node:18-slim AS frontend-builder
 
+# Install build dependencies for lightningcss
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app/frontend
 
 # Copy frontend package files
 COPY frontend/package*.json ./
 RUN npm install --legacy-peer-deps
+
+# Rebuild lightningcss native bindings
+RUN npm rebuild lightningcss --build-from-source || true
 
 # Copy frontend source
 COPY frontend/ ./

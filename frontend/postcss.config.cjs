@@ -10,8 +10,8 @@ const config = {
     // Importar estilos primero
     require('postcss-import'),
     
-    // Tailwind CSS - usando el nuevo paquete PostCSS
-    require('@tailwindcss/postcss'),
+    // Tailwind CSS clásico (sin lightningcss)
+    require('tailwindcss'),
     
     // Autoprefixer optimizado
     require('autoprefixer')({

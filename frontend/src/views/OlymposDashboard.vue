@@ -1,5 +1,5 @@
 <template>
-  <div class="olympos-dashboard">
+  <div class="olympos-dashboard" data-version="2.0">
     <!-- Fondo del Olimpo con columnas y cielo divino -->
     <div class="olympos-background">
       <!-- Luz celestial circular superior -->

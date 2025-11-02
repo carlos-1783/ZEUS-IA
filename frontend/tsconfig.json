@@ -46,7 +46,10 @@
     "node_modules",
     "dist",
     "**/*.js",
-    "**/*.mjs"
+    "**/*.mjs",
+    "**/*_NEW.vue",
+    "**/*_OLD.vue",
+    ".vite"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

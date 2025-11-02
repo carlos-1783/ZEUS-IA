@@ -134,11 +134,21 @@ def chat_completion(
         
     except Exception as e:
         elapsed_time = time.time() - start_time
-        print(f"❌ [OpenAI] Error after {elapsed_time:.2f}s: {str(e)}")
+        error_msg = str(e)
+        print(f"❌ [OpenAI] Error after {elapsed_time:.2f}s: {error_msg}")
+        
+        # Mensaje más amigable para error 401
+        if "401" in error_msg or "insufficient permissions" in error_msg.lower():
+            user_friendly_msg = "⚠️ Tu API key de OpenAI no tiene permisos suficientes. Ve a https://platform.openai.com/api-keys y crea una nueva key con permisos completos (Owner/Writer), o activa el scope 'model.request' en tu key actual."
+        elif "api_key" in error_msg.lower():
+            user_friendly_msg = "❌ API key de OpenAI no configurada o inválida. Verifica OPENAI_API_KEY en Railway."
+        else:
+            user_friendly_msg = error_msg
         
         return {
             "success": False,
-            "error": str(e),
+            "error": user_friendly_msg,
+            "technical_error": error_msg,
             "elapsed_time": round(elapsed_time, 2),
             "timestamp": datetime.now().isoformat()
         }

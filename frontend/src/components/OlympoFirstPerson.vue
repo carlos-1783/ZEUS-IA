@@ -118,14 +118,60 @@ const initScene = () => {
 }
 
 const createOlymposEnvironment = () => {
-  // SUELO - Mármol blanco con patrón de baldosas doradas
-  const floorGeometry = new THREE.PlaneGeometry(120, 120, 20, 20)
+  // SUELO - Mármol blanco con patrón de baldosas doradas REALISTA
+  const floorGeometry = new THREE.PlaneGeometry(150, 150, 30, 30)
+  
+  // Textura procedural de mármol
+  const canvas = document.createElement('canvas')
+  canvas.width = 512
+  canvas.height = 512
+  const ctx = canvas.getContext('2d')
+  
+  // Fondo blanco mármol
+  ctx.fillStyle = '#f5f5f5'
+  ctx.fillRect(0, 0, 512, 512)
+  
+  // Venas de mármol
+  for (let i = 0; i < 50; i++) {
+    ctx.strokeStyle = `rgba(200, 200, 200, ${Math.random() * 0.3})`
+    ctx.lineWidth = Math.random() * 3
+    ctx.beginPath()
+    ctx.moveTo(Math.random() * 512, Math.random() * 512)
+    ctx.bezierCurveTo(
+      Math.random() * 512, Math.random() * 512,
+      Math.random() * 512, Math.random() * 512,
+      Math.random() * 512, Math.random() * 512
+    )
+    ctx.stroke()
+  }
+  
+  // Baldosas doradas
+  ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)'
+  ctx.lineWidth = 4
+  for (let x = 0; x < 512; x += 64) {
+    ctx.beginPath()
+    ctx.moveTo(x, 0)
+    ctx.lineTo(x, 512)
+    ctx.stroke()
+  }
+  for (let y = 0; y < 512; y += 64) {
+    ctx.beginPath()
+    ctx.moveTo(0, y)
+    ctx.lineTo(512, y)
+    ctx.stroke()
+  }
+  
+  const floorTexture = new THREE.CanvasTexture(canvas)
+  floorTexture.wrapS = THREE.RepeatWrapping
+  floorTexture.wrapT = THREE.RepeatWrapping
+  floorTexture.repeat.set(10, 10)
+  
   const floorMaterial = new THREE.MeshStandardMaterial({ 
-    color: 0xffffff,
-    roughness: 0.1,
-    metalness: 0.6,
+    map: floorTexture,
+    roughness: 0.2,
+    metalness: 0.7,
     emissive: 0xffd700,
-    emissiveIntensity: 0.08
+    emissiveIntensity: 0.1
   })
   const floor = new THREE.Mesh(floorGeometry, floorMaterial)
   floor.rotation.x = -Math.PI / 2
@@ -144,42 +190,67 @@ const createOlymposEnvironment = () => {
   ]
   
   columnPositions.forEach(pos => {
-    // Base de columna
-    const baseGeometry = new THREE.CylinderGeometry(0.8, 1, 0.5, 16)
-    const baseMaterial = new THREE.MeshStandardMaterial({ 
+    // Base de columna DETALLADA
+    const baseGeometry = new THREE.CylinderGeometry(0.8, 1.2, 0.8, 24)
+    const marbleMaterial = new THREE.MeshStandardMaterial({ 
       color: 0xffffff,
-      roughness: 0.2,
-      metalness: 0.3
+      roughness: 0.15,
+      metalness: 0.4,
+      emissive: 0xffffff,
+      emissiveIntensity: 0.05
     })
-    const base = new THREE.Mesh(baseGeometry, baseMaterial)
-    base.position.set(pos[0], 0.25, pos[2])
+    const base = new THREE.Mesh(baseGeometry, marbleMaterial)
+    base.position.set(pos[0], 0.4, pos[2])
     base.castShadow = true
     scene.add(base)
     
-    // Fuste (columna principal)
-    const shaftGeometry = new THREE.CylinderGeometry(0.6, 0.6, 10, 24)
-    const shaftMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0xf5f5f5,
-      roughness: 0.25,
-      metalness: 0.2
-    })
-    const shaft = new THREE.Mesh(shaftGeometry, shaftMaterial)
-    shaft.position.set(pos[0], 5.5, pos[2])
-    shaft.castShadow = true
-    scene.add(shaft)
+    // Fuste (columna principal) con ACANALADURAS
+    const shaftGroup = new THREE.Group()
+    const mainShaft = new THREE.CylinderGeometry(0.65, 0.65, 12, 32)
+    const shaft = new THREE.Mesh(mainShaft, marbleMaterial)
+    shaftGroup.add(shaft)
     
-    // Capitel dorado
-    const capitalGeometry = new THREE.CylinderGeometry(1, 0.7, 1, 16)
-    const capitalMaterial = new THREE.MeshStandardMaterial({ 
+    // Acanaladuras (detalles verticales)
+    for (let i = 0; i < 16; i++) {
+      const angle = (i / 16) * Math.PI * 2
+      const grooveGeometry = new THREE.BoxGeometry(0.05, 12, 0.1)
+      const groove = new THREE.Mesh(grooveGeometry, marbleMaterial)
+      groove.position.set(
+        Math.cos(angle) * 0.68,
+        0,
+        Math.sin(angle) * 0.68
+      )
+      shaftGroup.add(groove)
+    }
+    
+    shaftGroup.position.set(pos[0], 6.5, pos[2])
+    shaftGroup.castShadow = true
+    scene.add(shaftGroup)
+    
+    // Capitel dorado ORNAMENTADO
+    const capitalGroup = new THREE.Group()
+    
+    const capitalMain = new THREE.CylinderGeometry(1.1, 0.75, 1.2, 24)
+    const goldMaterial = new THREE.MeshStandardMaterial({ 
       color: 0xffd700,
       roughness: 0.1,
-      metalness: 0.9,
+      metalness: 0.95,
       emissive: 0xffd700,
-      emissiveIntensity: 0.2
+      emissiveIntensity: 0.3
     })
-    const capital = new THREE.Mesh(capitalGeometry, capitalMaterial)
-    capital.position.set(pos[0], 11, pos[2])
-    scene.add(capital)
+    const capital = new THREE.Mesh(capitalMain, goldMaterial)
+    capitalGroup.add(capital)
+    
+    // Decoración del capitel
+    const ringGeometry = new THREE.TorusGeometry(0.9, 0.08, 16, 24)
+    const ring = new THREE.Mesh(ringGeometry, goldMaterial)
+    ring.rotation.x = Math.PI / 2
+    ring.position.y = -0.3
+    capitalGroup.add(ring)
+    
+    capitalGroup.position.set(pos[0], 13, pos[2])
+    capitalGroup.castShadow = true
+    scene.add(capitalGroup)
   })
   
   // TECHO DORADO (entre columnas)
@@ -247,48 +318,100 @@ const createOlymposEnvironment = () => {
 }
 
 const createCharacters = () => {
-  if (!props.agents) return
+  console.log('🔥 CREANDO PERSONAJES - props.agents:', props.agents)
   
-  // Posiciones iniciales de los personajes
-  const spawnPositions = [
-    { x: -5, z: -5 },  // PERSEO
-    { x: 5, z: -5 },   // RAFAEL
-    { x: -5, z: 5 },   // THALOS
-    { x: 5, z: 5 }     // JUSTICIA
-  ]
-  
-  props.agents.filter(a => a.id !== 1).forEach((agent, index) => {
-    const pos = spawnPositions[index] || { x: 0, z: 0 }
+  if (!props.agents || props.agents.length === 0) {
+    console.error('❌ NO HAY AGENTS - CREANDO DEFAULTS')
+    // CREAR PERSONAJES POR DEFECTO SI NO HAY PROPS
+    const defaultAgents = [
+      { id: 2, name: 'PERSEO', image: '/images/avatars/Perseo-avatar.jpg' },
+      { id: 3, name: 'RAFAEL', image: '/images/avatars/Rafael-avatar.jpg' },
+      { id: 4, name: 'THALOS', image: '/images/avatars/Thalos-avatar.jpg' },
+      { id: 5, name: 'JUSTICIA', image: '/images/avatars/Justicia-avatar.jpg' },
+      { id: 1, name: 'ZEUS', image: '/images/avatars/Zeus-avatar.jpg' }
+    ]
     
-    // Cargar imagen del avatar
-    const textureLoader = new THREE.TextureLoader()
-    const texture = textureLoader.load(agent.image || '/images/avatars/Perseo-avatar.jpg')
-    
-    // Crear plano 2D con la imagen (billboard GRANDE)
-    const geometry = new THREE.PlaneGeometry(3, 4)  // MUY GRANDE: 3m ancho x 4m alto
-    const material = new THREE.MeshBasicMaterial({
-      map: texture,
-      transparent: true,
-      alphaTest: 0.3,
-      side: THREE.DoubleSide,
-      opacity: 1
+    defaultAgents.forEach((agent, index) => {
+      createSingleCharacter(agent, index)
     })
-    
-    const mesh = new THREE.Mesh(geometry, material)
-    mesh.position.set(pos.x, 2, pos.z)  // Más alto
-    
-    // Metadata
-    mesh.userData = {
-      agent: agent,
-      targetPosition: new THREE.Vector3(pos.x, 2, pos.z),
-      walkSpeed: 1.5,  // Más rápido
-      idleTime: 0,
-      walkPhase: Math.random() * Math.PI * 2
-    }
-    
-    scene.add(mesh)
-    characters.push(mesh)
+    return
+  }
+  
+  // Usar agents reales
+  props.agents.forEach((agent, index) => {
+    createSingleCharacter(agent, index)
   })
+}
+
+const createSingleCharacter = (agent, index) => {
+  // Posiciones de vuelo - distribuidos en círculo
+  const angle = (index / 5) * Math.PI * 2
+  const radius = 12
+  const pos = {
+    x: Math.cos(angle) * radius,
+    z: Math.sin(angle) * radius,
+    y: 6 + Math.random() * 4  // Volando alto
+  }
+  
+  console.log(`✅ Creando ${agent.name} en posición:`, pos)
+  
+  // Cargar imagen del avatar
+  const textureLoader = new THREE.TextureLoader()
+  textureLoader.crossOrigin = 'anonymous'
+  
+  const texture = textureLoader.load(
+    agent.image || '/images/avatars/Perseo-avatar.jpg',
+    (tex) => {
+      console.log(`✅ Textura cargada para ${agent.name}`)
+    },
+    undefined,
+    (err) => {
+      console.error(`❌ Error cargando textura para ${agent.name}:`, err)
+    }
+  )
+  
+  // BILLBOARD GIGANTE Y BRILLANTE
+  const geometry = new THREE.PlaneGeometry(4, 5)  // GIGANTE: 4m x 5m
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    alphaTest: 0.1,
+    side: THREE.DoubleSide,
+    opacity: 1,
+    depthWrite: false  // Para que se vea siempre
+  })
+  
+  const mesh = new THREE.Mesh(geometry, material)
+  mesh.position.set(pos.x, pos.y, pos.z)
+  
+  // HALO DORADO ALREDEDOR (como dios griego)
+  const haloGeometry = new THREE.RingGeometry(2.5, 3, 32)
+  const haloMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffd700,
+    transparent: true,
+    opacity: 0.3,
+    side: THREE.DoubleSide
+  })
+  const halo = new THREE.Mesh(haloGeometry, haloMaterial)
+  halo.position.set(0, 2, -0.1)
+  mesh.add(halo)
+  
+  // Metadata para vuelo
+  mesh.userData = {
+    agent: agent,
+    targetPosition: new THREE.Vector3(pos.x, pos.y, pos.z),
+    flySpeed: 2.5,  // Velocidad de vuelo
+    idleTime: 0,
+    flyPhase: Math.random() * Math.PI * 2,
+    floatPhase: Math.random() * Math.PI * 2,
+    halo: halo,
+    isFlying: true
+  }
+  
+  scene.add(mesh)
+  characters.push(mesh)
+  
+  console.log(`✅ ${agent.name} añadido a la escena. Total personajes:`, characters.length)
 }
 
 const setupControls = () => {
@@ -388,36 +511,63 @@ const updateCharacters = (delta) => {
     // IA simple - movimiento aleatorio
     data.idleTime += delta
     
-    if (data.idleTime > 5 + Math.random() * 3) {
-      // Nuevo destino aleatorio (dentro del templo)
-      data.targetPosition.set(
-        (Math.random() - 0.5) * 25,
-        2,
-        (Math.random() - 0.5) * 25
-      )
-      data.idleTime = 0
-    }
-    
-    // Moverse hacia el objetivo
-    const dx = data.targetPosition.x - mesh.position.x
-    const dz = data.targetPosition.z - mesh.position.z
-    const distance = Math.sqrt(dx * dx + dz * dz)
-    
-    if (distance > 1) {
-      // Normalizar y aplicar velocidad
-      mesh.position.x += (dx / distance) * data.walkSpeed * delta
-      mesh.position.z += (dz / distance) * data.walkSpeed * delta
+    // VUELO COMO DIOSES GRIEGOS
+    if (data.isFlying) {
+      if (data.idleTime > 6 + Math.random() * 4) {
+        // Nuevo destino de vuelo aleatorio
+        const angle = Math.random() * Math.PI * 2
+        const radius = 8 + Math.random() * 8
+        data.targetPosition.set(
+          Math.cos(angle) * radius,
+          5 + Math.random() * 6,  // Vuelan alto
+          Math.sin(angle) * radius
+        )
+        data.idleTime = 0
+      }
       
-      // Animación de caminar - balanceo vertical VISIBLE
-      data.walkPhase += delta * 6
-      mesh.position.y = 2 + Math.abs(Math.sin(data.walkPhase)) * 0.3
+      // Moverse suavemente hacia el objetivo
+      const dx = data.targetPosition.x - mesh.position.x
+      const dy = data.targetPosition.y - mesh.position.y
+      const dz = data.targetPosition.z - mesh.position.z
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz)
       
-      // Escala al caminar (bounce)
-      const bounce = 1 + Math.sin(data.walkPhase * 2) * 0.12
-      mesh.scale.set(3 * bounce, 4 * bounce, 1)
-    } else {
-      // Idle - respiración sutil
-      mesh.scale.set(3, 4, 1)
+      if (distance > 1.5) {
+        // Vuelo suave
+        mesh.position.x += (dx / distance) * data.flySpeed * delta
+        mesh.position.y += (dy / distance) * data.flySpeed * delta
+        mesh.position.z += (dz / distance) * data.flySpeed * delta
+        
+        // Animación de vuelo - ondulación elegante
+        data.flyPhase += delta * 3
+        data.floatPhase += delta * 2
+        
+        // Balanceo vertical suave (flotando)
+        mesh.position.y += Math.sin(data.floatPhase) * 0.015
+        
+        // Inclinación al volar
+        const tilt = Math.sin(data.flyPhase) * 0.05
+        mesh.rotation.z = tilt
+        
+        // Escala respiratoria
+        const breathe = 1 + Math.sin(data.floatPhase * 1.5) * 0.03
+        mesh.scale.set(4 * breathe, 5 * breathe, 1)
+        
+        // Halo pulsante
+        if (data.halo) {
+          data.halo.material.opacity = 0.2 + Math.abs(Math.sin(data.floatPhase)) * 0.3
+          data.halo.rotation.z += delta * 0.5
+        }
+      } else {
+        // Hover en el lugar
+        data.floatPhase += delta * 2
+        mesh.position.y += Math.sin(data.floatPhase) * 0.01
+        mesh.scale.set(4, 5, 1)
+        
+        if (data.halo) {
+          data.halo.material.opacity = 0.3
+          data.halo.rotation.z += delta * 0.3
+        }
+      }
     }
     
     // Siempre mirar a la cámara (billboard)

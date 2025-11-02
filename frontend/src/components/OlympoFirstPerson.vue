@@ -320,27 +320,23 @@ const createOlymposEnvironment = () => {
 const createCharacters = () => {
   console.log('🔥 CREANDO PERSONAJES - props.agents:', props.agents)
   
-  if (!props.agents || props.agents.length === 0) {
-    console.error('❌ NO HAY AGENTS - CREANDO DEFAULTS')
-    // CREAR PERSONAJES POR DEFECTO SI NO HAY PROPS
-    const defaultAgents = [
-      { id: 2, name: 'PERSEO', image: '/images/avatars/Perseo-avatar.jpg' },
-      { id: 3, name: 'RAFAEL', image: '/images/avatars/Rafael-avatar.jpg' },
-      { id: 4, name: 'THALOS', image: '/images/avatars/Thalos-avatar.jpg' },
-      { id: 5, name: 'JUSTICIA', image: '/images/avatars/Justicia-avatar.jpg' },
-      { id: 1, name: 'ZEUS', image: '/images/avatars/Zeus-avatar.jpg' }
-    ]
-    
-    defaultAgents.forEach((agent, index) => {
-      createSingleCharacter(agent, index)
-    })
-    return
-  }
+  // SIEMPRE CREAR PERSONAJES POR DEFECTO
+  const defaultAgents = [
+    { id: 2, name: 'PERSEO', image: '/images/avatars/Perseo-avatar.jpg', status: 'Volando' },
+    { id: 3, name: 'RAFAEL', image: '/images/avatars/Rafael-avatar.jpg', status: 'Vigilando' },
+    { id: 4, name: 'THALOS', image: '/images/avatars/Thalos-avatar.jpg', status: 'Protegiendo' },
+    { id: 5, name: 'JUSTICIA', image: '/images/avatars/Justicia-avatar.jpg', status: 'Juzgando' },
+    { id: 1, name: 'ZEUS', image: '/images/avatars/Zeus-avatar.jpg', status: 'Reinando' }
+  ]
   
-  // Usar agents reales
-  props.agents.forEach((agent, index) => {
+  console.log('✅ Creando 5 personajes por defecto')
+  
+  defaultAgents.forEach((agent, index) => {
+    console.log(`📌 Creando agente ${index + 1}/${defaultAgents.length}:`, agent.name)
     createSingleCharacter(agent, index)
   })
+  
+  console.log(`✅ Total de ${characters.length} personajes creados en la escena`)
 }
 
 const createSingleCharacter = (agent, index) => {

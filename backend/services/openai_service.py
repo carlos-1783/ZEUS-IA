@@ -20,7 +20,21 @@ def get_openai_client() -> OpenAI:
     if client is None:
         if not settings.OPENAI_API_KEY:
             raise ValueError("❌ OPENAI_API_KEY not configured")
-        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        
+        try:
+            # Inicializar solo con api_key (sin kwargs adicionales)
+            client = OpenAI(
+                api_key=settings.OPENAI_API_KEY,
+                timeout=60.0,
+                max_retries=2
+            )
+            print(f"✅ OpenAI client initialized successfully")
+        except TypeError as e:
+            # Si falla con parámetros adicionales, intentar solo con api_key
+            print(f"⚠️ OpenAI init con parámetros falló: {e}")
+            print(f"🔄 Reiniciando con solo api_key...")
+            client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        
     return client
 
 

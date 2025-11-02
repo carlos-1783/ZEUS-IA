@@ -118,68 +118,132 @@ const initScene = () => {
 }
 
 const createOlymposEnvironment = () => {
-  // Suelo del Olimpo (mármol blanco brillante)
-  const floorGeometry = new THREE.PlaneGeometry(100, 100)
+  // SUELO - Mármol blanco con patrón de baldosas doradas
+  const floorGeometry = new THREE.PlaneGeometry(120, 120, 20, 20)
   const floorMaterial = new THREE.MeshStandardMaterial({ 
     color: 0xffffff,
-    roughness: 0.2,
-    metalness: 0.3,
-    emissive: 0xffffff,
-    emissiveIntensity: 0.1
+    roughness: 0.1,
+    metalness: 0.6,
+    emissive: 0xffd700,
+    emissiveIntensity: 0.08
   })
   const floor = new THREE.Mesh(floorGeometry, floorMaterial)
   floor.rotation.x = -Math.PI / 2
   floor.receiveShadow = true
   scene.add(floor)
   
-  // Columnas griegas
+  // COLUMNAS GRIEGAS MASIVAS (como templo real)
   const columnPositions = [
-    [-8, 0, -8], [8, 0, -8],
-    [-8, 0, 8], [8, 0, 8],
-    [-8, 0, 0], [8, 0, 0],
-    [0, 0, -8], [0, 0, 8]
+    // Fila frontal
+    [-12, 0, -15], [-6, 0, -15], [0, 0, -15], [6, 0, -15], [12, 0, -15],
+    // Fila trasera
+    [-12, 0, 15], [-6, 0, 15], [0, 0, 15], [6, 0, 15], [12, 0, 15],
+    // Laterales
+    [-18, 0, -8], [-18, 0, 0], [-18, 0, 8],
+    [18, 0, -8], [18, 0, 0], [18, 0, 8]
   ]
   
   columnPositions.forEach(pos => {
-    const columnGeometry = new THREE.CylinderGeometry(0.5, 0.5, 6, 16)
-    const columnMaterial = new THREE.MeshStandardMaterial({ 
+    // Base de columna
+    const baseGeometry = new THREE.CylinderGeometry(0.8, 1, 0.5, 16)
+    const baseMaterial = new THREE.MeshStandardMaterial({ 
       color: 0xffffff,
-      roughness: 0.3,
-      metalness: 0.2,
-      emissive: 0xffd700,
-      emissiveIntensity: 0.05
+      roughness: 0.2,
+      metalness: 0.3
     })
-    const column = new THREE.Mesh(columnGeometry, columnMaterial)
-    column.position.set(pos[0], 3, pos[2])
-    column.castShadow = true
-    scene.add(column)
+    const base = new THREE.Mesh(baseGeometry, baseMaterial)
+    base.position.set(pos[0], 0.25, pos[2])
+    base.castShadow = true
+    scene.add(base)
+    
+    // Fuste (columna principal)
+    const shaftGeometry = new THREE.CylinderGeometry(0.6, 0.6, 10, 24)
+    const shaftMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0xf5f5f5,
+      roughness: 0.25,
+      metalness: 0.2
+    })
+    const shaft = new THREE.Mesh(shaftGeometry, shaftMaterial)
+    shaft.position.set(pos[0], 5.5, pos[2])
+    shaft.castShadow = true
+    scene.add(shaft)
+    
+    // Capitel dorado
+    const capitalGeometry = new THREE.CylinderGeometry(1, 0.7, 1, 16)
+    const capitalMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0xffd700,
+      roughness: 0.1,
+      metalness: 0.9,
+      emissive: 0xffd700,
+      emissiveIntensity: 0.2
+    })
+    const capital = new THREE.Mesh(capitalGeometry, capitalMaterial)
+    capital.position.set(pos[0], 11, pos[2])
+    scene.add(capital)
   })
   
-  // Cielo azul brillante
-  const skyGeometry = new THREE.SphereGeometry(50, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2)
-  const skyMaterial = new THREE.MeshBasicMaterial({ 
-    color: 0x87CEEB,
-    side: THREE.BackSide
+  // TECHO DORADO (entre columnas)
+  const ceilingGeometry = new THREE.PlaneGeometry(40, 35)
+  const ceilingMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffd700,
+    roughness: 0.2,
+    metalness: 0.8,
+    emissive: 0xffd700,
+    emissiveIntensity: 0.15,
+    side: THREE.DoubleSide
   })
-  const sky = new THREE.Mesh(skyGeometry, skyMaterial)
-  scene.add(sky)
+  const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial)
+  ceiling.position.set(0, 12, 0)
+  ceiling.rotation.x = Math.PI / 2
+  scene.add(ceiling)
   
-  // Nubes
-  for (let i = 0; i < 10; i++) {
-    const cloudGeometry = new THREE.SphereGeometry(2 + Math.random(), 16, 16)
+  // MONTAÑAS AL FONDO
+  for (let i = 0; i < 5; i++) {
+    const mountainGeometry = new THREE.ConeGeometry(8 + Math.random() * 4, 15 + Math.random() * 5, 8)
+    const mountainMaterial = new THREE.MeshStandardMaterial({
+      color: 0xe0e0e0,
+      roughness: 0.8
+    })
+    const mountain = new THREE.Mesh(mountainGeometry, mountainMaterial)
+    mountain.position.set(
+      (i - 2) * 15,
+      5,
+      -40 - Math.random() * 10
+    )
+    scene.add(mountain)
+  }
+  
+  // NUBES FLOTANTES
+  for (let i = 0; i < 15; i++) {
+    const cloudGeometry = new THREE.SphereGeometry(2 + Math.random() * 2, 16, 16)
     const cloudMaterial = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
-      opacity: 0.6
+      opacity: 0.7
     })
     const cloud = new THREE.Mesh(cloudGeometry, cloudMaterial)
     cloud.position.set(
-      (Math.random() - 0.5) * 40,
-      10 + Math.random() * 5,
-      (Math.random() - 0.5) * 40
+      (Math.random() - 0.5) * 60,
+      8 + Math.random() * 8,
+      (Math.random() - 0.5) * 60
     )
     scene.add(cloud)
   }
+  
+  // ESTATUAS GRIEGAS (decoración)
+  const statuePositions = [[-10, 0, -10], [10, 0, -10]]
+  statuePositions.forEach(pos => {
+    const statueGeometry = new THREE.CylinderGeometry(0.3, 0.4, 2, 16)
+    const statueMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.4,
+      metalness: 0.1
+    })
+    const statue = new THREE.Mesh(statueGeometry, statueMaterial)
+    statue.position.set(pos[0], 1, pos[2])
+    statue.castShadow = true
+    scene.add(statue)
+  })
 }
 
 const createCharacters = () => {
@@ -200,23 +264,24 @@ const createCharacters = () => {
     const textureLoader = new THREE.TextureLoader()
     const texture = textureLoader.load(agent.image || '/images/avatars/Perseo-avatar.jpg')
     
-    // Crear plano 2D con la imagen (billboard grande)
-    const geometry = new THREE.PlaneGeometry(2, 3)  // Más grande: 2m ancho x 3m alto
+    // Crear plano 2D con la imagen (billboard GRANDE)
+    const geometry = new THREE.PlaneGeometry(3, 4)  // MUY GRANDE: 3m ancho x 4m alto
     const material = new THREE.MeshBasicMaterial({
       map: texture,
       transparent: true,
-      alphaTest: 0.5,
-      side: THREE.DoubleSide
+      alphaTest: 0.3,
+      side: THREE.DoubleSide,
+      opacity: 1
     })
     
     const mesh = new THREE.Mesh(geometry, material)
-    mesh.position.set(pos.x, 1.5, pos.z)
+    mesh.position.set(pos.x, 2, pos.z)  // Más alto
     
     // Metadata
     mesh.userData = {
       agent: agent,
-      targetPosition: new THREE.Vector3(pos.x, 1.5, pos.z),
-      walkSpeed: 1.2,
+      targetPosition: new THREE.Vector3(pos.x, 2, pos.z),
+      walkSpeed: 1.5,  // Más rápido
       idleTime: 0,
       walkPhase: Math.random() * Math.PI * 2
     }
@@ -323,12 +388,12 @@ const updateCharacters = (delta) => {
     // IA simple - movimiento aleatorio
     data.idleTime += delta
     
-    if (data.idleTime > 4 + Math.random() * 3) {
-      // Nuevo destino aleatorio
+    if (data.idleTime > 5 + Math.random() * 3) {
+      // Nuevo destino aleatorio (dentro del templo)
       data.targetPosition.set(
-        (Math.random() - 0.5) * 20,
-        1.5,
-        (Math.random() - 0.5) * 20
+        (Math.random() - 0.5) * 25,
+        2,
+        (Math.random() - 0.5) * 25
       )
       data.idleTime = 0
     }
@@ -343,13 +408,16 @@ const updateCharacters = (delta) => {
       mesh.position.x += (dx / distance) * data.walkSpeed * delta
       mesh.position.z += (dz / distance) * data.walkSpeed * delta
       
-      // Animación de caminar - balanceo
-      data.walkPhase += delta * 5
-      mesh.position.y = 1.5 + Math.abs(Math.sin(data.walkPhase)) * 0.2
+      // Animación de caminar - balanceo vertical VISIBLE
+      data.walkPhase += delta * 6
+      mesh.position.y = 2 + Math.abs(Math.sin(data.walkPhase)) * 0.3
       
-      // Escala ligeramente (simula paso)
-      const bounce = 1 + Math.sin(data.walkPhase * 2) * 0.08
-      mesh.scale.set(2 * bounce, 3 * bounce, 1)
+      // Escala al caminar (bounce)
+      const bounce = 1 + Math.sin(data.walkPhase * 2) * 0.12
+      mesh.scale.set(3 * bounce, 4 * bounce, 1)
+    } else {
+      // Idle - respiración sutil
+      mesh.scale.set(3, 4, 1)
     }
     
     // Siempre mirar a la cámara (billboard)

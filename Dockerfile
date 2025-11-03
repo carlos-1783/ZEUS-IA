@@ -1,7 +1,8 @@
 # ========================================
-# ZEUS-IA PRODUCTION DOCKERFILE
+# ZEUS-IA PRODUCTION DOCKERFILE v1.0.6
 # ========================================
 # Multi-stage build for Railway deployment
+# REBUILD: 2025-11-03 - GLB Avatars Fix
 
 # Stage 1: Build Frontend
 FROM mirror.gcr.io/library/node:18-slim AS frontend-builder

@@ -8,10 +8,10 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 
 # Importar servicios
-from backend.services.whatsapp_service import whatsapp_service
-from backend.services.email_service import email_service
-from backend.services.hacienda_service import hacienda_service
-from backend.services.stripe_service import stripe_service
+from services.whatsapp_service import whatsapp_service
+from services.email_service import email_service
+from services.hacienda_service import hacienda_service
+from services.stripe_service import stripe_service
 
 router = APIRouter()
 

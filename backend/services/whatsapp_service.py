@@ -102,8 +102,8 @@ class WhatsAppService:
         """
         try:
             # Importar agentes
-            from backend.agents.zeus_core import ZeusCore
-            from backend.agents.perseo import Perseo
+            from agents.zeus_core import ZeusCore
+            from agents.perseo import Perseo
             
             # Mapeo de agentes
             agents_map = {

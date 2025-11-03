@@ -852,3 +852,19 @@ const chatWith = (agent) => {
 }
 </style>
 
+
+﻿
+client.ts:19 [vite] connecting...
+client.ts:155 [vite] connected.
+App.vue:10 ✅ ZEUS IA Frontend iniciado
+main.ts:26 ✅ ZEUS IA iniciado
+OlymposDashboard.vue:322 ✅ Backend respondió: 
+Object
+OlymposDashboard.vue:322 ✅ Backend respondió: 
+Object
+OlymposDashboard.vue:322 ✅ Backend respondió: 
+Object
+OlymposDashboard.vue:322 ✅ Backend respondió: 
+Object
+OlymposDashboard.vue:322 ✅ Backend respondió: 
+Object

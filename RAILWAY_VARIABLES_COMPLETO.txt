@@ -1,0 +1,70 @@
+# ========================================
+# ZEUS-IA - Variables de Entorno Railway
+# ========================================
+# INSTRUCCIONES: Copia estas variables en Railway > Variables
+# Reemplaza los valores YOUR_... con tus credenciales reales
+# ========================================
+
+# ============================================================================
+# CORE (Ya configurado)
+# ============================================================================
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+SECRET_KEY=1b6ed3a2f7c62ea379032ddd1fa9b19b
+ENVIRONMENT=production
+DEBUG=false
+PORT=8000
+
+# ============================================================================
+# OPENAI (CRÍTICO - Sin esto los agentes NO funcionan)
+# ============================================================================
+OPENAI_API_KEY=YOUR_OPENAI_API_KEY
+OPENAI_MODEL=gpt-3.5-turbo
+OPENAI_MAX_TOKENS=2000
+OPENAI_TEMPERATURE=0.3
+
+# ============================================================================
+# TWILIO - WhatsApp Automation
+# ============================================================================
+TWILIO_ACCOUNT_SID=YOUR_TWILIO_ACCOUNT_SID
+TWILIO_AUTH_TOKEN=YOUR_TWILIO_AUTH_TOKEN
+TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
+
+# ============================================================================
+# SENDGRID - Email Automation
+# ============================================================================
+SENDGRID_API_KEY=YOUR_SENDGRID_API_KEY
+SENDGRID_FROM_EMAIL=noreply@zeus-ia.com
+SENDGRID_FROM_NAME=ZEUS-IA
+
+# ============================================================================
+# STRIPE - Payment Processing
+# ============================================================================
+STRIPE_API_KEY=YOUR_STRIPE_SECRET_KEY
+STRIPE_WEBHOOK_SECRET=YOUR_STRIPE_WEBHOOK_SECRET
+STRIPE_CURRENCY=eur
+
+# ============================================================================
+# HACIENDA (AEAT) - Opcional
+# ============================================================================
+AEAT_NIF=YOUR_COMPANY_NIF
+AEAT_PASSWORD=YOUR_CERTIFICATE_PASSWORD
+AEAT_ENVIRONMENT=test
+AEAT_CERTIFICATE_PATH=/app/certs/certificado.pfx
+
+# ============================================================================
+# OTROS (Opcionales)
+# ============================================================================
+SLACK_WEBHOOK_URL=YOUR_SLACK_WEBHOOK_URL
+ADMIN_EMAIL=admin@zeus-ia.com
+SENTRY_DSN=YOUR_SENTRY_DSN
+
+# ============================================================================
+# NOTAS
+# ============================================================================
+# 1. NO compartas este archivo con las keys reales
+# 2. Obtén las keys siguiendo: CONFIGURACION_API_KEYS.md
+# 3. Stripe: usa sk_test_ para pruebas, sk_live_ para producción
+# 4. Twilio: sandbox para pruebas, número verificado para producción
+# 5. AEAT: modo test no requiere certificado, production sí
+# ============================================================================
+

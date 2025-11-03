@@ -9,7 +9,8 @@ load_dotenv()
 class Settings(BaseSettings):
     # Application
     PROJECT_NAME: str = "ZEUS-IA"
-    VERSION: str = "1.0.0"
+    VERSION: str = "1.0.6"
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", os.getenv("RAILWAY_ENVIRONMENT", "production"))
     API_V1_STR: str = "/api/v1"
     DEBUG: bool = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
     

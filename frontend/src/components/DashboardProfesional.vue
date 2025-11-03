@@ -59,7 +59,11 @@
       <header class="dashboard-header">
         <div class="header-left">
           <!-- Botón hamburguesa para móvil -->
-          <button class="hamburger-btn" @click="sidebarOpen = !sidebarOpen">
+          <button 
+            class="hamburger-btn" 
+            :class="{ active: sidebarOpen }"
+            @click="sidebarOpen = !sidebarOpen"
+          >
             <span></span>
             <span></span>
             <span></span>
@@ -512,8 +516,8 @@ const chatWith = (agent) => {
   color: #10b981;
 }
 
-/* RESPONSIVE - MÓVIL */
-@media (max-width: 768px) {
+/* RESPONSIVE - MÓVIL Y TABLET */
+@media (max-width: 1024px) {
   /* Mostrar overlay */
   .sidebar-overlay {
     display: block;
@@ -526,6 +530,8 @@ const chatWith = (agent) => {
     left: 0;
     height: 100vh;
     transform: translateX(-100%);
+    z-index: 999;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
   }
 
   /* Sidebar visible cuando está abierto */
@@ -536,6 +542,19 @@ const chatWith = (agent) => {
   /* Mostrar botón hamburguesa en móvil */
   .hamburger-btn {
     display: flex;
+  }
+  
+  /* Animación del botón hamburguesa cuando está abierto */
+  .hamburger-btn.active span:nth-child(1) {
+    transform: rotate(45deg) translate(5px, 5px);
+  }
+  
+  .hamburger-btn.active span:nth-child(2) {
+    opacity: 0;
+  }
+  
+  .hamburger-btn.active span:nth-child(3) {
+    transform: rotate(-45deg) translate(7px, -6px);
   }
 
   /* Ajustar main content */

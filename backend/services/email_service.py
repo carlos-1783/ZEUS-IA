@@ -113,9 +113,9 @@ class EmailService:
         """
         try:
             # Importar agentes
-            from backend.agents.zeus_core import ZeusCore
-            from backend.agents.perseo import Perseo
-            from backend.agents.rafael import Rafael
+            from agents.zeus_core import ZeusCore
+            from agents.perseo import Perseo
+            from agents.rafael import Rafael
             
             # Mapeo de agentes
             agents_map = {

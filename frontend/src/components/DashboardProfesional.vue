@@ -142,25 +142,25 @@ const agentsData = ref([
   {
     name: 'PERSEO',
     role: 'Growth Strategist',
-    image: '/images/avatars/perseo-avatar.jpg',
+    image: '/images/avatars/Perseo-avatar.jpg',
     load: 62
   },
   {
     name: 'RAFAEL',
     role: 'Fiscal Guardian',
-    image: '/images/avatars/rafael-avatar.jpg',
+    image: '/images/avatars/Rafael-avatar.jpg',
     load: 38
   },
   {
     name: 'THALOS',
     role: 'Cybersecurity Defender',
-    image: '/images/avatars/thalos-avatar.jpg',
+    image: '/images/avatars/Thalos-avatar.jpg',
     load: 71
   },
   {
     name: 'JUSTICIA',
     role: 'Legal & GDPR Advisor',
-    image: '/images/avatars/justicia-avatar.jpg',
+    image: '/images/avatars/Justicia-avatar.jpg',
     load: 29
   }
 ])

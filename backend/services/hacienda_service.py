@@ -6,10 +6,16 @@ import os
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from decimal import Decimal
-import zeep
-from zeep import Client as SoapClient
-from zeep.wsse.username import UsernameToken
-import xmltodict
+
+try:
+    import zeep
+    from zeep import Client as SoapClient
+    from zeep.wsse.username import UsernameToken
+    import xmltodict
+    ZEEP_AVAILABLE = True
+except ImportError:
+    ZEEP_AVAILABLE = False
+    zeep = SoapClient = UsernameToken = xmltodict = None
 
 class HaciendaService:
     """Servicio para integración con Hacienda (AEAT)"""
@@ -26,7 +32,9 @@ class HaciendaService:
         }
         
         self.client = None
-        if self.nif and self.password:
+        if not ZEEP_AVAILABLE:
+            print("⚠️ Hacienda Service: SOAP libraries not installed (pip install zeep xmltodict)")
+        elif self.nif and self.password:
             print(f"✅ Hacienda Service configurado (modo: {self.environment})")
         else:
             print("⚠️ Hacienda Service: Credenciales AEAT no configuradas")

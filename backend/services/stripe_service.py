@@ -4,8 +4,14 @@ Automatiza procesamiento de pagos y suscripciones
 """
 import os
 from typing import Optional, Dict, Any
-import stripe
 from app.core.config import settings
+
+try:
+    import stripe
+    STRIPE_AVAILABLE = True
+except ImportError:
+    STRIPE_AVAILABLE = False
+    stripe = None
 
 class StripeService:
     """Servicio para procesamiento de pagos con Stripe"""
@@ -15,7 +21,9 @@ class StripeService:
         self.webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
         self.currency = os.getenv("STRIPE_CURRENCY", "eur")
         
-        if self.api_key:
+        if not STRIPE_AVAILABLE:
+            print("⚠️ Stripe Service: Stripe library not installed (pip install stripe)")
+        elif self.api_key:
             stripe.api_key = self.api_key
             print("✅ Stripe Service inicializado correctamente")
         else:

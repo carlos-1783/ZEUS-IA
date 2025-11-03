@@ -1,6 +1,6 @@
 <template>
-  <!-- Modo 3D con Avatares GLB Humanizados -->
-  <OlympoGLB 
+  <!-- Dashboard Profesional Corporativo -->
+  <DashboardProfesional 
     v-if="firstPersonMode"
     :agents="olymposAgents"
     @agentClicked="summonAgent"
@@ -240,7 +240,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Agent3DAvatar from '@/components/Agent3DAvatar.vue'
-import OlympoGLB from '@/components/OlympoGLB.vue'
+import DashboardProfesional from '@/components/DashboardProfesional.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()

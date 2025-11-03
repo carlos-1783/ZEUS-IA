@@ -36,6 +36,10 @@ cryptography==42.0.5
 # AI / OpenAI
 openai>=1.0.0,<2.0.0
 
+# Communications
+twilio==9.0.4
+sendgrid==6.11.0
+
 # Utilities
 python-dateutil==2.9.0
 pytz==2024.1

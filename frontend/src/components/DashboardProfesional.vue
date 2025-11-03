@@ -1,7 +1,14 @@
 <template>
   <div class="dashboard-profesional">
+    <!-- Overlay para móvil -->
+    <div 
+      class="sidebar-overlay" 
+      :class="{ active: sidebarOpen }"
+      @click="sidebarOpen = false"
+    ></div>
+
     <!-- Sidebar Oscura -->
-    <aside class="sidebar-dark">
+    <aside class="sidebar-dark" :class="{ open: sidebarOpen }">
       <div class="logo-section">
         <h1>⚡ ZEUS-IA</h1>
         <p class="subtitle">Enterprise AI Platform</p>
@@ -11,7 +18,7 @@
         <button 
           class="nav-item" 
           :class="{ active: currentView === 'dashboard' }"
-          @click="currentView = 'dashboard'"
+          @click="currentView = 'dashboard'; closeSidebarOnMobile()"
         >
           <span class="icon">🏛️</span>
           <span>Dashboard</span>
@@ -19,7 +26,7 @@
         <button 
           class="nav-item"
           :class="{ active: currentView === 'analytics' }"
-          @click="currentView = 'analytics'"
+          @click="currentView = 'analytics'; closeSidebarOnMobile()"
         >
           <span class="icon">📊</span>
           <span>Analytics</span>
@@ -27,7 +34,7 @@
         <button 
           class="nav-item"
           :class="{ active: currentView === 'settings' }"
-          @click="currentView = 'settings'"
+          @click="currentView = 'settings'; closeSidebarOnMobile()"
         >
           <span class="icon">⚙️</span>
           <span>Settings</span>
@@ -51,8 +58,16 @@
       <!-- Header -->
       <header class="dashboard-header">
         <div class="header-left">
-          <h2>AI Agents Control Center</h2>
-          <p class="breadcrumb">Dashboard / Agents Overview</p>
+          <!-- Botón hamburguesa para móvil -->
+          <button class="hamburger-btn" @click="sidebarOpen = !sidebarOpen">
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
+          <div>
+            <h2>AI Agents Control Center</h2>
+            <p class="breadcrumb">Dashboard / Agents Overview</p>
+          </div>
         </div>
         <div class="header-right">
           <div class="status-badge online">● System Online</div>
@@ -261,6 +276,14 @@ const emit = defineEmits(['agentClicked'])
 
 const selectedAgent = ref(null)
 const currentView = ref('dashboard')
+const sidebarOpen = ref(false)
+
+const closeSidebarOnMobile = () => {
+  // Cerrar sidebar en móvil después de seleccionar una opción
+  if (window.innerWidth <= 768) {
+    sidebarOpen.value = false
+  }
+}
 
 const agentsData = ref([
   {
@@ -315,6 +338,26 @@ const chatWith = (agent) => {
   font-family: 'Inter', -apple-system, sans-serif;
 }
 
+/* SIDEBAR OVERLAY (solo móvil) */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 998;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+.sidebar-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
 /* SIDEBAR */
 .sidebar-dark {
   width: 280px;
@@ -323,6 +366,8 @@ const chatWith = (agent) => {
   padding: 32px 24px;
   display: flex;
   flex-direction: column;
+  transition: transform 0.3s ease;
+  z-index: 999;
 }
 
 .logo-section {
@@ -403,6 +448,26 @@ const chatWith = (agent) => {
   margin-top: 4px;
 }
 
+/* BOTÓN HAMBURGUESA (oculto en desktop) */
+.hamburger-btn {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  margin-right: 16px;
+}
+
+.hamburger-btn span {
+  display: block;
+  width: 24px;
+  height: 2px;
+  background: #fff;
+  transition: all 0.3s;
+}
+
 /* MAIN CONTENT */
 .main-content {
   flex: 1;
@@ -415,6 +480,12 @@ const chatWith = (agent) => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 32px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .header-left h2 {
@@ -439,6 +510,61 @@ const chatWith = (agent) => {
 .status-badge.online {
   background: rgba(16, 185, 129, 0.15);
   color: #10b981;
+}
+
+/* RESPONSIVE - MÓVIL */
+@media (max-width: 768px) {
+  /* Mostrar overlay */
+  .sidebar-overlay {
+    display: block;
+  }
+
+  /* Sidebar oculto por defecto en móvil */
+  .sidebar-dark {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    transform: translateX(-100%);
+  }
+
+  /* Sidebar visible cuando está abierto */
+  .sidebar-dark.open {
+    transform: translateX(0);
+  }
+
+  /* Mostrar botón hamburguesa en móvil */
+  .hamburger-btn {
+    display: flex;
+  }
+
+  /* Ajustar main content */
+  .main-content {
+    padding: 16px 20px;
+  }
+
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .header-left {
+    width: 100%;
+  }
+
+  .header-left h2 {
+    font-size: 24px;
+  }
+
+  .header-right {
+    width: 100%;
+  }
+
+  /* Agents grid más compacto en móvil */
+  .agents-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* AGENTS GRID */

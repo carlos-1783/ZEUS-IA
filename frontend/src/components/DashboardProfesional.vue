@@ -8,15 +8,27 @@
       </div>
 
       <nav class="nav-menu">
-        <button class="nav-item active">
+        <button 
+          class="nav-item" 
+          :class="{ active: currentView === 'dashboard' }"
+          @click="currentView = 'dashboard'"
+        >
           <span class="icon">🏛️</span>
           <span>Dashboard</span>
         </button>
-        <button class="nav-item">
+        <button 
+          class="nav-item"
+          :class="{ active: currentView === 'analytics' }"
+          @click="currentView = 'analytics'"
+        >
           <span class="icon">📊</span>
           <span>Analytics</span>
         </button>
-        <button class="nav-item">
+        <button 
+          class="nav-item"
+          :class="{ active: currentView === 'settings' }"
+          @click="currentView = 'settings'"
+        >
           <span class="icon">⚙️</span>
           <span>Settings</span>
         </button>
@@ -47,8 +59,8 @@
         </div>
       </header>
 
-      <!-- Agents Grid -->
-      <section class="agents-grid">
+      <!-- Agents Grid (Dashboard) -->
+      <section v-if="currentView === 'dashboard'" class="agents-grid">
         <div 
           v-for="agent in agentsData" 
           :key="agent.name"
@@ -85,6 +97,123 @@
               <span>💬</span>
               Interact
             </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Analytics View -->
+      <section v-if="currentView === 'analytics'" class="analytics-view">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon">📈</div>
+            <div class="stat-content">
+              <h3>Total Interactions</h3>
+              <p class="stat-number">1,247</p>
+              <span class="stat-change positive">+12% this week</span>
+            </div>
+          </div>
+          
+          <div class="stat-card">
+            <div class="stat-icon">⚡</div>
+            <div class="stat-content">
+              <h3>Avg Response Time</h3>
+              <p class="stat-number">0.8s</p>
+              <span class="stat-change positive">-15% faster</span>
+            </div>
+          </div>
+          
+          <div class="stat-card">
+            <div class="stat-icon">💰</div>
+            <div class="stat-content">
+              <h3>Cost Savings</h3>
+              <p class="stat-number">$3,456</p>
+              <span class="stat-change positive">+8% this month</span>
+            </div>
+          </div>
+          
+          <div class="stat-card">
+            <div class="stat-icon">✅</div>
+            <div class="stat-content">
+              <h3>Success Rate</h3>
+              <p class="stat-number">98.2%</p>
+              <span class="stat-change positive">+2.1% improvement</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-placeholder">
+          <h3>Performance Analytics</h3>
+          <div class="placeholder-content">
+            <span class="icon-large">📊</span>
+            <p>Detailed analytics charts coming soon</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings View -->
+      <section v-if="currentView === 'settings'" class="settings-view">
+        <div class="settings-grid">
+          <div class="settings-card">
+            <h3>🔔 Notifications</h3>
+            <div class="setting-item">
+              <label>Email notifications</label>
+              <input type="checkbox" checked />
+            </div>
+            <div class="setting-item">
+              <label>Push notifications</label>
+              <input type="checkbox" checked />
+            </div>
+            <div class="setting-item">
+              <label>Agent status updates</label>
+              <input type="checkbox" />
+            </div>
+          </div>
+
+          <div class="settings-card">
+            <h3>🎨 Appearance</h3>
+            <div class="setting-item">
+              <label>Theme</label>
+              <select>
+                <option>Dark (Current)</option>
+                <option>Light</option>
+                <option>Auto</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <label>Language</label>
+              <select>
+                <option>Español</option>
+                <option>English</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="settings-card">
+            <h3>🔐 Security</h3>
+            <div class="setting-item">
+              <label>Two-factor authentication</label>
+              <button class="btn-secondary">Enable</button>
+            </div>
+            <div class="setting-item">
+              <label>Session timeout</label>
+              <select>
+                <option>30 minutes</option>
+                <option>1 hour</option>
+                <option>4 hours</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="settings-card">
+            <h3>⚙️ Advanced</h3>
+            <div class="setting-item">
+              <label>API Access</label>
+              <button class="btn-secondary">Generate Key</button>
+            </div>
+            <div class="setting-item">
+              <label>Export Data</label>
+              <button class="btn-secondary">Download</button>
+            </div>
           </div>
         </div>
       </section>
@@ -131,6 +260,7 @@ const props = defineProps({
 const emit = defineEmits(['agentClicked'])
 
 const selectedAgent = ref(null)
+const currentView = ref('dashboard')
 
 const agentsData = ref([
   {
@@ -554,6 +684,171 @@ const chatWith = (agent) => {
   color: #fff;
   font-weight: 600;
   cursor: pointer;
+}
+
+/* ANALYTICS VIEW */
+.analytics-view {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+.stat-card {
+  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.stat-icon {
+  font-size: 32px;
+  background: rgba(59, 130, 246, 0.15);
+  padding: 12px;
+  border-radius: 12px;
+}
+
+.stat-content h3 {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0 0 8px;
+}
+
+.stat-number {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0;
+  color: #fff;
+}
+
+.stat-change {
+  font-size: 13px;
+  margin-top: 4px;
+  display: inline-block;
+}
+
+.stat-change.positive {
+  color: #10b981;
+}
+
+.chart-placeholder {
+  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 32px;
+  min-height: 400px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-placeholder h3 {
+  margin: 0 0 24px;
+  font-size: 20px;
+}
+
+.placeholder-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.icon-large {
+  font-size: 64px;
+  opacity: 0.5;
+}
+
+.placeholder-content p {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 16px;
+}
+
+/* SETTINGS VIEW */
+.settings-view {
+  max-width: 1000px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 24px;
+}
+
+.settings-card {
+  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.settings-card h3 {
+  margin: 0 0 20px;
+  font-size: 18px;
+  color: #fff;
+}
+
+.setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.setting-item:last-child {
+  border-bottom: none;
+}
+
+.setting-item label {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 14px;
+}
+
+.setting-item input[type="checkbox"] {
+  width: 44px;
+  height: 24px;
+  cursor: pointer;
+}
+
+.setting-item select {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.setting-item select option {
+  background: #1a1f2e;
+}
+
+.btn-secondary {
+  padding: 8px 16px;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 6px;
+  color: #3b82f6;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: rgba(59, 130, 246, 0.5);
 }
 </style>
 

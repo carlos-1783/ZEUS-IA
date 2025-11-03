@@ -56,11 +56,13 @@
           :class="{ 'has-avatar': agent.hasGLB }"
           @click="selectAgent(agent)"
         >
-          <!-- Avatar 3D Container -->
-          <div class="avatar-container" :ref="el => setAvatarRef(agent.name, el)">
-            <div class="avatar-loader" v-if="!agent.loaded">
-              <div class="spinner"></div>
-            </div>
+          <!-- Avatar Image -->
+          <div class="avatar-container">
+            <img 
+              :src="agent.image" 
+              :alt="agent.name"
+              class="avatar-image"
+            />
           </div>
 
           <!-- Agent Info -->
@@ -92,7 +94,9 @@
         <div class="chat-panel">
           <div class="chat-header">
             <div class="chat-agent-info">
-              <div class="chat-avatar-mini" :ref="el => setChatAvatarRef(el)"></div>
+              <div class="chat-avatar-mini">
+                <img :src="selectedAgent.image" :alt="selectedAgent.name" />
+              </div>
               <div>
                 <h4>{{ selectedAgent.name }}</h4>
                 <p>{{ selectedAgent.role }}</p>
@@ -118,9 +122,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import * as THREE from 'three'
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { ref } from 'vue'
 
 const props = defineProps({
   agents: Array
@@ -129,62 +131,39 @@ const props = defineProps({
 const emit = defineEmits(['agentClicked'])
 
 const selectedAgent = ref(null)
-const avatarRefs = ref({})
-const avatarScenes = ref({})
 
 const agentsData = ref([
   {
     name: 'ZEUS CORE',
     role: 'Supreme Orchestrator',
-    glbUrl: 'https://models.readyplayer.me/69079ecd48062250a4c853f4.glb',
-    hasGLB: true,
-    load: 45,
-    loaded: false
+    image: '/images/zues-3d-main.png',
+    load: 45
   },
   {
     name: 'PERSEO',
     role: 'Growth Strategist',
-    glbUrl: 'https://models.readyplayer.me/69079ce412a04a26c26798b2.glb',
-    hasGLB: true,
-    load: 62,
-    loaded: false
+    image: '/images/avatars/perseo-avatar.jpg',
+    load: 62
   },
   {
     name: 'RAFAEL',
     role: 'Fiscal Guardian',
-    glbUrl: null,
-    hasGLB: false,
-    load: 38,
-    loaded: true,
-    color: 0x10b981
+    image: '/images/avatars/rafael-avatar.jpg',
+    load: 38
   },
   {
     name: 'THALOS',
     role: 'Cybersecurity Defender',
-    glbUrl: null,
-    hasGLB: false,
-    load: 71,
-    loaded: true,
-    color: 0x6366f1
+    image: '/images/avatars/thalos-avatar.jpg',
+    load: 71
   },
   {
     name: 'JUSTICIA',
     role: 'Legal & GDPR Advisor',
-    glbUrl: null,
-    hasGLB: false,
-    load: 29,
-    loaded: true,
-    color: 0xec4899
+    image: '/images/avatars/justicia-avatar.jpg',
+    load: 29
   }
 ])
-
-const setAvatarRef = (name, el) => {
-  if (el) avatarRefs.value[name] = el
-}
-
-const setChatAvatarRef = (el) => {
-  if (el) avatarRefs.value['chat'] = el
-}
 
 const selectAgent = (agent) => {
   selectedAgent.value = agent
@@ -195,120 +174,6 @@ const chatWith = (agent) => {
   selectedAgent.value = agent
   emit('agentClicked', agent)
 }
-
-const loadAvatars = () => {
-  const loader = new GLTFLoader()
-
-  agentsData.value.forEach(agent => {
-    const container = avatarRefs.value[agent.name]
-    if (!container) return
-
-    // Crear escena Three.js para este avatar
-    const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 1000)
-    camera.position.set(0, 1.6, 2.5)
-    camera.lookAt(0, 1, 0)
-
-    const renderer = new THREE.WebGLRenderer({ 
-      alpha: true, 
-      antialias: true 
-    })
-    renderer.setSize(250, 250)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.2
-    renderer.outputColorSpace = THREE.SRGBColorSpace
-    container.appendChild(renderer.domElement)
-
-    // Luces
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8)
-    scene.add(ambientLight)
-
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.2)
-    keyLight.position.set(2, 3, 2)
-    scene.add(keyLight)
-
-    const fillLight = new THREE.DirectionalLight(0x4a90e2, 0.5)
-    fillLight.position.set(-2, 1, -1)
-    scene.add(fillLight)
-
-    if (agent.hasGLB && agent.glbUrl) {
-      // Cargar GLB
-      loader.load(
-        agent.glbUrl,
-        (gltf) => {
-          const model = gltf.scene
-          
-          // Centrar y escalar
-          const box = new THREE.Box3().setFromObject(model)
-          const center = box.getCenter(new THREE.Vector3())
-          const size = box.getSize(new THREE.Vector3())
-          
-          const maxDim = Math.max(size.x, size.y, size.z)
-          const scale = 1.8 / maxDim
-          model.scale.setScalar(scale)
-          
-          model.position.x = -center.x * scale
-          model.position.y = -center.y * scale
-          model.position.z = -center.z * scale
-
-          scene.add(model)
-          agent.loaded = true
-
-          // Animación de rotación suave
-          const animate = () => {
-            model.rotation.y += 0.005
-            renderer.render(scene, camera)
-            requestAnimationFrame(animate)
-          }
-          animate()
-        },
-        undefined,
-        (error) => {
-          console.error(`Error cargando ${agent.name}:`, error)
-          createPlaceholder(scene, agent.color || 0x3b82f6)
-          agent.loaded = true
-          renderer.render(scene, camera)
-        }
-      )
-    } else {
-      // Placeholder para agentes sin GLB
-      createPlaceholder(scene, agent.color)
-      agent.loaded = true
-      const animate = () => {
-        renderer.render(scene, camera)
-        requestAnimationFrame(animate)
-      }
-      animate()
-    }
-
-    avatarScenes.value[agent.name] = { scene, renderer, camera }
-  })
-}
-
-const createPlaceholder = (scene, color) => {
-  const geometry = new THREE.SphereGeometry(0.8, 32, 32)
-  const material = new THREE.MeshStandardMaterial({
-    color: color,
-    roughness: 0.3,
-    metalness: 0.7,
-    emissive: color,
-    emissiveIntensity: 0.2
-  })
-  const sphere = new THREE.Mesh(geometry, material)
-  sphere.position.y = 1
-  scene.add(sphere)
-}
-
-onMounted(() => {
-  setTimeout(loadAvatars, 100)
-})
-
-onUnmounted(() => {
-  Object.values(avatarScenes.value).forEach(({ renderer }) => {
-    renderer.dispose()
-  })
-})
 </script>
 
 <style scoped>
@@ -478,25 +343,24 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 3px solid rgba(59, 130, 246, 0.3);
+  transition: all 0.3s;
 }
 
-.avatar-loader {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.agent-card:hover .avatar-container {
+  border-color: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
 }
 
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid rgba(59, 130, 246, 0.2);
-  border-top-color: #3b82f6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
+.avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.agent-card:hover .avatar-image {
+  transform: scale(1.1);
 }
 
 .agent-info {
@@ -607,7 +471,14 @@ onUnmounted(() => {
   width: 50px;
   height: 50px;
   border-radius: 50%;
-  background: rgba(59, 130, 246, 0.2);
+  overflow: hidden;
+  border: 2px solid rgba(59, 130, 246, 0.5);
+}
+
+.chat-avatar-mini img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .chat-agent-info h4 {

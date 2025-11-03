@@ -4,9 +4,16 @@ Automatiza respuestas por correo electrónico
 """
 import os
 from typing import Optional, Dict, Any, List
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, Email, To, Content
 from app.core.config import settings
+
+try:
+    from sendgrid import SendGridAPIClient
+    from sendgrid.helpers.mail import Mail, Email, To, Content
+    SENDGRID_AVAILABLE = True
+except ImportError:
+    SENDGRID_AVAILABLE = False
+    SendGridAPIClient = None
+    Mail = Email = To = Content = None
 
 class EmailService:
     """Servicio para automatización de email vía SendGrid"""
@@ -17,7 +24,9 @@ class EmailService:
         self.from_name = os.getenv("SENDGRID_FROM_NAME", "ZEUS-IA")
         
         self.client = None
-        if self.api_key:
+        if not SENDGRID_AVAILABLE:
+            print("⚠️ Email Service: SendGrid library not installed (pip install sendgrid)")
+        elif self.api_key:
             try:
                 self.client = SendGridAPIClient(self.api_key)
                 print("✅ Email Service inicializado correctamente")

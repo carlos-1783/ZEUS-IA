@@ -4,8 +4,14 @@ Automatiza respuestas a clientes por WhatsApp
 """
 import os
 from typing import Optional, Dict, Any
-from twilio.rest import Client
 from app.core.config import settings
+
+try:
+    from twilio.rest import Client
+    TWILIO_AVAILABLE = True
+except ImportError:
+    TWILIO_AVAILABLE = False
+    Client = None
 
 class WhatsAppService:
     """Servicio para automatización de WhatsApp vía Twilio"""
@@ -16,7 +22,9 @@ class WhatsAppService:
         self.whatsapp_number = os.getenv("TWILIO_WHATSAPP_NUMBER", "whatsapp:+14155238886")  # Sandbox by default
         
         self.client = None
-        if self.account_sid and self.auth_token:
+        if not TWILIO_AVAILABLE:
+            print("⚠️ WhatsApp Service: Twilio library not installed (pip install twilio)")
+        elif self.account_sid and self.auth_token:
             try:
                 self.client = Client(self.account_sid, self.auth_token)
                 print("✅ WhatsApp Service inicializado correctamente")

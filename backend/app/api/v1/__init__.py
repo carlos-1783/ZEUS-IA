@@ -1,7 +1,20 @@
 from fastapi import APIRouter, WebSocket
-from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, commands, health, system, customers, test, zeus_core, agents, metrics, chat, integrations
+from app.api.v1.endpoints import (
+    auth, 
+    commands, 
+    health, 
+    system, 
+    customers, 
+    test, 
+    zeus_core, 
+    agents, 
+    metrics, 
+    chat, 
+    integrations,
+    google,
+    marketing
+)
 from app.api.v1.endpoints.websocket import websocket_endpoint
 
 api_router = APIRouter()
@@ -32,6 +45,12 @@ api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 
 # Integrations endpoint (WhatsApp, Email, Hacienda, Stripe)
 api_router.include_router(integrations.router, prefix="/integrations", tags=["integrations"])
+
+# Google Workspace integrations (Calendar, Gmail, Drive, Sheets)
+api_router.include_router(google.router, prefix="/google", tags=["google-workspace"])
+
+# Marketing Automation (Google Ads, Meta Ads, Analytics)
+api_router.include_router(marketing.router, prefix="/marketing", tags=["marketing-automation"])
 
 # WebSocket endpoint - CORREGIDO para Railway
 @api_router.websocket("/ws/{client_id}")

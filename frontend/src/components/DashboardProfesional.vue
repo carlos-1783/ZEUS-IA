@@ -136,7 +136,7 @@ const agentsData = ref([
   {
     name: 'ZEUS CORE',
     role: 'Supreme Orchestrator',
-    image: '/images/zues-3d-main.png',
+    image: '/images/avatars/Zeus-avatar.jpg',
     load: 45
   },
   {

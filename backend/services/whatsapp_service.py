@@ -109,9 +109,10 @@ class WhatsAppService:
             Dict con respuesta del agente
         """
         try:
-            # Importar agentes
+            # Importar agentes y logger
             from agents.zeus_core import ZeusCore
             from agents.perseo import Perseo
+            from services.activity_logger import activity_logger
             
             # Mapeo de agentes
             agents_map = {
@@ -138,6 +139,25 @@ class WhatsAppService:
                 # Enviar respuesta automática
                 send_result = await self.send_message(from_number, response_text)
                 
+                # ✅ REGISTRAR ACTIVIDAD
+                activity_logger.log_activity(
+                    agent_name=agent_name,
+                    action_type="whatsapp_response",
+                    action_description=f"Respondido WhatsApp de {from_number}",
+                    details={
+                        "from": from_number,
+                        "message": message_body[:100],  # Primeros 100 caracteres
+                        "response": response_text[:100],
+                        "channel": "whatsapp"
+                    },
+                    metrics={
+                        "response_time": "instant",
+                        "message_sent": send_result.get("success", False)
+                    },
+                    status="completed",
+                    priority="high"
+                )
+                
                 return {
                     "success": True,
                     "agent": agent_name,
@@ -148,6 +168,20 @@ class WhatsAppService:
                 error_msg = "Lo siento, tuve un problema procesando tu mensaje."
                 await self.send_message(from_number, error_msg)
                 
+                # ✅ REGISTRAR ERROR
+                activity_logger.log_activity(
+                    agent_name=agent_name,
+                    action_type="whatsapp_error",
+                    action_description=f"Error procesando WhatsApp de {from_number}",
+                    details={
+                        "from": from_number,
+                        "message": message_body[:100],
+                        "error": result.get("error", "Unknown")
+                    },
+                    status="failed",
+                    priority="high"
+                )
+                
                 return {
                     "success": False,
                     "error": result.get("error", "Unknown error")
@@ -157,6 +191,20 @@ class WhatsAppService:
             error_msg = "Lo siento, ocurrió un error. Por favor intenta más tarde."
             if self.is_configured():
                 await self.send_message(from_number, error_msg)
+            
+            # ✅ REGISTRAR EXCEPCIÓN
+            from services.activity_logger import activity_logger
+            activity_logger.log_activity(
+                agent_name=agent_name,
+                action_type="whatsapp_exception",
+                action_description=f"Excepción procesando WhatsApp",
+                details={
+                    "from": from_number,
+                    "exception": str(e)
+                },
+                status="failed",
+                priority="critical"
+            )
             
             return {
                 "success": False,

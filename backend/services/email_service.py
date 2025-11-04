@@ -121,10 +121,11 @@ class EmailService:
             Dict con respuesta del agente
         """
         try:
-            # Importar agentes
+            # Importar agentes y logger
             from agents.zeus_core import ZeusCore
             from agents.perseo import Perseo
             from agents.rafael import Rafael
+            from services.activity_logger import activity_logger
             
             # Mapeo de agentes
             agents_map = {
@@ -177,6 +178,26 @@ class EmailService:
                     content_type="text/html"
                 )
                 
+                # ✅ REGISTRAR ACTIVIDAD
+                activity_logger.log_activity(
+                    agent_name=agent_name,
+                    action_type="email_response",
+                    action_description=f"Respondido email de {from_email}",
+                    details={
+                        "from": from_email,
+                        "subject": subject,
+                        "message": body[:100],  # Primeros 100 caracteres
+                        "response": response_text[:100],
+                        "channel": "email"
+                    },
+                    metrics={
+                        "response_time": "instant",
+                        "email_sent": send_result.get("success", False)
+                    },
+                    status="completed",
+                    priority="normal"
+                )
+                
                 return {
                     "success": True,
                     "agent": agent_name,
@@ -191,12 +212,41 @@ class EmailService:
                     content=error_msg
                 )
                 
+                # ✅ REGISTRAR ERROR
+                activity_logger.log_activity(
+                    agent_name=agent_name,
+                    action_type="email_error",
+                    action_description=f"Error procesando email de {from_email}",
+                    details={
+                        "from": from_email,
+                        "subject": subject,
+                        "error": result.get("error", "Unknown")
+                    },
+                    status="failed",
+                    priority="normal"
+                )
+                
                 return {
                     "success": False,
                     "error": result.get("error", "Unknown error")
                 }
                 
         except Exception as e:
+            # ✅ REGISTRAR EXCEPCIÓN
+            from services.activity_logger import activity_logger
+            activity_logger.log_activity(
+                agent_name=agent_name,
+                action_type="email_exception",
+                action_description=f"Excepción procesando email",
+                details={
+                    "from": from_email,
+                    "subject": subject,
+                    "exception": str(e)
+                },
+                status="failed",
+                priority="critical"
+            )
+            
             return {
                 "success": False,
                 "error": str(e)

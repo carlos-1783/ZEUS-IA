@@ -237,32 +237,11 @@
         </div>
       </section>
 
-      <!-- Chat Panel (si hay agente seleccionado) -->
-      <div v-if="selectedAgent" class="chat-overlay" @click.self="selectedAgent = null">
-        <div class="chat-panel">
-          <div class="chat-header">
-            <div class="chat-agent-info">
-              <div class="chat-avatar-mini">
-                <img :src="selectedAgent.image" :alt="selectedAgent.name" />
-              </div>
-              <div>
-                <h4>{{ selectedAgent.name }}</h4>
-                <p>{{ selectedAgent.role }}</p>
-              </div>
-            </div>
-            <button class="btn-close" @click="selectedAgent = null">✕</button>
-          </div>
-
-          <div class="chat-messages">
-            <div class="message agent-message">
-              <p>Hola, soy {{ selectedAgent.name }}. ¿En qué puedo ayudarte?</p>
-            </div>
-          </div>
-
-          <div class="chat-input">
-            <input type="text" placeholder="Escribe tu mensaje..." />
-            <button class="btn-send">Enviar</button>
-          </div>
+      <!-- Agent Activity Panel (si hay agente seleccionado) -->
+      <div v-if="selectedAgent" class="agent-overlay" @click.self="selectedAgent = null">
+        <div class="agent-panel-container">
+          <button class="btn-close-panel" @click="selectedAgent = null">✕</button>
+          <AgentActivityPanel :agent="selectedAgent" />
         </div>
       </div>
     </main>
@@ -270,7 +249,8 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import AgentActivityPanel from './AgentActivityPanel.vue'
 
 const props = defineProps({
   agents: Array

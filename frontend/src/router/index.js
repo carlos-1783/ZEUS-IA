@@ -33,6 +33,7 @@ const NotFound = () => import('../views/errors/NotFound.vue')
 const AuthTest = () => import('../views/AuthTest.vue')
 const TestRoute = () => import('../views/TestRoute.vue')
 const Pricing = () => import('../views/Pricing.vue')
+const Checkout = () => import('../views/Checkout.vue')
 
 // Routes that don't require authentication
 const publicRoutes = [
@@ -131,6 +132,17 @@ const router = createRouter({
       component: Pricing,
       meta: { 
         title: 'Precios - ZEUS-IA',
+        requiresAuth: false
+      }
+    },
+    
+    // Checkout page (pública)
+    {
+      path: '/checkout/:plan',
+      name: 'Checkout',
+      component: Checkout,
+      meta: { 
+        title: 'Checkout - ZEUS-IA',
         requiresAuth: false
       }
     },

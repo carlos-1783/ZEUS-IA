@@ -43,7 +43,9 @@ const publicRoutes = [
   'ResetPassword',
   'NotFound',
   'AuthTest',  // Temporarily public for testing
-  'WebSocketTest'  // Temporarily public for testing
+  'WebSocketTest',  // Temporarily public for testing
+  'Pricing',  // Landing page pública
+  'Checkout'  // Checkout público
 ]
 
 // Navigation guard to check authentication

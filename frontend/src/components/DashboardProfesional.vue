@@ -683,19 +683,20 @@ const chatWith = (agent) => {
   box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
 }
 
-/* CHAT OVERLAY */
-.chat-overlay {
+/* AGENT ACTIVITY PANEL OVERLAY */
+.agent-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  padding: 20px;
 }
 
 .chat-panel {

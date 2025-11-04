@@ -229,6 +229,8 @@ const isSpeaking = ref(false)
 const currentTranscript = ref('')
 const agentVoiceResponse = ref('')
 
+import { computed } from 'vue'
+
 const voiceStatus = computed(() => {
   if (isListening.value) return '🎤 Escuchando...'
   if (isSpeaking.value) return '🗣️ Respondiendo...'

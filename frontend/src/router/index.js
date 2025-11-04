@@ -32,6 +32,7 @@ const ResetPassword = () => import('../views/auth/ResetPassword.vue')
 const NotFound = () => import('../views/errors/NotFound.vue')
 const AuthTest = () => import('../views/AuthTest.vue')
 const TestRoute = () => import('../views/TestRoute.vue')
+const Pricing = () => import('../views/Pricing.vue')
 
 // Routes that don't require authentication
 const publicRoutes = [

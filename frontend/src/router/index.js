@@ -34,6 +34,7 @@ const AuthTest = () => import('../views/AuthTest.vue')
 const TestRoute = () => import('../views/TestRoute.vue')
 const Pricing = () => import('../views/Pricing.vue')
 const Checkout = () => import('../views/Checkout.vue')
+const AdminPanel = () => import('../views/AdminPanel.vue')
 
 // Routes that don't require authentication
 const publicRoutes = [
@@ -146,6 +147,17 @@ const router = createRouter({
       meta: { 
         title: 'Checkout - ZEUS-IA',
         requiresAuth: false
+      }
+    },
+    
+    // Admin Panel (requiere autenticación y ser superuser)
+    {
+      path: '/admin',
+      name: 'AdminPanel',
+      component: AdminPanel,
+      meta: { 
+        title: 'Panel de Admin - ZEUS-IA',
+        requiresAuth: true
       }
     },
     

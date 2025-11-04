@@ -206,7 +206,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 
 const props = defineProps({
   agent: {
@@ -228,8 +228,6 @@ const isListening = ref(false)
 const isSpeaking = ref(false)
 const currentTranscript = ref('')
 const agentVoiceResponse = ref('')
-
-import { computed } from 'vue'
 
 const voiceStatus = computed(() => {
   if (isListening.value) return '🎤 Escuchando...'

@@ -263,10 +263,9 @@ const processPayment = async () => {
       return
     }
 
-    // 3. Pago exitoso
+    // 3. Pago exitoso - Crear cuenta
     if (confirmedPayment.status === 'succeeded') {
-      // Aquí crear la cuenta del usuario y la suscripción
-      await createUserAccount()
+      await createUserAccount(confirmedPayment.id)
       
       paymentSuccess.value = true
       processing.value = false
@@ -278,9 +277,33 @@ const processPayment = async () => {
   }
 }
 
-const createUserAccount = async () => {
-  // TODO: Llamar al backend para crear cuenta y suscripción
-  console.log('Creando cuenta para:', customerData.value)
+const createUserAccount = async (paymentIntentId) => {
+  try {
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/onboarding/create-account`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        company_name: customerData.value.companyName,
+        email: customerData.value.email,
+        full_name: customerData.value.fullName,
+        employees: customerData.value.employees,
+        plan: selectedPlan,
+        payment_intent_id: paymentIntentId
+      })
+    })
+
+    const result = await response.json()
+
+    if (!result.success) {
+      console.error('Error creando cuenta:', result)
+    } else {
+      console.log('Cuenta creada exitosamente:', result)
+    }
+  } catch (error) {
+    console.error('Error en onboarding:', error)
+  }
 }
 
 const goToDashboard = () => {

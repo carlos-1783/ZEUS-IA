@@ -13,7 +13,8 @@ from app.api.v1.endpoints import (
     chat, 
     integrations,
     google,
-    marketing
+    marketing,
+    onboarding
 )
 from app.api.v1.endpoints.websocket import websocket_endpoint
 
@@ -51,6 +52,9 @@ api_router.include_router(google.router, prefix="/google", tags=["google-workspa
 
 # Marketing Automation (Google Ads, Meta Ads, Analytics)
 api_router.include_router(marketing.router, prefix="/marketing", tags=["marketing-automation"])
+
+# Onboarding (creación de cuentas después del pago)
+api_router.include_router(onboarding.router, prefix="/onboarding", tags=["onboarding"])
 
 # WebSocket endpoint - CORREGIDO para Railway
 @api_router.websocket("/ws/{client_id}")

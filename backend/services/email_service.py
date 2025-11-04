@@ -8,13 +8,13 @@ from app.core.config import settings
 
 try:
     from sendgrid import SendGridAPIClient
-    from sendgrid.helpers.mail import Mail, Email, To, Content
+    from sendgrid.helpers.mail import Mail, Email, To, Content  # pyright: ignore[reportMissingImports]  # pyright: ignore[reportMissingImports]
     SENDGRID_AVAILABLE = True
 except ImportError:
     SENDGRID_AVAILABLE = False
     SendGridAPIClient = None
     Mail = Email = To = Content = None
-
+ 
 class EmailService:
     """Servicio para automatización de email vía SendGrid"""
     

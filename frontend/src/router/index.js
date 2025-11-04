@@ -119,7 +119,18 @@ const router = createRouter({
       path: '/',
       redirect: () => {
         const authStore = useAuthStore()
-        return authStore.isAuthenticated ? '/dashboard' : '/auth/login'
+        return authStore.isAuthenticated ? '/dashboard' : '/pricing'
+      }
+    },
+    
+    // Pricing page (pública)
+    {
+      path: '/pricing',
+      name: 'Pricing',
+      component: Pricing,
+      meta: { 
+        title: 'Precios - ZEUS-IA',
+        requiresAuth: false
       }
     },
     

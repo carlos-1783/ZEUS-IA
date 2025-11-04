@@ -1,0 +1,681 @@
+<template>
+  <div class="pricing-page">
+    <!-- Hero Section -->
+    <section class="hero">
+      <div class="hero-content">
+        <h1 class="hero-title">
+          <span class="gradient-text">Automatiza tu empresa</span> con IA
+        </h1>
+        <p class="hero-subtitle">
+          5 Agentes especializados trabajando 24/7 para tu negocio
+        </p>
+        <div class="hero-stats">
+          <div class="stat">
+            <div class="stat-value">5</div>
+            <div class="stat-label">Agentes IA</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">24/7</div>
+            <div class="stat-label">Disponibilidad</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">100%</div>
+            <div class="stat-label">Automatización</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section class="pricing-section">
+      <div class="container">
+        <h2 class="section-title">Elige el plan perfecto para tu empresa</h2>
+        <p class="section-subtitle">
+          Todos los planes incluyen acceso completo a la plataforma
+        </p>
+
+        <!-- Plans Grid -->
+        <div class="plans-grid">
+          <!-- ZEUS STARTUP -->
+          <div class="plan-card">
+            <div class="plan-badge">🏃 Ideal para autónomos</div>
+            <h3 class="plan-name">ZEUS STARTUP</h3>
+            <p class="plan-description">1-5 empleados</p>
+            
+            <div class="plan-pricing">
+              <div class="price-item">
+                <span class="price-label">Setup inicial</span>
+                <span class="price">€500</span>
+                <span class="price-note">pago único</span>
+              </div>
+              <div class="price-divider">+</div>
+              <div class="price-item">
+                <span class="price-label">Suscripción</span>
+                <span class="price">€99</span>
+                <span class="price-note">/mes</span>
+              </div>
+            </div>
+
+            <ul class="features-list">
+              <li>✅ 5 Agentes IA (ZEUS, PERSEO, RAFAEL, THALOS, JUSTICIA)</li>
+              <li>✅ WhatsApp Automation</li>
+              <li>✅ Email Automation</li>
+              <li>✅ Facturación + Hacienda</li>
+              <li>✅ Stripe Payments</li>
+              <li>✅ Soporte por email</li>
+            </ul>
+
+            <button class="btn-primary" @click="selectPlan('startup')">
+              Empezar ahora
+            </button>
+          </div>
+
+          <!-- ZEUS GROWTH (MOST POPULAR) -->
+          <div class="plan-card popular">
+            <div class="popular-badge">⭐ MÁS POPULAR</div>
+            <div class="plan-badge">🏢 Para PYMEs</div>
+            <h3 class="plan-name">ZEUS GROWTH</h3>
+            <p class="plan-description">6-25 empleados</p>
+            
+            <div class="plan-pricing">
+              <div class="price-item">
+                <span class="price-label">Setup inicial</span>
+                <span class="price">€1,500</span>
+                <span class="price-note">pago único</span>
+              </div>
+              <div class="price-divider">+</div>
+              <div class="price-item">
+                <span class="price-label">Suscripción</span>
+                <span class="price">€299</span>
+                <span class="price-note">/mes</span>
+              </div>
+            </div>
+
+            <ul class="features-list">
+              <li>✅ Todo de ZEUS STARTUP</li>
+              <li>✅ Google Workspace (Calendar, Gmail, Drive, Sheets)</li>
+              <li>✅ Marketing Automation (Google Ads, Meta Ads)</li>
+              <li>✅ Analytics avanzado</li>
+              <li>✅ Soporte prioritario</li>
+              <li>✅ Onboarding personalizado</li>
+            </ul>
+
+            <button class="btn-primary pulse" @click="selectPlan('growth')">
+              Empezar ahora
+            </button>
+          </div>
+
+          <!-- ZEUS BUSINESS -->
+          <div class="plan-card">
+            <div class="plan-badge">🏛️ Empresas</div>
+            <h3 class="plan-name">ZEUS BUSINESS</h3>
+            <p class="plan-description">26-100 empleados</p>
+            
+            <div class="plan-pricing">
+              <div class="price-item">
+                <span class="price-label">Setup inicial</span>
+                <span class="price">€2,500</span>
+                <span class="price-note">pago único</span>
+              </div>
+              <div class="price-divider">+</div>
+              <div class="price-item">
+                <span class="price-label">Suscripción</span>
+                <span class="price">€699</span>
+                <span class="price-note">/mes</span>
+              </div>
+            </div>
+
+            <ul class="features-list">
+              <li>✅ Todo de ZEUS GROWTH</li>
+              <li>✅ Integraciones personalizadas</li>
+              <li>✅ Múltiples usuarios admin</li>
+              <li>✅ API access completo</li>
+              <li>✅ Soporte 24/7</li>
+              <li>✅ Account manager dedicado</li>
+              <li>✅ SLA garantizado</li>
+            </ul>
+
+            <button class="btn-primary" @click="selectPlan('business')">
+              Empezar ahora
+            </button>
+          </div>
+
+          <!-- ZEUS ENTERPRISE -->
+          <div class="plan-card enterprise">
+            <div class="plan-badge">⚡ Corporativo</div>
+            <h3 class="plan-name">ZEUS ENTERPRISE</h3>
+            <p class="plan-description">101+ empleados</p>
+            
+            <div class="plan-pricing">
+              <div class="price-item">
+                <span class="price-label">Setup inicial</span>
+                <span class="price">€5,000+</span>
+                <span class="price-note">personalizado</span>
+              </div>
+              <div class="price-divider">+</div>
+              <div class="price-item">
+                <span class="price-label">Suscripción</span>
+                <span class="price">€1,500+</span>
+                <span class="price-note">/mes</span>
+              </div>
+            </div>
+
+            <ul class="features-list">
+              <li>✅ Todo de ZEUS BUSINESS</li>
+              <li>✅ Instalación on-premise (opcional)</li>
+              <li>✅ White-label disponible</li>
+              <li>✅ Integraciones enterprise (SAP, Oracle)</li>
+              <li>✅ Compliance y auditorías</li>
+              <li>✅ Training presencial</li>
+              <li>✅ Contrato enterprise SLA 99.9%</li>
+              <li>✅ Soporte técnico dedicado</li>
+            </ul>
+
+            <button class="btn-secondary" @click="contactSales">
+              Contactar ventas
+            </button>
+          </div>
+        </div>
+
+        <!-- Trust Badges -->
+        <div class="trust-section">
+          <p class="trust-text">✅ Sin permanencia • ✅ Cancela cuando quieras • ✅ Datos seguros</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features-section">
+      <div class="container">
+        <h2 class="section-title">¿Qué incluye ZEUS-IA?</h2>
+        
+        <div class="features-grid">
+          <div class="feature-item">
+            <div class="feature-icon">📱</div>
+            <h3>WhatsApp Automation</h3>
+            <p>Responde automáticamente a tus clientes por WhatsApp 24/7</p>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">📧</div>
+            <h3>Email Automation</h3>
+            <p>Gestiona tu correo con respuestas inteligentes de IA</p>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">🏛️</div>
+            <h3>Facturación + Hacienda</h3>
+            <p>Automatiza facturas y modelos fiscales (AEAT/SII)</p>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">💳</div>
+            <h3>Pagos Stripe</h3>
+            <p>Procesa pagos y suscripciones automáticamente</p>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">📊</div>
+            <h3>Marketing Automation</h3>
+            <p>Optimiza campañas en Google Ads y Meta Ads con IA</p>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">📅</div>
+            <h3>Google Workspace</h3>
+            <p>Integra Calendar, Gmail, Drive y Sheets</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section class="faq-section">
+      <div class="container">
+        <h2 class="section-title">Preguntas Frecuentes</h2>
+        
+        <div class="faq-grid">
+          <div class="faq-item">
+            <h3>¿Puedo cambiar de plan después?</h3>
+            <p>Sí, puedes hacer upgrade o downgrade cuando quieras desde tu panel de control.</p>
+          </div>
+          <div class="faq-item">
+            <h3>¿Hay periodo de prueba?</h3>
+            <p>Ofrecemos demo gratuita de 30 minutos para que veas el sistema en acción.</p>
+          </div>
+          <div class="faq-item">
+            <h3>¿Cómo funciona el setup?</h3>
+            <p>Es un pago único al inicio que cubre la instalación, configuración e integración de ZEUS en tu empresa.</p>
+          </div>
+          <div class="faq-item">
+            <h3>¿Qué formas de pago aceptan?</h3>
+            <p>Tarjeta de crédito/débito vía Stripe. Pagos 100% seguros y encriptados.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA Final -->
+    <section class="cta-section">
+      <div class="cta-content">
+        <h2>¿Listo para automatizar tu empresa?</h2>
+        <p>Únete a las empresas que ya usan ZEUS-IA</p>
+        <div class="cta-buttons">
+          <button class="btn-primary large" @click="selectPlan('growth')">
+            Empezar ahora
+          </button>
+          <button class="btn-secondary large" @click="contactSales">
+            Agendar demo
+          </button>
+        </div>
+      </div>
+    </section>
+  </div>
+</template>
+
+<script setup>
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+
+const selectPlan = (plan) => {
+  // Redirigir al checkout con el plan seleccionado
+  router.push({
+    name: 'Checkout',
+    params: { plan }
+  })
+}
+
+const contactSales = () => {
+  // Abrir email o formulario de contacto
+  window.location.href = 'mailto:sales@zeus-ia.com?subject=Consulta ZEUS Enterprise'
+}
+</script>
+
+<style scoped>
+.pricing-page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #0a0e1a 0%, #1a1f2e 100%);
+  color: #fff;
+}
+
+/* Hero Section */
+.hero {
+  padding: 100px 20px 60px;
+  text-align: center;
+}
+
+.hero-title {
+  font-size: 56px;
+  font-weight: 800;
+  margin: 0 0 20px;
+  line-height: 1.2;
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-subtitle {
+  font-size: 24px;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0 0 60px;
+}
+
+.hero-stats {
+  display: flex;
+  justify-content: center;
+  gap: 60px;
+  flex-wrap: wrap;
+}
+
+.stat {
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 48px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 8px;
+}
+
+/* Pricing Section */
+.pricing-section {
+  padding: 80px 20px;
+}
+
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.section-title {
+  font-size: 40px;
+  font-weight: 700;
+  text-align: center;
+  margin: 0 0 16px;
+}
+
+.section-subtitle {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+  margin: 0 0 60px;
+}
+
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 30px;
+  margin-bottom: 40px;
+}
+
+.plan-card {
+  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 32px;
+  position: relative;
+  transition: all 0.3s;
+}
+
+.plan-card:hover {
+  transform: translateY(-8px);
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow: 0 20px 60px rgba(59, 130, 246, 0.3);
+}
+
+.plan-card.popular {
+  border-color: #3b82f6;
+  box-shadow: 0 10px 40px rgba(59, 130, 246, 0.4);
+}
+
+.popular-badge {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  color: white;
+  padding: 6px 20px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.plan-badge {
+  display: inline-block;
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.plan-name {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.plan-description {
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0 0 24px;
+}
+
+.plan-pricing {
+  margin: 24px 0;
+  padding: 24px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.price-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.price-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.price {
+  font-size: 48px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.price-note {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.price-divider {
+  text-align: center;
+  font-size: 24px;
+  color: rgba(255, 255, 255, 0.3);
+  margin: 12px 0;
+}
+
+.features-list {
+  list-style: none;
+  padding: 0;
+  margin: 24px 0;
+}
+
+.features-list li {
+  padding: 10px 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.btn-primary {
+  width: 100%;
+  padding: 16px 32px;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-primary:hover {
+  transform: scale(1.05);
+  box-shadow: 0 10px 30px rgba(59, 130, 246, 0.5);
+}
+
+.btn-primary.pulse {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 20px rgba(59, 130, 246, 0);
+  }
+}
+
+.btn-secondary {
+  width: 100%;
+  padding: 16px 32px;
+  background: transparent;
+  color: white;
+  border: 2px solid #3b82f6;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-secondary:hover {
+  background: rgba(59, 130, 246, 0.1);
+  transform: scale(1.05);
+}
+
+.trust-section {
+  text-align: center;
+  margin-top: 40px;
+}
+
+.trust-text {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+}
+
+/* Features Section */
+.features-section {
+  padding: 80px 20px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 30px;
+}
+
+.feature-item {
+  text-align: center;
+  padding: 32px;
+}
+
+.feature-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.feature-item h3 {
+  font-size: 20px;
+  margin: 0 0 12px;
+}
+
+.feature-item p {
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.6;
+}
+
+/* FAQ Section */
+.faq-section {
+  padding: 80px 20px;
+}
+
+.faq-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 30px;
+}
+
+.faq-item {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 24px;
+  border-radius: 12px;
+}
+
+.faq-item h3 {
+  font-size: 18px;
+  margin: 0 0 12px;
+  color: #3b82f6;
+}
+
+.faq-item p {
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* CTA Section */
+.cta-section {
+  padding: 100px 20px;
+  text-align: center;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+}
+
+.cta-content h2 {
+  font-size: 40px;
+  margin: 0 0 16px;
+}
+
+.cta-content p {
+  font-size: 20px;
+  margin: 0 0 40px;
+  opacity: 0.9;
+}
+
+.cta-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.btn-primary.large,
+.btn-secondary.large {
+  padding: 20px 48px;
+  font-size: 18px;
+  width: auto;
+}
+
+.btn-primary.large {
+  background: white;
+  color: #3b82f6;
+}
+
+.btn-secondary.large {
+  border-color: white;
+  color: white;
+}
+
+.btn-secondary.large:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .hero-title {
+    font-size: 36px;
+  }
+
+  .hero-subtitle {
+    font-size: 18px;
+  }
+
+  .section-title {
+    font-size: 28px;
+  }
+
+  .plans-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .price {
+    font-size: 36px;
+  }
+}
+</style>
+

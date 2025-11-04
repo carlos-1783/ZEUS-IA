@@ -21,6 +21,7 @@ def create_tables():
         from app.models.user import User, RefreshToken
         from app.models.customer import Customer
         from app.models.erp import Invoice, Product, Payment
+        from app.models.agent_activity import AgentActivity
         
         Base.metadata.create_all(bind=engine)
         print("[DATABASE] ✅ Tablas creadas correctamente")

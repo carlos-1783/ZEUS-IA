@@ -57,7 +57,7 @@ Antes de vender, asegúrate de que todo funciona:
 
 #### 🎯 **Propuesta de Valor** (Cópiala y úsala):
 
-> **"ZEUS-IA es tu departamento de gestión empresarial completo, 24/7, por menos de lo que cuesta un empleado."**
+> **"ZEUS-IA es tu departamento de gestión empresarial completo, 24/7, por menos de lo que cuestan empleado."**
 
 #### 💰 **Planes Disponibles**:
 

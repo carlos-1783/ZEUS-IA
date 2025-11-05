@@ -249,42 +249,42 @@
           <div class="agents-grid">
             <div class="agent-card">
               <div class="agent-avatar">
-                <div class="avatar-placeholder zeus">Z</div>
+                <img src="/images/avatars/Zeus-avatar.jpg" alt="ZEUS CORE" />
               </div>
               <h4>ZEUS CORE</h4>
               <p>Orquestador supremo que coordina todo el sistema</p>
             </div>
             <div class="agent-card">
               <div class="agent-avatar">
-                <div class="avatar-placeholder perseo">P</div>
+                <img src="/images/avatars/Perseo-avatar.jpg" alt="PERSEO" />
               </div>
               <h4>PERSEO</h4>
               <p>Marketing, SEO, SEM y optimización de ventas</p>
             </div>
             <div class="agent-card">
               <div class="agent-avatar">
-                <div class="avatar-placeholder rafael">R</div>
+                <img src="/images/avatars/Rafael-avatar.jpg" alt="RAFAEL" />
               </div>
               <h4>RAFAEL</h4>
               <p>Fiscal, contabilidad y gestión con Hacienda</p>
             </div>
             <div class="agent-card">
               <div class="agent-avatar">
-                <div class="avatar-placeholder thalos">T</div>
+                <img src="/images/avatars/Thalos-avatar.jpg" alt="THALOS" />
               </div>
               <h4>THALOS</h4>
               <p>Ciberseguridad, auditorías y protección 24/7</p>
             </div>
             <div class="agent-card">
               <div class="agent-avatar">
-                <div class="avatar-placeholder justicia">J</div>
+                <img src="/images/avatars/Justicia-avatar.jpg" alt="JUSTICIA" />
               </div>
               <h4>JUSTICIA</h4>
               <p>Legal, contratos, GDPR y compliance</p>
             </div>
             <div class="agent-card">
               <div class="agent-avatar">
-                <div class="avatar-placeholder afrodita">A</div>
+                <img src="/images/avatars/Afrodita-avatar.jpg" alt="AFRODITA" />
               </div>
               <h4>AFRODITA</h4>
               <p>RRHH, logística, horarios y gestión de equipos</p>
@@ -857,42 +857,6 @@ const contactSales = () => {
   object-fit: cover;
   border-radius: 50%;
   background: #1a1f2e;
-}
-
-.avatar-placeholder {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 48px;
-  font-weight: 700;
-  color: white;
-}
-
-.avatar-placeholder.zeus {
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-}
-
-.avatar-placeholder.perseo {
-  background: linear-gradient(135deg, #ec4899 0%, #d946ef 100%);
-}
-
-.avatar-placeholder.rafael {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-}
-
-.avatar-placeholder.thalos {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-}
-
-.avatar-placeholder.justicia {
-  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-}
-
-.avatar-placeholder.afrodita {
-  background: linear-gradient(135deg, #f472b6 0%, #ec4899 100%);
 }
 
 .agent-card h4 {

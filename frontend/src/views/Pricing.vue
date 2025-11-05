@@ -7,11 +7,19 @@
           <span class="gradient-text">Automatiza tu empresa</span> con IA
         </h1>
         <p class="hero-subtitle">
-          5 Agentes especializados trabajando 24/7 para tu negocio
+          6 Agentes especializados trabajando 24/7 para tu negocio
         </p>
+        
+        <!-- Value Proposition -->
+        <div class="value-prop">
+          <div class="value-badge">🥉 3ª más económica del mercado</div>
+          <div class="value-badge main">🏆 #1 en funcionalidades completas</div>
+          <div class="value-badge">✅ Todo incluido sin sorpresas</div>
+        </div>
+
         <div class="hero-stats">
           <div class="stat">
-            <div class="stat-value">5</div>
+            <div class="stat-value">6</div>
             <div class="stat-label">Agentes IA</div>
           </div>
           <div class="stat">
@@ -26,12 +34,57 @@
       </div>
     </section>
 
+    <!-- Comparison Section -->
+    <section class="comparison-section">
+      <div class="container">
+        <h2 class="section-title">¿Por qué ZEUS-IA?</h2>
+        <p class="section-subtitle">Comparamos para que tú no tengas que hacerlo</p>
+        
+        <div class="comparison-grid">
+          <div class="comparison-card">
+            <div class="comparison-rank">🥇</div>
+            <h3>Competidor A</h3>
+            <div class="comparison-price">€2,500/mes</div>
+            <ul class="comparison-features">
+              <li>❌ Solo contabilidad</li>
+              <li>❌ No incluye marketing</li>
+              <li>❌ Sin RRHH ni logística</li>
+            </ul>
+          </div>
+
+          <div class="comparison-card">
+            <div class="comparison-rank">🥈</div>
+            <h3>Competidor B</h3>
+            <div class="comparison-price">€1,800/mes</div>
+            <ul class="comparison-features">
+              <li>✅ CRM + Marketing</li>
+              <li>❌ Sin fiscal ni legal</li>
+              <li>❌ No automatiza RRHH</li>
+            </ul>
+          </div>
+
+          <div class="comparison-card winner">
+            <div class="winner-badge">🏆 GANADOR</div>
+            <div class="comparison-rank">🥉</div>
+            <h3>ZEUS-IA (tú)</h3>
+            <div class="comparison-price">€299/mes</div>
+            <ul class="comparison-features">
+              <li>✅ Marketing + Fiscal + Legal</li>
+              <li>✅ RRHH + Logística completa</li>
+              <li>✅ Seguridad + Compliance</li>
+              <li class="highlight">🚀 Todo por 6x menos</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Pricing Section -->
     <section class="pricing-section">
       <div class="container">
         <h2 class="section-title">Elige el plan perfecto para tu empresa</h2>
         <p class="section-subtitle">
-          Todos los planes incluyen acceso completo a la plataforma
+          Todos los planes incluyen los 6 agentes IA + todas las funcionalidades
         </p>
 
         <!-- Plans Grid -->
@@ -57,10 +110,11 @@
             </div>
 
             <ul class="features-list">
-              <li>✅ 5 Agentes IA (ZEUS, PERSEO, RAFAEL, THALOS, JUSTICIA)</li>
+              <li>✅ 6 Agentes IA (ZEUS, PERSEO, RAFAEL, THALOS, JUSTICIA, AFRODITA)</li>
               <li>✅ WhatsApp Automation</li>
               <li>✅ Email Automation</li>
               <li>✅ Facturación + Hacienda</li>
+              <li>✅ RRHH + Logística (AFRODITA)</li>
               <li>✅ Stripe Payments</li>
               <li>✅ Soporte por email</li>
             </ul>
@@ -189,6 +243,55 @@
       <div class="container">
         <h2 class="section-title">¿Qué incluye ZEUS-IA?</h2>
         
+        <!-- Agents Grid -->
+        <div class="agents-showcase">
+          <h3 class="agents-title">Los 6 Agentes de ZEUS-IA</h3>
+          <div class="agents-grid">
+            <div class="agent-card">
+              <div class="agent-avatar">
+                <img src="/images/avatars/Zeus-avatar.jpg" alt="ZEUS CORE" />
+              </div>
+              <h4>ZEUS CORE</h4>
+              <p>Orquestador supremo que coordina todo el sistema</p>
+            </div>
+            <div class="agent-card">
+              <div class="agent-avatar">
+                <img src="/images/avatars/Perseo-avatar.jpg" alt="PERSEO" />
+              </div>
+              <h4>PERSEO</h4>
+              <p>Marketing, SEO, SEM y optimización de ventas</p>
+            </div>
+            <div class="agent-card">
+              <div class="agent-avatar">
+                <img src="/images/avatars/Rafael-avatar.jpg" alt="RAFAEL" />
+              </div>
+              <h4>RAFAEL</h4>
+              <p>Fiscal, contabilidad y gestión con Hacienda</p>
+            </div>
+            <div class="agent-card">
+              <div class="agent-avatar">
+                <img src="/images/avatars/Thalos-avatar.jpg" alt="THALOS" />
+              </div>
+              <h4>THALOS</h4>
+              <p>Ciberseguridad, auditorías y protección 24/7</p>
+            </div>
+            <div class="agent-card">
+              <div class="agent-avatar">
+                <img src="/images/avatars/Justicia-avatar.jpg" alt="JUSTICIA" />
+              </div>
+              <h4>JUSTICIA</h4>
+              <p>Legal, contratos, GDPR y compliance</p>
+            </div>
+            <div class="agent-card">
+              <div class="agent-avatar">
+                <img src="/images/avatars/Afrodita-avatar.jpg" alt="AFRODITA" />
+              </div>
+              <h4>AFRODITA</h4>
+              <p>RRHH, logística, horarios y gestión de equipos</p>
+            </div>
+          </div>
+        </div>
+
         <div class="features-grid">
           <div class="feature-item">
             <div class="feature-icon">📱</div>
@@ -206,9 +309,9 @@
             <p>Automatiza facturas y modelos fiscales (AEAT/SII)</p>
           </div>
           <div class="feature-item">
-            <div class="feature-icon">💳</div>
-            <h3>Pagos Stripe</h3>
-            <p>Procesa pagos y suscripciones automáticamente</p>
+            <div class="feature-icon">👥</div>
+            <h3>RRHH + Logística</h3>
+            <p>Gestión de equipos, horarios, rutas y entregas con AFRODITA</p>
           </div>
           <div class="feature-item">
             <div class="feature-icon">📊</div>
@@ -216,9 +319,9 @@
             <p>Optimiza campañas en Google Ads y Meta Ads con IA</p>
           </div>
           <div class="feature-item">
-            <div class="feature-icon">📅</div>
-            <h3>Google Workspace</h3>
-            <p>Integra Calendar, Gmail, Drive y Sheets</p>
+            <div class="feature-icon">🔒</div>
+            <h3>Seguridad Total</h3>
+            <p>Ciberseguridad, auditorías y protección de datos</p>
           </div>
         </div>
       </div>
@@ -317,7 +420,48 @@ const contactSales = () => {
 .hero-subtitle {
   font-size: 24px;
   color: rgba(255, 255, 255, 0.7);
-  margin: 0 0 60px;
+  margin: 0 0 30px;
+}
+
+/* Value Proposition */
+.value-prop {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 40px;
+}
+
+.value-badge {
+  padding: 12px 24px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 30px;
+  font-size: 14px;
+  font-weight: 600;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s;
+}
+
+.value-badge:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.value-badge.main {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  border-color: transparent;
+  font-size: 16px;
+  animation: glow 2s infinite;
+}
+
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(139, 92, 246, 0.8);
+  }
 }
 
 .hero-stats {
@@ -344,6 +488,112 @@ const contactSales = () => {
   font-size: 14px;
   color: rgba(255, 255, 255, 0.6);
   margin-top: 8px;
+}
+
+/* Comparison Section */
+.comparison-section {
+  padding: 80px 20px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 30px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.comparison-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 30px;
+  text-align: center;
+  transition: all 0.3s;
+}
+
+.comparison-card:hover {
+  transform: translateY(-8px);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.comparison-card.winner {
+  border-color: #3b82f6;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2));
+  box-shadow: 0 0 40px rgba(59, 130, 246, 0.4);
+  position: relative;
+}
+
+.winner-badge {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  padding: 6px 20px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.comparison-rank {
+  font-size: 48px;
+  margin-bottom: 10px;
+}
+
+.comparison-card h3 {
+  font-size: 24px;
+  margin-bottom: 15px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.comparison-price {
+  font-size: 32px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 20px;
+}
+
+.comparison-features {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+}
+
+.comparison-features li {
+  padding: 10px 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.8);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.comparison-features li:last-child {
+  border-bottom: none;
+}
+
+.comparison-features li.highlight {
+  color: #10b981;
+  font-weight: 700;
+  font-size: 16px;
+  animation: pulse-text 2s infinite;
+}
+
+@keyframes pulse-text {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 
 /* Pricing Section */
@@ -552,6 +802,74 @@ const contactSales = () => {
 .features-section {
   padding: 80px 20px;
   background: rgba(0, 0, 0, 0.3);
+}
+
+/* Agents Showcase */
+.agents-showcase {
+  margin-bottom: 60px;
+}
+
+.agents-title {
+  text-align: center;
+  font-size: 28px;
+  margin-bottom: 40px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.agents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 30px;
+  max-width: 1200px;
+  margin: 0 auto 40px;
+}
+
+.agent-card {
+  text-align: center;
+  transition: all 0.3s;
+  cursor: pointer;
+}
+
+.agent-card:hover {
+  transform: translateY(-10px);
+}
+
+.agent-avatar {
+  width: 120px;
+  height: 120px;
+  margin: 0 auto 15px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid transparent;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  padding: 3px;
+  transition: all 0.3s;
+}
+
+.agent-card:hover .agent-avatar {
+  box-shadow: 0 0 30px rgba(59, 130, 246, 0.6);
+  transform: scale(1.1);
+}
+
+.agent-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  background: #1a1f2e;
+}
+
+.agent-card h4 {
+  font-size: 18px;
+  margin: 0 0 8px;
+  color: #3b82f6;
+}
+
+.agent-card p {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.5;
+  margin: 0;
 }
 
 .features-grid {

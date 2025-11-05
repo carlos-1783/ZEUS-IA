@@ -225,6 +225,8 @@ import { ref, computed, onMounted, watch } from 'vue'
 import PerseoWorkspace from './agent-workspaces/PerseoWorkspace.vue'
 import RafaelWorkspace from './agent-workspaces/RafaelWorkspace.vue'
 import AfroditaWorkspace from './agent-workspaces/AfroditaWorkspace.vue'
+import ThalosWorkspace from './agent-workspaces/ThalosWorkspace.vue'
+import JusticiaWorkspace from './agent-workspaces/JusticiaWorkspace.vue'
 
 const props = defineProps({
   agent: {
@@ -238,7 +240,9 @@ const workspaces = {
   'PERSEO': PerseoWorkspace,
   'RAFAEL': RafaelWorkspace,
   'AFRODITA': AfroditaWorkspace,
-  // THALOS y JUSTICIA pendientes de implementar
+  'THALOS': ThalosWorkspace,
+  'JUSTICIA': JusticiaWorkspace
+  // ZEUS CORE no tiene workspace específico (es el orquestador)
 }
 
 const currentWorkspace = computed(() => {

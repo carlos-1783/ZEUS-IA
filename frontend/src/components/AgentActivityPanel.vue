@@ -261,18 +261,98 @@ const activeTab = ref(hasWorkspace.value ? 'workspace' : 'chat')
 // Text chat
 const messages = ref([])
 const textInput = ref('')
+const messagesContainer = ref(null)
 
 // Voice chat
 const isListening = ref(false)
 const isSpeaking = ref(false)
 const currentTranscript = ref('')
 const agentVoiceResponse = ref('')
+let recognition = null
+let speechSynthesis = window.speechSynthesis
 
 const voiceStatus = computed(() => {
   if (isListening.value) return '🎤 Escuchando...'
   if (isSpeaking.value) return '🗣️ Respondiendo...'
   return `🤖 ${props.agent.name} está listo para escucharte`
 })
+
+// Inicializar reconocimiento de voz
+const initSpeechRecognition = () => {
+  if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    recognition = new SpeechRecognition()
+    recognition.continuous = false
+    recognition.interimResults = true
+    recognition.lang = 'es-ES'
+    
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map(result => result[0].transcript)
+        .join('')
+      
+      currentTranscript.value = transcript
+      
+      // Si es final, enviar al agente
+      if (event.results[event.results.length - 1].isFinal) {
+        sendVoiceToAgent(transcript)
+      }
+    }
+    
+    recognition.onerror = (event) => {
+      console.error('Error de reconocimiento:', event.error)
+      isListening.value = false
+      if (event.error === 'not-allowed') {
+        alert('❌ Necesitas dar permiso al micrófono')
+      }
+    }
+    
+    recognition.onend = () => {
+      isListening.value = false
+    }
+  }
+}
+
+// Enviar mensaje de voz al agente
+const sendVoiceToAgent = async (transcript) => {
+  if (!transcript.trim()) return
+  
+  isListening.value = false
+  isSpeaking.value = true
+  agentVoiceResponse.value = '⏳ Procesando...'
+  
+  try {
+    const agentNameUrl = props.agent.name.toLowerCase().replace(/ /g, '-')
+    const response = await fetch(`/api/v1/chat/${agentNameUrl}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: transcript, context: {} })
+    })
+    
+    const data = await response.json()
+    const responseText = data.message || 'Lo siento, no pude procesar tu solicitud.'
+    
+    agentVoiceResponse.value = responseText
+    
+    // Text-to-Speech
+    if (speechSynthesis) {
+      const utterance = new SpeechSynthesisUtterance(responseText)
+      utterance.lang = 'es-ES'
+      utterance.rate = 0.9
+      utterance.onend = () => {
+        isSpeaking.value = false
+      }
+      speechSynthesis.speak(utterance)
+    } else {
+      isSpeaking.value = false
+    }
+    
+  } catch (error) {
+    console.error('Error en voz:', error)
+    agentVoiceResponse.value = '❌ Error al procesar'
+    isSpeaking.value = false
+  }
+}
 
 // Activities
 const activities = ref([])
@@ -295,13 +375,15 @@ watch(() => props.agent.name, () => {
 
 const loadActivities = async () => {
   try {
+    const agentName = props.agent.name.split(' ')[0].toUpperCase()
     const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/activities/${props.agent.name.split(' ')[0]}?days=${activityDays.value}`
+      `/api/v1/activities/${agentName}?days=${activityDays.value}`
     )
     const data = await response.json()
     
     if (data.success) {
       activities.value = data.activities
+      console.log(`✅ Actividades de ${agentName} cargadas:`, data.total_activities)
     }
   } catch (error) {
     console.error('Error loading activities:', error)
@@ -312,13 +394,15 @@ const loadActivities = async () => {
 
 const loadMetrics = async () => {
   try {
+    const agentName = props.agent.name.split(' ')[0].toUpperCase()
     const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/activities/${props.agent.name.split(' ')[0]}/metrics?days=30`
+      `/api/v1/activities/${agentName}/metrics?days=30`
     )
     const data = await response.json()
     
     if (data.success) {
       metrics.value = data
+      console.log(`✅ Métricas de ${agentName} cargadas`)
     }
   } catch (error) {
     console.error('Error loading metrics:', error)
@@ -401,14 +485,27 @@ const sendTextMessage = async () => {
 }
 
 const toggleVoiceChat = () => {
-  isListening.value = !isListening.value
+  if (!recognition) {
+    initSpeechRecognition()
+  }
   
   if (isListening.value) {
-    // Iniciar reconocimiento de voz
-    currentTranscript.value = 'Esperando tu comando...'
-  } else {
     // Detener
+    if (recognition) {
+      recognition.stop()
+    }
+    isListening.value = false
     currentTranscript.value = ''
+  } else {
+    // Iniciar
+    if (recognition) {
+      currentTranscript.value = ''
+      agentVoiceResponse.value = ''
+      recognition.start()
+      isListening.value = true
+    } else {
+      alert('❌ Tu navegador no soporta reconocimiento de voz. Usa Chrome, Edge o Safari.')
+    }
   }
 }
 

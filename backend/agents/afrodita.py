@@ -21,13 +21,29 @@ class Afrodita(BaseAgent):
     """
     
     def __init__(self):
+        # Cargar configuración desde prompts.json
+        import os
+        import json
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        prompts_path = os.path.join(base_dir, "config", "prompts.json")
+        
+        # Cargar config de AFRODITA si existe, sino usar defaults
+        try:
+            with open(prompts_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+            afrodita_config = config["zeus_prime_v1"]["agents"].get("AFRODITA", {})
+            system_prompt = afrodita_config.get("prompt", None)
+            temperature = afrodita_config.get("parameters", {}).get("temperature", 0.7)
+            max_tokens = afrodita_config.get("parameters", {}).get("max_tokens", 2000)
+        except:
+            system_prompt = None
+            temperature = 0.7
+            max_tokens = 2000
+        
         super().__init__(
             name="AFRODITA",
             role="HR & Logistics Manager",
-            domain="Recursos Humanos, Logística, Gestión de Personal"
-        )
-        
-        self.system_prompt = """Eres AFRODITA, la agente de Recursos Humanos y Logística de ZEUS-IA.
+            system_prompt=system_prompt or """Eres AFRODITA, la agente de Recursos Humanos y Logística de ZEUS-IA.
 
 Tu nombre proviene de la diosa griega del amor y la armonía, porque tu misión es cuidar del activo más valioso de cualquier empresa: LAS PERSONAS.
 
@@ -141,7 +157,16 @@ Eres la encargada de gestionar TODO lo relacionado con el equipo humano y su coo
 
 Habla siempre en español (España), de forma natural, profesional pero cercana.
 
-Eres la voz humana de ZEUS-IA. El corazón del sistema. 💙"""
+Eres la voz humana de ZEUS-IA. El corazón del sistema. 💙""",
+            temperature=temperature,
+            max_tokens=max_tokens,
+            hitl_threshold=0.75
+        )
+        
+        # Configurar dominio
+        self.domain = "Recursos Humanos, Logística, Gestión de Personal"
+        
+        print(f"👥 AFRODITA inicializada - Dominio: {self.domain}")
 
     def process_request(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """

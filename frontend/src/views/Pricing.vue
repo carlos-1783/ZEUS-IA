@@ -374,13 +374,13 @@
 <script setup>
 import { useRouter } from 'vue-router'
 
-// Import avatar images
-import zeusAvatar from '/images/avatars/Zeus-avatar.jpg'
-import perseoAvatar from '/images/avatars/Perseo-avatar.jpg'
-import rafaelAvatar from '/images/avatars/Rafael-avatar.jpg'
-import thalosAvatar from '/images/avatars/Thalos-avatar.jpg'
-import justiciaAvatar from '/images/avatars/Justicia-avatar.jpg'
-import afroditaAvatar from '/images/avatars/Afrodita-avatar.jpg'
+// Import avatar images from assets (processed by Vite)
+import zeusAvatar from '@/assets/images/avatars/Zeus-avatar.jpg'
+import perseoAvatar from '@/assets/images/avatars/Perseo-avatar.jpg'
+import rafaelAvatar from '@/assets/images/avatars/Rafael-avatar.jpg'
+import thalosAvatar from '@/assets/images/avatars/Thalos-avatar.jpg'
+import justiciaAvatar from '@/assets/images/avatars/Justicia-avatar.jpg'
+import afroditaAvatar from '@/assets/images/avatars/Afrodita-avatar.jpg'
 
 const router = useRouter()
 

@@ -67,12 +67,13 @@
             <div class="winner-badge">🏆 GANADOR</div>
             <div class="comparison-rank">🥉</div>
             <h3>ZEUS-IA (tú)</h3>
-            <div class="comparison-price">€299/mes</div>
+            <div class="comparison-price">€497/mes</div>
             <ul class="comparison-features">
               <li>✅ Marketing + Fiscal + Legal</li>
               <li>✅ RRHH + Logística completa</li>
               <li>✅ Seguridad + Compliance</li>
-              <li class="highlight">🚀 Todo por 6x menos</li>
+              <li class="highlight">🚀 Todo por 3.6x menos</li>
+              <li class="highlight">💡 No pagas hasta que funcione</li>
             </ul>
           </div>
         </div>
@@ -95,18 +96,26 @@
             <h3 class="plan-name">ZEUS STARTUP</h3>
             <p class="plan-description">1-5 empleados</p>
             
+            <div class="hybrid-badge">
+              💡 Solo pagas €197 para empezar. El resto cuando ZEUS funcione al 100%
+            </div>
+            
             <div class="plan-pricing">
               <div class="price-item">
-                <span class="price-label">Setup inicial</span>
-                <span class="price">€500</span>
-                <span class="price-note">pago único</span>
+                <span class="price-label">Hoy pagas</span>
+                <span class="price">€197</span>
+                <span class="price-note">para empezar</span>
               </div>
-              <div class="price-divider">+</div>
+              <div class="price-divider">→</div>
               <div class="price-item">
-                <span class="price-label">Suscripción</span>
-                <span class="price">€99</span>
-                <span class="price-note">/mes</span>
+                <span class="price-label">Mensual</span>
+                <span class="price">€197</span>
+                <span class="price-note">/mes (desde mes 2)</span>
               </div>
+            </div>
+            
+            <div class="price-breakdown">
+              <small>💰 Setup total: €497 (€197 hoy + €300 al deployment)</small>
             </div>
 
             <ul class="features-list">
@@ -131,18 +140,26 @@
             <h3 class="plan-name">ZEUS GROWTH</h3>
             <p class="plan-description">6-25 empleados</p>
             
+            <div class="hybrid-badge">
+              💡 Solo pagas €497 para empezar. El resto cuando ZEUS funcione al 100%
+            </div>
+            
             <div class="plan-pricing">
               <div class="price-item">
-                <span class="price-label">Setup inicial</span>
-                <span class="price">€1,500</span>
-                <span class="price-note">pago único</span>
+                <span class="price-label">Hoy pagas</span>
+                <span class="price">€497</span>
+                <span class="price-note">para empezar</span>
               </div>
-              <div class="price-divider">+</div>
+              <div class="price-divider">→</div>
               <div class="price-item">
-                <span class="price-label">Suscripción</span>
-                <span class="price">€299</span>
-                <span class="price-note">/mes</span>
+                <span class="price-label">Mensual</span>
+                <span class="price">€497</span>
+                <span class="price-note">/mes (desde mes 2)</span>
               </div>
+            </div>
+            
+            <div class="price-breakdown">
+              <small>💰 Setup total: €1,497 (€497 hoy + €1,000 al deployment)</small>
             </div>
 
             <ul class="features-list">
@@ -165,18 +182,26 @@
             <h3 class="plan-name">ZEUS BUSINESS</h3>
             <p class="plan-description">26-100 empleados</p>
             
+            <div class="hybrid-badge">
+              💡 Solo pagas €897 para empezar. El resto cuando ZEUS funcione al 100%
+            </div>
+            
             <div class="plan-pricing">
               <div class="price-item">
-                <span class="price-label">Setup inicial</span>
-                <span class="price">€2,500</span>
-                <span class="price-note">pago único</span>
+                <span class="price-label">Hoy pagas</span>
+                <span class="price">€897</span>
+                <span class="price-note">para empezar</span>
               </div>
-              <div class="price-divider">+</div>
+              <div class="price-divider">→</div>
               <div class="price-item">
-                <span class="price-label">Suscripción</span>
-                <span class="price">€699</span>
-                <span class="price-note">/mes</span>
+                <span class="price-label">Mensual</span>
+                <span class="price">€897</span>
+                <span class="price-note">/mes (desde mes 2)</span>
               </div>
+            </div>
+            
+            <div class="price-breakdown">
+              <small>💰 Setup total: €2,697 (€897 hoy + €1,800 al deployment)</small>
             </div>
 
             <ul class="features-list">
@@ -200,18 +225,26 @@
             <h3 class="plan-name">ZEUS ENTERPRISE</h3>
             <p class="plan-description">101+ empleados</p>
             
+            <div class="hybrid-badge">
+              💡 Solo pagas €1,797 para empezar. El resto cuando ZEUS funcione al 100%
+            </div>
+            
             <div class="plan-pricing">
               <div class="price-item">
-                <span class="price-label">Setup inicial</span>
-                <span class="price">€5,000+</span>
-                <span class="price-note">personalizado</span>
+                <span class="price-label">Hoy pagas</span>
+                <span class="price">€1,797</span>
+                <span class="price-note">para empezar</span>
               </div>
-              <div class="price-divider">+</div>
+              <div class="price-divider">→</div>
               <div class="price-item">
-                <span class="price-label">Suscripción</span>
-                <span class="price">€1,500+</span>
-                <span class="price-note">/mes</span>
+                <span class="price-label">Mensual</span>
+                <span class="price">€1,797</span>
+                <span class="price-note">/mes (desde mes 2)</span>
               </div>
+            </div>
+            
+            <div class="price-breakdown">
+              <small>💰 Setup total: €5,397+ (€1,797 hoy + €3,600 al deployment)</small>
             </div>
 
             <ul class="features-list">
@@ -342,8 +375,12 @@
             <p>Ofrecemos demo gratuita de 30 minutos para que veas el sistema en acción.</p>
           </div>
           <div class="faq-item">
-            <h3>¿Cómo funciona el setup?</h3>
-            <p>Es un pago único al inicio que cubre la instalación, configuración e integración de ZEUS en tu empresa.</p>
+            <h3>¿Cómo funciona el modelo de pago híbrido?</h3>
+            <p>Pagas solo el 33% inicial para empezar (ej: €497 para GROWTH). El resto del setup + primer mes lo pagas SOLO cuando ZEUS esté funcionando al 100% en tu empresa. Si en 60 días no funciona, te devolvemos todo.</p>
+          </div>
+          <div class="faq-item">
+            <h3>¿Qué significa "funcionando al 100%"?</h3>
+            <p>ZEUS está desplegado cuando: (1) Los 6 agentes responden correctamente, (2) APIs integradas funcionan, (3) Tu equipo lo ha usado 5 días consecutivos, (4) Se completó un workflow completo. TÚ decides cuando está listo.</p>
           </div>
           <div class="faq-item">
             <h3>¿Qué formas de pago aceptan?</h3>
@@ -679,6 +716,31 @@ const contactSales = () => {
   font-size: 14px;
   font-weight: 600;
   margin-bottom: 16px;
+}
+
+.hybrid-badge {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10b981;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 20px;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.price-breakdown {
+  text-align: center;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.price-breakdown small {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
 }
 
 .plan-name {

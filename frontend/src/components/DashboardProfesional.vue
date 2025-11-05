@@ -39,6 +39,13 @@
           <span class="icon">⚙️</span>
           <span>Settings</span>
         </button>
+        <button 
+          class="nav-item admin-btn"
+          @click="goToAdmin"
+        >
+          <span class="icon">🔐</span>
+          <span>Admin Panel</span>
+        </button>
       </nav>
 
       <div class="metrics-mini">
@@ -127,35 +134,35 @@
             <div class="stat-icon">📈</div>
             <div class="stat-content">
               <h3>Total Interactions</h3>
-              <p class="stat-number">1,247</p>
-              <span class="stat-change positive">+12% this week</span>
+              <p class="stat-number">{{ dashboardMetrics.totalInteractions.toLocaleString() }}</p>
+              <span class="stat-change positive">{{ dashboardMetrics.interactionsTrend }}</span>
             </div>
           </div>
-          
+
           <div class="stat-card">
             <div class="stat-icon">⚡</div>
             <div class="stat-content">
               <h3>Avg Response Time</h3>
-              <p class="stat-number">0.8s</p>
-              <span class="stat-change positive">-15% faster</span>
+              <p class="stat-number">{{ dashboardMetrics.avgResponseTime }}</p>
+              <span class="stat-change positive">{{ dashboardMetrics.responseTrend }}</span>
             </div>
           </div>
-          
+
           <div class="stat-card">
             <div class="stat-icon">💰</div>
             <div class="stat-content">
               <h3>Cost Savings</h3>
-              <p class="stat-number">$3,456</p>
-              <span class="stat-change positive">+8% this month</span>
+              <p class="stat-number">{{ dashboardMetrics.costSavings }}</p>
+              <span class="stat-change positive">{{ dashboardMetrics.savingsTrend }}</span>
             </div>
           </div>
-          
+
           <div class="stat-card">
             <div class="stat-icon">✅</div>
             <div class="stat-content">
               <h3>Success Rate</h3>
-              <p class="stat-number">98.2%</p>
-              <span class="stat-change positive">+2.1% improvement</span>
+              <p class="stat-number">{{ dashboardMetrics.successRate }}</p>
+              <span class="stat-change positive">{{ dashboardMetrics.successTrend }}</span>
             </div>
           </div>
         </div>
@@ -249,8 +256,11 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import AgentActivityPanel from './AgentActivityPanel.vue'
+
+const router = useRouter()
 
 const props = defineProps({
   agents: Array
@@ -268,6 +278,53 @@ const closeSidebarOnMobile = () => {
     sidebarOpen.value = false
   }
 }
+
+const goToAdmin = () => {
+  router.push('/admin')
+}
+
+// Métricas reales desde backend
+const dashboardMetrics = ref({
+  totalInteractions: 0,
+  avgResponseTime: '0.0s',
+  costSavings: '$0',
+  successRate: '0%',
+  interactionsTrend: '0%',
+  responseTrend: '0%',
+  savingsTrend: '0%',
+  successTrend: '0%'
+})
+
+// Cargar métricas desde backend
+const loadDashboardMetrics = async () => {
+  try {
+    const response = await fetch('/api/v1/metrics/dashboard')
+    const data = await response.json()
+    
+    if (data.success) {
+      dashboardMetrics.value = {
+        totalInteractions: data.total_interactions || 0,
+        avgResponseTime: data.avg_response_time || '0.0s',
+        costSavings: data.cost_savings || '$0',
+        successRate: data.success_rate || '0%',
+        interactionsTrend: data.interactions_trend || '0%',
+        responseTrend: data.response_trend || '0%',
+        savingsTrend: data.savings_trend || '0%',
+        successTrend: data.success_trend || '0%'
+      }
+      console.log('✅ Métricas del dashboard cargadas')
+    }
+  } catch (error) {
+    console.error('Error cargando métricas:', error)
+    // Usar valores por defecto en caso de error
+  }
+}
+
+// Cargar al montar y cada 30 segundos
+onMounted(() => {
+  loadDashboardMetrics()
+  setInterval(loadDashboardMetrics, 30000)
+})
 
 const agentsData = ref([
   {
@@ -409,6 +466,18 @@ const chatWith = (agent) => {
 .nav-item.active {
   background: rgba(59, 130, 246, 0.15);
   color: #3b82f6;
+}
+
+.nav-item.admin-btn {
+  margin-top: 8px;
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.nav-item.admin-btn:hover {
+  background: rgba(139, 92, 246, 0.2);
+  color: #8b5cf6;
+  border-color: rgba(139, 92, 246, 0.5);
 }
 
 .icon {

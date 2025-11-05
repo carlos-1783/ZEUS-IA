@@ -249,42 +249,42 @@
           <div class="agents-grid">
             <div class="agent-card">
               <div class="agent-avatar">
-                <img src="/images/avatars/Zeus-avatar.jpg" alt="ZEUS CORE" />
+                <img :src="zeusAvatar" alt="ZEUS CORE" />
               </div>
               <h4>ZEUS CORE</h4>
               <p>Orquestador supremo que coordina todo el sistema</p>
             </div>
             <div class="agent-card">
               <div class="agent-avatar">
-                <img src="/images/avatars/Perseo-avatar.jpg" alt="PERSEO" />
+                <img :src="perseoAvatar" alt="PERSEO" />
               </div>
               <h4>PERSEO</h4>
               <p>Marketing, SEO, SEM y optimización de ventas</p>
             </div>
             <div class="agent-card">
               <div class="agent-avatar">
-                <img src="/images/avatars/Rafael-avatar.jpg" alt="RAFAEL" />
+                <img :src="rafaelAvatar" alt="RAFAEL" />
               </div>
               <h4>RAFAEL</h4>
               <p>Fiscal, contabilidad y gestión con Hacienda</p>
             </div>
             <div class="agent-card">
               <div class="agent-avatar">
-                <img src="/images/avatars/Thalos-avatar.jpg" alt="THALOS" />
+                <img :src="thalosAvatar" alt="THALOS" />
               </div>
               <h4>THALOS</h4>
               <p>Ciberseguridad, auditorías y protección 24/7</p>
             </div>
             <div class="agent-card">
               <div class="agent-avatar">
-                <img src="/images/avatars/Justicia-avatar.jpg" alt="JUSTICIA" />
+                <img :src="justiciaAvatar" alt="JUSTICIA" />
               </div>
               <h4>JUSTICIA</h4>
               <p>Legal, contratos, GDPR y compliance</p>
             </div>
             <div class="agent-card">
               <div class="agent-avatar">
-                <img src="/images/avatars/Afrodita-avatar.jpg" alt="AFRODITA" />
+                <img :src="afroditaAvatar" alt="AFRODITA" />
               </div>
               <h4>AFRODITA</h4>
               <p>RRHH, logística, horarios y gestión de equipos</p>
@@ -373,6 +373,14 @@
 
 <script setup>
 import { useRouter } from 'vue-router'
+
+// Import avatar images
+import zeusAvatar from '/images/avatars/Zeus-avatar.jpg'
+import perseoAvatar from '/images/avatars/Perseo-avatar.jpg'
+import rafaelAvatar from '/images/avatars/Rafael-avatar.jpg'
+import thalosAvatar from '/images/avatars/Thalos-avatar.jpg'
+import justiciaAvatar from '/images/avatars/Justicia-avatar.jpg'
+import afroditaAvatar from '/images/avatars/Afrodita-avatar.jpg'
 
 const router = useRouter()
 

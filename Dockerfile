@@ -63,6 +63,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend source
 COPY backend/ ./
 
+# LIMPIAR TODO EL CACHÉ DE PYTHON (forzar recarga de módulos)
+RUN find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+RUN find . -type f -name "*.pyc" -delete 2>/dev/null || true
+RUN find . -type f -name "*.pyo" -delete 2>/dev/null || true
+
 # Copy built frontend from stage 1
 COPY --from=frontend-builder /app/frontend/dist ./static
 

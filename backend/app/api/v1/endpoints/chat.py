@@ -23,12 +23,29 @@ router = APIRouter()
 
 # Instancias de agentes
 try:
+    print("🔄 Inicializando ZEUS CORE...")
     zeus = ZeusCore()
+    print("✅ ZEUS CORE OK")
+    
+    print("🔄 Inicializando PERSEO...")
     perseo = Perseo()
+    print("✅ PERSEO OK")
+    
+    print("🔄 Inicializando RAFAEL...")
     rafael = Rafael()
+    print("✅ RAFAEL OK")
+    
+    print("🔄 Inicializando THALOS...")
     thalos = Thalos()
+    print("✅ THALOS OK")
+    
+    print("🔄 Inicializando JUSTICIA...")
     justicia = Justicia()
+    print("✅ JUSTICIA OK")
+    
+    print("🔄 Inicializando AFRODITA...")
     afrodita = Afrodita()
+    print("✅ AFRODITA OK")
     
     # Registrar agentes en ZEUS
     zeus.register_agent(perseo)
@@ -40,6 +57,9 @@ try:
     print("✅ Todos los agentes inicializados correctamente")
 except Exception as e:
     print(f"❌ Error inicializando agentes: {e}")
+    import traceback
+    print("📋 Traceback completo:")
+    traceback.print_exc()
     zeus = perseo = rafael = thalos = justicia = afrodita = None
 
 # Mapeo de agentes

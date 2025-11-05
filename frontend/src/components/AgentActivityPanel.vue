@@ -221,7 +221,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import PerseoWorkspace from './agent-workspaces/PerseoWorkspace.vue'
 import RafaelWorkspace from './agent-workspaces/RafaelWorkspace.vue'
 import AfroditaWorkspace from './agent-workspaces/AfroditaWorkspace.vue'
@@ -327,28 +327,77 @@ const loadMetrics = async () => {
   }
 }
 
-const sendTextMessage = () => {
+const sendTextMessage = async () => {
   if (!textInput.value.trim()) return
+  
+  const userMessage = textInput.value
+  textInput.value = ''
   
   // Añadir mensaje del usuario
   messages.value.push({
     id: Date.now(),
     sender: 'user',
-    content: textInput.value,
+    content: userMessage,
     timestamp: new Date()
   })
   
-  // Simular respuesta del agente
-  setTimeout(() => {
+  // Añadir mensaje de "procesando"
+  const processingId = Date.now() + 1
+  messages.value.push({
+    id: processingId,
+    sender: 'agent',
+    content: '⏳ Procesando...',
+    timestamp: new Date()
+  })
+  
+  try {
+    // Llamar al API real del agente
+    const agentNameUrl = props.agent.name.toLowerCase().replace(/ /g, '-')
+    const response = await fetch(`/api/v1/chat/${agentNameUrl}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: userMessage,
+        context: {}
+      })
+    })
+    
+    const data = await response.json()
+    
+    // Remover mensaje de "procesando"
+    messages.value = messages.value.filter(m => m.id !== processingId)
+    
+    // Añadir respuesta real del agente
     messages.value.push({
-      id: Date.now() + 1,
+      id: Date.now() + 2,
       sender: 'agent',
-      content: `Entendido. Procesando tu solicitud...`,
+      content: data.message || 'Lo siento, no pude procesar tu solicitud.',
       timestamp: new Date()
     })
-  }, 1000)
-  
-  textInput.value = ''
+    
+    // Scroll al final
+    nextTick(() => {
+      if (messagesContainer.value) {
+        messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+      }
+    })
+    
+  } catch (error) {
+    console.error('Error al comunicarse con el agente:', error)
+    
+    // Remover mensaje de "procesando"
+    messages.value = messages.value.filter(m => m.id !== processingId)
+    
+    // Mostrar error
+    messages.value.push({
+      id: Date.now() + 2,
+      sender: 'agent',
+      content: '❌ Error: No pude conectarme con el agente. Intenta de nuevo.',
+      timestamp: new Date()
+    })
+  }
 }
 
 const toggleVoiceChat = () => {

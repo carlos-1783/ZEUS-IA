@@ -29,8 +29,15 @@
       </div>
     </div>
 
-    <!-- Tabs: Chat / Actividad / Métricas -->
+    <!-- Tabs: Workspace / Chat / Actividad / Métricas -->
     <div class="tabs">
+      <button 
+        :class="{ active: activeTab === 'workspace' }"
+        @click="activeTab = 'workspace'"
+        v-if="hasWorkspace"
+      >
+        🛠️ Workspace
+      </button>
       <button 
         :class="{ active: activeTab === 'chat' }"
         @click="activeTab = 'chat'"
@@ -49,6 +56,14 @@
       >
         📈 Métricas
       </button>
+    </div>
+
+    <!-- Workspace Tab -->
+    <div v-if="activeTab === 'workspace'" class="tab-content workspace-content">
+      <component :is="currentWorkspace" v-if="currentWorkspace" />
+      <div v-else class="no-workspace">
+        <p>Workspace no disponible para este agente</p>
+      </div>
     </div>
 
     <!-- Chat Tab -->
@@ -207,6 +222,9 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import PerseoWorkspace from './agent-workspaces/PerseoWorkspace.vue'
+import RafaelWorkspace from './agent-workspaces/RafaelWorkspace.vue'
+import AfroditaWorkspace from './agent-workspaces/AfroditaWorkspace.vue'
 
 const props = defineProps({
   agent: {
@@ -215,9 +233,26 @@ const props = defineProps({
   }
 })
 
+// Workspaces mapping
+const workspaces = {
+  'PERSEO': PerseoWorkspace,
+  'RAFAEL': RafaelWorkspace,
+  'AFRODITA': AfroditaWorkspace,
+  // THALOS y JUSTICIA pendientes de implementar
+}
+
+const currentWorkspace = computed(() => {
+  const agentKey = props.agent.name.split(' ')[0].toUpperCase()
+  return workspaces[agentKey] || null
+})
+
+const hasWorkspace = computed(() => {
+  return currentWorkspace.value !== null
+})
+
 // Communication mode
 const communicationMode = ref('text')
-const activeTab = ref('chat')
+const activeTab = ref(hasWorkspace.value ? 'workspace' : 'chat')
 
 // Text chat
 const messages = ref([])
@@ -941,6 +976,22 @@ onMounted(() => {
   text-align: center;
   padding: 40px;
   color: rgba(255, 255, 255, 0.4);
+}
+
+/* Workspace Tab */
+.workspace-content {
+  padding: 0;
+  overflow-y: auto;
+  max-height: 100%;
+}
+
+.no-workspace {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 16px;
 }
 
 /* Responsive */

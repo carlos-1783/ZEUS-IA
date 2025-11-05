@@ -299,6 +299,12 @@ const agentsData = ref([
     role: 'Legal & GDPR Advisor',
     image: '/images/avatars/Justicia-avatar.jpg',
     load: 29
+  },
+  {
+    name: 'AFRODITA',
+    role: 'HR & Logistics Manager',
+    image: '/images/avatars/Afrodita-avatar.jpg',
+    load: 52
   }
 ])
 

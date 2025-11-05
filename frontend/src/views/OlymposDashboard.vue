@@ -205,6 +205,11 @@
       {{ showMetrics ? '📊 OCULTAR' : '📊 MÉTRICAS' }}
     </button>
 
+    <!-- Botón Admin Panel -->
+    <button @click="goToAdmin" class="admin-toggle">
+      ⚙️ ADMIN
+    </button>
+
     <!-- Notificaciones Divinas -->
     <div class="divine-notifications">
       <transition-group name="notification-slide">
@@ -356,6 +361,11 @@ const toggleAgentsPanel = () => {
   if (showAgents.value) {
     showNotification('info', '⚡ Panel de agentes invocado')
   }
+}
+
+// Ir al Admin Panel
+const goToAdmin = () => {
+  router.push('/admin')
 }
 
 // Inicializar Speech Recognition
@@ -1280,6 +1290,28 @@ onMounted(() => {
   background: rgba(59, 130, 246, 0.6);
   transform: scale(1.05);
   box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+}
+
+.admin-toggle {
+  position: fixed;
+  top: 30px;
+  right: 200px;
+  padding: 12px 25px;
+  background: rgba(75, 0, 130, 0.9);
+  border: 2px solid rgba(139, 92, 246, 0.4);
+  border-radius: 50px;
+  color: #ffd700;
+  font-weight: bold;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  z-index: 60;
+  transition: all 0.3s ease;
+}
+
+.admin-toggle:hover {
+  background: rgba(139, 92, 246, 0.6);
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
 }
 
 /* ========== NOTIFICACIONES DIVINAS ========== */

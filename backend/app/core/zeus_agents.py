@@ -17,6 +17,7 @@ class AgentType(Enum):
     THALOS = "thalos"       # Ciberdefensa Automatizada
     JUSTICIA = "justicia"   # Abogada Digital
     RAFAEL = "rafael"       # Asistente Fiscal y Contable
+    AFRODITA = "afrodita"   # RRHH y Logística
     ANALISIS = "analisis"   # Análisis de datos
     IA = "ia"              # Inteligencia artificial
 

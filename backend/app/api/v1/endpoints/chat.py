@@ -17,6 +17,7 @@ from agents.perseo import Perseo
 from agents.rafael import Rafael
 from agents.thalos import Thalos
 from agents.justicia import Justicia
+from agents.afrodita import Afrodita
 
 router = APIRouter()
 
@@ -27,17 +28,19 @@ try:
     rafael = Rafael()
     thalos = Thalos()
     justicia = Justicia()
+    afrodita = Afrodita()
     
     # Registrar agentes en ZEUS
     zeus.register_agent(perseo)
     zeus.register_agent(rafael)
     zeus.register_agent(thalos)
     zeus.register_agent(justicia)
+    zeus.register_agent(afrodita)
     
     print("✅ Todos los agentes inicializados correctamente")
 except Exception as e:
     print(f"❌ Error inicializando agentes: {e}")
-    zeus = perseo = rafael = thalos = justicia = None
+    zeus = perseo = rafael = thalos = justicia = afrodita = None
 
 # Mapeo de agentes
 AGENTS = {
@@ -45,7 +48,8 @@ AGENTS = {
     "PERSEO": perseo,
     "RAFAEL": rafael,
     "THALOS": thalos,
-    "JUSTICIA": justicia
+    "JUSTICIA": justicia,
+    "AFRODITA": afrodita
 }
 
 class ChatRequest(BaseModel):

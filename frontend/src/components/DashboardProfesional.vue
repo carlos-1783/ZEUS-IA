@@ -111,11 +111,11 @@
             <div class="agent-stats">
               <div class="stat">
                 <span class="stat-label">Status</span>
-                <span class="stat-value status-active">Active</span>
+                <span class="stat-value status-active">Online</span>
               </div>
               <div class="stat">
-                <span class="stat-label">Load</span>
-                <span class="stat-value">{{ agent.load }}%</span>
+                <span class="stat-label">Actividades 24h</span>
+                <span class="stat-value">{{ agent.activities_24h || 0 }}</span>
               </div>
             </div>
 
@@ -320,10 +320,16 @@ const loadDashboardMetrics = async () => {
   }
 }
 
-// Cargar al montar y cada 30 segundos
+// Cargar al montar y refrescar periódicamente
 onMounted(() => {
   loadDashboardMetrics()
+  loadAgentsActivities()
+  
+  // Refresh dashboard metrics cada 30 segundos
   setInterval(loadDashboardMetrics, 30000)
+  
+  // Refresh actividades de agentes cada minuto
+  setInterval(loadAgentsActivities, 60000)
 })
 
 const agentsData = ref([
@@ -331,39 +337,57 @@ const agentsData = ref([
     name: 'ZEUS CORE',
     role: 'Supreme Orchestrator',
     image: '/images/avatars/Zeus-avatar.jpg',
-    load: 45
+    activities_24h: 0
   },
   {
     name: 'PERSEO',
     role: 'Growth Strategist',
     image: '/images/avatars/Perseo-avatar.jpg',
-    load: 62
+    activities_24h: 0
   },
   {
     name: 'RAFAEL',
     role: 'Fiscal Guardian',
     image: '/images/avatars/Rafael-avatar.jpg',
-    load: 38
+    activities_24h: 0
   },
   {
     name: 'THALOS',
     role: 'Cybersecurity Defender',
     image: '/images/avatars/Thalos-avatar.jpg',
-    load: 71
+    activities_24h: 0
   },
   {
     name: 'JUSTICIA',
     role: 'Legal & GDPR Advisor',
     image: '/images/avatars/Justicia-avatar.jpg',
-    load: 29
+    activities_24h: 0
   },
   {
     name: 'AFRODITA',
     role: 'HR & Logistics Manager',
     image: '/images/avatars/Afrodita-avatar.jpg',
-    load: 52
+    activities_24h: 0
   }
 ])
+
+// Cargar actividades reales de cada agente (últimas 24h)
+const loadAgentsActivities = async () => {
+  for (const agent of agentsData.value) {
+    try {
+      const agentName = agent.name.split(' ')[0].toUpperCase()
+      const response = await fetch(`/api/v1/activities/${agentName}?days=1`)
+      const data = await response.json()
+      
+      if (data.success) {
+        agent.activities_24h = data.total_activities || 0
+      }
+    } catch (error) {
+      console.error(`Error cargando actividades de ${agent.name}:`, error)
+      agent.activities_24h = 0
+    }
+  }
+}
 
 const selectAgent = (agent) => {
   selectedAgent.value = agent

@@ -29,6 +29,11 @@ def ensure_tables_initialized() -> None:
         create_tables()
         _tables_initialized = True
 
+
+def tables_ready() -> bool:
+    """Indica si las tablas ya fueron inicializadas."""
+    return _tables_initialized
+
 class ActivityLogger:
     """Servicio para registrar y consultar actividades de agentes"""
     
@@ -62,6 +67,7 @@ class ActivityLogger:
         Returns:
             AgentActivity creada
         """
+        ensure_tables_initialized()
         db = SessionLocal()
         try:
             activity = AgentActivity(
@@ -134,6 +140,7 @@ class ActivityLogger:
         """
         db = SessionLocal()
         try:
+            ensure_tables_initialized()
             query = db.query(AgentActivity).filter(
                 AgentActivity.agent_name == agent_name,
                 AgentActivity.created_at >= datetime.utcnow() - timedelta(days=days)
@@ -187,6 +194,7 @@ class ActivityLogger:
         """
         db = SessionLocal()
         try:
+            ensure_tables_initialized()
             query = db.query(AgentActivity).filter(
                 AgentActivity.agent_name == agent_name,
                 AgentActivity.created_at >= datetime.utcnow() - timedelta(days=days)

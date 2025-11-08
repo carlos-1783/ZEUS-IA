@@ -65,7 +65,7 @@ async def get_agent_activities(
         Lista de actividades
     """
     try:
-        activities = activity_logger.get_agent_activities(
+        activities = ActivityLogger.get_agent_activities(
             agent_name=agent_name.upper(),
             user_email=user_email,
             limit=limit,
@@ -116,7 +116,7 @@ async def get_agent_metrics(
         Métricas del agente
     """
     try:
-        if not _tables_initialized:
+        if not tables_ready():
             ensure_tables_initialized()
 
         metrics = ActivityLogger.get_agent_metrics(
@@ -148,7 +148,7 @@ async def log_activity(activity: ActivityCreate):
         Actividad creada
     """
     try:
-        result = activity_logger.log_activity(
+        result = ActivityLogger.log_activity(
             agent_name=activity.agent_name.upper(),
             action_type=activity.action_type,
             action_description=activity.action_description,
@@ -200,7 +200,7 @@ async def get_all_agents_summary(
         summary = {}
         
         for agent in agents:
-            metrics = activity_logger.get_agent_metrics(
+            metrics = ActivityLogger.get_agent_metrics(
                 agent_name=agent,
                 user_email=user_email,
                 days=days

@@ -6,9 +6,28 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
+from threading import Lock
 from app.models.agent_activity import AgentActivity
 from app.db.session import SessionLocal
 from app.db.base import create_tables
+
+
+_tables_initialized = False
+_tables_lock = Lock()
+
+
+def ensure_tables_initialized() -> None:
+    """Garantiza que las tablas de la BD se hayan creado solo una vez."""
+    global _tables_initialized
+    if _tables_initialized:
+        return
+
+    with _tables_lock:
+        if _tables_initialized:
+            return
+        print("[ACTIVITY] Inicializando tablas (una sola vez)...")
+        create_tables()
+        _tables_initialized = True
 
 class ActivityLogger:
     """Servicio para registrar y consultar actividades de agentes"""
@@ -23,7 +42,8 @@ class ActivityLogger:
         user_email: Optional[str] = None,
         status: str = "completed",
         priority: str = "normal",
-        visible_to_client: bool = True
+        visible_to_client: bool = True,
+        _retry: bool = True,
     ) -> AgentActivity:
         """
         Registrar una actividad de un agente
@@ -66,9 +86,9 @@ class ActivityLogger:
             return activity
             
         except OperationalError as e:
-            if "no such table" in str(e):
-                print("[ACTIVITY] Tabla agent_activities no existe. Creándola...")
-                create_tables()
+            if "no such table" in str(e) and _retry:
+                print("[ACTIVITY] Tabla agent_activities no existe. Creándola (log_activity)...")
+                ensure_tables_initialized()
                 db.rollback()
                 return ActivityLogger.log_activity(
                     agent_name,
@@ -80,8 +100,9 @@ class ActivityLogger:
                     status,
                     priority,
                     visible_to_client,
+                    _retry=False,
                 )
-            print(f"[ERROR] Error al registrar actividad: {e}")
+            print(f"[ERROR] Error al registrar actividad (OperationalError): {e}")
             db.rollback()
             return None
         except Exception as e:
@@ -96,7 +117,8 @@ class ActivityLogger:
         agent_name: str,
         user_email: Optional[str] = None,
         limit: int = 50,
-        days: int = 7
+        days: int = 7,
+        _retry: bool = True,
     ) -> List[AgentActivity]:
         """
         Obtener actividades de un agente
@@ -127,16 +149,17 @@ class ActivityLogger:
             return activities
             
         except OperationalError as e:
-            if "no such table" in str(e):
-                print("[ACTIVITY] Tabla agent_activities no existe. Creándola...")
-                create_tables()
+            if "no such table" in str(e) and _retry:
+                print("[ACTIVITY] Tabla agent_activities no existe. Creándola (get_agent_activities)...")
+                ensure_tables_initialized()
                 return ActivityLogger.get_agent_activities(
                     agent_name,
                     user_email=user_email,
                     limit=limit,
                     days=days,
+                    _retry=False,
                 )
-            print(f"[ERROR] Error al obtener actividades: {e}")
+            print(f"[ERROR] Error al obtener actividades (OperationalError): {e}")
             return []
         except Exception as e:
             print(f"[ERROR] Error al obtener actividades: {e}")
@@ -148,7 +171,8 @@ class ActivityLogger:
     def get_agent_metrics(
         agent_name: str,
         user_email: Optional[str] = None,
-        days: int = 30
+        days: int = 30,
+        _retry: bool = True,
     ) -> Dict[str, Any]:
         """
         Obtener métricas agregadas de un agente
@@ -203,15 +227,16 @@ class ActivityLogger:
             }
             
         except OperationalError as e:
-            if "no such table" in str(e):
-                print("[ACTIVITY] Tabla agent_activities no existe. Creándola...")
-                create_tables()
+            if "no such table" in str(e) and _retry:
+                print("[ACTIVITY] Tabla agent_activities no existe. Creándola (get_agent_metrics)...")
+                ensure_tables_initialized()
                 return ActivityLogger.get_agent_metrics(
                     agent_name,
                     user_email=user_email,
                     days=days,
+                    _retry=False,
                 )
-            print(f"[ERROR] Error al calcular métricas: {e}")
+            print(f"[ERROR] Error al calcular métricas (OperationalError): {e}")
             return {}
         except Exception as e:
             print(f"[ERROR] Error al calcular métricas: {e}")

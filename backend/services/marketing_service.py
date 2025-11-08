@@ -18,10 +18,11 @@ class MarketingService:
         self.google_ads_customer_id = os.getenv("GOOGLE_ADS_CUSTOMER_ID")
         
         # Meta Ads (Facebook/Instagram)
-        self.meta_access_token = os.getenv("META_ACCESS_TOKEN")
-        self.meta_app_id = os.getenv("META_APP_ID")
-        self.meta_app_secret = os.getenv("META_APP_SECRET")
-        self.meta_ad_account_id = os.getenv("META_AD_ACCOUNT_ID")
+        # Prefer FACEBOOK_* variables but support legacy META_* names
+        self.meta_access_token = os.getenv("FACEBOOK_ACCESS_TOKEN") or os.getenv("META_ACCESS_TOKEN")
+        self.meta_app_id = os.getenv("FACEBOOK_APP_ID") or os.getenv("META_APP_ID")
+        self.meta_app_secret = os.getenv("FACEBOOK_APP_SECRET") or os.getenv("META_APP_SECRET")
+        self.meta_ad_account_id = os.getenv("FACEBOOK_AD_ACCOUNT_ID") or os.getenv("META_AD_ACCOUNT_ID")
         
         # Google Analytics
         self.ga_property_id = os.getenv("GA_PROPERTY_ID")

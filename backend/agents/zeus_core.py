@@ -387,7 +387,7 @@ class ZeusCore(BaseAgent):
 
         # Registrar coordinación general de ZEUS
         activity_logger.log_activity(
-            agent_name="ZEUS CORE",
+            agent_name=self._normalize_agent_name(self.name),
             action_type="coordination",
             action_description="Fase PRE-LANZAMIENTO activada y plan maestro distribuido.",
             details={
@@ -403,7 +403,7 @@ class ZeusCore(BaseAgent):
         for task in plan["tasks"]:
             due_date = (now + timedelta(days=task["due_in_days"])).isoformat()
             activity_logger.log_activity(
-                agent_name=task["agent"],
+                agent_name=self._normalize_agent_name(task["agent"]),
                 action_type=task["action_type"],
                 action_description=task["description"],
                 details={
@@ -442,4 +442,11 @@ class ZeusCore(BaseAgent):
         ]
 
         return "\n".join(summary)
+
+    @staticmethod
+    def _normalize_agent_name(name: str) -> str:
+        """Normalizar nombre de agente para registros (sin espacios, mayúsculas)."""
+        if not name:
+            return "ZEUS"
+        return name.strip().split(" ")[0].upper()
 

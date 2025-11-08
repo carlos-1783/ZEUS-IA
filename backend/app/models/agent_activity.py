@@ -4,7 +4,7 @@ Registro de actividades de cada agente IA
 """
 from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Boolean
 from sqlalchemy.sql import func
-from app.db.base_class import Base
+from app.db.base import Base
 
 class AgentActivity(Base):
     """Modelo para registrar actividades de los agentes"""

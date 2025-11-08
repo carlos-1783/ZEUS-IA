@@ -403,10 +403,12 @@ const chatWith = (agent) => {
 <style scoped>
 .dashboard-profesional {
   display: flex;
-  height: 100vh;
+  min-height: 100vh;
+  height: auto;
   background: #0a0e1a;
   color: #fff;
   font-family: 'Inter', -apple-system, sans-serif;
+  overflow-x: hidden;
 }
 
 /* SIDEBAR OVERLAY (solo móvil) */
@@ -663,6 +665,23 @@ const chatWith = (agent) => {
   .agents-grid {
     grid-template-columns: 1fr;
   }
+
+  .agent-overlay {
+    padding: 24px 12px;
+    align-items: flex-start;
+  }
+
+  .agent-panel-container {
+    width: 100%;
+    max-height: none;
+    gap: 12px;
+  }
+
+  .btn-close-panel {
+    position: sticky;
+    top: 0;
+    margin-left: auto;
+  }
 }
 
 /* AGENTS GRID */
@@ -795,7 +814,47 @@ const chatWith = (agent) => {
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  padding: 20px;
+  padding: 32px 24px;
+  overflow-y: auto;
+}
+
+.agent-panel-container {
+  position: relative;
+  width: min(720px, 100%);
+  max-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.agent-panel-container::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.6), rgba(139, 92, 246, 0.4));
+  opacity: 0.2;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.btn-close-panel {
+  align-self: flex-end;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+  z-index: 1;
+}
+
+.btn-close-panel:hover {
+  background: rgba(255, 255, 255, 0.18);
+  transform: scale(1.06);
 }
 
 .chat-panel {

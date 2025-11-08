@@ -1148,7 +1148,10 @@ onMounted(() => {
 @media (max-width: 768px) {
   .activity-panel {
     height: auto;
-    min-height: 500px;
+    min-height: unset;
+    max-height: calc(100vh - 140px);
+    width: 100%;
+    padding: 18px 14px;
   }
 
   .metrics-grid,
@@ -1159,6 +1162,11 @@ onMounted(() => {
   .panel-header {
     flex-direction: column;
     gap: 16px;
+  }
+
+  .tab-content,
+  .workspace-content {
+    max-height: none;
   }
 }
 </style>

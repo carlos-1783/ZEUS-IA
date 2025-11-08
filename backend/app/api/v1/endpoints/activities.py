@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.models.agent_activity import AgentActivity
-from services.activity_logger import activity_logger
+from services.activity_logger import ActivityLogger, ensure_tables_initialized, tables_ready
 
 router = APIRouter()
 
@@ -35,6 +35,8 @@ class ActivityCreate(BaseModel):
 def get_db():
     db = SessionLocal()
     try:
+        if not tables_ready():
+            ensure_tables_initialized()
         yield db
     finally:
         db.close()
@@ -114,7 +116,10 @@ async def get_agent_metrics(
         Métricas del agente
     """
     try:
-        metrics = activity_logger.get_agent_metrics(
+        if not _tables_initialized:
+            ensure_tables_initialized()
+
+        metrics = ActivityLogger.get_agent_metrics(
             agent_name=agent_name.upper(),
             user_email=user_email,
             days=days

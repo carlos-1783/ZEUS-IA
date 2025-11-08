@@ -37,6 +37,8 @@ class ZeusCore(BaseAgent):
         # Agentes disponibles (se registrarán después)
         self.agents: Dict[str, BaseAgent] = {}
         self.prelaunch_active = False
+        self.prelaunch_plan: Optional[Dict[str, Any]] = None
+        self.prelaunch_plan: Optional[Dict[str, Any]] = None
         
         print("⚡ ZEUS CORE inicializado - El Olimpo está listo ⚡")
     
@@ -186,8 +188,10 @@ class ZeusCore(BaseAgent):
             self._register_prelaunch_tasks(plan)
             self.prelaunch_active = True
             tasks_created = True
+            self.prelaunch_plan = plan
         else:
             print("ℹ️ [ZEUS] Fase PRE-LANZAMIENTO ya estaba activa. Se entrega resumen actualizado.")
+            self.prelaunch_plan = plan
 
         summary_text = self._render_prelaunch_summary(plan, tasks_created=tasks_created)
 
@@ -449,4 +453,46 @@ class ZeusCore(BaseAgent):
         if not name:
             return "ZEUS"
         return name.strip().split(" ")[0].upper()
+
+    # ============================================================
+    # APIs públicas para orquestación
+    # ============================================================
+
+    def ensure_prelaunch_plan(self) -> Dict[str, Any]:
+        """
+        Garantizar que el plan de pre-lanzamiento esté generado y registrado.
+        Útil para inicializar tareas automáticamente en el arranque del sistema.
+        """
+        if self.prelaunch_active and self.prelaunch_plan:
+            return {
+                "success": True,
+                "already_active": True,
+                "plan": self.prelaunch_plan
+            }
+
+        result = self._start_prelaunch_phase({"phase": "prelaunch", "origin": "auto-init"})
+        self.prelaunch_plan = result.get("plan")
+        self.prelaunch_active = True
+        return result
+
+    # ============================================================
+    # APIs públicas para orquestación
+    # ============================================================
+
+    def ensure_prelaunch_plan(self) -> Dict[str, Any]:
+        """
+        Garantizar que el plan de pre-lanzamiento está generado.
+        Se usa en el arranque para poblar actividades aunque
+        ningún usuario haya enviado todavía el prompt maestro.
+        """
+        if self.prelaunch_active and self.prelaunch_plan:
+            return {
+                "success": True,
+                "already_active": True,
+                "plan": self.prelaunch_plan
+            }
+        
+        result = self._start_prelaunch_phase({"phase": "prelaunch", "origin": "auto-init"})
+        self.prelaunch_plan = result.get("plan")
+        return result
 

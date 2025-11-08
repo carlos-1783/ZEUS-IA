@@ -54,6 +54,14 @@ try:
     zeus.register_agent(justicia)
     zeus.register_agent(afrodita)
     
+    # Asegurar que el plan pre-lanzamiento esté inicializado
+    try:
+        plan_result = zeus.ensure_prelaunch_plan()
+        if plan_result.get("success"):
+            print("✅ Plan pre-lanzamiento preparado automáticamente.")
+    except Exception as prelaunch_error:
+        print(f"⚠️ No se pudo preparar el plan pre-lanzamiento automáticamente: {prelaunch_error}")
+
     print("✅ Todos los agentes inicializados correctamente")
 except Exception as e:
     print(f"❌ Error inicializando agentes: {e}")

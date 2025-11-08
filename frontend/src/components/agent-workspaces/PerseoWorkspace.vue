@@ -689,5 +689,125 @@ function shareItem() {
 .btn-share:hover {
   background: #f3f4f6;
 }
+
+@media (max-width: 600px) {
+  .perseo-workspace {
+    padding: 16px 12px 80px;
+  }
+
+  .workspace-header h3 {
+    font-size: 18px;
+    margin-bottom: 10px;
+  }
+
+  .tabs {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .tabs button {
+    flex: 1 1 calc(50% - 6px);
+    padding: 8px 0;
+    font-size: 12px;
+  }
+
+  .gallery-filters {
+    margin-bottom: 12px;
+  }
+
+  .gallery-filters select {
+    width: 100%;
+    font-size: 12px;
+  }
+
+  .gallery-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .gallery-item {
+    max-width: 360px;
+    margin: 0 auto;
+  }
+
+  .item-preview {
+    height: 180px;
+  }
+
+  .item-info {
+    padding: 12px;
+  }
+
+  .item-info h4 {
+    font-size: 14px;
+  }
+
+  .item-actions {
+    flex-direction: column;
+    padding: 0 12px 12px;
+  }
+
+  .item-actions button {
+    font-size: 12px;
+    padding: 9px;
+  }
+
+  .campaigns-list,
+  .pending-list {
+    gap: 14px;
+  }
+
+  .campaign-card,
+  .pending-item {
+    padding: 16px;
+    max-width: 360px;
+    margin: 0 auto;
+  }
+
+  .campaign-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .campaign-actions {
+    flex-direction: column;
+  }
+
+  .btn-view,
+  .btn-pause {
+    font-size: 13px;
+  }
+
+  .pending-actions {
+    flex-direction: column;
+  }
+
+  .pending-actions button {
+    font-size: 13px;
+    padding: 10px;
+  }
+
+  .modal-content {
+    width: calc(100% - 24px);
+    max-width: 420px;
+  }
+
+  .modal-body {
+    padding: 24px 18px;
+  }
+
+  .modal-body h3 {
+    font-size: 18px;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  .btn-download,
+  .btn-share {
+    font-size: 13px;
+  }
+}
 </style>
 

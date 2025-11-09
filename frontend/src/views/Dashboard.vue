@@ -211,6 +211,61 @@
           </table>
         </div>
       </div>
+
+      <!-- Entregables automáticos -->
+      <div class="bg-white shadow overflow-hidden sm:rounded-lg mt-8">
+        <div class="px-4 py-5 sm:px-6 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h3 class="text-lg leading-6 font-medium text-gray-900">Entregables Automáticos</h3>
+            <p class="mt-1 max-w-2xl text-sm text-gray-500">
+              Archivos generados por los agentes de forma autónoma.
+            </p>
+          </div>
+          <button
+            @click="loadAutomationOutputs"
+            :disabled="isLoadingOutputs"
+            class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <i class="fas fa-sync-alt mr-2"></i> {{ isLoadingOutputs ? 'Actualizando...' : 'Actualizar' }}
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agente</th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Archivo</th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tamaño</th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Generado</th>
+                <th scope="col" class="px-6 py-3"></th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr v-for="output in automationOutputs" :key="output.path">
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ output.agent }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-indigo-600 break-all">{{ output.filename }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ formatFileSize(output.size_bytes) }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ formatTimestamp(output.created_at) }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
+                  <a
+                    :href="buildDownloadLink(output.path)"
+                    class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <i class="fas fa-download mr-2"></i> Descargar
+                  </a>
+                </td>
+              </tr>
+              <tr v-if="automationOutputs.length === 0">
+                <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">
+                  Aún no se han generado entregables. ZEUS los publicará aquí al completar las tareas.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </main>
   </div>
 </template>
@@ -224,6 +279,7 @@ import { Chart, registerables } from 'chart.js';
 import { format, subDays } from 'date-fns';
 import { es } from 'date-fns/locale/es';
 import { useI18n } from 'vue-i18n';
+import { fetchAutomationOutputs, buildOutputDownloadUrl } from '@/api/automationService';
 
 // Registrar componentes de Chart.js
 Chart.register(...registerables);
@@ -244,6 +300,8 @@ const error = ref(null);
 const userData = ref(null);
 const currentUser = ref(null);
 const salesChart = ref(null);
+const automationOutputs = ref([]);
+const isLoadingOutputs = ref(false);
 
 // Datos del dashboard
 const metrics = ref([
@@ -339,12 +397,45 @@ const formatDate = (date) => {
   }
 };
 
+const formatFileSize = (size) => {
+  if (!size) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = size;
+  let index = 0;
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024;
+    index += 1;
+  }
+  return `${value.toFixed(1)} ${units[index]}`;
+};
+
+const formatTimestamp = (timestamp) => {
+  return new Date(timestamp * 1000).toLocaleString();
+};
+
+const buildDownloadLink = (path) => buildOutputDownloadUrl(path);
+
 const loadUserData = async () => {
   try {
     const userData = await api.getCurrentUser();
     user.value = userData;
   } catch (error) {
     console.error('Error al cargar datos del usuario:', error);
+  }
+};
+
+const loadAutomationOutputs = async () => {
+  if (isLoadingOutputs.value) {
+    return;
+  }
+  try {
+    isLoadingOutputs.value = true;
+    const outputs = await fetchAutomationOutputs();
+    automationOutputs.value = outputs;
+  } catch (err) {
+    console.error('Error al obtener entregables automáticos:', err);
+  } finally {
+    isLoadingOutputs.value = false;
   }
 };
 
@@ -485,6 +576,7 @@ onMounted(() => {
 
   // Performance: Ejecutar inmediatamente sin async
   loadData();
+  loadAutomationOutputs();
   
   // Performance: Event listener con passive para mejor rendimiento
   document.addEventListener('click', handleClickOutside, { passive: true });

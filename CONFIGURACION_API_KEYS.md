@@ -156,6 +156,7 @@ SENDGRID_FROM_NAME=ZEUS-IA
 STRIPE_API_KEY=sk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 STRIPE_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 STRIPE_CURRENCY=eur
+STRIPE_MODE=test
 ```
 
 ### **Pasar a producción:**
@@ -163,6 +164,8 @@ STRIPE_CURRENCY=eur
 1. **Verifica** tu negocio en Stripe (requiere datos fiscales)
 2. **Cambia** a production keys (sk_live_...)
 3. **Configura** nuevo webhook con production URL
+4. **Actualiza** la variable `STRIPE_MODE=live` en Railway
+5. **Verifica** con `GET /api/v1/integrations/stripe/status` que `detected_mode` y `requested_mode` sean `live`
 
 ### **Costo:**
 - **Sin cuota mensual**

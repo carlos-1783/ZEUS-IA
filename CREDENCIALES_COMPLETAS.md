@@ -12,12 +12,19 @@
 STRIPE_API_KEY=sk_test_51SPKKlRkVIjZaYJn... ✅
 STRIPE_PUBLISHABLE_KEY=pk_test_51SPKKlRkVIjZaYJn... ✅
 STRIPE_WEBHOOK_SECRET=whsec-ounc-fvqj-ckdf-yvav-koig ✅
+STRIPE_MODE=test
 ```
 
 **Estado**: ✅ OPERATIVO
 - 4 productos creados
 - Setup fees configurados
 - Suscripciones activas
+
+**Acción pendiente para modo producción**:
+- Generar llaves `sk_live` / `pk_live` y webhook live en Stripe
+- Actualizar variables en Railway con llaves live
+- Cambiar `STRIPE_MODE` a `live`
+- Confirmar en `/api/v1/integrations/stripe/status` que `detected_mode=live`
 
 ---
 

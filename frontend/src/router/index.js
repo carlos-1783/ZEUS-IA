@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import i18n from '../i18n'
 
 // Custom encoding/decoding functions for URL parameters
 const encodeParam = (param) => {
@@ -168,6 +169,7 @@ const router = createRouter({
       component: OlymposDashboard,
       meta: { 
         title: 'El Olimpo - Panel de Zeus',
+        titleKey: 'navigation.dashboard',
         requiresAuth: true
       }
     },
@@ -295,9 +297,15 @@ router.beforeEach((to, from, next) => {
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
   
   // Set page title
-  document.title = to.meta.title 
-    ? `${to.meta.title} | ${import.meta.env.VITE_APP_NAME || 'ZEUS-IA'}`
-    : import.meta.env.VITE_APP_NAME || 'ZEUS-IA'
+  const appName = import.meta.env.VITE_APP_NAME || 'ZEUS-IA'
+  const metaTitleKey = to.meta.titleKey
+  const translatedTitle = typeof metaTitleKey === 'string'
+    ? i18n.global.t(metaTitleKey)
+    : to.meta.title
+
+  document.title = translatedTitle
+    ? `${translatedTitle} | ${appName}`
+    : appName
   
   // Proteger rutas que requieren autenticación
   if (requiresAuth && !authStore.isAuthenticated) {

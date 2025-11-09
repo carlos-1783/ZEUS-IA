@@ -1,841 +1,703 @@
 <template>
   <div class="justicia-workspace">
-    <div class="workspace-header">
-      <h3>⚖️ Espacio de Trabajo - JUSTICIA</h3>
-      <div class="tabs">
-        <button :class="{ active: activeTab === 'contracts' }" @click="activeTab = 'contracts'">
-          📄 Contratos
-        </button>
-        <button :class="{ active: activeTab === 'compliance' }" @click="activeTab = 'compliance'">
-          ✅ Compliance
-        </button>
-        <button :class="{ active: activeTab === 'policies' }" @click="activeTab = 'policies'">
-          📋 Políticas
-        </button>
-        <button :class="{ active: activeTab === 'gdpr' }" @click="activeTab = 'gdpr'">
-          🔒 GDPR
-        </button>
+    <header class="workspace-header">
+      <div>
+        <h3>⚖️ Espacio de Trabajo – JUSTICIA</h3>
+        <p class="subtitle">
+          Entregables legales automatizados: políticas, términos y checklist de cumplimiento.
+        </p>
       </div>
+      <button class="refresh-btn" :disabled="isLoading" @click="reload">
+        <i class="fas fa-sync-alt"></i>
+        {{ isLoading ? 'Actualizando…' : 'Actualizar' }}
+      </button>
+    </header>
+
+    <div v-if="error" class="error-banner">
+      <i class="fas fa-exclamation-triangle"></i>
+      <span>Error al cargar entregables legales: {{ error }}</span>
     </div>
 
-    <!-- Contratos -->
-    <div v-if="activeTab === 'contracts'" class="contracts-section">
-      <div class="section-header">
-        <h4>Contratos Pendientes de Revisión</h4>
-        <button @click="uploadContract" class="btn-upload">📤 Subir Contrato</button>
-      </div>
+    <section class="workspace-body" v-if="!isLoading && deliverables.length">
+      <aside class="deliverable-list">
+        <h4>Documentos generados</h4>
+        <ul>
+          <li
+            v-for="item in deliverables"
+            :key="item.id"
+            :class="{ active: item.id === selectedId }"
+            @click="selectDeliverable(item.id)"
+          >
+            <div class="title">{{ formatTitle(item) }}</div>
+            <div class="meta">
+              <span>{{ formatDate(item.createdAt) }}</span>
+              <span>{{ formatSize(item.sizeBytes) }}</span>
+            </div>
+            <div class="tags">
+              <span class="tag policy">Política</span>
+              <span class="tag terms">Términos</span>
+              <span class="tag compliance">Checklist</span>
+            </div>
+          </li>
+        </ul>
+      </aside>
 
-      <div class="contracts-list">
-        <div v-for="contract in pendingContracts" :key="contract.id" class="contract-card">
-          <div class="contract-header">
-            <div>
-              <h4>{{ contract.title }}</h4>
-              <span class="contract-type">{{ contract.type }}</span>
-            </div>
-            <span class="contract-status" :class="contract.status">{{ contract.status_text }}</span>
+      <main class="deliverable-details" v-if="currentDetails">
+        <header class="details-header">
+          <div>
+            <h4>{{ formatTitle(currentDeliverable ?? undefined) }}</h4>
+            <span v-if="currentDeliverable" class="details-meta">
+              Generado el {{ formatDate(currentDeliverable.createdAt) }}
+            </span>
+            <p v-if="currentDetails.summary" class="details-summary">
+              {{ currentDetails.summary }}
+            </p>
           </div>
-          
-          <div class="contract-info">
-            <div class="info-row">
-              <span class="label">Cliente:</span>
-              <span class="value">{{ contract.client }}</span>
-            </div>
-            <div class="info-row">
-              <span class="label">Fecha subida:</span>
-              <span class="value">{{ formatDate(contract.uploaded_at) }}</span>
-            </div>
-            <div class="info-row">
-              <span class="label">Cláusulas:</span>
-              <span class="value">{{ contract.clauses_count }}</span>
-            </div>
+          <div class="details-actions">
+            <a
+              v-if="currentDeliverable && currentDeliverable.files.json"
+              :href="buildDownloadLink(currentDeliverable.files.json)"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn ghost"
+            >
+              Descargar JSON
+            </a>
+            <a
+              v-if="currentDeliverable && currentDeliverable.files.markdown"
+              :href="buildDownloadLink(currentDeliverable.files.markdown)"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn ghost"
+            >
+              Descargar Markdown
+            </a>
           </div>
+        </header>
 
-          <div v-if="contract.issues && contract.issues.length > 0" class="contract-issues">
-            <h5>⚠️ Problemas Detectados:</h5>
-            <ul>
-              <li v-for="(issue, idx) in contract.issues" :key="idx">{{ issue }}</li>
+        <div class="details-grid">
+          <section class="card" v-if="currentDetails.privacy_policy">
+            <header class="card-header">
+              <h5>🔒 Política de Privacidad</h5>
+              <span class="badge">RGPD Ready</span>
+            </header>
+            <p class="card-summary">{{ currentDetails.privacy_policy.overview }}</p>
+            <div class="sections">
+              <div
+                v-for="section in currentDetails.privacy_policy.sections"
+                :key="section.heading"
+                class="section-block"
+              >
+                <h6>{{ section.heading }}</h6>
+                <p>{{ section.content }}</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="card" v-if="currentDetails.terms_of_service">
+            <header class="card-header">
+              <h5>📜 Términos de Servicio</h5>
+              <span class="badge violet">Protección contractual</span>
+            </header>
+            <p class="card-summary">{{ currentDetails.terms_of_service.overview }}</p>
+            <div class="sections">
+              <div
+                v-for="clause in currentDetails.terms_of_service.clauses"
+                :key="clause.title"
+                class="section-block"
+              >
+                <h6>{{ clause.title }}</h6>
+                <p>{{ clause.body }}</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="card" v-if="currentDetails.compliance_checklist">
+            <header class="card-header">
+              <h5>✅ Checklist de Cumplimiento</h5>
+            </header>
+            <ul class="checklist">
+              <li
+                v-for="item in currentDetails.compliance_checklist.items"
+                :key="item.description"
+              >
+                <span class="state" :class="item.status">{{ formatStatus(item.status) }}</span>
+                <span class="description">{{ item.description }}</span>
+              </li>
             </ul>
-          </div>
-
-          <div class="contract-actions">
-            <button @click="reviewContract(contract.id)" class="btn-review">👁️ Revisar</button>
-            <button v-if="contract.status === 'reviewed'" @click="approveContract(contract.id)" class="btn-approve">
-              ✅ Aprobar
-            </button>
-            <button v-if="contract.status === 'reviewed'" @click="rejectContract(contract.id)" class="btn-reject">
-              ❌ Rechazar
-            </button>
-            <button @click="downloadContract(contract.id)" class="btn-download">⬇️ Descargar</button>
-          </div>
-        </div>
-
-        <div v-if="pendingContracts.length === 0" class="empty-state">
-          ✅ No hay contratos pendientes de revisión
-        </div>
-      </div>
-    </div>
-
-    <!-- Compliance -->
-    <div v-if="activeTab === 'compliance'" class="compliance-section">
-      <div class="section-header">
-        <h4>Auditorías de Cumplimiento</h4>
-        <button @click="runComplianceCheck" class="btn-run">🔍 Nueva Auditoría</button>
-      </div>
-
-      <div class="compliance-overview">
-        <div class="compliance-card">
-          <h4>🇪🇺 GDPR</h4>
-          <div class="compliance-score">
-            <div class="score-circle" :style="{ background: getScoreColor(98) }">
-              <span>98%</span>
+            <div v-if="currentDetails.compliance_checklist.alerts?.length" class="alerts">
+              <h6>Alertas legales</h6>
+              <ul>
+                <li v-for="alert in currentDetails.compliance_checklist.alerts" :key="alert">
+                  {{ alert }}
+                </li>
+              </ul>
             </div>
-            <p>Conforme</p>
-          </div>
-          <ul class="compliance-checks">
-            <li class="check-ok">✅ Consentimiento</li>
-            <li class="check-ok">✅ Derechos ARCO</li>
-            <li class="check-warning">⚠️ Política de cookies (actualizar)</li>
-          </ul>
+          </section>
         </div>
+      </main>
 
-        <div class="compliance-card">
-          <h4>🔐 LOPD</h4>
-          <div class="compliance-score">
-            <div class="score-circle" :style="{ background: getScoreColor(100) }">
-              <span>100%</span>
-            </div>
-            <p>Conforme</p>
-          </div>
-          <ul class="compliance-checks">
-            <li class="check-ok">✅ Registro de actividades</li>
-            <li class="check-ok">✅ DPO asignado</li>
-            <li class="check-ok">✅ Evaluación de impacto</li>
-          </ul>
+      <main class="deliverable-details" v-else>
+        <div class="empty-state">
+          <div class="icon">📚</div>
+          <h4>Selecciona un entregable legal</h4>
+          <p>Elige un paquete generado para revisar políticas y condiciones.</p>
         </div>
+      </main>
+    </section>
 
-        <div class="compliance-card">
-          <h4>📊 ISO 27001</h4>
-          <div class="compliance-score">
-            <div class="score-circle" :style="{ background: getScoreColor(85) }">
-              <span>85%</span>
-            </div>
-            <p>En progreso</p>
-          </div>
-          <ul class="compliance-checks">
-            <li class="check-ok">✅ Gestión de riesgos</li>
-            <li class="check-warning">⚠️ Políticas de seguridad</li>
-            <li class="check-pending">⏳ Auditoría externa pendiente</li>
-          </ul>
-        </div>
+    <section v-else class="empty-container">
+      <div v-if="isLoading" class="empty-state">
+        <div class="spinner"></div>
+        <p>Generando documentación legal…</p>
       </div>
-    </div>
-
-    <!-- Políticas -->
-    <div v-if="activeTab === 'policies'" class="policies-section">
-      <div class="section-header">
-        <h4>Políticas y Documentos Legales</h4>
-        <button @click="createPolicy" class="btn-create">+ Nueva Política</button>
+      <div v-else class="empty-state">
+        <div class="icon">⚖️</div>
+        <h4>Sin entregables disponibles</h4>
+        <p>
+          Solicita a JUSTICIA un nuevo paquete legal y aparecerá aquí listo para descargar.
+        </p>
       </div>
+    </section>
 
-      <div class="policies-list">
-        <div v-for="policy in policies" :key="policy.id" class="policy-card">
-          <div class="policy-header">
-            <h4>{{ policy.title }}</h4>
-            <span class="policy-version">v{{ policy.version }}</span>
-          </div>
-          <p class="policy-description">{{ policy.description }}</p>
-          <div class="policy-meta">
-            <span>Última actualización: {{ formatDate(policy.updated_at) }}</span>
-            <span :class="['policy-status', policy.status]">{{ policy.status_text }}</span>
-          </div>
-          <div class="policy-actions">
-            <button @click="viewPolicy(policy.id)" class="btn-view">👁️ Ver</button>
-            <button @click="editPolicy(policy.id)" class="btn-edit">✏️ Editar</button>
-            <button @click="publishPolicy(policy.id)" class="btn-publish">🚀 Publicar</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- GDPR -->
-    <div v-if="activeTab === 'gdpr'" class="gdpr-section">
-      <div class="section-header">
-        <h4>Gestión GDPR</h4>
-      </div>
-
-      <div class="gdpr-cards">
-        <div class="gdpr-card">
-          <h4>📝 Solicitudes ARCO</h4>
-          <p class="gdpr-description">Acceso, Rectificación, Cancelación, Oposición</p>
-          <div class="gdpr-stat">
-            <span class="stat-number">{{ arcoRequests.length }}</span>
-            <span class="stat-label">Pendientes</span>
-          </div>
-          <button @click="viewArcoRequests" class="btn-manage">Gestionar</button>
-        </div>
-
-        <div class="gdpr-card">
-          <h4>🗑️ Derecho al Olvido</h4>
-          <p class="gdpr-description">Solicitudes de eliminación de datos</p>
-          <div class="gdpr-stat">
-            <span class="stat-number">0</span>
-            <span class="stat-label">Pendientes</span>
-          </div>
-          <button @click="viewDeletionRequests" class="btn-manage">Gestionar</button>
-        </div>
-
-        <div class="gdpr-card">
-          <h4>📦 Portabilidad</h4>
-          <p class="gdpr-description">Exportación de datos personales</p>
-          <div class="gdpr-stat">
-            <span class="stat-number">2</span>
-            <span class="stat-label">Pendientes</span>
-          </div>
-          <button @click="viewPortabilityRequests" class="btn-manage">Gestionar</button>
-        </div>
-
-        <div class="gdpr-card">
-          <h4>🔔 Notificaciones</h4>
-          <p class="gdpr-description">Brechas de seguridad (72h AEPD)</p>
-          <div class="gdpr-stat">
-            <span class="stat-number">0</span>
-            <span class="stat-label">Activas</span>
-          </div>
-          <button @click="viewNotifications" class="btn-manage">Gestionar</button>
-        </div>
-      </div>
-
-      <div class="data-registry">
-        <h4>📊 Registro de Actividades de Tratamiento</h4>
-        <div class="registry-table">
-          <div class="table-header">
-            <span>Tratamiento</span>
-            <span>Finalidad</span>
-            <span>Base legal</span>
-            <span>Categorías</span>
-          </div>
-          <div class="table-row">
-            <span>Gestión de clientes</span>
-            <span>Facturación</span>
-            <span>Ejecución contrato</span>
-            <span>Identificación, contacto</span>
-          </div>
-          <div class="table-row">
-            <span>Marketing</span>
-            <span>Campañas publicitarias</span>
-            <span>Consentimiento</span>
-            <span>Email, preferencias</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    <footer class="workspace-footer">
+      <p>
+        Descarga el Markdown para enviarlo a tu equipo legal o integrarlo en la web sin esfuerzo.
+      </p>
+    </footer>
   </div>
 </template>
 
-<script setup>
-import { ref } from 'vue'
+<script setup lang="ts">
+import { onMounted, ref, computed, watch } from 'vue';
+import { useAutomationDeliverables } from '@/composables/useAutomationDeliverables';
 
-const activeTab = ref('contracts')
+const {
+  items: deliverables,
+  isLoading,
+  error,
+  load,
+  buildDownloadLinkFor,
+  fetchDeliverableData,
+} = useAutomationDeliverables('JUSTICIA');
 
-const pendingContracts = ref([
-  {
-    id: 1,
-    title: 'Contrato de Suscripción - Empresa XYZ SL',
-    type: 'Subscription Agreement',
-    client: 'Empresa XYZ SL',
-    uploaded_at: new Date(Date.now() - 1000 * 3600 * 24 * 2),
-    clauses_count: 23,
-    status: 'reviewed',
-    status_text: 'Revisado',
-    issues: [
-      'Cláusula 12: Falta definir período de preaviso para cancelación',
-      'Cláusula 18: Términos de renovación automática deben ser más claros'
-    ]
-  },
-  {
-    id: 2,
-    title: 'Acuerdo de Confidencialidad - Partner Tech SA',
-    type: 'NDA',
-    client: 'Partner Tech SA',
-    uploaded_at: new Date(Date.now() - 1000 * 3600 * 12),
-    clauses_count: 8,
-    status: 'pending',
-    status_text: 'Pendiente',
-    issues: []
+const selectedId = ref<string | null>(null);
+const currentDetails = ref<any>(null);
+
+const currentDeliverable = computed(() =>
+  deliverables.value.find((item) => item.id === selectedId.value) || null
+);
+
+const buildDownloadLink = buildDownloadLinkFor;
+
+const reload = async () => {
+  await load();
+  if (!deliverables.value.length) {
+    selectedId.value = null;
+    currentDetails.value = null;
+    return;
   }
-])
-
-const policies = ref([
-  {
-    id: 1,
-    title: 'Política de Privacidad',
-    description: 'Tratamiento de datos personales según GDPR',
-    version: '2.1',
-    updated_at: new Date(Date.now() - 1000 * 3600 * 24 * 15),
-    status: 'published',
-    status_text: 'Publicada'
-  },
-  {
-    id: 2,
-    title: 'Términos y Condiciones',
-    description: 'Condiciones generales de uso del servicio',
-    version: '3.0',
-    updated_at: new Date(Date.now() - 1000 * 3600 * 24 * 5),
-    status: 'draft',
-    status_text: 'Borrador'
-  },
-  {
-    id: 3,
-    title: 'Política de Cookies',
-    description: 'Uso de cookies y tecnologías similares',
-    version: '1.5',
-    updated_at: new Date(Date.now() - 1000 * 3600 * 24 * 30),
-    status: 'published',
-    status_text: 'Publicada'
+  const previous = selectedId.value;
+  const exists = previous && deliverables.value.some((item) => item.id === previous);
+  if (!exists) {
+    selectedId.value = deliverables.value[0].id;
+  } else {
+    await loadDetails();
   }
-])
+};
 
-const arcoRequests = ref([
-  { id: 1, type: 'access', client: 'Juan Pérez' },
-  { id: 2, type: 'rectification', client: 'María García' }
-])
-
-function formatDate(date) {
-  return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
-
-function getScoreColor(score) {
-  if (score >= 95) return 'linear-gradient(135deg, #10b981, #059669)'
-  if (score >= 80) return 'linear-gradient(135deg, #eab308, #ca8a04)'
-  return 'linear-gradient(135deg, #ef4444, #dc2626)'
-}
-
-function uploadContract() {
-  console.log('Subir nuevo contrato')
-}
-
-function reviewContract(id) {
-  console.log('Revisar contrato:', id)
-}
-
-function approveContract(id) {
-  if (confirm('¿Aprobar este contrato?')) {
-    console.log('Aprobar contrato:', id)
+const loadDetails = async () => {
+  if (!currentDeliverable.value) {
+    currentDetails.value = null;
+    return;
   }
-}
-
-function rejectContract(id) {
-  const reason = prompt('¿Motivo del rechazo?')
-  if (reason) {
-    console.log('Rechazar contrato:', id, reason)
+  try {
+    currentDetails.value = await fetchDeliverableData(currentDeliverable.value);
+  } catch (err) {
+    console.error('Error cargando paquete legal', err);
+    currentDetails.value = null;
   }
-}
+};
 
-function downloadContract(id) {
-  console.log('Descargar contrato:', id)
-}
-
-function runComplianceCheck() {
-  console.log('Ejecutar auditoría de compliance')
-}
-
-function createPolicy() {
-  console.log('Crear nueva política')
-}
-
-function viewPolicy(id) {
-  console.log('Ver política:', id)
-}
-
-function editPolicy(id) {
-  console.log('Editar política:', id)
-}
-
-function publishPolicy(id) {
-  if (confirm('¿Publicar esta política en la web?')) {
-    console.log('Publicar política:', id)
+const selectDeliverable = (id: string) => {
+  if (selectedId.value !== id) {
+    selectedId.value = id;
   }
-}
+};
 
-function viewArcoRequests() {
-  console.log('Ver solicitudes ARCO')
-}
+const formatTitle = (item?: { id: string }) => {
+  if (!item) return 'Paquete legal';
+  const parts = item.id.split('/');
+  const filename = parts[parts.length - 1];
+  return filename.replace(/_/g, ' ').replace(/\d{8}T\d{6}Z$/, '').trim() || 'Paquete legal';
+};
 
-function viewDeletionRequests() {
-  console.log('Ver solicitudes de eliminación')
-}
+const formatDate = (timestamp: number) =>
+  new Date(timestamp * 1000).toLocaleString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
-function viewPortabilityRequests() {
-  console.log('Ver solicitudes de portabilidad')
-}
+const formatSize = (bytes: number) => {
+  if (!bytes) return '0 KB';
+  const units = ['B', 'KB', 'MB'];
+  let value = bytes;
+  let index = 0;
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024;
+    index += 1;
+  }
+  return `${value.toFixed(1)} ${units[index]}`;
+};
 
-function viewNotifications() {
-  console.log('Ver notificaciones de brechas')
-}
+const formatStatus = (status: string) => {
+  if (!status) return 'Pendiente';
+  const map: Record<string, string> = {
+    completed: 'Completado',
+    pending: 'Pendiente',
+    review: 'Revisión',
+  };
+  return map[status.toLowerCase()] || status;
+};
+
+watch(selectedId, loadDetails);
+
+onMounted(async () => {
+  await reload();
+});
 </script>
 
 <style scoped>
 .justicia-workspace {
-  padding: 20px;
-}
-
-.workspace-header h3 {
-  font-size: 24px;
-  margin-bottom: 15px;
-  color: #1f2937;
-}
-
-.tabs {
-  display: flex;
-  gap: 10px;
-  border-bottom: 2px solid #e5e7eb;
-  margin-bottom: 30px;
-}
-
-.tabs button {
-  padding: 10px 20px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  font-size: 14px;
-  color: #6b7280;
-  transition: all 0.3s;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-}
-
-.tabs button.active {
-  color: #8b5cf6;
-  border-bottom-color: #8b5cf6;
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.section-header h4 {
-  font-size: 18px;
-  color: #1f2937;
-}
-
-.btn-upload,
-.btn-run,
-.btn-create {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 8px;
-  background: #8b5cf6;
-  color: white;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-  transition: all 0.2s;
-}
-
-.btn-upload:hover,
-.btn-run:hover,
-.btn-create:hover {
-  background: #7c3aed;
-}
-
-.contracts-list,
-.policies-list {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
+  padding: 24px 32px 48px;
+  background: radial-gradient(circle at top right, rgba(129, 140, 248, 0.12), transparent 55%);
+  min-height: calc(100vh - 120px);
 }
 
-.contract-card,
-.policy-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 20px;
-  background: white;
-}
-
-.contract-header,
-.policy-header {
+.workspace-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 15px;
+  gap: 16px;
 }
 
-.contract-header h4,
-.policy-header h4 {
-  font-size: 18px;
-  margin: 0 0 5px;
-  color: #1f2937;
+.workspace-header h3 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
 }
 
-.contract-type {
-  font-size: 13px;
-  color: #6b7280;
-  background: #f3f4f6;
-  padding: 4px 12px;
-  border-radius: 4px;
-  display: inline-block;
-  margin-top: 5px;
+.workspace-header .subtitle {
+  font-size: 15px;
+  color: #475569;
+  margin-top: 4px;
 }
 
-.contract-status,
-.policy-status {
-  padding: 6px 14px;
-  border-radius: 6px;
-  font-size: 12px;
+.refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(129, 140, 248, 0.4);
+  background: rgba(129, 140, 248, 0.12);
+  color: #4338ca;
   font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.contract-status.reviewed {
-  background: #dbeafe;
-  color: #1e40af;
+.refresh-btn:hover:not(:disabled) {
+  background: rgba(129, 140, 248, 0.2);
 }
 
-.contract-status.pending {
-  background: #fef3c7;
-  color: #92400e;
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
-.contract-status.approved {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.contract-info {
-  margin-bottom: 15px;
-}
-
-.info-row {
+.error-banner {
   display: flex;
-  margin-bottom: 8px;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.12);
+  color: #b91c1c;
   font-size: 14px;
 }
 
-.info-row .label {
-  color: #6b7280;
-  min-width: 120px;
+.workspace-body {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 24px;
 }
 
-.info-row .value {
-  color: #1f2937;
-  font-weight: 500;
+.deliverable-list {
+  background: #ffffff;
+  border-radius: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  padding: 20px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.contract-issues {
-  background: #fef2f2;
-  border-left: 4px solid #ef4444;
-  padding: 15px;
-  margin-bottom: 15px;
-  border-radius: 6px;
+.deliverable-list h4 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
 }
 
-.contract-issues h5 {
-  font-size: 14px;
-  margin: 0 0 10px;
-  color: #991b1b;
-}
-
-.contract-issues ul {
+.deliverable-list ul {
+  list-style: none;
   margin: 0;
-  padding-left: 20px;
-  font-size: 13px;
-  color: #dc2626;
-}
-
-.contract-issues li {
-  margin-bottom: 5px;
-}
-
-.contract-actions,
-.policy-actions {
+  padding: 0;
   display: flex;
+  flex-direction: column;
   gap: 10px;
 }
 
-.contract-actions button,
-.policy-actions button {
-  flex: 1;
-  padding: 10px 16px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
+.deliverable-list li {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: rgba(248, 250, 252, 0.9);
   cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-review,
-.btn-view {
-  background: #3b82f6;
-  color: white;
-}
-
-.btn-review:hover,
-.btn-view:hover {
-  background: #2563eb;
-}
-
-.btn-approve {
-  background: #10b981;
-  color: white;
-}
-
-.btn-approve:hover {
-  background: #059669;
-}
-
-.btn-reject {
-  background: #ef4444;
-  color: white;
-}
-
-.btn-reject:hover {
-  background: #dc2626;
-}
-
-.btn-download,
-.btn-edit {
-  background: #6b7280;
-  color: white;
-}
-
-.btn-download:hover,
-.btn-edit:hover {
-  background: #4b5563;
-}
-
-.btn-publish {
-  background: #8b5cf6;
-  color: white;
-}
-
-.btn-publish:hover {
-  background: #7c3aed;
-}
-
-.compliance-overview {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
-  margin-bottom: 30px;
-}
-
-.compliance-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 20px;
-  background: white;
-  text-align: center;
-}
-
-.compliance-card h4 {
-  font-size: 18px;
-  margin: 0 0 20px;
-  color: #1f2937;
-}
-
-.compliance-score {
-  margin-bottom: 20px;
-}
-
-.score-circle {
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
+  transition: all 0.2s ease;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 10px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  flex-direction: column;
+  gap: 6px;
 }
 
-.score-circle span {
-  font-size: 28px;
-  font-weight: 700;
-  color: white;
+.deliverable-list li.active {
+  border-color: rgba(129, 140, 248, 0.45);
+  background: rgba(129, 140, 248, 0.12);
+  box-shadow: 0 6px 14px rgba(129, 140, 248, 0.2);
 }
 
-.compliance-score p {
-  font-size: 14px;
-  color: #6b7280;
-  margin: 0;
+.deliverable-list .title {
+  font-weight: 600;
+  color: #1e293b;
 }
 
-.compliance-checks {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  text-align: left;
-}
-
-.compliance-checks li {
-  padding: 8px 0;
-  font-size: 14px;
-  border-bottom: 1px solid #f3f4f6;
-}
-
-.compliance-checks li:last-child {
-  border-bottom: none;
-}
-
-.check-ok {
-  color: #059669;
-}
-
-.check-warning {
-  color: #d97706;
-}
-
-.check-pending {
-  color: #6b7280;
-}
-
-.policy-version {
-  background: #f3f4f6;
-  padding: 4px 12px;
-  border-radius: 4px;
+.deliverable-list .meta {
+  display: flex;
+  gap: 8px;
   font-size: 12px;
-  color: #6b7280;
+  color: #64748b;
+}
+
+.deliverable-list .tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tag {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
   font-weight: 600;
 }
 
-.policy-description {
-  font-size: 14px;
-  color: #4b5563;
-  margin-bottom: 15px;
+.tag.policy {
+  background: rgba(165, 243, 252, 0.8);
+  color: #0f766e;
 }
 
-.policy-meta {
+.tag.terms {
+  background: rgba(199, 210, 254, 0.85);
+  color: #3730a3;
+}
+
+.tag.compliance {
+  background: rgba(252, 231, 243, 0.8);
+  color: #a21caf;
+}
+
+.deliverable-details {
+  background: #ffffff;
+  border-radius: 24px;
+  border: 1px solid rgba(15, 23, 42, 0.05);
+  padding: 28px;
+  box-shadow: 0 18px 35px rgba(15, 23, 42, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.details-header h4 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.details-meta {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.details-summary {
+  margin-top: 8px;
+  color: #475569;
+  font-size: 14px;
+}
+
+.details-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  transition: transform 0.15s;
+}
+
+.btn.ghost {
+  border: 1px solid rgba(129, 140, 248, 0.4);
+  background: rgba(129, 140, 248, 0.12);
+  color: #4338ca;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.details-grid {
+  display: grid;
+  gap: 20px;
+}
+
+.card {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 18px;
+  padding: 22px;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 55%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
-  font-size: 13px;
-  color: #6b7280;
 }
 
-.policy-status {
-  padding: 4px 12px;
-  border-radius: 4px;
+.card h5 {
+  font-size: 18px;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(129, 140, 248, 0.2);
+  color: #4338ca;
   font-size: 12px;
   font-weight: 600;
 }
 
-.policy-status.published {
-  background: #d1fae5;
-  color: #065f46;
+.badge.violet {
+  background: rgba(196, 181, 253, 0.25);
+  color: #6d28d9;
 }
 
-.policy-status.draft {
-  background: #fef3c7;
-  color: #92400e;
+.card-summary {
+  color: #475569;
+  font-size: 14px;
 }
 
-.gdpr-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 20px;
-  margin-bottom: 30px;
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
-.gdpr-card {
-  border: 1px solid #e5e7eb;
+.section-block {
+  background: rgba(227, 233, 255, 0.4);
+  border-radius: 14px;
+  padding: 14px 18px;
+}
+
+.section-block h6 {
+  font-size: 15px;
+  color: #1d4ed8;
+  margin-bottom: 6px;
+}
+
+.section-block p {
+  color: #475569;
+  font-size: 14px;
+}
+
+.checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.checklist li {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  background: rgba(236, 254, 255, 0.6);
   border-radius: 12px;
-  padding: 20px;
-  background: white;
+  padding: 12px 16px;
+}
+
+.state {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.state.completed {
+  background: rgba(167, 243, 208, 0.9);
+  color: #047857;
+}
+
+.state.pending {
+  background: rgba(254, 226, 226, 0.9);
+  color: #b91c1c;
+}
+
+.state.review {
+  background: rgba(254, 249, 195, 0.9);
+  color: #b45309;
+}
+
+.description {
+  color: #475569;
+  font-size: 14px;
+}
+
+.alerts {
+  margin-top: 12px;
+}
+
+.alerts h6 {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: #7c3aed;
+}
+
+.alerts ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.empty-container {
+  background: rgba(248, 250, 252, 0.7);
+  border: 2px dashed rgba(148, 163, 184, 0.5);
+  border-radius: 20px;
+  padding: 60px 30px;
   text-align: center;
-}
-
-.gdpr-card h4 {
-  font-size: 16px;
-  margin: 0 0 10px;
-  color: #1f2937;
-}
-
-.gdpr-description {
-  font-size: 13px;
-  color: #6b7280;
-  margin-bottom: 20px;
-}
-
-.gdpr-stat {
-  margin-bottom: 20px;
-}
-
-.stat-number {
-  display: block;
-  font-size: 48px;
-  font-weight: 700;
-  color: #8b5cf6;
-  margin-bottom: 5px;
-}
-
-.stat-label {
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.btn-manage {
-  width: 100%;
-  padding: 10px 16px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: white;
-  cursor: pointer;
-  font-size: 14px;
-  transition: all 0.2s;
-}
-
-.btn-manage:hover {
-  background: #f9fafb;
-}
-
-.data-registry {
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 20px;
-}
-
-.data-registry h4 {
-  font-size: 16px;
-  margin: 0 0 20px;
-  color: #1f2937;
-}
-
-.registry-table {
-  width: 100%;
-}
-
-.table-header,
-.table-row {
-  display: grid;
-  grid-template-columns: 2fr 2fr 1.5fr 2fr;
-  gap: 15px;
-  padding: 12px 0;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.table-header {
-  font-weight: 700;
-  font-size: 13px;
-  color: #6b7280;
-  text-transform: uppercase;
-}
-
-.table-row {
-  font-size: 14px;
-  color: #1f2937;
+  color: #475569;
 }
 
 .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.empty-state .icon {
+  font-size: 42px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 4px solid rgba(129, 140, 248, 0.2);
+  border-top-color: #6366f1;
+  animation: spin 1s linear infinite;
+}
+
+.workspace-footer {
+  font-size: 13px;
+  color: #64748b;
   text-align: center;
-  padding: 60px;
-  color: #6b7280;
-  font-size: 16px;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 900px) {
+  .workspace-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .justicia-workspace {
+    padding: 20px 16px 80px;
+  }
+
+  .workspace-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .refresh-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .deliverable-list {
+    padding: 16px;
+  }
+
+  .details-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .details-actions {
+    width: 100%;
+    gap: 8px;
+  }
 }
 </style>
 

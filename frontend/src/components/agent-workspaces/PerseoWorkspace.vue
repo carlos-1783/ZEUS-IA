@@ -1,813 +1,704 @@
 <template>
   <div class="perseo-workspace">
-    <div class="workspace-header">
-      <h3>📢 Espacio de Trabajo - PERSEO</h3>
-      <div class="tabs">
-        <button 
-          :class="{ active: activeTab === 'content' }"
-          @click="activeTab = 'content'"
-        >
-          📁 Contenido Creado
-        </button>
-        <button 
-          :class="{ active: activeTab === 'campaigns' }"
-          @click="activeTab = 'campaigns'"
-        >
-          🎯 Campañas
-        </button>
-        <button 
-          :class="{ active: activeTab === 'pending' }"
-          @click="activeTab = 'pending'"
-        >
-          ⏳ Pendientes Aprobación
-        </button>
+    <header class="workspace-header">
+      <div>
+        <h3>📢 Espacio de Trabajo – PERSEO</h3>
+        <p class="subtitle">
+          Generador automático de campañas, guiones y prompts IA listos para lanzar.
+        </p>
       </div>
+      <button class="refresh-btn" :disabled="isLoading" @click="reload">
+        <i class="fas fa-sync-alt"></i>
+        {{ isLoading ? 'Actualizando…' : 'Actualizar' }}
+      </button>
+    </header>
+
+    <div v-if="error" class="error-banner">
+      <i class="fas fa-exclamation-triangle"></i>
+      <span>Hubo un problema al cargar los entregables: {{ error }}</span>
     </div>
 
-    <!-- Contenido Creado -->
-    <div v-if="activeTab === 'content'" class="content-gallery">
-      <div class="gallery-filters">
-        <select v-model="contentFilter">
-          <option value="all">Todos</option>
-          <option value="image">Imágenes</option>
-          <option value="video">Videos</option>
-          <option value="post">Posts</option>
-          <option value="ad">Anuncios</option>
-        </select>
-      </div>
-
-      <div class="gallery-grid">
-        <div 
-          v-for="item in filteredContent" 
-          :key="item.id"
-          class="gallery-item"
-          @click="previewItem(item)"
-        >
-          <div class="item-preview">
-            <img v-if="item.type === 'image'" :src="item.thumbnail" :alt="item.title" />
-            <video v-else-if="item.type === 'video'" :src="item.url" controls></video>
-            <div v-else class="post-preview">
-              <p>{{ item.content.substring(0, 100) }}...</p>
+    <section class="workspace-body" v-if="!isLoading && deliverables.length">
+      <aside class="deliverable-list">
+        <h4>Entregables</h4>
+        <ul>
+          <li
+            v-for="item in deliverables"
+            :key="item.id"
+            :class="{ active: item.id === selectedId }"
+            @click="selectDeliverable(item.id)"
+          >
+            <div class="title">{{ formatTitle(item) }}</div>
+            <div class="meta">
+              <span>{{ formatDate(item.createdAt) }}</span>
+              <span>{{ formatSize(item.sizeBytes) }}</span>
             </div>
+            <div class="tags">
+              <span class="tag">Guion</span>
+              <span class="tag">Prompts IA</span>
+              <span class="tag">Plan Difusión</span>
+            </div>
+          </li>
+        </ul>
+      </aside>
+
+      <main class="deliverable-details" v-if="currentDetails">
+        <header class="details-header">
+          <div>
+            <h4>{{ formatTitle(currentDeliverable ?? undefined) }}</h4>
+            <span v-if="currentDeliverable" class="details-meta">
+              Generado el {{ formatDate(currentDeliverable.createdAt) }}
+            </span>
           </div>
-          <div class="item-info">
-            <h4>{{ item.title }}</h4>
-            <span class="item-date">{{ formatDate(item.created_at) }}</span>
-            <span :class="['item-status', item.status]">{{ item.status }}</span>
+          <div class="details-actions">
+            <a
+              v-if="currentDeliverable && currentDeliverable.files.json"
+              :href="buildDownloadLink(currentDeliverable.files.json)"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn ghost"
+            >
+              Descargar JSON
+            </a>
+            <a
+              v-if="currentDeliverable && currentDeliverable.files.markdown"
+              :href="buildDownloadLink(currentDeliverable.files.markdown)"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn ghost"
+            >
+              Descargar Markdown
+            </a>
           </div>
-          <div class="item-actions">
-            <button v-if="item.status === 'draft'" @click.stop="approveContent(item.id)" class="btn-approve">
-              ✅ Aprobar
-            </button>
-            <button @click.stop="editContent(item.id)" class="btn-edit">
-              ✏️ Editar
-            </button>
-            <button @click.stop="deleteContent(item.id)" class="btn-delete">
-              🗑️ Eliminar
-            </button>
-          </div>
+        </header>
+
+        <div class="details-grid">
+          <section class="card" v-if="currentDetails.video_script">
+            <h5>🎬 Guion de Vídeo</h5>
+            <p class="card-description">{{ currentDetails.video_script.goal }}</p>
+            <ul class="script-list">
+              <li v-for="segment in currentDetails.video_script.structure" :key="segment.segment">
+                <span class="segment-title">{{ segment.segment }}</span>
+                <span class="segment-copy">{{ segment.copy }}</span>
+              </li>
+            </ul>
+            <div v-if="currentDetails.video_script.visual_notes" class="notes">
+              <h6>Notas visuales</h6>
+              <ul>
+                <li v-for="note in currentDetails.video_script.visual_notes" :key="note">
+                  {{ note }}
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <section class="card" v-if="currentDetails.ai_prompts">
+            <h5>🤖 Prompts para IA</h5>
+            <div class="prompts">
+              <div v-for="(data, platform) in currentDetails.ai_prompts" :key="platform" class="prompt">
+                <div class="prompt-header">
+                  <span class="prompt-platform">{{ formatPlatform(platform) }}</span>
+                  <span class="prompt-target">{{ formatPlatformTarget(data) }}</span>
+                </div>
+                <code class="prompt-body">{{ formatPromptBody(data) }}</code>
+              </div>
+            </div>
+          </section>
+
+          <section class="card" v-if="currentDetails.distribution_plan">
+            <h5>📣 Plan de Difusión</h5>
+            <p class="card-description">
+              Lanzamiento previsto el {{ currentDetails.distribution_plan.launch_date }}.
+              Acciones por canal y automatizaciones listas.
+            </p>
+            <div class="channels">
+              <div
+                class="channel"
+                v-for="(channel, name) in currentDetails.distribution_plan.channels"
+                :key="name"
+              >
+                <h6>{{ formatPlatform(name) }}</h6>
+                <ul>
+                  <li v-if="channel.type"><strong>Formato:</strong> {{ channel.type }}</li>
+                  <li v-if="channel.copy"><strong>Mensajes:</strong>
+                    <ul>
+                      <li v-for="line in channel.copy" :key="line">{{ line }}</li>
+                    </ul>
+                  </li>
+                  <li v-if="channel.assets"><strong>Assets:</strong> {{ channel.assets.join(', ') }}</li>
+                  <li v-if="channel.cta"><strong>CTA:</strong> {{ channel.cta }}</li>
+                </ul>
+              </div>
+            </div>
+            <div class="automation" v-if="currentDetails.distribution_plan.automation">
+              <h6>Automatizaciones</h6>
+              <ul>
+                <li v-for="(desc, key) in currentDetails.distribution_plan.automation" :key="key">
+                  <strong>{{ formatPlatform(key) }}:</strong> {{ desc }}
+                </li>
+              </ul>
+            </div>
+          </section>
         </div>
-      </div>
-    </div>
+      </main>
 
-    <!-- Campañas -->
-    <div v-if="activeTab === 'campaigns'" class="campaigns-section">
-      <div class="campaigns-list">
-        <div 
-          v-for="campaign in campaigns" 
-          :key="campaign.id"
-          class="campaign-card"
-        >
-          <div class="campaign-header">
-            <h4>{{ campaign.name }}</h4>
-            <span :class="['campaign-status', campaign.status]">{{ campaign.status }}</span>
-          </div>
-          <div class="campaign-stats">
-            <div class="stat">
-              <span class="stat-label">Presupuesto:</span>
-              <span class="stat-value">€{{ campaign.budget }}</span>
-            </div>
-            <div class="stat">
-              <span class="stat-label">Gastado:</span>
-              <span class="stat-value">€{{ campaign.spent }}</span>
-            </div>
-            <div class="stat">
-              <span class="stat-label">ROI:</span>
-              <span class="stat-value">{{ campaign.roi }}x</span>
-            </div>
-            <div class="stat">
-              <span class="stat-label">Conversiones:</span>
-              <span class="stat-value">{{ campaign.conversions }}</span>
-            </div>
-          </div>
-          <div class="campaign-actions">
-            <button @click="viewCampaign(campaign.id)" class="btn-view">Ver Detalles</button>
-            <button @click="pauseCampaign(campaign.id)" class="btn-pause">Pausar</button>
-          </div>
+      <main class="deliverable-details" v-else>
+        <div class="empty-state">
+          <div class="icon">🗂️</div>
+          <h4>Selecciona un entregable</h4>
+          <p>
+            Haz clic en cualquiera de los entregables de la izquierda para visualizar el guion,
+            prompts y plan de difusión.
+          </p>
         </div>
-      </div>
-    </div>
+      </main>
+    </section>
 
-    <!-- Pendientes de Aprobación -->
-    <div v-if="activeTab === 'pending'" class="pending-section">
-      <div v-if="pendingApprovals.length === 0" class="empty-state">
-        <p>✅ No hay contenido pendiente de aprobación</p>
+    <section v-else class="empty-container">
+      <div v-if="isLoading" class="empty-state">
+        <div class="spinner"></div>
+        <p>Generando entregables de marketing…</p>
       </div>
-      <div v-else class="pending-list">
-        <div 
-          v-for="item in pendingApprovals" 
-          :key="item.id"
-          class="pending-item"
-        >
-          <div class="pending-preview">
-            <h4>{{ item.title }}</h4>
-            <p>{{ item.description }}</p>
-            <div class="preview-content">
-              <img v-if="item.type === 'image'" :src="item.url" />
-              <video v-else-if="item.type === 'video'" :src="item.url" controls></video>
-              <div v-else class="text-preview">{{ item.content }}</div>
-            </div>
-          </div>
-          <div class="pending-actions">
-            <button @click="approveItem(item.id)" class="btn-approve">✅ Aprobar y Publicar</button>
-            <button @click="requestChanges(item.id)" class="btn-edit">✏️ Solicitar Cambios</button>
-            <button @click="rejectItem(item.id)" class="btn-reject">❌ Rechazar</button>
-          </div>
-        </div>
+      <div v-else class="empty-state">
+        <div class="icon">🕒</div>
+        <h4>Sin entregables aún</h4>
+        <p>
+          Pide a PERSEO una acción desde el chat (“crea un vídeo de lanzamiento…”) y aparecerá aquí
+          el paquete completo de activos listos para descargar.
+        </p>
       </div>
-    </div>
+    </section>
 
-    <!-- Modal de Preview -->
-    <div v-if="previewModal" class="modal-overlay" @click="closePreview">
-      <div class="modal-content" @click.stop>
-        <button class="modal-close" @click="closePreview">×</button>
-        <div class="modal-body">
-          <h3>{{ selectedItem.title }}</h3>
-          <div class="preview-large">
-            <img v-if="selectedItem.type === 'image'" :src="selectedItem.url" />
-            <video v-else-if="selectedItem.type === 'video'" :src="selectedItem.url" controls></video>
-            <div v-else class="post-full">{{ selectedItem.content }}</div>
-          </div>
-          <div class="modal-actions">
-            <button @click="downloadItem" class="btn-download">⬇️ Descargar</button>
-            <button @click="shareItem" class="btn-share">🔗 Compartir</button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <footer class="workspace-footer">
+      <p>
+        Consejo: cuando estés conforme, pulsa “Descargar Markdown” para exportar el briefing directo
+        al equipo creativo o a tu IA de vídeo.
+      </p>
+    </footer>
   </div>
 </template>
 
-<script setup>
-import { ref, computed } from 'vue'
+<script setup lang="ts">
+import { onMounted, ref, computed, watch } from 'vue';
+import { useAutomationDeliverables } from '@/composables/useAutomationDeliverables';
 
-const activeTab = ref('content')
-const contentFilter = ref('all')
-const previewModal = ref(false)
-const selectedItem = ref(null)
+const {
+  items: deliverables,
+  isLoading,
+  error,
+  load,
+  buildDownloadLinkFor,
+  fetchDeliverableData,
+} = useAutomationDeliverables('PERSEO');
 
-// Datos de ejemplo (TODO: Conectar con API)
-const content = ref([
-  {
-    id: 1,
-    type: 'image',
-    title: 'Post LinkedIn - IA en Marketing',
-    thumbnail: '/images/sample-post.jpg',
-    url: '/images/sample-post.jpg',
-    content: '',
-    status: 'published',
-    created_at: '2024-11-04T10:30:00'
-  },
-  {
-    id: 2,
-    type: 'video',
-    title: 'Video Promocional - Black Friday',
-    thumbnail: '/images/sample-video-thumb.jpg',
-    url: '/videos/sample-promo.mp4',
-    content: '',
-    status: 'draft',
-    created_at: '2024-11-04T12:00:00'
-  },
-  {
-    id: 3,
-    type: 'post',
-    title: 'Post Instagram - Lanzamiento',
-    thumbnail: '',
-    url: '',
-    content: '🚀 Hoy lanzamos algo increíble. ZEUS-IA está aquí para revolucionar cómo gestionas tu empresa...',
-    status: 'draft',
-    created_at: '2024-11-04T14:15:00'
+const selectedId = ref<string | null>(null);
+const currentDetails = ref<any>(null);
+const isLoadingDetails = ref(false);
+
+const currentDeliverable = computed(() =>
+  deliverables.value.find((item) => item.id === selectedId.value) || null
+);
+
+const buildDownloadLink = buildDownloadLinkFor;
+
+const reload = async () => {
+  await load();
+  if (!deliverables.value.length) {
+    selectedId.value = null;
+    currentDetails.value = null;
+    return;
   }
-])
-
-const campaigns = ref([
-  {
-    id: 1,
-    name: 'Marketing Digital España',
-    status: 'active',
-    budget: 500,
-    spent: 342,
-    roi: 4.2,
-    conversions: 45
-  },
-  {
-    id: 2,
-    name: 'Instagram Awareness',
-    status: 'active',
-    budget: 300,
-    spent: 180,
-    roi: 3.1,
-    conversions: 28
+  const previous = selectedId.value;
+  const exists = previous && deliverables.value.some((item) => item.id === previous);
+  if (!exists) {
+    selectedId.value = deliverables.value[0].id;
+  } else {
+    await loadDetails();
   }
-])
+};
 
-const pendingApprovals = ref([
-  {
-    id: 1,
-    type: 'ad',
-    title: 'Anuncio Google Ads - Cerveza 2x1',
-    description: 'Campaña promocional para Black Friday',
-    url: '',
-    content: '🍺 BLACK FRIDAY ESPECIAL\n\n2x1 en todas nuestras cervezas artesanales\n\nSolo este fin de semana. ¡No te lo pierdas!\n\n👉 www.tucerveceria.com'
+const loadDetails = async () => {
+  if (!currentDeliverable.value) {
+    currentDetails.value = null;
+    return;
   }
-])
-
-const filteredContent = computed(() => {
-  if (contentFilter.value === 'all') return content.value
-  return content.value.filter(item => item.type === contentFilter.value)
-})
-
-function formatDate(dateString) {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-}
-
-function previewItem(item) {
-  selectedItem.value = item
-  previewModal.value = true
-}
-
-function closePreview() {
-  previewModal.value = false
-  selectedItem.value = null
-}
-
-function approveContent(id) {
-  console.log('Aprobar contenido:', id)
-  // TODO: Llamar API
-}
-
-function editContent(id) {
-  console.log('Editar contenido:', id)
-  // TODO: Abrir editor
-}
-
-function deleteContent(id) {
-  if (confirm('¿Eliminar este contenido?')) {
-    console.log('Eliminar:', id)
-    // TODO: Llamar API
+  isLoadingDetails.value = true;
+  try {
+    currentDetails.value = await fetchDeliverableData(currentDeliverable.value);
+  } catch (err) {
+    console.error('Error cargando detalle de entregable', err);
+    currentDetails.value = null;
+  } finally {
+    isLoadingDetails.value = false;
   }
-}
+};
 
-function approveItem(id) {
-  console.log('Aprobar y publicar:', id)
-  // TODO: Llamar API
-}
-
-function requestChanges(id) {
-  const feedback = prompt('¿Qué cambios necesitas?')
-  if (feedback) {
-    console.log('Solicitar cambios:', id, feedback)
-    // TODO: Llamar API
+const selectDeliverable = (id: string) => {
+  if (selectedId.value !== id) {
+    selectedId.value = id;
   }
-}
+};
 
-function rejectItem(id) {
-  if (confirm('¿Rechazar este contenido?')) {
-    console.log('Rechazar:', id)
-    // TODO: Llamar API
+const formatTitle = (item?: { id: string }) => {
+  if (!item) return 'Entregable';
+  const parts = item.id.split('/');
+  const filename = parts[parts.length - 1];
+  return filename.replace(/_/g, ' ').replace(/\d{8}T\d{6}Z$/, '').trim() || 'Campaña';
+};
+
+const formatDate = (timestamp: number) => {
+  return new Date(timestamp * 1000).toLocaleString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const formatSize = (bytes: number) => {
+  if (!bytes) return '0 KB';
+  const units = ['B', 'KB', 'MB'];
+  let value = bytes;
+  let index = 0;
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024;
+    index += 1;
   }
-}
+  return `${value.toFixed(1)} ${units[index]}`;
+};
 
-function viewCampaign(id) {
-  console.log('Ver campaña:', id)
-  // TODO: Mostrar detalles
-}
+const formatPlatform = (name: string | number) => String(name).replace(/_/g, ' ').toUpperCase();
 
-function pauseCampaign(id) {
-  console.log('Pausar campaña:', id)
-  // TODO: Llamar API
-}
+const formatPlatformTarget = (value: any) => {
+  if (value && typeof value === 'object') {
+    if ('platform' in value) return value.platform;
+    if ('voice' in value) return value.voice;
+    if ('text' in value) return 'texto';
+  }
+  return 'prompt';
+};
 
-function downloadItem() {
-  console.log('Descargar:', selectedItem.value)
-  // TODO: Implementar descarga
-}
+const formatPromptBody = (value: any) => {
+  if (value && typeof value === 'object') {
+    return value.prompt || value.text || JSON.stringify(value);
+  }
+  return String(value);
+};
 
-function shareItem() {
-  console.log('Compartir:', selectedItem.value)
-  // TODO: Implementar compartir
-}
+watch(selectedId, loadDetails);
+
+onMounted(async () => {
+  await reload();
+});
 </script>
 
 <style scoped>
 .perseo-workspace {
-  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px 32px 48px;
+  background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 55%);
+  min-height: calc(100vh - 120px);
 }
 
 .workspace-header {
-  margin-bottom: 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
 }
 
 .workspace-header h3 {
-  font-size: 24px;
-  margin-bottom: 15px;
-  color: #1f2937;
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
 }
 
-.tabs {
+.workspace-header .subtitle {
+  font-size: 15px;
+  color: #475569;
+  margin-top: 4px;
+}
+
+.error-banner {
   display: flex;
+  align-items: center;
   gap: 10px;
-  border-bottom: 2px solid #e5e7eb;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  color: #b91c1c;
+  font-size: 14px;
 }
 
-.tabs button {
-  padding: 10px 20px;
-  border: none;
-  background: none;
+.refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.08);
+  color: #1d4ed8;
+  font-weight: 600;
   cursor: pointer;
-  font-size: 14px;
-  color: #6b7280;
-  transition: all 0.3s;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
+  transition: all 0.2s;
 }
 
-.tabs button.active {
-  color: #3b82f6;
-  border-bottom-color: #3b82f6;
+.refresh-btn:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.15);
 }
 
-.gallery-filters {
-  margin-bottom: 20px;
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
-.gallery-filters select {
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 14px;
-}
-
-.gallery-grid {
+.workspace-body {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: 320px 1fr;
+  gap: 24px;
+}
+
+.deliverable-list {
+  background: #ffffff;
+  border-radius: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  padding: 20px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.deliverable-list h4 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.deliverable-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.deliverable-list li {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: rgba(248, 250, 252, 0.8);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.deliverable-list li.active {
+  border-color: rgba(59, 130, 246, 0.45);
+  background: rgba(59, 130, 246, 0.08);
+  box-shadow: 0 6px 14px rgba(59, 130, 246, 0.1);
+}
+
+.deliverable-list .title {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.deliverable-list .meta {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.deliverable-list .tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tag {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.1);
+  color: #0f766e;
+  font-weight: 600;
+}
+
+.deliverable-details {
+  background: #ffffff;
+  border-radius: 24px;
+  border: 1px solid rgba(15, 23, 42, 0.05);
+  padding: 28px;
+  box-shadow: 0 18px 35px rgba(15, 23, 42, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.details-header h4 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.details-meta {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.details-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  transition: transform 0.15s;
+}
+
+.btn.ghost {
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.05);
+  color: #1d4ed8;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.details-grid {
+  display: grid;
   gap: 20px;
 }
 
-.gallery-item {
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.gallery-item:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-}
-
-.item-preview {
-  width: 100%;
-  height: 200px;
-  background: #f3f4f6;
+.card {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 18px;
+  padding: 22px;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 55%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
   display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
+  flex-direction: column;
+  gap: 14px;
 }
 
-.item-preview img,
-.item-preview video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.card h5 {
+  font-size: 18px;
+  color: #0f172a;
+  font-weight: 700;
 }
 
-.post-preview {
-  padding: 20px;
-  text-align: left;
+.card-description {
+  color: #475569;
   font-size: 14px;
-  color: #4b5563;
 }
 
-.item-info {
-  padding: 15px;
+.script-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
 }
 
-.item-info h4 {
-  font-size: 16px;
-  margin-bottom: 8px;
-  color: #1f2937;
+.script-list li {
+  background: rgba(59, 130, 246, 0.08);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.item-date {
-  font-size: 12px;
-  color: #9ca3af;
-  margin-right: 10px;
-}
-
-.item-status {
-  font-size: 11px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-weight: 600;
+.segment-title {
+  font-weight: 700;
+  color: #1d4ed8;
+  font-size: 13px;
   text-transform: uppercase;
 }
 
-.item-status.published {
-  background: #d1fae5;
-  color: #065f46;
+.segment-copy {
+  color: #0f172a;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
-.item-status.draft {
-  background: #fef3c7;
-  color: #92400e;
+.notes ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #475569;
 }
 
-.item-actions {
-  padding: 0 15px 15px;
-  display: flex;
-  gap: 8px;
-}
-
-.item-actions button {
-  flex: 1;
-  padding: 8px 12px;
-  border: none;
-  border-radius: 6px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-approve {
-  background: #10b981;
-  color: white;
-}
-
-.btn-approve:hover {
-  background: #059669;
-}
-
-.btn-edit {
-  background: #3b82f6;
-  color: white;
-}
-
-.btn-edit:hover {
-  background: #2563eb;
-}
-
-.btn-delete,
-.btn-reject {
-  background: #ef4444;
-  color: white;
-}
-
-.btn-delete:hover,
-.btn-reject:hover {
-  background: #dc2626;
-}
-
-.campaigns-list,
-.pending-list {
+.prompts {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
 }
 
-.campaign-card,
-.pending-item {
-  border: 1px solid #e5e7eb;
+.prompt {
+  border: 1px solid rgba(148, 163, 184, 0.3);
   border-radius: 12px;
-  padding: 20px;
-  background: white;
+  padding: 12px 14px;
+  background: rgba(15, 118, 110, 0.05);
 }
 
-.campaign-header {
+.prompt-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-.campaign-status.active {
-  background: #d1fae5;
-  color: #065f46;
-  padding: 4px 12px;
-  border-radius: 4px;
-  font-size: 12px;
+  font-size: 13px;
+  color: #0f766e;
   font-weight: 600;
-}
-
-.campaign-stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 15px;
-  margin-bottom: 15px;
-}
-
-.stat {
-  display: flex;
-  flex-direction: column;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: #6b7280;
-  margin-bottom: 4px;
-}
-
-.stat-value {
-  font-size: 18px;
-  font-weight: 700;
-  color: #1f2937;
-}
-
-.campaign-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.btn-view,
-.btn-pause {
-  padding: 8px 16px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: white;
-  cursor: pointer;
-  font-size: 14px;
-  transition: all 0.2s;
-}
-
-.btn-view:hover,
-.btn-pause:hover {
-  background: #f3f4f6;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 60px 20px;
-  color: #6b7280;
-  font-size: 16px;
-}
-
-.pending-preview h4 {
-  font-size: 18px;
   margin-bottom: 8px;
 }
 
-.pending-preview p {
-  font-size: 14px;
-  color: #6b7280;
-  margin-bottom: 15px;
-}
-
-.preview-content,
-.text-preview {
-  background: #f9fafb;
-  padding: 20px;
-  border-radius: 8px;
-  margin-bottom: 15px;
-}
-
-.text-preview {
+.prompt-body {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  color: #0f172a;
   white-space: pre-wrap;
+  display: block;
+}
+
+.channels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.channel {
+  background: rgba(14, 116, 144, 0.05);
+  border-radius: 12px;
+  padding: 14px 16px;
+  border: 1px solid rgba(14, 116, 144, 0.2);
+}
+
+.channel h6 {
   font-size: 14px;
-  line-height: 1.6;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 8px;
 }
 
-.pending-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.pending-actions button {
-  flex: 1;
-  padding: 10px 16px;
-  border: none;
-  border-radius: 6px;
+.channel ul,
+.automation ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #475569;
   font-size: 14px;
-  cursor: pointer;
-  font-weight: 500;
 }
 
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+.automation {
+  margin-top: 12px;
+}
+
+.empty-container {
+  background: rgba(248, 250, 252, 0.7);
+  border: 2px dashed rgba(148, 163, 184, 0.5);
+  border-radius: 20px;
+  padding: 60px 30px;
+  text-align: center;
+  color: #475569;
+}
+
+.empty-state {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  z-index: 1000;
+  gap: 12px;
 }
 
-.modal-content {
-  background: white;
-  border-radius: 16px;
-  max-width: 800px;
-  max-height: 90vh;
-  overflow: auto;
-  position: relative;
+.empty-state .icon {
+  font-size: 42px;
 }
 
-.modal-close {
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  background: white;
-  border: none;
-  font-size: 32px;
-  cursor: pointer;
+.spinner {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  border: 4px solid rgba(59, 130, 246, 0.2);
+  border-top-color: #3b82f6;
+  animation: spin 1s linear infinite;
 }
 
-.modal-body {
-  padding: 40px;
+.workspace-footer {
+  font-size: 13px;
+  color: #64748b;
+  text-align: center;
 }
 
-.modal-body h3 {
-  font-size: 24px;
-  margin-bottom: 20px;
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
-.preview-large img,
-.preview-large video {
-  width: 100%;
-  border-radius: 8px;
-  margin-bottom: 20px;
-}
+@media (max-width: 900px) {
+  .workspace-body {
+    grid-template-columns: 1fr;
+  }
 
-.post-full {
-  background: #f9fafb;
-  padding: 30px;
-  border-radius: 8px;
-  white-space: pre-wrap;
-  line-height: 1.8;
-  margin-bottom: 20px;
-}
-
-.modal-actions {
-  display: flex;
-  gap: 15px;
-}
-
-.btn-download,
-.btn-share {
-  flex: 1;
-  padding: 12px 20px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  background: white;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.btn-download:hover,
-.btn-share:hover {
-  background: #f3f4f6;
+  .deliverable-details {
+    padding: 20px;
+  }
 }
 
 @media (max-width: 600px) {
   .perseo-workspace {
-    padding: 16px 12px 80px;
+    padding: 20px 16px 80px;
   }
 
-  .workspace-header h3 {
-    font-size: 18px;
-    margin-bottom: 10px;
+  .workspace-header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
-  .tabs {
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .tabs button {
-    flex: 1 1 calc(50% - 6px);
-    padding: 8px 0;
-    font-size: 12px;
-  }
-
-  .gallery-filters {
-    margin-bottom: 12px;
-  }
-
-  .gallery-filters select {
+  .refresh-btn {
     width: 100%;
-    font-size: 12px;
+    justify-content: center;
   }
 
-  .gallery-grid {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-
-  .gallery-item {
-    max-width: 360px;
-    margin: 0 auto;
-  }
-
-  .item-preview {
-    height: 180px;
-  }
-
-  .item-info {
-    padding: 12px;
-  }
-
-  .item-info h4 {
-    font-size: 14px;
-  }
-
-  .item-actions {
-    flex-direction: column;
-    padding: 0 12px 12px;
-  }
-
-  .item-actions button {
-    font-size: 12px;
-    padding: 9px;
-  }
-
-  .campaigns-list,
-  .pending-list {
-    gap: 14px;
-  }
-
-  .campaign-card,
-  .pending-item {
+  .deliverable-list {
     padding: 16px;
-    max-width: 360px;
-    margin: 0 auto;
   }
 
-  .campaign-stats {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-  }
-
-  .campaign-actions {
+  .details-header {
     flex-direction: column;
+    align-items: flex-start;
   }
 
-  .btn-view,
-  .btn-pause {
-    font-size: 13px;
-  }
-
-  .pending-actions {
-    flex-direction: column;
-  }
-
-  .pending-actions button {
-    font-size: 13px;
-    padding: 10px;
-  }
-
-  .modal-content {
-    width: calc(100% - 24px);
-    max-width: 420px;
-  }
-
-  .modal-body {
-    padding: 24px 18px;
-  }
-
-  .modal-body h3 {
-    font-size: 18px;
-  }
-
-  .modal-actions {
-    flex-direction: column;
-  }
-
-  .btn-download,
-  .btn-share {
-    font-size: 13px;
+  .details-actions {
+    width: 100%;
+    gap: 8px;
   }
 }
 </style>
-

@@ -12,6 +12,7 @@ import os
 from app.core.config import settings
 from app.api.v1 import api_router
 from app.db.base import create_tables
+from services.automation import start_agent_automation, stop_agent_automation
 
 # Create FastAPI app
 app = FastAPI(
@@ -115,6 +116,12 @@ async def startup_event():
         db.close()
 
     print("[STARTUP] ✅ Aplicación lista")
+    await start_agent_automation()
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await stop_agent_automation()
 
 # Serve static files (frontend) - FIXED
 if os.path.exists("static"):

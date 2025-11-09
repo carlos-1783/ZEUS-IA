@@ -1,923 +1,699 @@
 <template>
   <div class="afrodita-workspace">
-    <div class="workspace-header">
-      <h3>👥 Espacio de Trabajo - AFRODITA</h3>
-      <div class="tabs">
-        <button :class="{ active: activeTab === 'employees' }" @click="activeTab = 'employees'">
-          👤 Empleados
-        </button>
-        <button :class="{ active: activeTab === 'schedules' }" @click="activeTab = 'schedules'">
-          🕐 Horarios
-        </button>
-        <button :class="{ active: activeTab === 'routes' }" @click="activeTab = 'routes'">
-          🚚 Rutas
-        </button>
-        <button :class="{ active: activeTab === 'vacations' }" @click="activeTab = 'vacations'">
-          🏖️ Vacaciones
-        </button>
+    <header class="workspace-header">
+      <div>
+        <h3>🤝 Espacio de Trabajo – AFRODITA</h3>
+        <p class="subtitle">
+          Playbooks de soporte, onboarding y coordinación automatizados.
+        </p>
       </div>
+      <button class="refresh-btn" :disabled="isLoading" @click="reload">
+        <i class="fas fa-sync-alt"></i>
+        {{ isLoading ? 'Actualizando…' : 'Actualizar' }}
+      </button>
+    </header>
+
+    <div v-if="error" class="error-banner">
+      <i class="fas fa-exclamation-triangle"></i>
+      <span>No se pudieron cargar los playbooks: {{ error }}</span>
     </div>
 
-    <!-- Empleados -->
-    <div v-if="activeTab === 'employees'" class="employees-section">
-      <div class="section-header">
-        <h4>Equipo ({{ employees.length }} empleados)</h4>
-        <button @click="addEmployee" class="btn-add">+ Añadir Empleado</button>
-      </div>
+    <section class="workspace-body" v-if="!isLoading && deliverables.length">
+      <aside class="deliverable-list">
+        <h4>Playbooks generados</h4>
+        <ul>
+          <li
+            v-for="item in deliverables"
+            :key="item.id"
+            :class="{ active: item.id === selectedId }"
+            @click="selectDeliverable(item.id)"
+          >
+            <div class="title">{{ formatTitle(item) }}</div>
+            <div class="meta">
+              <span>{{ formatDate(item.createdAt) }}</span>
+              <span>{{ formatSize(item.sizeBytes) }}</span>
+            </div>
+            <div class="tags">
+              <span class="tag schedule">Agenda</span>
+              <span class="tag onboarding">Onboarding</span>
+              <span class="tag coordination">Coordinación</span>
+            </div>
+          </li>
+        </ul>
+      </aside>
 
-      <div class="employees-grid">
-        <div v-for="emp in employees" :key="emp.id" class="employee-card">
-          <div class="employee-avatar">
-            <img v-if="emp.avatar" :src="emp.avatar" :alt="emp.name" />
-            <div v-else class="avatar-placeholder">{{ emp.name.charAt(0) }}</div>
+      <main class="deliverable-details" v-if="currentDetails">
+        <header class="details-header">
+          <div>
+            <h4>{{ formatTitle(currentDeliverable ?? undefined) }}</h4>
+            <span v-if="currentDeliverable" class="details-meta">
+              Generado el {{ formatDate(currentDeliverable.createdAt) }}
+            </span>
+            <p v-if="currentDetails.summary" class="details-summary">
+              {{ currentDetails.summary }}
+            </p>
           </div>
-          <div class="employee-info">
-            <h4>{{ emp.name }}</h4>
-            <span class="employee-role">{{ emp.role }}</span>
-            <span class="employee-department">{{ emp.department }}</span>
+          <div class="details-actions">
+            <a
+              v-if="currentDeliverable && currentDeliverable.files.json"
+              :href="buildDownloadLink(currentDeliverable.files.json)"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn ghost"
+            >
+              Descargar JSON
+            </a>
+            <a
+              v-if="currentDeliverable && currentDeliverable.files.markdown"
+              :href="buildDownloadLink(currentDeliverable.files.markdown)"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn ghost"
+            >
+              Descargar Markdown
+            </a>
           </div>
-          <div class="employee-status">
-            <span :class="['status-badge', emp.status]">{{ emp.status_text }}</span>
-          </div>
-          <div class="employee-actions">
-            <button @click="viewEmployee(emp.id)" class="btn-view">Ver Perfil</button>
-          </div>
-        </div>
-      </div>
-    </div>
+        </header>
 
-    <!-- Horarios y Fichajes -->
-    <div v-if="activeTab === 'schedules'" class="schedules-section">
-      <div class="date-selector">
-        <button @click="changeWeek(-1)">←</button>
-        <span class="current-week">{{ currentWeekText }}</span>
-        <button @click="changeWeek(1)">→</button>
-      </div>
+        <div class="details-grid">
+          <section class="card" v-if="currentDetails.support_schedule">
+            <header class="card-header">
+              <h5>📅 Agenda de Soporte</h5>
+              <span class="badge">Semanas iniciales</span>
+            </header>
+            <div class="schedule">
+              <div
+                v-for="(week, label) in currentDetails.support_schedule"
+                :key="label"
+                class="week-block"
+              >
+                <h6>{{ formatWeek(label) }} · {{ week.theme }}</h6>
+                <ul>
+                  <li v-for="touch in week.touchpoints" :key="touch.day + touch.channel">
+                    <strong>{{ touch.day }}</strong> · {{ touch.channel }} → {{ touch.goal }}
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </section>
 
-      <div class="schedule-table">
-        <div class="schedule-header">
-          <div class="header-cell employee-col">Empleado</div>
-          <div class="header-cell" v-for="day in weekDays" :key="day">{{ day }}</div>
-          <div class="header-cell">Total</div>
-        </div>
-        <div v-for="emp in employees" :key="emp.id" class="schedule-row">
-          <div class="employee-col">
-            <span>{{ emp.name }}</span>
-          </div>
-          <div class="day-cell" v-for="day in 5" :key="day">
-            <div class="time-entry">08:00 - 17:00</div>
-            <div class="hours">8h</div>
-          </div>
-          <div class="total-cell">
-            <strong>40h</strong>
-          </div>
-        </div>
-      </div>
+          <section class="card" v-if="currentDetails.onboarding_manual">
+            <header class="card-header">
+              <h5>🧭 Manual de Onboarding</h5>
+              <span class="badge teal">Módulos paso a paso</span>
+            </header>
+            <div class="modules">
+              <div
+                v-for="module in currentDetails.onboarding_manual.modules"
+                :key="module.title"
+                class="module"
+              >
+                <h6>{{ module.title }}</h6>
+                <ul>
+                  <li v-for="topic in module.content" :key="topic">{{ topic }}</li>
+                </ul>
+              </div>
+            </div>
+            <div class="resources" v-if="currentDetails.onboarding_manual.resources?.length">
+              <h6>Recursos</h6>
+              <ul>
+                <li v-for="resource in currentDetails.onboarding_manual.resources" :key="resource">
+                  {{ resource }}
+                </li>
+              </ul>
+            </div>
+          </section>
 
-      <div class="pending-approvals">
-        <h4>Fichajes Pendientes de Aprobación</h4>
-        <div v-if="pendingTimeEntries.length === 0" class="empty-state">
-          ✅ No hay fichajes pendientes
-        </div>
-        <div v-else class="approvals-list">
-          <div v-for="entry in pendingTimeEntries" :key="entry.id" class="approval-item">
-            <div class="approval-info">
-              <strong>{{ entry.employee_name }}</strong>
-              <span>{{ formatDate(entry.date) }} - {{ entry.type }}</span>
-              <span class="approval-reason">{{ entry.reason }}</span>
+          <section class="card" v-if="currentDetails.coordination_notes">
+            <header class="card-header">
+              <h5>🤝 Coordinación Multicanal</h5>
+            </header>
+            <div class="meetings">
+              <h6>Ritmo de reuniones</h6>
+              <ul>
+                <li v-for="meeting in currentDetails.coordination_notes.meetings" :key="meeting.frequency">
+                  <strong>{{ meeting.frequency }}</strong> · {{ meeting.participants.join(', ') }} →
+                  {{ meeting.objective }}
+                </li>
+              </ul>
             </div>
-            <div class="approval-actions">
-              <button @click="approveTimeEntry(entry.id)" class="btn-approve">✅</button>
-              <button @click="rejectTimeEntry(entry.id)" class="btn-reject">❌</button>
+            <div class="alerts" v-if="currentDetails.coordination_notes.alerts?.length">
+              <h6>Alertas críticas</h6>
+              <ul>
+                <li v-for="alert in currentDetails.coordination_notes.alerts" :key="alert">
+                  {{ alert }}
+                </li>
+              </ul>
             </div>
-          </div>
+          </section>
         </div>
-      </div>
-    </div>
+      </main>
 
-    <!-- Rutas y Logística -->
-    <div v-if="activeTab === 'routes'" class="routes-section">
-      <div class="section-header">
-        <h4>Rutas de Hoy ({{ routes.length }})</h4>
-        <button @click="createRoute" class="btn-add">+ Nueva Ruta</button>
-      </div>
+      <main class="deliverable-details" v-else>
+        <div class="empty-state">
+          <div class="icon">📝</div>
+          <h4>Selecciona un playbook</h4>
+          <p>Elige un entregable para revisar agenda, recursos y coordinación.</p>
+        </div>
+      </main>
+    </section>
 
-      <div class="routes-grid">
-        <div v-for="route in routes" :key="route.id" class="route-card">
-          <div class="route-header">
-            <h4>{{ route.name }}</h4>
-            <span :class="['route-status', route.status]">{{ route.status_text }}</span>
-          </div>
-          <div class="route-info">
-            <div class="info-item">
-              <span class="info-label">Conductor:</span>
-              <span>{{ route.driver }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">Vehículo:</span>
-              <span>{{ route.vehicle }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">Paradas:</span>
-              <span>{{ route.stops }} entregas</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">Distancia:</span>
-              <span>{{ route.distance_km }} km</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">Tiempo estimado:</span>
-              <span>{{ route.estimated_time }}</span>
-            </div>
-          </div>
-          <div class="route-progress">
-            <div class="progress-bar">
-              <div class="progress-fill" :style="{ width: route.progress + '%' }"></div>
-            </div>
-            <span class="progress-text">{{ route.completed }}/{{ route.stops }} completadas</span>
-          </div>
-          <div class="route-actions">
-            <button @click="viewRoute(route.id)" class="btn-view">📍 Ver Mapa</button>
-            <button @click="optimizeRoute(route.id)" class="btn-optimize">⚡ Optimizar</button>
-          </div>
-        </div>
+    <section v-else class="empty-container">
+      <div v-if="isLoading" class="empty-state">
+        <div class="spinner"></div>
+        <p>Generando playbook de soporte…</p>
       </div>
+      <div v-else class="empty-state">
+        <div class="icon">🤝</div>
+        <h4>Sin entregables disponibles</h4>
+        <p>
+          Solicita a AFRODITA un nuevo plan de soporte y aparecerá aquí automáticamente.
+        </p>
+      </div>
+    </section>
 
-      <div class="fleet-status">
-        <h4>Estado de la Flota</h4>
-        <div class="vehicles-list">
-          <div v-for="vehicle in vehicles" :key="vehicle.id" class="vehicle-item">
-            <div class="vehicle-icon">🚚</div>
-            <div class="vehicle-info">
-              <strong>{{ vehicle.name }}</strong>
-              <span>{{ vehicle.plate }}</span>
-            </div>
-            <div class="vehicle-status">
-              <span :class="['vehicle-badge', vehicle.status]">{{ vehicle.status_text }}</span>
-            </div>
-            <div class="vehicle-metrics">
-              <span>{{ vehicle.km_today }} km hoy</span>
-              <span>Combustible: {{ vehicle.fuel }}%</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Vacaciones -->
-    <div v-if="activeTab === 'vacations'" class="vacations-section">
-      <div class="vacation-calendar">
-        <h4>Calendario de Ausencias</h4>
-        <div class="calendar-grid">
-          <!-- TODO: Implementar calendario visual -->
-          <p class="calendar-placeholder">📅 Calendario próximamente</p>
-        </div>
-      </div>
-
-      <div class="vacation-requests">
-        <h4>Solicitudes Pendientes</h4>
-        <div v-if="vacationRequests.length === 0" class="empty-state">
-          ✅ No hay solicitudes pendientes
-        </div>
-        <div v-else class="requests-list">
-          <div v-for="request in vacationRequests" :key="request.id" class="request-card">
-            <div class="request-header">
-              <strong>{{ request.employee_name }}</strong>
-              <span class="request-type">{{ request.type }}</span>
-            </div>
-            <div class="request-dates">
-              <span>Desde: {{ formatDate(request.from) }}</span>
-              <span>Hasta: {{ formatDate(request.to) }}</span>
-              <span class="request-days">{{ request.days }} días</span>
-            </div>
-            <div class="request-reason">
-              <em>"{{ request.reason }}"</em>
-            </div>
-            <div class="request-actions">
-              <button @click="approveVacation(request.id)" class="btn-approve">✅ Aprobar</button>
-              <button @click="rejectVacation(request.id)" class="btn-reject">❌ Rechazar</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="vacation-summary">
-        <h4>Resumen del Equipo</h4>
-        <div class="summary-grid">
-          <div v-for="emp in employees" :key="emp.id" class="summary-item">
-            <span class="summary-name">{{ emp.name }}</span>
-            <span class="summary-days">{{ emp.vacation_days_remaining }} días disponibles</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    <footer class="workspace-footer">
+      <p>
+        Descarga el Markdown para compartir el playbook completo con tu equipo de customer success.
+      </p>
+    </footer>
   </div>
 </template>
 
-<script setup>
-import { ref, computed } from 'vue'
+<script setup lang="ts">
+import { onMounted, ref, computed, watch } from 'vue';
+import { useAutomationDeliverables } from '@/composables/useAutomationDeliverables';
 
-const activeTab = ref('employees')
-const currentWeek = ref(new Date())
+const {
+  items: deliverables,
+  isLoading,
+  error,
+  load,
+  buildDownloadLinkFor,
+  fetchDeliverableData,
+} = useAutomationDeliverables('AFRODITA');
 
-const weekDays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie']
+const selectedId = ref<string | null>(null);
+const currentDetails = ref<any>(null);
 
-const employees = ref([
-  {
-    id: 1,
-    name: 'Juan Pérez',
-    role: 'Comercial',
-    department: 'Ventas',
-    status: 'active',
-    status_text: 'Activo',
-    avatar: null,
-    vacation_days_remaining: 15
-  },
-  {
-    id: 2,
-    name: 'María García',
-    role: 'Marketing Manager',
-    department: 'Marketing',
-    status: 'active',
-    status_text: 'Activo',
-    avatar: null,
-    vacation_days_remaining: 22
-  },
-  {
-    id: 3,
-    name: 'Pablo Rodríguez',
-    role: 'Repartidor',
-    department: 'Logística',
-    status: 'onleave',
-    status_text: 'De baja',
-    avatar: null,
-    vacation_days_remaining: 10
+const currentDeliverable = computed(() =>
+  deliverables.value.find((item) => item.id === selectedId.value) || null
+);
+
+const buildDownloadLink = buildDownloadLinkFor;
+
+const reload = async () => {
+  await load();
+  if (!deliverables.value.length) {
+    selectedId.value = null;
+    currentDetails.value = null;
+    return;
   }
-])
-
-const pendingTimeEntries = ref([
-  {
-    id: 1,
-    employee_name: 'Juan Pérez',
-    date: '2024-11-04',
-    type: 'Hora extra',
-    reason: '2 horas extra por proyecto urgente'
+  const previous = selectedId.value;
+  const exists = previous && deliverables.value.some((item) => item.id === previous);
+  if (!exists) {
+    selectedId.value = deliverables.value[0].id;
+  } else {
+    await loadDetails();
   }
-])
+};
 
-const routes = ref([
-  {
-    id: 1,
-    name: 'Ruta Norte - Mañana',
-    driver: 'Pablo Rodríguez',
-    vehicle: 'Furgoneta V-001',
-    stops: 12,
-    distance_km: 45,
-    estimated_time: '3h 20min',
-    status: 'in_progress',
-    status_text: 'En curso',
-    progress: 60,
-    completed: 7
-  },
-  {
-    id: 2,
-    name: 'Ruta Centro - Tarde',
-    driver: 'Ana López',
-    vehicle: 'Furgoneta V-002',
-    stops: 8,
-    distance_km: 32,
-    estimated_time: '2h 15min',
-    status: 'pending',
-    status_text: 'Pendiente',
-    progress: 0,
-    completed: 0
+const loadDetails = async () => {
+  if (!currentDeliverable.value) {
+    currentDetails.value = null;
+    return;
   }
-])
-
-const vehicles = ref([
-  {
-    id: 1,
-    name: 'Furgoneta V-001',
-    plate: '1234-ABC',
-    status: 'active',
-    status_text: 'En ruta',
-    km_today: 28,
-    fuel: 65
-  },
-  {
-    id: 2,
-    name: 'Furgoneta V-002',
-    plate: '5678-DEF',
-    status: 'idle',
-    status_text: 'Disponible',
-    km_today: 0,
-    fuel: 92
+  try {
+    currentDetails.value = await fetchDeliverableData(currentDeliverable.value);
+  } catch (err) {
+    console.error('Error cargando playbook de soporte', err);
+    currentDetails.value = null;
   }
-])
+};
 
-const vacationRequests = ref([
-  {
-    id: 1,
-    employee_name: 'María García',
-    type: 'Vacaciones',
-    from: '2024-11-20',
-    to: '2024-11-24',
-    days: 5,
-    reason: 'Viaje familiar'
+const selectDeliverable = (id: string) => {
+  if (selectedId.value !== id) {
+    selectedId.value = id;
   }
-])
+};
 
-const currentWeekText = computed(() => {
-  const start = new Date(currentWeek.value)
-  start.setDate(start.getDate() - start.getDay() + 1)
-  const end = new Date(start)
-  end.setDate(start.getDate() + 4)
-  
-  return `${start.getDate()}/${start.getMonth() + 1} - ${end.getDate()}/${end.getMonth() + 1}`
-})
+const formatTitle = (item?: { id: string }) => {
+  if (!item) return 'Playbook';
+  const parts = item.id.split('/');
+  const filename = parts[parts.length - 1];
+  return filename.replace(/_/g, ' ').replace(/\d{8}T\d{6}Z$/, '').trim() || 'Playbook';
+};
 
-function formatDate(dateString) {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
+const formatDate = (timestamp: number) =>
+  new Date(timestamp * 1000).toLocaleString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
-function changeWeek(direction) {
-  const newDate = new Date(currentWeek.value)
-  newDate.setDate(newDate.getDate() + (direction * 7))
-  currentWeek.value = newDate
-}
-
-function addEmployee() {
-  console.log('Añadir empleado')
-}
-
-function viewEmployee(id) {
-  console.log('Ver empleado:', id)
-}
-
-function approveTimeEntry(id) {
-  console.log('Aprobar fichaje:', id)
-}
-
-function rejectTimeEntry(id) {
-  console.log('Rechazar fichaje:', id)
-}
-
-function createRoute() {
-  console.log('Crear nueva ruta')
-}
-
-function viewRoute(id) {
-  console.log('Ver ruta en mapa:', id)
-}
-
-function optimizeRoute(id) {
-  console.log('Optimizar ruta:', id)
-}
-
-function approveVacation(id) {
-  if (confirm('¿Aprobar esta solicitud de vacaciones?')) {
-    console.log('Aprobar vacaciones:', id)
+const formatSize = (bytes: number) => {
+  if (!bytes) return '0 KB';
+  const units = ['B', 'KB', 'MB'];
+  let value = bytes;
+  let index = 0;
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024;
+    index += 1;
   }
-}
+  return `${value.toFixed(1)} ${units[index]}`;
+};
 
-function rejectVacation(id) {
-  const reason = prompt('¿Motivo del rechazo?')
-  if (reason) {
-    console.log('Rechazar vacaciones:', id, reason)
-  }
-}
+const formatWeek = (label: string) => label.replace('_', ' ').replace(/\bweek\b/i, 'Semana');
+
+watch(selectedId, loadDetails);
+
+onMounted(async () => {
+  await reload();
+});
 </script>
 
 <style scoped>
 .afrodita-workspace {
-  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px 32px 48px;
+  background: radial-gradient(circle at top left, rgba(16, 185, 129, 0.12), transparent 55%);
+  min-height: calc(100vh - 120px);
+}
+
+.workspace-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
 }
 
 .workspace-header h3 {
-  font-size: 24px;
-  margin-bottom: 15px;
-  color: #1f2937;
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
 }
 
-.tabs {
-  display: flex;
-  gap: 10px;
-  border-bottom: 2px solid #e5e7eb;
-  margin-bottom: 30px;
+.workspace-header .subtitle {
+  font-size: 15px;
+  color: #475569;
+  margin-top: 4px;
 }
 
-.tabs button {
-  padding: 10px 20px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  font-size: 14px;
-  color: #6b7280;
-  transition: all 0.3s;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-}
-
-.tabs button.active {
-  color: #3b82f6;
-  border-bottom-color: #3b82f6;
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
+.refresh-btn {
+  display: inline-flex;
   align-items: center;
-  margin-bottom: 20px;
-}
-
-.section-header h4 {
-  font-size: 18px;
-  color: #1f2937;
-}
-
-.btn-add,
-.btn-approve,
-.btn-reject {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
 }
 
-.btn-add {
-  background: #3b82f6;
-  color: white;
+.refresh-btn:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.18);
 }
 
-.btn-add:hover {
-  background: #2563eb;
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
-.employees-grid {
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.12);
+  color: #b91c1c;
+  font-size: 14px;
+}
+
+.workspace-body {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: 320px 1fr;
+  gap: 24px;
+}
+
+.deliverable-list {
+  background: #ffffff;
+  border-radius: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  padding: 20px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.deliverable-list h4 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.deliverable-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.deliverable-list li {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: rgba(248, 250, 252, 0.9);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.deliverable-list li.active {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(16, 185, 129, 0.12);
+  box-shadow: 0 6px 14px rgba(16, 185, 129, 0.18);
+}
+
+.deliverable-list .title {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.deliverable-list .meta {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.deliverable-list .tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tag {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.tag.schedule {
+  background: rgba(204, 251, 241, 0.9);
+  color: #0f766e;
+}
+
+.tag.onboarding {
+  background: rgba(187, 247, 208, 0.85);
+  color: #047857;
+}
+
+.tag.coordination {
+  background: rgba(233, 213, 255, 0.85);
+  color: #6d28d9;
+}
+
+.deliverable-details {
+  background: #ffffff;
+  border-radius: 24px;
+  border: 1px solid rgba(15, 23, 42, 0.05);
+  padding: 28px;
+  box-shadow: 0 18px 35px rgba(15, 23, 42, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.details-header h4 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.details-meta {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.details-summary {
+  margin-top: 8px;
+  color: #475569;
+  font-size: 14px;
+}
+
+.details-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  transition: transform 0.15s;
+}
+
+.btn.ghost {
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.details-grid {
+  display: grid;
   gap: 20px;
 }
 
-.employee-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 20px;
+.card {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 18px;
+  padding: 22px;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 55%);
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 14px;
 }
 
-.employee-avatar {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  overflow: hidden;
-  margin: 0 auto;
-}
-
-.employee-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.avatar-placeholder {
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+.card-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 32px;
+}
+
+.card h5 {
+  font-size: 18px;
+  color: #0f172a;
   font-weight: 700;
 }
 
-.employee-info {
-  text-align: center;
-}
-
-.employee-info h4 {
-  font-size: 18px;
-  margin-bottom: 5px;
-}
-
-.employee-role {
-  display: block;
-  font-size: 14px;
-  color: #6b7280;
-  margin-bottom: 3px;
-}
-
-.employee-department {
-  display: block;
-  font-size: 12px;
-  color: #9ca3af;
-}
-
-.employee-status {
-  text-align: center;
-}
-
-.status-badge {
-  padding: 4px 12px;
-  border-radius: 4px;
+.badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #047857;
   font-size: 12px;
   font-weight: 600;
 }
 
-.status-badge.active {
-  background: #d1fae5;
-  color: #065f46;
+.badge.teal {
+  background: rgba(125, 211, 252, 0.25);
+  color: #0c4a6e;
 }
 
-.status-badge.onleave {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.employee-actions {
-  text-align: center;
-}
-
-.btn-view {
-  padding: 8px 16px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: white;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.date-selector {
+.schedule {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
-  margin-bottom: 30px;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.date-selector button {
-  padding: 8px 16px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: white;
-  cursor: pointer;
-  font-size: 18px;
+.week-block {
+  background: rgba(224, 242, 241, 0.6);
+  border-radius: 14px;
+  padding: 14px 18px;
 }
 
-.current-week {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1f2937;
+.week-block h6 {
+  font-size: 15px;
+  color: #0f766e;
+  margin-bottom: 6px;
 }
 
-.schedule-table {
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  overflow: hidden;
-  margin-bottom: 30px;
+.week-block ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #475569;
+  font-size: 14px;
 }
 
-.schedule-header,
-.schedule-row {
+.modules {
   display: grid;
-  grid-template-columns: 200px repeat(5, 1fr) 100px;
-  border-bottom: 1px solid #e5e7eb;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
 }
 
-.schedule-header {
-  background: #f9fafb;
-  font-weight: 600;
+.module {
+  background: rgba(209, 250, 229, 0.65);
+  border-radius: 14px;
+  padding: 14px 16px;
 }
 
-.header-cell,
-.employee-col,
-.day-cell,
-.total-cell {
-  padding: 15px;
+.module h6 {
+  font-size: 15px;
+  color: #047857;
+  margin-bottom: 6px;
+}
+
+.module ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #475569;
+  font-size: 14px;
+}
+
+.resources {
+  margin-top: 12px;
+}
+
+.resources h6 {
+  font-size: 14px;
+  color: #0c4a6e;
+  margin-bottom: 6px;
+}
+
+.resources ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #475569;
+  font-size: 14px;
+}
+
+.meetings ul,
+.alerts ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #475569;
+  font-size: 14px;
+}
+
+.alerts h6,
+.meetings h6 {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 6px;
+}
+
+.empty-container {
+  background: rgba(248, 250, 252, 0.7);
+  border: 2px dashed rgba(148, 163, 184, 0.5);
+  border-radius: 20px;
+  padding: 60px 30px;
   text-align: center;
-  border-right: 1px solid #e5e7eb;
-}
-
-.employee-col {
-  text-align: left;
-  font-weight: 500;
-}
-
-.time-entry {
-  font-size: 13px;
-  color: #374151;
-}
-
-.hours {
-  font-size: 12px;
-  color: #6b7280;
-  margin-top: 4px;
-}
-
-.total-cell strong {
-  color: #059669;
-}
-
-.pending-approvals {
-  margin-top: 30px;
-}
-
-.pending-approvals h4 {
-  font-size: 18px;
-  margin-bottom: 15px;
+  color: #475569;
 }
 
 .empty-state {
-  text-align: center;
-  padding: 40px;
-  color: #6b7280;
-}
-
-.approvals-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.approval-item {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 15px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  gap: 12px;
 }
 
-.approval-info {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+.empty-state .icon {
+  font-size: 42px;
 }
 
-.approval-reason {
+.spinner {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 4px solid rgba(16, 185, 129, 0.2);
+  border-top-color: #10b981;
+  animation: spin 1s linear infinite;
+}
+
+.workspace-footer {
   font-size: 13px;
-  color: #6b7280;
-}
-
-.approval-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.btn-approve {
-  background: #10b981;
-  color: white;
-}
-
-.btn-reject {
-  background: #ef4444;
-  color: white;
-}
-
-.routes-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 20px;
-  margin-bottom: 30px;
-}
-
-.route-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 20px;
-}
-
-.route-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-.route-status {
-  padding: 4px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.route-status.in_progress {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.route-status.pending {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.route-info {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 15px;
-}
-
-.info-item {
-  display: flex;
-  justify-content: space-between;
-  font-size: 14px;
-}
-
-.info-label {
-  color: #6b7280;
-}
-
-.route-progress {
-  margin-bottom: 15px;
-}
-
-.progress-bar {
-  width: 100%;
-  height: 8px;
-  background: #e5e7eb;
-  border-radius: 4px;
-  overflow: hidden;
-  margin-bottom: 5px;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-  transition: width 0.3s;
-}
-
-.progress-text {
-  font-size: 12px;
-  color: #6b7280;
-}
-
-.route-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.route-actions button {
-  flex: 1;
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: white;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.fleet-status h4 {
-  font-size: 18px;
-  margin-bottom: 15px;
-}
-
-.vehicles-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.vehicle-item {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  padding: 15px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-}
-
-.vehicle-icon {
-  font-size: 32px;
-}
-
-.vehicle-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.vehicle-badge {
-  padding: 4px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.vehicle-badge.active {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.vehicle-badge.idle {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.vehicle-metrics {
-  display: flex;
-  gap: 15px;
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.vacation-calendar,
-.vacation-requests,
-.vacation-summary {
-  margin-bottom: 30px;
-}
-
-.vacation-calendar h4,
-.vacation-requests h4,
-.vacation-summary h4 {
-  font-size: 18px;
-  margin-bottom: 15px;
-}
-
-.calendar-placeholder {
+  color: #64748b;
   text-align: center;
-  padding: 60px;
-  font-size: 18px;
-  color: #9ca3af;
 }
 
-.requests-list {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
-.request-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 20px;
+@media (max-width: 900px) {
+  .workspace-body {
+    grid-template-columns: 1fr;
+  }
 }
 
-.request-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
+@media (max-width: 600px) {
+  .afrodita-workspace {
+    padding: 20px 16px 80px;
+  }
 
-.request-type {
-  padding: 4px 12px;
-  background: #dbeafe;
-  color: #1e40af;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
-}
+  .workspace-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 
-.request-dates {
-  display: flex;
-  gap: 15px;
-  margin-bottom: 10px;
-  font-size: 14px;
-  color: #6b7280;
-}
+  .refresh-btn {
+    width: 100%;
+    justify-content: center;
+  }
 
-.request-days {
-  color: #059669;
-  font-weight: 600;
-}
+  .deliverable-list {
+    padding: 16px;
+  }
 
-.request-reason {
-  margin-bottom: 15px;
-  font-size: 14px;
-  color: #4b5563;
-}
+  .details-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 
-.request-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 15px;
-}
-
-.summary-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 15px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-}
-
-.summary-days {
-  color: #059669;
-  font-weight: 600;
+  .details-actions {
+    width: 100%;
+    gap: 8px;
+  }
 }
 </style>
 

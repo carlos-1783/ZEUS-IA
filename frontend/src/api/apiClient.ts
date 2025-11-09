@@ -261,6 +261,10 @@ class ApiClient {
     throw new Error(response.data.error || 'Failed to fetch system status');
   }
 
+  public async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+    return this.instance.get<T>(url, config);
+  }
+
   // Generic request method
   public async request<T = any>(config: AxiosRequestConfig): Promise<T> {
     const response = await this.instance.request<ApiResponse<T>>(config);

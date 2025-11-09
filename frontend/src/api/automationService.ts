@@ -11,7 +11,7 @@ export interface AutomationOutput {
 
 export async function fetchAutomationOutputs(agent?: string): Promise<AutomationOutput[]> {
   const params = agent ? { agent } : undefined;
-  const response = await apiClient.get('/automation/outputs', { params });
+  const response = await apiClient.get<{ outputs?: AutomationOutput[] }>('/automation/outputs', { params });
   return response.data.outputs ?? [];
 }
 

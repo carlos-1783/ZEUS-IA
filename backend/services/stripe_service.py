@@ -4,8 +4,6 @@ Automatiza procesamiento de pagos y suscripciones
 """
 import os
 from typing import Optional, Dict, Any
-from app.core.config import settings
-
 try:
     import stripe
     STRIPE_AVAILABLE = True
@@ -20,12 +18,31 @@ class StripeService:
         self.api_key = os.getenv("STRIPE_API_KEY")
         self.webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
         self.currency = os.getenv("STRIPE_CURRENCY", "eur")
+        self.requested_mode = (os.getenv("STRIPE_MODE") or "auto").lower()
+        self.detected_mode = "unknown"
+        
+        if self.api_key:
+            if self.api_key.startswith("sk_live"):
+                self.detected_mode = "live"
+            elif self.api_key.startswith("sk_test"):
+                self.detected_mode = "test"
+            else:
+                self.detected_mode = "custom"
         
         if not STRIPE_AVAILABLE:
             print("⚠️ Stripe Service: Stripe library not installed (pip install stripe)")
         elif self.api_key:
             stripe.api_key = self.api_key
             print("✅ Stripe Service inicializado correctamente")
+            
+            if self.requested_mode not in ("auto", "live", "test"):
+                print(f"⚠️ Stripe Service: STRIPE_MODE '{self.requested_mode}' no es válido. Usa 'auto', 'live' o 'test'.")
+            elif self.requested_mode != "auto" and self.requested_mode != self.detected_mode:
+                print(
+                    "⚠️ Stripe Service: STRIPE_MODE="
+                    f"{self.requested_mode} pero la API key parece ser '{self.detected_mode}'. "
+                    "Actualiza tus credenciales para evitar operar en modo incorrecto."
+                )
         else:
             print("⚠️ Stripe Service: STRIPE_API_KEY no configurada")
     
@@ -239,7 +256,8 @@ class StripeService:
             "provider": "Stripe",
             "currency": self.currency,
             "webhooks_enabled": bool(self.webhook_secret),
-            "mode": "test" if self.api_key and self.api_key.startswith("sk_test") else "live"
+            "detected_mode": self.detected_mode,
+            "requested_mode": self.requested_mode
         }
 
 

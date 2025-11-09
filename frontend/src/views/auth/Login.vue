@@ -18,7 +18,7 @@
       <form class="space-y-6" @submit.prevent="handleSubmit">
         <div class="rounded-md shadow-sm -space-y-px">
           <div>
-            <label for="email-address" class="sr-only">Correo electrónico</label>
+            <label for="email-address" class="sr-only">{{ t('auth.login.emailPlaceholder') }}</label>
             <input
               id="email-address"
               v-model="form.email"
@@ -27,12 +27,12 @@
               autocomplete="email"
               required
               class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-              placeholder="Correo electrónico"
+              :placeholder="t('auth.login.emailPlaceholder')"
               :disabled="isLoading"
             >
           </div>
           <div>
-            <label for="password" class="sr-only">Contraseña</label>
+            <label for="password" class="sr-only">{{ t('auth.login.passwordPlaceholder') }}</label>
             <input
               id="password"
               v-model="form.password"
@@ -41,7 +41,7 @@
               autocomplete="current-password"
               required
               class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-              placeholder="Contraseña"
+              :placeholder="t('auth.login.passwordPlaceholder')"
               :disabled="isLoading"
             >
           </div>
@@ -58,13 +58,13 @@
               :disabled="isLoading"
             >
             <label for="remember-me" class="ml-2 block text-sm text-gray-900">
-              Recordar sesión
+              {{ t('auth.login.rememberMe') }}
             </label>
           </div>
 
           <div class="text-sm">
             <a href="#" class="font-medium text-indigo-600 hover:text-indigo-500">
-              ¿Olvidaste tu contraseña?
+              {{ t('auth.login.forgotPassword') }}
             </a>
           </div>
         </div>
@@ -80,32 +80,34 @@
                 <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clip-rule="evenodd" />
               </svg>
             </span>
-            <span v-if="!isLoading">Iniciar sesión</span>
-            <span v-else>Iniciando sesión...</span>
+            <span v-if="!isLoading">{{ t('auth.login.submit') }}</span>
+            <span v-else>{{ t('auth.login.submitting') }}</span>
           </button>
         </div>
       </form>
   </div>
 </template>
 
-<script setup>
-import { ref, onMounted, nextTick } from 'vue';
+<script setup lang="ts">
+import { ref, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { useI18n } from 'vue-i18n';
 
 console.log('🔍 Login.vue component is mounting...')
 
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
+const { t } = useI18n();
 
 console.log('🔍 Login.vue router:', router)
 console.log('🔍 Login.vue route:', route)
 
 // DESHABILITAR TOAST TEMPORALMENTE PARA EVITAR VIOLACIONES DE RENDIMIENTO
 const toast = {
-  success: (msg) => console.log('✅', msg),
-  error: (msg) => console.error('❌', msg)
+  success: (msg: string) => console.log('✅', msg),
+  error: (msg: string) => console.error('❌', msg)
 }
 const form = ref({
   email: '',
@@ -115,7 +117,23 @@ const form = ref({
 
 const error = ref('');
 const isLoading = ref(false);
-const redirectTo = route.query.redirect || '/dashboard';
+const redirectTo = (route.query.redirect as string) || '/dashboard';
+
+const normalizeErrorMessage = (err: unknown, fallbackKey: string) => {
+  if (err instanceof Error) {
+    return err.message;
+  }
+  if (typeof err === 'string') {
+    return err;
+  }
+  if (err && typeof err === 'object' && 'message' in err) {
+    const maybeMessage = (err as { message?: unknown }).message;
+    if (typeof maybeMessage === 'string') {
+      return maybeMessage;
+    }
+  }
+  return t(fallbackKey);
+};
 
 // Verificar si ya hay una sesión activa
 onMounted(() => {
@@ -132,19 +150,19 @@ onMounted(() => {
 });
 
 // Validar formulario
-const validateForm = () => {
-  const errors = {};
+const validateForm = (): true | Record<string, string> => {
+  const errors: Record<string, string> = {};
   
   if (!form.value.email) {
-    errors.email = 'El correo electrónico es obligatorio';
+    errors.email = t('auth.login.emailRequired');
   } else if (!/\S+@\S+\.\S+/.test(form.value.email)) {
-    errors.email = 'El correo electrónico no es válido';
+    errors.email = t('auth.login.emailInvalid');
   }
   
   if (!form.value.password) {
-    errors.password = 'La contraseña es obligatoria';
+    errors.password = t('auth.login.passwordRequired');
   } else if (form.value.password.length < 6) {
-    errors.password = 'La contraseña debe tener al menos 6 caracteres';
+    errors.password = t('auth.login.passwordLength');
   }
   
   return Object.keys(errors).length === 0 ? true : errors;
@@ -178,7 +196,7 @@ const handleSubmit = async () => {
       const token = localStorage.getItem('auth_token');
       
       if (!token) {
-        error.value = 'No se pudo guardar el token de autenticación';
+        error.value = t('auth.login.tokenError');
         return;
       }
       
@@ -188,10 +206,7 @@ const handleSubmit = async () => {
       
     } else {
       // Performance: Solo mostrar error en UI, sin alerts
-      let mensaje = result.error || result.message || 'Error al iniciar sesión. Por favor, verifica tus credenciales.';
-      if (typeof mensaje !== 'string') {
-        mensaje = JSON.stringify(mensaje);
-      }
+      const mensaje = normalizeErrorMessage(result.error ?? result.message, 'auth.login.defaultError');
       error.value = mensaje;
       console.error('Error de login:', mensaje);
     }
@@ -199,10 +214,7 @@ const handleSubmit = async () => {
     console.error('[auth/Login.vue] Error en el inicio de sesión:', err);
     
     // Performance: Solo mostrar error en UI, sin alerts
-    let mensaje = err.message || 'Ocurrió un error al intentar iniciar sesión. Por favor, inténtalo de nuevo.';
-    if (typeof mensaje !== 'string') {
-      mensaje = JSON.stringify(mensaje);
-    }
+    const mensaje = normalizeErrorMessage(err, 'auth.login.genericError');
     error.value = mensaje;
     console.error('Error:', mensaje);
   } finally {

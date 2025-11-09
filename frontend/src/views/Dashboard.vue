@@ -192,13 +192,19 @@
                     activity.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                     'bg-red-100 text-red-800'
                   ]">
-                    {{ activity.status === 'completed' ? 'Completado' : activity.status === 'pending' ? 'Pendiente' : 'Error' }}
+                    {{
+                      activity.status === 'completed'
+                        ? t('status.completed')
+                        : activity.status === 'pending'
+                          ? t('status.pending')
+                          : t('status.error')
+                    }}
                   </span>
                 </td>
               </tr>
               <tr v-if="recentActivities.length === 0">
                 <td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">
-                  No hay actividades recientes
+                  {{ t('status.noActivities') }}
                 </td>
               </tr>
             </tbody>
@@ -217,6 +223,7 @@ import api from '@/api';
 import { Chart, registerables } from 'chart.js';
 import { format, subDays } from 'date-fns';
 import { es } from 'date-fns/locale/es';
+import { useI18n } from 'vue-i18n';
 
 // Registrar componentes de Chart.js
 Chart.register(...registerables);
@@ -228,6 +235,7 @@ import DashboardMetric from '@/components/DashboardMetric.vue';
 
 // Estado reactivo
 const authStore = useAuthStore();
+const { t } = useI18n();
 const router = useRouter();
 const selectedPeriod = ref('día'); // Valor por defecto, puede ser 'día', 'semana' o 'mes'
 const showUserMenu = ref(false);

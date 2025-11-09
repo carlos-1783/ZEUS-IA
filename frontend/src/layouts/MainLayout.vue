@@ -6,7 +6,7 @@
         @click="isSidebarOpen = !isSidebarOpen"
         class="p-2 rounded-md text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
       >
-        <span class="sr-only">Abrir menú</span>
+<span class="sr-only">{{ t('layout.openMenu') }}</span>
         <svg 
           class="h-6 w-6" 
           xmlns="http://www.w3.org/2000/svg" 
@@ -41,8 +41,8 @@
         <!-- Navigation -->
         <nav class="flex-1 px-2 py-4 space-y-1">
           <router-link 
-            v-for="item in navigation" 
-            :key="item.name"
+            v-for="item in navigationItems" 
+            :key="item.route"
             :to="{ name: item.route }"
             class="group flex items-center px-4 py-3 text-sm font-medium rounded-md text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-75"
             :class="{ 'bg-indigo-800': $route.name === item.route }"
@@ -52,7 +52,7 @@
               class="mr-3 h-5 w-5 text-indigo-300 group-hover:text-indigo-200" 
               aria-hidden="true" 
             />
-            {{ item.name }}
+            {{ item.label }}
           </router-link>
         </nav>
 
@@ -68,13 +68,13 @@
             </div>
             <div class="ml-3">
               <p class="text-sm font-medium text-white">
-                {{ userFullName || 'Usuario' }}
+                {{ userFullName || t('layout.userFallback') }}
               </p>
               <button 
                 @click="logout"
                 class="text-xs font-medium text-indigo-200 hover:text-white"
               >
-                Cerrar sesión
+                {{ t('layout.logout') }}
               </button>
             </div>
           </div>
@@ -91,7 +91,17 @@
             {{ pageTitle }}
           </h1>
           <div class="flex items-center space-x-4">
-            <!-- Add any header actions here -->
+            <label class="text-sm text-gray-600">
+              {{ t('layout.languageLabel') }}
+            </label>
+            <select
+              v-model="currentLocale"
+              class="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            >
+              <option v-for="localeOption in supportedLocales" :key="localeOption" :value="localeOption">
+                {{ localeOption.toUpperCase() }}
+              </option>
+            </select>
           </div>
         </div>
       </header>
@@ -117,24 +127,44 @@
   ></div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { useI18n } from 'vue-i18n';
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const isSidebarOpen = ref(window.innerWidth >= 768);
 
+const { t, locale, availableLocales } = useI18n();
+
+const supportedLocales = computed(() => availableLocales);
+
+const currentLocale = computed<string>({
+  get: () => locale.value,
+  set: (value) => {
+    locale.value = value;
+    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+      window.localStorage.setItem('zeus_locale', value);
+    }
+  },
+});
+
 // Navigation items
-const navigation = [
-  { name: 'Dashboard', route: 'Dashboard', icon: 'tachometer-alt' },
-  // Add more navigation items as needed
-];
+const navigationItems = computed(() => [
+  { label: t('navigation.dashboard'), route: 'Dashboard', icon: 'tachometer-alt' },
+]);
 
 // Computed properties
-const pageTitle = computed(() => route.meta.title || 'Dashboard');
+const pageTitle = computed(() => {
+  const metaTitleKey = route.meta.titleKey;
+  if (typeof metaTitleKey === 'string') {
+    return t(metaTitleKey);
+  }
+  return route.meta.title || t('navigation.dashboard');
+});
 const userFullName = computed(() => authStore.userFullName);
 const userAvatar = computed(() => {
   // Replace with actual user avatar URL or initials

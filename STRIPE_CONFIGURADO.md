@@ -44,6 +44,7 @@ Mensual: €1,500/mes (price_1SPfEBRkVIjZaYJnSGFyux8o)
 STRIPE_API_KEY=sk_test_... (configurado en .env)
 STRIPE_PUBLISHABLE_KEY=pk_test_... (configurado en .env)
 STRIPE_WEBHOOK_SECRET=whsec-... (configurado en .env)
+STRIPE_MODE=test
 ```
 
 **IMPORTANTE**: Las credenciales están en el archivo `.env` (no versionado en git).
@@ -143,6 +144,22 @@ Fallo:  4000 0000 0000 0002
 | Checkout | ⏳ PENDIENTE |
 | Onboarding | ⏳ PENDIENTE |
 | Panel Admin | ⏳ PENDIENTE |
+
+---
+
+## 🔄 Pasos para pasar a producción (modo dueño):
+
+1. **Cambiar llaves a producción en Stripe**
+   - Genera `sk_live_...` y `pk_live_...`
+   - Registra webhook en modo live y actualiza `STRIPE_WEBHOOK_SECRET`
+2. **Actualizar variables en Railway**
+   - Reemplaza `STRIPE_API_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`
+   - Establece `STRIPE_MODE=live`
+3. **Verificar estado**
+   - Ejecuta `GET https://zeus-ia-production-16d8.up.railway.app/api/v1/integrations/stripe/status`
+   - Asegúrate de que `requested_mode` y `detected_mode` regresen `live`
+4. **Generar commit de despliegue**
+   - Ejecuta script `BUILD_AND_DEPLOY` y `git push` para que Railway redeploye
 
 ---
 

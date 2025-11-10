@@ -185,29 +185,21 @@ Eres la voz humana de ZEUS-IA. El corazón del sistema. 💙""",
         # Analizar tipo de consulta
         query_type = self._classify_query(user_message)
         
-        # Construir contexto para OpenAI
-        messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": user_message}
-        ]
-        
-        # Llamar a OpenAI
         try:
-            response = self._call_openai(messages)
-            
-            return {
-                "success": True,
-                "agent": self.name,
-                "content": response,
-                "query_type": query_type,
-                "channel": channel,
-                "priority": priority,
-                "metadata": {
+            decision = self.make_decision(user_message, additional_context=context)
+            decision["query_type"] = query_type
+            decision["channel"] = channel
+            decision["priority"] = priority
+            metadata = decision.get("metadata", {})
+            metadata.update(
+                {
                     "domain": self.domain,
                     "requires_approval": query_type in ["nomina", "despido", "contrato"],
-                    "escalate_to_zeus": False
+                    "escalate_to_zeus": False,
                 }
-            }
+            )
+            decision["metadata"] = metadata
+            return decision
             
         except Exception as e:
             return {

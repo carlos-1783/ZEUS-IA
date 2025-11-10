@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 import os
 from dotenv import load_dotenv
 
@@ -121,6 +121,20 @@ class Settings(BaseSettings):
     
     # Rate Limiting
     RATE_LIMIT: str = "100/minute"
+
+    # Scopes / permisos
+    DEFAULT_SCOPE_MAP: Dict[str, List[str]] = {
+        "marketingdigitalper.seo@gmail.com": [
+            "marketing:read",
+            "marketing:write",
+            "tax:read",
+            "tax:write",
+            "legal:read",
+            "legal:write",
+            "hr:read",
+            "hr:write",
+        ]
+    }
     
     # Email
     SMTP_TLS: bool = True

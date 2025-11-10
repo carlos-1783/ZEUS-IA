@@ -2,6 +2,7 @@
 # ZEUS-IA MAIN APPLICATION
 # ========================================
 
+import logging
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -49,74 +50,15 @@ app.add_middleware(
 app.include_router(api_router, prefix="/api/v1")
 
 # Crear tablas al iniciar la aplicación
+logger = logging.getLogger("zeus.startup")
+
+
 @app.on_event("startup")
 async def startup_event():
-    print("[STARTUP] Iniciando ZEUS-IA...")
-    
-    # MOSTRAR DATABASE_URL CONFIGURADA
-    import os
-    db_url = os.getenv("DATABASE_URL", "NO CONFIGURADA")
-    print(f"[STARTUP] 🔍 DATABASE_URL: {db_url[:50]}...")  # Mostrar solo los primeros 50 caracteres
-    
+    logger.info("Starting ZEUS-IA backend")
     create_tables()
-    
-    # Crear usuario de prueba si no existe
-    from app.db.base import SessionLocal
-    from app.models.user import User
-    from app.core.security import get_password_hash
-    
-    db = SessionLocal()
-    try:
-        print("[STARTUP] 🔍 Verificando usuarios en la base de datos...")
-        # Contar usuarios existentes
-        user_count = db.query(User).count()
-        print(f"[STARTUP] 📊 Usuarios en la base de datos: {user_count}")
-        
-        # Verificar si ya existe un usuario
-        existing_user = db.query(User).filter(User.email == "marketingdigitalper.seo@gmail.com").first()
-        if not existing_user:
-            print("[STARTUP] 🆕 Creando usuario de prueba...")
-            test_user = User(
-                email="marketingdigitalper.seo@gmail.com",
-                full_name="Usuario de Prueba",
-                hashed_password=get_password_hash("Carnay19"),
-                is_active=True,
-                is_superuser=True
-            )
-            db.add(test_user)
-            db.commit()
-            db.refresh(test_user)
-            print(f"[STARTUP] ✅ Usuario de prueba creado con ID: {test_user.id}")
-            print(f"[STARTUP] 📧 Email: {test_user.email}")
-            print(f"[STARTUP] 🔐 Contraseña: Carnay19")
-        else:
-            print(f"[STARTUP] ✅ Usuario ya existe con ID: {existing_user.id}")
-            print("[STARTUP] 🔄 Actualizando contraseña...")
-            # Actualizar contraseña para asegurar que sea "Carnay19"
-            existing_user.hashed_password = get_password_hash("Carnay19")
-            existing_user.is_active = True
-            existing_user.is_superuser = True
-            db.commit()
-            print("[STARTUP] ✅ Contraseña y permisos actualizados")
-            print(f"[STARTUP] 📧 Email: {existing_user.email}")
-            print(f"[STARTUP] 🔐 Contraseña: Carnay19")
-        
-        # Verificar el usuario fue creado/actualizado
-        final_count = db.query(User).count()
-        print(f"[STARTUP] 📊 Usuarios finales en la base de datos: {final_count}")
-        
-    except Exception as e:
-        print(f"[STARTUP] ❌ Error al crear usuario: {e}")
-        print(f"[STARTUP] 🔍 Tipo de error: {type(e).__name__}")
-        import traceback
-        print(f"[STARTUP] 📋 Traceback completo:")
-        traceback.print_exc()
-        db.rollback()
-    finally:
-        db.close()
-
-    print("[STARTUP] ✅ Aplicación lista")
     await start_agent_automation()
+    logger.info("ZEUS-IA backend ready")
 
 
 @app.on_event("shutdown")

@@ -1,3 +1,4 @@
+import logging
 import secrets
 import string
 from datetime import datetime, timedelta
@@ -14,6 +15,8 @@ from app.core.config import settings
 from app.models.user import RefreshToken, User
 from app.db.session import get_db
 
+logger = logging.getLogger(__name__)
+
 # OAuth2 scheme for token authentication
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -29,21 +32,21 @@ def ensure_secret_key(key: str) -> str:
     Returns:
         str: La clave como string, lista para usar con PyJWT
     """
-    print(f"[SECURITY] Clave original: {key[:5]}... (longitud: {len(key)} caracteres)")
+    logger.debug("[SECURITY] Clave original: %s... (longitud: %s caracteres)", key[:5], len(key))
     
     # Si la clave es None o está vacía, generamos una nueva
     if not key:
         import secrets
         key = secrets.token_hex(32)  # 64 caracteres hexadecimales
-        print(f"[SECURITY] Se generó una nueva clave secreta: {key[:5]}...")
+        logger.debug("[SECURITY] Se generó una nueva clave secreta: %s...", key[:5])
     
     # Asegurarnos de que la clave tenga al menos 32 caracteres
     if len(key) < 32:
-        print(f"[SECURITY] La clave es demasiado corta ({len(key)} < 32), aplicando hash...")
+        logger.debug("[SECURITY] La clave es demasiado corta (%s < 32), aplicando hash...", len(key))
         import hashlib
         key = hashlib.sha256(key.encode('utf-8')).hexdigest()
     
-    print(f"[SECURITY] Clave final: {key[:5]}... (longitud: {len(key)} caracteres)")
+    logger.debug("[SECURITY] Clave final: %s... (longitud: %s caracteres)", key[:5], len(key))
     return key
 
 # Configuración de la clave secreta
@@ -51,10 +54,10 @@ try:
     # Asegurarnos de que la clave secreta sea un string
     SECRET_KEY = ensure_secret_key(settings.SECRET_KEY)
     serializer = URLSafeTimedSerializer(SECRET_KEY)
-    print(f"[SECURITY] Clave secreta configurada correctamente. Longitud: {len(SECRET_KEY)} caracteres")
-    print(f"[SECURITY] Muestra de clave: {SECRET_KEY[:5]}...")
+    logger.debug("[SECURITY] Clave secreta configurada correctamente. Longitud: %s caracteres", len(SECRET_KEY))
+    logger.debug("[SECURITY] Muestra de clave: %s...", SECRET_KEY[:5])
 except Exception as e:
-    print(f"[SECURITY] Error al configurar la clave secreta: {str(e)}")
+    logger.error("Error al configurar la clave secreta: %s", str(e))
     raise
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -68,9 +71,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     Returns:
         str: Encoded JWT token
     """
-    print("\n" + "="*80)
-    print("[JWT] === INICIO DE CREACIÓN DE TOKEN ===")
-    print(f"[JWT] Datos a codificar: {data}")
+    logger.debug("=" * 80)
+    logger.debug("[JWT] === INICIO DE CREACIÓN DE TOKEN ===")
+    logger.debug("[JWT] Datos a codificar: %s", data)
     
     # Create a copy of the data dictionary
     to_encode = data.copy()
@@ -94,28 +97,28 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     })
     
     # Log token details
-    print(f"[JWT] Fecha/hora actual (UTC): {now}")
-    print(f"[JWT] Token expira en: {expire} (en {settings.ACCESS_TOKEN_EXPIRE_MINUTES} minutos)")
-    print(f"[JWT] Payload final: {to_encode}")
-    print(f"[JWT] Usando ALGORITHM: {settings.ALGORITHM}")
-    print(f"[JWT] Usando ISSUER: {settings.JWT_ISSUER}")
+    logger.debug("[JWT] Fecha/hora actual (UTC): %s", now)
+    logger.debug("[JWT] Token expira en: %s (en %s minutos)", expire, settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    logger.debug("[JWT] Payload final: %s", to_encode)
+    logger.debug("[JWT] Usando ALGORITHM: %s", settings.ALGORITHM)
+    logger.debug("[JWT] Usando ISSUER: %s", settings.JWT_ISSUER)
     
     # Generar el token con la clave secreta como string
     try:
-        print("\n[JWT] === GENERANDO TOKEN JWT ===")
+        logger.debug("[JWT] === GENERANDO TOKEN JWT ===")
         
         # Asegurarse de que la clave sea string
         secret_key_str = str(SECRET_KEY)
         
-        print(f"[JWT] Usando clave secreta de {len(secret_key_str)} caracteres")
-        print(f"[JWT] Muestra de clave: {secret_key_str[:5]}...")
+        logger.debug("[JWT] Usando clave secreta de %s caracteres", len(secret_key_str))
+        logger.debug("[JWT] Muestra de clave: %s...", secret_key_str[:5])
         
         # Generar el token
-        print("\n[JWT] Generando token con los siguientes parámetros:")
-        print(f"  - Algoritmo: {settings.ALGORITHM}")
-        print(f"  - Issuer (iss): {settings.JWT_ISSUER}")
-        print(f"  - Audience (aud): zeus-ia:auth")
-        print(f"  - Tiempo de expiración: {settings.ACCESS_TOKEN_EXPIRE_MINUTES} minutos")
+        logger.debug("[JWT] Generando token con los siguientes parámetros:")
+        logger.debug("  - Algoritmo: %s", settings.ALGORITHM)
+        logger.debug("  - Issuer (iss): %s", settings.JWT_ISSUER)
+        logger.debug("  - Audience (aud): zeus-ia:auth")
+        logger.debug("  - Tiempo de expiración: %s minutos", settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         
         # Generar el token JWT
         encoded_jwt = jwt.encode(
@@ -129,7 +132,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
             encoded_jwt = encoded_jwt.decode('utf-8')
             
         # Verificar que el token generado sea válido
-        print("\n[JWT] === VERIFICANDO TOKEN GENERADO ===")
+        logger.debug("[JWT] === VERIFICANDO TOKEN GENERADO ===")
         try:
             # Verificar que podemos decodificar el token con la misma clave
             decoded = jwt.decode(
@@ -139,16 +142,16 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
                 audience=to_encode.get("aud"),
                 issuer=to_encode.get("iss")
             )
-            print("[JWT] Token generado y verificado exitosamente")
+            logger.debug("[JWT] Token generado y verificado exitosamente")
             return encoded_jwt
             
         except Exception as verify_error:
-            print(f"[JWT] ERROR: No se pudo verificar el token generado: {str(verify_error)}")
+            logger.error("[JWT] ERROR: No se pudo verificar el token generado: %s", str(verify_error))
             raise JWTError(f"Error de verificación del token generado: {str(verify_error)}")
             
     except Exception as e:
-        print(f"[JWT] Error al generar el token: {str(e)}")
-        print(f"[JWT] Tipo de error: {type(e).__name__}")
+        logger.error("[JWT] Error al generar el token: %s", str(e))
+        logger.error("[JWT] Tipo de error: %s", type(e).__name__)
         raise
 
 def create_refresh_token() -> str:

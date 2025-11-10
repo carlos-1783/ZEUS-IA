@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
@@ -51,6 +51,24 @@ def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al obtener el usuario por ID"
         )
+
+
+def resolve_user_scopes(user: User, existing_scopes: Optional[List[str]] = None) -> List[str]:
+    """
+    Determine effective scopes for a user.
+    Priority:
+      1. Scopes already embedded in the token (existing_scopes)
+      2. Superusers retain wildcard access ["*"]
+      3. Mapping defined in settings.DEFAULT_SCOPE_MAP keyed by email
+    """
+    if existing_scopes:
+        return existing_scopes
+
+    if getattr(user, "is_superuser", False):
+        return ["*"]
+
+    scope_map = settings.DEFAULT_SCOPE_MAP or {}
+    return scope_map.get(user.email.lower(), [])
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     print(f"Intentando autenticar: {email}")
@@ -185,6 +203,10 @@ async def get_current_user(
         if user is None:
             logger.warning(f"Usuario no encontrado para el identificador: {user_identifier}")
             raise credentials_exception
+
+        # Resolver scopes efectivos y adjuntarlos al payload
+        effective_scopes = resolve_user_scopes(user, payload.get("scopes"))
+        payload["scopes"] = effective_scopes
             
         # Agregar información del usuario al request para uso posterior
         request.state.user = user
@@ -220,3 +242,32 @@ def get_current_active_superuser(
             detail="El usuario no tiene suficientes privilegios"
         )
     return current_user
+
+
+def require_scopes(required_scopes: List[str]):
+    """
+    Dependency factory that ensures the authenticated principal owns the required scopes.
+    """
+
+    def dependency(
+        request: Request,
+        current_user: User = Depends(get_current_active_user),
+    ) -> User:
+        payload = getattr(request.state, "token_payload", {})
+        token_scopes = payload.get("scopes", [])
+
+        if "*" in token_scopes or any(scope in token_scopes for scope in required_scopes):
+            return current_user
+
+        logger.warning(
+            "Acceso denegado por scopes insuficientes. Requeridos=%s | Token=%s",
+            required_scopes,
+            token_scopes,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient scope",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return dependency

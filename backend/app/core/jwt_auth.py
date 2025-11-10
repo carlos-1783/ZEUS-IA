@@ -306,7 +306,8 @@ def create_access_token(
     email: str,
     is_active: bool = True,
     is_superuser: bool = False,
-    expires_delta: Optional[timedelta] = None
+    expires_delta: Optional[timedelta] = None,
+    scopes: Optional[List[str]] = None,
 ) -> str:
     """
     Crea un token de acceso JWT para un usuario.
@@ -330,7 +331,8 @@ def create_access_token(
         "email": email,
         "is_active": is_active,
         "is_superuser": is_superuser,
-        "type": "access"  # Añadir tipo de token
+        "type": "access",  # Añadir tipo de token
+        "scopes": scopes or [],
     }
 
     return create_jwt_token(data, expires_delta)

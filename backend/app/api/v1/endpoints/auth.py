@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Form, Body, Header
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 
-from app.core.auth import get_current_active_user
+from app.core.auth import get_current_active_user, resolve_user_scopes
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 
@@ -33,12 +33,15 @@ async def create_tokens(db: Session, user: User) -> Dict[str, Any]:
     refresh_token_expires = timedelta(days=float(settings.REFRESH_TOKEN_EXPIRE_DAYS))
     
     # Create access token using the new JWT module
+    user_scopes = resolve_user_scopes(user)
+
     access_token = create_access_token(
         user_id=str(user.id),
         email=user.email,
         is_active=user.is_active,
         is_superuser=user.is_superuser,
-        expires_delta=access_token_expires
+        expires_delta=access_token_expires,
+        scopes=user_scopes,
     )
     
     # Create refresh token and store it in the database
@@ -63,7 +66,8 @@ async def create_tokens(db: Session, user: User) -> Dict[str, Any]:
         "email": user.email,
         "full_name": user.full_name,
         "is_active": user.is_active,
-        "is_superuser": user.is_superuser
+        "is_superuser": user.is_superuser,
+        "scopes": user_scopes,
     }
 
 @router.post(
@@ -74,8 +78,8 @@ async def create_tokens(db: Session, user: User) -> Dict[str, Any]:
     description="Login with email and password to get an access token and refresh token"
 )
 async def login(
-    username: str = Form("marketingdigitalper.seo@gmail.com"),
-    password: str = Form("Carnay19"),
+    username: str = Form(...),
+    password: str = Form(...),
     grant_type: str = Form(default="password"),
     db: Session = Depends(get_db)
 ):

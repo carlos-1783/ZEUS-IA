@@ -2,7 +2,7 @@
 🔌 Integrations Endpoints
 Endpoints para WhatsApp, Email, Hacienda, Stripe
 """
-from fastapi import APIRouter, HTTPException, Request, Header
+from fastapi import APIRouter, HTTPException, Request, Header, Depends
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any
 from datetime import datetime
@@ -12,6 +12,9 @@ from services.whatsapp_service import whatsapp_service
 from services.email_service import email_service
 from services.hacienda_service import hacienda_service
 from services.stripe_service import stripe_service
+from app.core.auth import require_scopes
+from app.core.auth import get_current_active_superuser
+from app.models.user import User
 
 router = APIRouter()
 
@@ -58,7 +61,10 @@ class PaymentIntent(BaseModel):
 # ============================================================================
 
 @router.post("/whatsapp/send")
-async def send_whatsapp(message: WhatsAppMessage):
+async def send_whatsapp(
+    message: WhatsAppMessage,
+    _: User = Depends(require_scopes(["marketing:write"])),
+):
     """Enviar mensaje de WhatsApp"""
     result = await whatsapp_service.send_message(
         to_number=message.to_number,
@@ -95,7 +101,9 @@ async def whatsapp_webhook(request: Request):
     return result
 
 @router.get("/whatsapp/status")
-async def whatsapp_status():
+async def whatsapp_status(
+    _: User = Depends(require_scopes(["marketing:read"])),
+):
     """Obtener estado del servicio de WhatsApp"""
     return whatsapp_service.get_status()
 
@@ -104,7 +112,10 @@ async def whatsapp_status():
 # ============================================================================
 
 @router.post("/email/send")
-async def send_email(message: EmailMessage):
+async def send_email(
+    message: EmailMessage,
+    _: User = Depends(require_scopes(["marketing:write"])),
+):
     """Enviar email"""
     result = await email_service.send_email(
         to_email=message.to_email,
@@ -144,7 +155,9 @@ async def email_webhook(request: Request):
     return result
 
 @router.get("/email/status")
-async def email_status():
+async def email_status(
+    _: User = Depends(require_scopes(["marketing:read"])),
+):
     """Obtener estado del servicio de Email"""
     return email_service.get_status()
 
@@ -153,7 +166,10 @@ async def email_status():
 # ============================================================================
 
 @router.post("/hacienda/factura")
-async def enviar_factura(factura: FacturaEmitida):
+async def enviar_factura(
+    factura: FacturaEmitida,
+    _: User = Depends(require_scopes(["tax:write"])),
+):
     """Enviar factura al SII de Hacienda"""
     result = await hacienda_service.enviar_factura_emitida(factura.dict())
     
@@ -163,7 +179,10 @@ async def enviar_factura(factura: FacturaEmitida):
     return result
 
 @router.post("/hacienda/modelo-303")
-async def presentar_modelo_303(modelo: Modelo303):
+async def presentar_modelo_303(
+    modelo: Modelo303,
+    _: User = Depends(require_scopes(["tax:write"])),
+):
     """Presentar Modelo 303 (IVA trimestral)"""
     result = await hacienda_service.presentar_modelo_303(
         trimestre=modelo.trimestre,
@@ -177,7 +196,9 @@ async def presentar_modelo_303(modelo: Modelo303):
     return result
 
 @router.get("/hacienda/status")
-async def hacienda_status():
+async def hacienda_status(
+    _: User = Depends(require_scopes(["tax:read"])),
+):
     """Obtener estado del servicio de Hacienda"""
     return hacienda_service.get_status()
 
@@ -186,7 +207,10 @@ async def hacienda_status():
 # ============================================================================
 
 @router.post("/stripe/payment-intent")
-async def create_payment(payment: PaymentIntent):
+async def create_payment(
+    payment: PaymentIntent,
+    _: User = Depends(require_scopes(["tax:write"])),
+):
     """Crear Payment Intent para procesar pago"""
     result = await stripe_service.create_payment_intent(
         amount=payment.amount,
@@ -225,7 +249,9 @@ async def stripe_webhook(
     return result
 
 @router.get("/stripe/status")
-async def stripe_status():
+async def stripe_status(
+    _: User = Depends(require_scopes(["tax:read"])),
+):
     """Obtener estado del servicio de Stripe"""
     return stripe_service.get_status()
 
@@ -234,7 +260,9 @@ async def stripe_status():
 # ============================================================================
 
 @router.get("/status")
-async def integrations_status():
+async def integrations_status(
+    _: User = Depends(get_current_active_superuser),
+):
     """Obtener estado de todas las integraciones"""
     return {
         "whatsapp": whatsapp_service.get_status(),

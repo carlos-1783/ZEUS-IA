@@ -1,5 +1,6 @@
 import { ref, readonly, onBeforeUnmount } from 'vue';
 import { WebSocketEvents, type WebSocketEvent, type ConnectionStatus } from './types/websocket';
+import config from '@/config';
 
 type EventListener<T = any> = (event: WebSocketEvent<T>) => void;
 
@@ -149,27 +150,15 @@ const webSocketService = {
       // Generar un client_id único
       const clientId = `client-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       
-      // Usar el proxy de Vite en desarrollo
-      const isDev = import.meta.env.DEV;
-      let wsUrl: string;
-      
-      if (isDev) {
-        // En desarrollo, conectar directamente al backend en puerto 8000
+      let wsUrl = (config.ws.url || '').trim();
+      if (!wsUrl) {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${protocol}//localhost:8000/api/v1/ws/${clientId}`;
-      } else {
-        // En producción, deshabilitar WebSocket y usar HTTP polling
-        console.log('WebSocket deshabilitado en producción - usando HTTP polling');
-        return false;
+        wsUrl = `${protocol}//${window.location.host}/api/v1/ws`;
       }
-      
-      console.log('WebSocket URL:', wsUrl);
-      console.log('Environment:', isDev ? 'DEVELOPMENT' : 'PRODUCTION');
-      console.log('Protocol:', window.location.protocol);
-      console.log('Host:', window.location.host);
-      
+      const normalizedWsUrl = wsUrl.replace(/\/$/, '');
+
       // Añadir el token como query parameter
-      const url = new URL(wsUrl);
+      const url = new URL(`${normalizedWsUrl}/${clientId}`);
       url.searchParams.set('token', token);
 
       return new Promise<boolean>((resolve, reject) => {

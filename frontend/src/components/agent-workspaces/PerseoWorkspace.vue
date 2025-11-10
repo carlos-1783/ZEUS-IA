@@ -73,6 +73,39 @@
         </header>
 
         <div class="details-grid">
+          <section class="card video-card">
+            <h5>🎥 Montaje del vídeo</h5>
+            <p class="card-description">
+              Render automático generado por PERSEO listo para revisión y descarga.
+            </p>
+            <video
+              v-if="videoUrl"
+              :src="videoUrl"
+              controls
+              playsinline
+              preload="metadata"
+              class="video-player"
+            ></video>
+            <div v-else class="video-empty">
+              <i class="fas fa-video-slash"></i>
+              <p>
+                Aún no se ha adjuntado un archivo de vídeo a este entregable. Solicita a PERSEO una
+                regeneración para producirlo automáticamente.
+              </p>
+            </div>
+            <div v-if="videoFile" class="video-meta">
+              <span>{{ formatSize(videoFile.size_bytes) }}</span>
+              <a
+                :href="buildDownloadLink(videoFile)"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="btn ghost"
+              >
+                Descargar MP4
+              </a>
+            </div>
+          </section>
+
           <section class="card" v-if="currentDetails.video_script">
             <h5>🎬 Guion de Vídeo</h5>
             <p class="card-description">{{ currentDetails.video_script.goal }}</p>
@@ -200,6 +233,12 @@ const currentDeliverable = computed(() =>
 );
 
 const buildDownloadLink = buildDownloadLinkFor;
+const videoFile = computed(() => {
+  const files = currentDeliverable.value?.files.other ?? [];
+  return files.find((file) => /\.(mp4|webm|mov|m4v)$/i.test(file.path)) ?? null;
+});
+
+const videoUrl = computed(() => (videoFile.value ? buildDownloadLink(videoFile.value) : ''));
 
 const reload = async () => {
   await load();
@@ -297,11 +336,12 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  padding: 24px 32px 48px;
+  padding: 32px 48px 64px;
   background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 55%);
-  min-height: calc(100vh - 120px);
-  max-width: 1200px;
-  margin: 0 auto;
+  min-height: calc(100vh - 96px);
+  max-width: 1440px;
+  width: min(1440px, calc(100% - 48px));
+  margin: 0 auto 32px;
 }
 
 .workspace-header {
@@ -360,11 +400,11 @@ onMounted(async () => {
 
 .workspace-body {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 360px 1fr;
   gap: 24px;
   flex: 1;
   min-height: 0;
-  max-height: calc(100vh - 220px);
+  max-height: calc(100vh - 180px);
 }
 
 .deliverable-list {
@@ -502,7 +542,7 @@ onMounted(async () => {
 
 .details-grid {
   display: grid;
-  gap: 20px;
+  gap: 24px;
 }
 
 .card {
@@ -525,6 +565,48 @@ onMounted(async () => {
 .card-description {
   color: #475569;
   font-size: 14px;
+}
+
+.video-card {
+  padding-bottom: 26px;
+}
+
+.video-player {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #000;
+  max-height: 520px;
+  object-fit: cover;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+}
+
+.video-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 18px;
+  font-size: 13px;
+  color: #475569;
+  gap: 12px;
+}
+
+.video-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 28px 20px;
+  border-radius: 14px;
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  background: rgba(248, 250, 252, 0.7);
+  color: #475569;
+  text-align: center;
+}
+
+.video-empty i {
+  font-size: 32px;
+  color: rgba(59, 130, 246, 0.6);
 }
 
 .script-list {
@@ -683,7 +765,7 @@ onMounted(async () => {
 
 @media (max-width: 600px) {
   .perseo-workspace {
-    padding: 20px 16px 80px;
+    padding: 24px 18px 80px;
     min-height: auto;
   }
 
@@ -709,6 +791,11 @@ onMounted(async () => {
   .details-actions {
     width: 100%;
     gap: 8px;
+  }
+
+  .video-meta {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 </style>

@@ -279,9 +279,12 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  padding: 24px 32px 48px;
+  padding: 32px 48px 64px;
   background: radial-gradient(circle at top left, rgba(16, 185, 129, 0.12), transparent 55%);
-  min-height: calc(100vh - 120px);
+  min-height: calc(100vh - 96px);
+  max-width: 1440px;
+  width: min(1440px, calc(100% - 48px));
+  margin: 0 auto 32px;
 }
 
 .workspace-header {
@@ -340,8 +343,11 @@ onMounted(async () => {
 
 .workspace-body {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 360px 1fr;
   gap: 24px;
+  flex: 1;
+  min-height: 0;
+  max-height: calc(100vh - 180px);
 }
 
 .deliverable-list {

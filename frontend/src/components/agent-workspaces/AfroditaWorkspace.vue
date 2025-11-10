@@ -264,7 +264,8 @@ const formatSize = (bytes: number) => {
   return `${value.toFixed(1)} ${units[index]}`;
 };
 
-const formatWeek = (label: string) => label.replace('_', ' ').replace(/\bweek\b/i, 'Semana');
+const formatWeek = (label: string | number) =>
+  String(label).replace('_', ' ').replace(/\bweek\b/i, 'Semana');
 
 watch(selectedId, loadDetails);
 
@@ -663,12 +664,14 @@ onMounted(async () => {
 @media (max-width: 900px) {
   .workspace-body {
     grid-template-columns: 1fr;
+    max-height: none;
   }
 }
 
 @media (max-width: 600px) {
   .afrodita-workspace {
     padding: 20px 16px 80px;
+    min-height: auto;
   }
 
   .workspace-header {

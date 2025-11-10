@@ -277,6 +277,8 @@ onMounted(async () => {
   padding: 24px 32px 48px;
   background: radial-gradient(circle at top right, rgba(129, 140, 248, 0.12), transparent 55%);
   min-height: calc(100vh - 120px);
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .workspace-header {
@@ -337,6 +339,9 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: 320px 1fr;
   gap: 24px;
+  flex: 1;
+  min-height: 0;
+  max-height: calc(100vh - 220px);
 }
 
 .deliverable-list {
@@ -348,6 +353,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow-y: auto;
 }
 
 .deliverable-list h4 {
@@ -432,6 +438,8 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .details-header {
@@ -667,12 +675,14 @@ onMounted(async () => {
 @media (max-width: 900px) {
   .workspace-body {
     grid-template-columns: 1fr;
+    max-height: none;
   }
 }
 
 @media (max-width: 600px) {
   .justicia-workspace {
     padding: 20px 16px 80px;
+    min-height: auto;
   }
 
   .workspace-header {

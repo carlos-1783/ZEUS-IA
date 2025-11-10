@@ -47,6 +47,7 @@ env/
 *.sqlite
 *.sqlite3
 zeus_ia.db
+backend/storage/
 
 # =============================================================================
 # NODE / FRONTEND

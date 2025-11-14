@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.api.v1 import api_router
 from app.db.base import create_tables
 from services.automation import start_agent_automation, stop_agent_automation
+from app.db.initial_superuser import ensure_initial_superuser
 
 # Create FastAPI app
 app = FastAPI(
@@ -57,6 +58,7 @@ logger = logging.getLogger("zeus.startup")
 async def startup_event():
     logger.info("Starting ZEUS-IA backend")
     create_tables()
+    ensure_initial_superuser()
     await start_agent_automation()
     logger.info("ZEUS-IA backend ready")
 

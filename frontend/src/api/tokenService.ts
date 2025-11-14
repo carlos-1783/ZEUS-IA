@@ -95,7 +95,7 @@ export const tokenService: TokenService = {
     }
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || '/api/v1'}/auth/refresh-token`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || '/api/v1'}/auth/refresh`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -107,7 +107,8 @@ export const tokenService: TokenService = {
         throw new Error('Failed to refresh token');
       }
 
-      const data = await response.json();
+      const payload = await response.json();
+      const data = payload?.access_token ? payload : payload?.data;
       
       if (data.access_token) {
         this.setToken(data.access_token);

@@ -1,7 +1,10 @@
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Dict, Any, Optional
+
+logger = logging.getLogger(__name__)
 
 class StateManager:
     def __init__(self, state_file: str = 'system_state.json'):
@@ -46,7 +49,7 @@ class StateManager:
                         if key in loaded_state:
                             self._state[key] = loaded_state[key]
         except (json.JSONDecodeError, IOError) as e:
-            print(f"Warning: Could not load state from {self.state_file}: {e}")
+            logger.warning("Could not load state from %s: %s", self.state_file, e)
     
     def _save_state(self) -> None:
         """Save the current state to the state file."""
@@ -63,7 +66,7 @@ class StateManager:
             # Rename the temp file to the actual state file
             os.rename(temp_file, self.state_file)
         except (IOError, OSError) as e:
-            print(f"Error saving state to {self.state_file}: {e}")
+            logger.error("Error saving state to %s: %s", self.state_file, e)
     
     def get_state(self) -> Dict[str, Any]:
         """Get a copy of the current state."""

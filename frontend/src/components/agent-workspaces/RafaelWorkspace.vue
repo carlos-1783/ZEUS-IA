@@ -235,13 +235,13 @@ onMounted(async () => {
 .rafael-workspace {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 28px;
   padding: 32px 48px 64px;
   background: radial-gradient(circle at top left, rgba(245, 158, 11, 0.12), transparent 55%);
   min-height: calc(100vh - 96px);
-  max-width: 1440px;
-  width: min(1440px, calc(100% - 48px));
-  margin: 0 auto 32px;
+  max-width: 98%;
+  width: calc(100% - 24px);
+  margin: 0 auto 24px;
 }
 
 .workspace-header {
@@ -292,22 +292,24 @@ onMounted(async () => {
 
 .workspace-body {
   display: grid;
-  grid-template-columns: 360px 1fr;
-  gap: 24px;
+  grid-template-columns: minmax(420px, 500px) minmax(0, 1fr);
+  gap: 32px;
   flex: 1;
   min-height: 0;
-  max-height: calc(100vh - 180px);
+  max-height: none;
+  align-items: stretch;
 }
 
 .deliverable-list {
   background: #ffffff;
   border-radius: 20px;
   border: 1px solid rgba(148, 163, 184, 0.25);
-  padding: 20px;
+  padding: 28px;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+  max-height: calc(100vh - 200px);
   overflow-y: auto;
 }
 
@@ -366,12 +368,13 @@ onMounted(async () => {
   background: #ffffff;
   border-radius: 24px;
   border: 1px solid rgba(15, 23, 42, 0.05);
-  padding: 28px;
+  padding: 32px;
   box-shadow: 0 18px 35px rgba(15, 23, 42, 0.08);
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 28px;
   min-height: 0;
+  max-height: calc(100vh - 200px);
   overflow-y: auto;
 }
 
@@ -411,7 +414,8 @@ onMounted(async () => {
 
 .cards {
   display: grid;
-  gap: 16px;
+  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
 }
 
 .card {

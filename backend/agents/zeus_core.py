@@ -172,6 +172,114 @@ class ZeusCore(BaseAgent):
             "total_agents": len(self.agents),
             "system_status": "online" if self.is_active else "offline"
         }
+    
+    def communicate_between_agents(
+        self,
+        from_agent: str,
+        to_agent: str,
+        message: str,
+        context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Permitir que un agente se comunique con otro agente
+        
+        Args:
+            from_agent: Nombre del agente que envía el mensaje
+            to_agent: Nombre del agente destinatario
+            message: Mensaje a enviar
+            context: Contexto adicional opcional
+        
+        Returns:
+            Dict con respuesta del agente destinatario
+        """
+        from_agent_upper = from_agent.upper()
+        to_agent_upper = to_agent.upper()
+        
+        if from_agent_upper not in self.agents:
+            return {
+                "success": False,
+                "error": f"Agente origen '{from_agent}' no encontrado"
+            }
+        
+        if to_agent_upper not in self.agents:
+            return {
+                "success": False,
+                "error": f"Agente destino '{to_agent}' no encontrado"
+            }
+        
+        print(f"📡 [ZEUS] {from_agent_upper} → {to_agent_upper}: {message[:100]}...")
+        
+        # Preparar contexto para el agente destinatario
+        agent_context = {
+            "user_message": message,
+            "from_agent": from_agent_upper,
+            "inter_agent_communication": True,
+            **(context or {})
+        }
+        
+        # Obtener respuesta del agente destinatario
+        target_agent = self.agents[to_agent_upper]
+        result = target_agent.process_request(agent_context)
+        
+        # Agregar metadata de comunicación
+        result["communication_metadata"] = {
+            "from": from_agent_upper,
+            "to": to_agent_upper,
+            "message": message,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        print(f"✅ [ZEUS] {to_agent_upper} respondió a {from_agent_upper}")
+        
+        return result
+    
+    def coordinate_multi_agent_task(
+        self,
+        task_description: str,
+        required_agents: List[str],
+        context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Coordinar una tarea que requiere múltiples agentes
+        
+        Args:
+            task_description: Descripción de la tarea
+            required_agents: Lista de agentes necesarios
+            context: Contexto adicional
+        
+        Returns:
+            Dict con resultados de todos los agentes
+        """
+        print(f"🎯 [ZEUS] Coordinando tarea multi-agente: {task_description}")
+        
+        results = {}
+        for agent_name in required_agents:
+            agent_upper = agent_name.upper()
+            if agent_upper not in self.agents:
+                results[agent_upper] = {
+                    "success": False,
+                    "error": f"Agente '{agent_name}' no disponible"
+                }
+                continue
+            
+            agent = self.agents[agent_upper]
+            agent_context = {
+                "user_message": task_description,
+                "multi_agent_task": True,
+                "other_agents": [a for a in required_agents if a.upper() != agent_upper],
+                **(context or {})
+            }
+            
+            result = agent.process_request(agent_context)
+            results[agent_upper] = result
+        
+        return {
+            "success": True,
+            "task": task_description,
+            "agents_involved": required_agents,
+            "results": results,
+            "coordinated_by": "ZEUS CORE"
+        }
 
     # ============================================================
     # Planificación estratégica

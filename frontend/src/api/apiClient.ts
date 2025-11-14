@@ -65,7 +65,7 @@ class ApiClient {
         const originalRequest = error.config;
 
         // Skip refresh for login or refresh-token endpoints
-        if (originalRequest.url?.includes('/auth/refresh-token') || 
+        if (originalRequest.url?.includes('/auth/refresh') || 
             originalRequest.url?.includes('/auth/login') ||
             originalRequest.skipAuthRefresh) {
           return Promise.reject(error);
@@ -208,26 +208,26 @@ class ApiClient {
         skipAuthRefresh: true
       };
 
-      const response = await this.instance.post<ApiResponse<AuthTokens>>(
-        'auth/refresh-token',
+      const response = await this.instance.post(
+        'auth/refresh',
         { refresh_token: refreshToken },
         requestConfig
       );
       
-      const responseData = response.data;
-      
-      if (!responseData || responseData.status !== 'success' || !responseData.data) {
-        console.error('[ApiClient] Invalid refresh token response:', responseData);
-        throw new Error('Invalid refresh token response');
-      }
+      const payload: any = response.data;
+      const tokens: AuthTokens | undefined = payload?.access_token
+        ? payload
+        : payload?.status === 'success'
+          ? payload.data
+          : undefined;
 
-      if (!responseData.data.access_token) {
-        console.error('[ApiClient] No access token in response:', responseData);
+      if (!tokens?.access_token) {
+        console.error('[ApiClient] Invalid refresh token response:', payload);
         throw new Error('No access token received');
       }
       
       console.log('[ApiClient] Token refresh successful');
-      return { data: responseData.data };
+      return { data: tokens };
       
     } catch (error) {
       console.error('[ApiClient] Error refreshing token:', error);

@@ -339,8 +339,8 @@ def get_current_user(db: Session, token: str) -> User:
         if isinstance(token_audience, str):
             if token_audience not in valid_audiences:
                 error_msg = f"Invalid token audience: {token_audience}"
-                print(f"[JWT] {error_msg}")
-                print(f"[JWT] Valid audiences: {valid_audiences}")
+                logger.error("[JWT] %s", error_msg)
+                logger.error("[JWT] Valid audiences: %s", valid_audiences)
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail={"error": "Invalid token audience", "valid_audiences": valid_audiences},
@@ -349,8 +349,8 @@ def get_current_user(db: Session, token: str) -> User:
         elif isinstance(token_audience, list):
             if not any(aud in valid_audiences for aud in token_audience):
                 error_msg = f"No valid audience found in: {token_audience}"
-                print(f"[JWT] {error_msg}")
-                print(f"[JWT] Valid audiences: {valid_audiences}")
+                logger.error("[JWT] %s", error_msg)
+                logger.error("[JWT] Valid audiences: %s", valid_audiences)
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail={"error": "No valid audience found", "valid_audiences": valid_audiences},
@@ -358,7 +358,7 @@ def get_current_user(db: Session, token: str) -> User:
                 )
         else:
             error_msg = f"Invalid audience type: {type(token_audience)}"
-            print(f"[JWT] {error_msg}")
+            logger.error("[JWT] %s", error_msg)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail={"error": "Invalid audience type"},
@@ -611,8 +611,8 @@ def get_current_active_user(
             detail="Inactive user"
         )
 
-    print(f"[AUTH] Usuario autenticado: {user.email}")
-    print("="*80 + "\n")
+    logger.info("[AUTH] Usuario autenticado: %s", user.email)
+    logger.debug("=" * 80)
     return user
 
 def generate_tokens(db: Session, user: User) -> Dict[str, str]:

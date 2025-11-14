@@ -73,24 +73,44 @@
         </header>
 
         <div class="details-grid">
+          <section class="card tip-card" v-if="currentDeliverable">
+            <header class="card-header">
+              <h5>🎯 Activar entrega</h5>
+              <span class="badge">Todo listo</span>
+            </header>
+            <p class="tip-body">
+              Cuando estés conforme, pulsa <strong>“Descargar Markdown”</strong>. Obtendrás el briefing completo para pasarlo al equipo creativo o a tu IA de vídeo sin tocar nada más.
+            </p>
+          </section>
+
           <section class="card video-card">
             <h5>🎥 Montaje del vídeo</h5>
             <p class="card-description">
               Render automático generado por PERSEO listo para revisión y descarga.
             </p>
+            <div class="video-status" :class="videoStatusClass">
+              <span class="status-dot"></span>
+              <span>{{ videoStatusLabel }}</span>
+            </div>
             <video
-              v-if="videoUrl"
+              v-if="videoUrl && !isGifVideo"
               :src="videoUrl"
               controls
               playsinline
               preload="metadata"
               class="video-player"
             ></video>
+            <img
+              v-else-if="videoUrl && isGifVideo"
+              :src="videoUrl"
+              loading="lazy"
+              class="video-gif"
+              alt="Vídeo generado por PERSEO (GIF fallback)"
+            />
             <div v-else class="video-empty">
               <i class="fas fa-video-slash"></i>
               <p>
-                Aún no se ha adjuntado un archivo de vídeo a este entregable. Solicita a PERSEO una
-                regeneración para producirlo automáticamente.
+                Aún no se ha adjuntado un archivo de vídeo a este entregable. Ejecuta PERSEO nuevamente o instala MoviePy + FFmpeg para habilitar la exportación automática.
               </p>
             </div>
             <div v-if="videoFile" class="video-meta">
@@ -101,7 +121,7 @@
                 rel="noopener noreferrer"
                 class="btn ghost"
               >
-                Descargar MP4
+                {{ videoDownloadLabel }}
               </a>
             </div>
           </section>
@@ -235,10 +255,50 @@ const currentDeliverable = computed(() =>
 const buildDownloadLink = buildDownloadLinkFor;
 const videoFile = computed(() => {
   const files = currentDeliverable.value?.files.other ?? [];
-  return files.find((file) => /\.(mp4|webm|mov|m4v)$/i.test(file.path)) ?? null;
+  return files.find((file) => /\.(mp4|webm|mov|m4v|gif)$/i.test(file.path)) ?? null;
 });
 
 const videoUrl = computed(() => (videoFile.value ? buildDownloadLink(videoFile.value) : ''));
+const isGifVideo = computed(() => (videoFile.value ? /\.gif$/i.test(videoFile.value.path) : false));
+
+const videoAsset = computed(() => currentDetails.value?.video_asset ?? null);
+
+const videoStatusLabel = computed(() => {
+  const asset = videoAsset.value;
+  if (!asset) {
+    return videoFile.value
+      ? 'Vídeo disponible para descarga.'
+      : 'Generación pendiente. Ejecuta PERSEO para crear el recurso.';
+  }
+  if (asset.success === false) {
+    return 'No se pudo generar el vídeo. Revisa dependencias (MoviePy + FFmpeg).';
+  }
+  if (asset.status === 'fallback_gif') {
+    return 'GIF generado como fallback. Instala MoviePy + FFmpeg para exportar MP4.';
+  }
+  if (asset.status === 'generated') {
+    return 'Vídeo MP4 generado automáticamente por PERSEO.';
+  }
+  return videoFile.value ? 'Vídeo disponible para descarga.' : 'Generación pendiente.';
+});
+
+const videoStatusClass = computed(() => {
+  const asset = videoAsset.value;
+  if (!asset) {
+    return videoFile.value ? 'status-success' : 'status-warning';
+  }
+  if (asset.success === false) {
+    return 'status-error';
+  }
+  if (asset.status === 'fallback_gif') {
+    return 'status-warning';
+  }
+  return 'status-success';
+});
+
+const videoDownloadLabel = computed(() =>
+  videoFile.value ? (isGifVideo.value ? 'Descargar GIF' : 'Descargar MP4') : ''
+);
 
 const reload = async () => {
   await load();
@@ -335,13 +395,13 @@ onMounted(async () => {
 .perseo-workspace {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 28px;
   padding: 32px 48px 64px;
   background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 55%);
   min-height: calc(100vh - 96px);
-  max-width: 1440px;
-  width: min(1440px, calc(100% - 48px));
-  margin: 0 auto 32px;
+  max-width: 98%;
+  width: calc(100% - 24px);
+  margin: 0 auto 24px;
 }
 
 .workspace-header {
@@ -400,22 +460,24 @@ onMounted(async () => {
 
 .workspace-body {
   display: grid;
-  grid-template-columns: 360px 1fr;
-  gap: 24px;
+  grid-template-columns: minmax(420px, 500px) minmax(0, 1fr);
+  gap: 32px;
   flex: 1;
   min-height: 0;
-  max-height: calc(100vh - 180px);
+  max-height: none;
+  align-items: stretch;
 }
 
 .deliverable-list {
   background: #ffffff;
   border-radius: 20px;
   border: 1px solid rgba(148, 163, 184, 0.25);
-  padding: 20px;
+  padding: 28px;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+  max-height: calc(100vh - 200px);
   overflow-y: auto;
 }
 
@@ -483,12 +545,13 @@ onMounted(async () => {
   background: #ffffff;
   border-radius: 24px;
   border: 1px solid rgba(15, 23, 42, 0.05);
-  padding: 28px;
+  padding: 32px;
   box-shadow: 0 18px 35px rgba(15, 23, 42, 0.08);
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 28px;
   min-height: 0;
+  max-height: calc(100vh - 200px);
   overflow-y: auto;
 }
 
@@ -543,6 +606,7 @@ onMounted(async () => {
 .details-grid {
   display: grid;
   gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
 }
 
 .card {
@@ -562,6 +626,17 @@ onMounted(async () => {
   font-weight: 700;
 }
 
+.tip-card {
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.15) 0%, #ffffff 65%);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.tip-body {
+  color: #1d4ed8;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
 .card-description {
   color: #475569;
   font-size: 14px;
@@ -569,6 +644,40 @@ onMounted(async () => {
 
 .video-card {
   padding-bottom: 26px;
+}
+
+.video-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  width: fit-content;
+}
+
+.video-status .status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.video-status.status-success {
+  color: #16a34a;
+  background: rgba(134, 239, 172, 0.2);
+}
+
+.video-status.status-warning {
+  color: #d97706;
+  background: rgba(251, 191, 36, 0.2);
+}
+
+.video-status.status-error {
+  color: #dc2626;
+  background: rgba(248, 113, 113, 0.2);
 }
 
 .video-player {
@@ -579,6 +688,24 @@ onMounted(async () => {
   max-height: 520px;
   object-fit: cover;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+}
+
+.video-gif {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+  background: #0f172a;
+  object-fit: contain;
+}
+
+.video-gif {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+  background: #0f172a;
+  object-fit: contain;
 }
 
 .video-meta {

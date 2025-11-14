@@ -182,11 +182,47 @@ Eres la voz humana de ZEUS-IA. El corazón del sistema. 💙""",
         channel = context.get("channel", "chat")
         priority = context.get("priority", "normal")
         
+        # Si es comunicación entre agentes, procesar directamente
+        if context.get("inter_agent_communication"):
+            enhanced_message = user_message
+        else:
+            enhanced_message = user_message
+            
+            # Detectar si necesita ayuda de otros agentes
+            needs_fiscal_help = any(kw in user_message.lower() for kw in [
+                "fiscal", "impuesto", "iva", "irpf", "hacienda", "nómina", "seguridad social"
+            ])
+            needs_legal_help = any(kw in user_message.lower() for kw in [
+                "legal", "contrato", "despido", "baja", "gdpr", "privacidad"
+            ])
+            
+            # Si necesita ayuda fiscal, solicitar a RAFAEL
+            if needs_fiscal_help and self.zeus_core_ref:
+                print(f"📡 [AFRODITA] Detecté necesidad de ayuda fiscal, consultando a RAFAEL...")
+                fiscal_response = self.request_agent_help(
+                    "RAFAEL",
+                    f"AFRODITA necesita información fiscal para: {user_message}",
+                    context
+                )
+                if fiscal_response and fiscal_response.get("success"):
+                    enhanced_message += f"\n\n[Información de RAFAEL]: {fiscal_response.get('content', '')[:500]}"
+            
+            # Si necesita ayuda legal, solicitar a JUSTICIA
+            if needs_legal_help and self.zeus_core_ref:
+                print(f"📡 [AFRODITA] Detecté necesidad de ayuda legal, consultando a JUSTICIA...")
+                legal_response = self.request_agent_help(
+                    "JUSTICIA",
+                    f"AFRODITA necesita información legal para: {user_message}",
+                    context
+                )
+                if legal_response and legal_response.get("success"):
+                    enhanced_message += f"\n\n[Información de JUSTICIA]: {legal_response.get('content', '')[:500]}"
+        
         # Analizar tipo de consulta
         query_type = self._classify_query(user_message)
         
         try:
-            decision = self.make_decision(user_message, additional_context=context)
+            decision = self.make_decision(enhanced_message, additional_context=context)
             decision["query_type"] = query_type
             decision["channel"] = channel
             decision["priority"] = priority

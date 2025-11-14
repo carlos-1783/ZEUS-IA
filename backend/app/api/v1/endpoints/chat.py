@@ -3,7 +3,7 @@ Endpoint para chat con agentes IA
 """
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import sys
 import os
 
@@ -47,12 +47,19 @@ try:
     afrodita = Afrodita()
     print("✅ AFRODITA OK")
     
-    # Registrar agentes en ZEUS
+    # Registrar agentes en ZEUS y establecer referencias para comunicación
     zeus.register_agent(perseo)
     zeus.register_agent(rafael)
     zeus.register_agent(thalos)
     zeus.register_agent(justicia)
     zeus.register_agent(afrodita)
+    
+    # Establecer referencia a ZEUS CORE en todos los agentes para comunicación entre ellos
+    perseo.set_zeus_core_ref(zeus)
+    rafael.set_zeus_core_ref(zeus)
+    thalos.set_zeus_core_ref(zeus)
+    justicia.set_zeus_core_ref(zeus)
+    afrodita.set_zeus_core_ref(zeus)
     
     # Asegurar que el plan pre-lanzamiento esté inicializado
     try:
@@ -91,6 +98,17 @@ class ChatResponse(BaseModel):
     confidence: Optional[float] = None
     hitl_required: Optional[bool] = None
     error: Optional[str] = None
+
+class AgentCommunicationRequest(BaseModel):
+    from_agent: str
+    to_agent: str
+    message: str
+    context: Optional[dict] = None
+
+class MultiAgentTaskRequest(BaseModel):
+    task_description: str
+    required_agents: List[str]
+    context: Optional[dict] = None
 
 @router.post("/{agent_name}/chat", response_model=ChatResponse)
 async def chat_with_agent(agent_name: str, request: ChatRequest):
@@ -158,6 +176,57 @@ async def chat_with_agent(agent_name: str, request: ChatRequest):
             success=False,
             error=str(e)
         )
+
+@router.post("/agents/communicate")
+async def communicate_agents(request: AgentCommunicationRequest):
+    """
+    Endpoint para comunicación entre agentes
+    
+    Args:
+        request: Solicitud de comunicación entre agentes
+    
+    Returns:
+        Respuesta del agente destino
+    """
+    if zeus is None:
+        raise HTTPException(
+            status_code=500,
+            detail="ZEUS CORE no está inicializado"
+        )
+    
+    result = zeus.communicate_between_agents(
+        from_agent=request.from_agent,
+        to_agent=request.to_agent,
+        message=request.message,
+        context=request.context or {}
+    )
+    
+    return result
+
+@router.post("/agents/coordinate")
+async def coordinate_agents(request: MultiAgentTaskRequest):
+    """
+    Endpoint para coordinar tareas multi-agente
+    
+    Args:
+        request: Solicitud de coordinación multi-agente
+    
+    Returns:
+        Resultados de todos los agentes
+    """
+    if zeus is None:
+        raise HTTPException(
+            status_code=500,
+            detail="ZEUS CORE no está inicializado"
+        )
+    
+    result = zeus.coordinate_multi_agent_task(
+        task_description=request.task_description,
+        required_agents=request.required_agents,
+        context=request.context or {}
+    )
+    
+    return result
 
 @router.get("/health")
 async def chat_health():

@@ -71,9 +71,10 @@ def resolve_user_scopes(user: User, existing_scopes: Optional[List[str]] = None)
     return scope_map.get(user.email.lower(), [])
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
-    print(f"Intentando autenticar: {email}")
+    logger.debug("Intento de autenticación para: %s", email)
     user = get_user(db, email=email)
-    print(f"Usuario encontrado: {user}")
+    if user:
+        logger.debug("Usuario %s localizado para autenticación", email)
     try:
         if not user:
             logger.warning(f"Intento de inicio de sesión fallido para el usuario: {email}")
@@ -143,8 +144,15 @@ async def get_current_user(
         # For WebSocket, we'll get the token from the query parameters
         token = request.query_params.get('token')
     elif not token and request:
-        # For regular HTTP requests, use the OAuth2 scheme
-        token = await oauth2_scheme(request) if hasattr(oauth2_scheme, '__call__') else None
+        # For regular HTTP requests, try OAuth2 scheme first
+        try:
+            token = await oauth2_scheme(request) if hasattr(oauth2_scheme, '__call__') else None
+        except Exception:
+            token = None
+        
+        # If no token in header, check query parameters (for direct downloads)
+        if not token and request.query_params.get('token'):
+            token = request.query_params.get('token')
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -152,9 +160,14 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     
+    # Verificar que hay token
+    if not token:
+        logger.warning("Token no proporcionado")
+        raise credentials_exception
+    
     try:
         # Limpiar el token por si viene con prefijo 'Bearer '
-        if token.startswith('Bearer '):
+        if isinstance(token, str) and token.startswith('Bearer '):
             token = token[7:].strip()
             
         # Decodificar el token
@@ -170,7 +183,8 @@ async def get_current_user(
                 }
             )
         except jwt.ExpiredSignatureError:
-            logger.warning("Token expirado")
+            # Token expirado es normal - el frontend maneja el refresh automáticamente
+            logger.debug("Token expirado - el cliente debería hacer refresh automático")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token expirado",
@@ -209,13 +223,17 @@ async def get_current_user(
         payload["scopes"] = effective_scopes
             
         # Agregar información del usuario al request para uso posterior
-        request.state.user = user
-        request.state.token_payload = payload
+        if request:
+            request.state.user = user
+            request.state.token_payload = payload
         
         return user
         
+    except HTTPException:
+        # Re-lanzar HTTPExceptions (401, 403, etc.) sin modificar
+        raise
     except Exception as e:
-        logger.error(f"Error inesperado en get_current_user: {str(e)}")
+        logger.error(f"Error inesperado en get_current_user: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor al validar el token"

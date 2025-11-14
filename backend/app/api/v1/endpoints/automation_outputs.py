@@ -8,10 +8,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional, List, Dict
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import FileResponse
 
 from services.automation.utils import OUTPUT_BASE_DIR
+from app.core.auth import get_current_active_superuser
+from app.models.user import User
 
 router = APIRouter()
 
@@ -46,7 +48,10 @@ def _collect_outputs(agent: Optional[str] = None) -> List[Dict[str, str]]:
 
 
 @router.get("/outputs")
-async def list_outputs(agent: Optional[str] = None):
+async def list_outputs(
+    agent: Optional[str] = None,
+    _: User = Depends(get_current_active_superuser),
+):
     """
     Listar los entregables generados por los agentes.
     """
@@ -59,12 +64,37 @@ async def list_outputs(agent: Optional[str] = None):
 
 
 @router.get("/outputs/{agent}/{filename}")
-async def download_output(agent: str, filename: str):
+async def download_output(
+    agent: str,
+    filename: str,
+    token: Optional[str] = None,  # Token como query param para descargas directas
+    current_user: User = Depends(get_current_active_superuser),
+):
     """
     Descargar un entregable concreto.
+    Permite token como query parameter para compatibilidad con descargas directas.
     """
     file_path = OUTPUT_BASE_DIR / agent.lower() / filename
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
-    return FileResponse(file_path)
+    
+    # Determinar content type basado en extensión
+    content_type = "application/octet-stream"
+    if filename.endswith('.json'):
+        content_type = "application/json"
+    elif filename.endswith(('.md', '.markdown')):
+        content_type = "text/markdown"
+    elif filename.endswith(('.mp4', '.mov', '.avi')):
+        content_type = "video/mp4"
+    elif filename.endswith('.gif'):
+        content_type = "image/gif"
+    
+    return FileResponse(
+        file_path,
+        media_type=content_type,
+        filename=filename,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
 

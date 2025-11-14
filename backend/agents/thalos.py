@@ -80,6 +80,9 @@ class Thalos(BaseAgent):
         target_ip = context.get("target_ip")
         target_user = context.get("target_user")
         
+        # Si es comunicación entre agentes, procesar directamente (pero mantener safeguards)
+        is_inter_agent = context.get("inter_agent_communication", False)
+        
         # SAFEGUARD 1: Verificar que no se ataque al creador
         if target_ip and self._is_protected_ip(target_ip):
             return {

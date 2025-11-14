@@ -6,10 +6,12 @@ Genera entregables automáticos de marketing.
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, Any
 
 from app.models.agent_activity import AgentActivity
 from .. import utils
+# Importación diferida para evitar circular import
 
 
 def _build_video_script(activity: AgentActivity) -> Dict[str, Any]:
@@ -87,6 +89,12 @@ def handle_perseo_task(activity: AgentActivity) -> Dict[str, Any]:
         "summary": "Plan integral de lanzamiento listo para ejecutar con IA y canales orgánicos/pagos.",
     }
 
+    # Importación diferida para evitar circular import
+    from services.video_service import generate_marketing_video
+    video_result = generate_marketing_video(deliverable, agent, prefix)
+    video_path = video_result.get("path") if video_result.get("success") else None
+    deliverable["video_asset"] = video_result
+
     json_path = utils.write_json(agent, prefix, deliverable)
     markdown_content = utils.summarize_markdown(
         "Plan de Lanzamiento ZEUS IA",
@@ -109,6 +117,14 @@ def handle_perseo_task(activity: AgentActivity) -> Dict[str, Any]:
                 "Email: seguimiento a leads interesados.",
                 "WhatsApp: secuencia automatizada para demos.",
             ],
+            "Video generado": [
+                (
+                    f"Archivo disponible: {Path(video_path).name}"
+                    if video_path
+                    else "Se generó GIF de apoyo como fallback." if video_result.get("success")
+                    else "Pendiente de generación (revisar dependencias MoviePy/FFmpeg)."
+                )
+            ],
         },
     )
     markdown_path = utils.write_markdown(agent, prefix, markdown_content)
@@ -120,11 +136,19 @@ def handle_perseo_task(activity: AgentActivity) -> Dict[str, Any]:
                 "deliverables": {
                     "json": json_path,
                     "markdown": markdown_path,
+                    "video": video_path,
                 },
                 "summary": deliverable["summary"],
+                "video_asset": video_result,
             }
         },
-        "metrics_update": {"assets_generated": 3},
-        "notes": f"Plan de marketing generado automáticamente. Archivos: {json_path}",
+        "metrics_update": {
+            "assets_generated": 3 + (1 if video_path else 0),
+            "video_generated": 1 if video_path else 0,
+        },
+        "notes": (
+            f"Plan de marketing generado automáticamente. Archivos: {json_path}"
+            + (f" | Vídeo: {video_path}" if video_path else "")
+        ),
     }
 

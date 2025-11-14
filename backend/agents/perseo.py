@@ -52,13 +52,47 @@ class Perseo(BaseAgent):
         request_type = context.get("type", "general")
         user_message = context.get("message", context.get("user_message", ""))
         
-        # Agregar contexto específico de marketing si es necesario
-        if request_type == "campaign":
-            enhanced_message = self._enhance_campaign_request(user_message, context)
-        elif request_type == "seo":
-            enhanced_message = self._enhance_seo_request(user_message, context)
-        else:
+        # Detectar si necesita ayuda de otros agentes
+        needs_fiscal_help = any(kw in user_message.lower() for kw in [
+            "factura", "iva", "impuesto", "fiscal", "hacienda", "modelo", "declaración"
+        ])
+        needs_legal_help = any(kw in user_message.lower() for kw in [
+            "legal", "contrato", "gdpr", "privacidad", "términos", "política", "compliance"
+        ])
+        
+        # Si es comunicación entre agentes, procesar directamente
+        if context.get("inter_agent_communication"):
             enhanced_message = user_message
+        else:
+            # Agregar contexto específico de marketing si es necesario
+            if request_type == "campaign":
+                enhanced_message = self._enhance_campaign_request(user_message, context)
+            elif request_type == "seo":
+                enhanced_message = self._enhance_seo_request(user_message, context)
+            else:
+                enhanced_message = user_message
+            
+            # Si necesita ayuda fiscal, solicitar a RAFAEL
+            if needs_fiscal_help and self.zeus_core_ref:
+                print(f"📡 [PERSEO] Detecté necesidad de ayuda fiscal, consultando a RAFAEL...")
+                fiscal_response = self.request_agent_help(
+                    "RAFAEL",
+                    f"PERSEO necesita información fiscal para: {user_message}",
+                    context
+                )
+                if fiscal_response and fiscal_response.get("success"):
+                    enhanced_message += f"\n\n[Información de RAFAEL]: {fiscal_response.get('content', '')[:500]}"
+            
+            # Si necesita ayuda legal, solicitar a JUSTICIA
+            if needs_legal_help and self.zeus_core_ref:
+                print(f"📡 [PERSEO] Detecté necesidad de ayuda legal, consultando a JUSTICIA...")
+                legal_response = self.request_agent_help(
+                    "JUSTICIA",
+                    f"PERSEO necesita información legal para: {user_message}",
+                    context
+                )
+                if legal_response and legal_response.get("success"):
+                    enhanced_message += f"\n\n[Información de JUSTICIA]: {legal_response.get('content', '')[:500]}"
         
         # Hacer decisión
         result = self.make_decision(enhanced_message, additional_context=context)

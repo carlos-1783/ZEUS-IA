@@ -16,7 +16,8 @@ from app.api.v1.endpoints import (
     marketing,
     onboarding,
     activities,
-    automation_outputs
+    automation_outputs,
+    system_status
 )
 from app.api.v1.endpoints.websocket import websocket_endpoint
 
@@ -61,6 +62,7 @@ api_router.include_router(onboarding.router, prefix="/onboarding", tags=["onboar
 # Activities (registro de actividades de agentes)
 api_router.include_router(activities.router, prefix="/activities", tags=["activities"])
 api_router.include_router(automation_outputs.router, prefix="/automation", tags=["automation"])
+api_router.include_router(system_status.router, prefix="/system", tags=["system-status"])
 
 # WebSocket endpoint - CORREGIDO para Railway
 @api_router.websocket("/ws/{client_id}")

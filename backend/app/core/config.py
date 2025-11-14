@@ -1,3 +1,4 @@
+import logging
 from pydantic_settings import BaseSettings
 from typing import Dict, List, Optional, Union
 import os
@@ -5,6 +6,7 @@ from dotenv import load_dotenv
 
 # Cargar variables de entorno
 load_dotenv()
+logger = logging.getLogger("zeus.config")
 
 class Settings(BaseSettings):
     # Application
@@ -175,7 +177,7 @@ def ensure_secret_key_format(secret_key: str) -> str:
     secret_key = secret_key.strip().strip('"\'')
     
     # Log the first and last 5 characters for debugging (without exposing the full key)
-    print(f"[SECURITY] Clave original: {secret_key[:5]}... (longitud: {len(secret_key)} caracteres)")
+    logger.debug("[SECURITY] Clave original: %s... (longitud: %s caracteres)", secret_key[:5], len(secret_key))
     
     # Ensure the key is a valid hex string if it's meant to be one
     try:
@@ -193,7 +195,7 @@ def ensure_secret_key_format(secret_key: str) -> str:
     if len(secret_key) < 32:  # At least 32 characters for a strong secret
         raise ValueError("La clave secreta debe tener al menos 32 caracteres")
     
-    print(f"[SECURITY] Clave final: {secret_key[:5]}... (longitud: {len(secret_key)} caracteres)")
+    logger.debug("[SECURITY] Clave final: %s... (longitud: %s caracteres)", secret_key[:5], len(secret_key))
     return secret_key
 
 # Crear instancia de configuración
@@ -202,10 +204,10 @@ settings = Settings()
 # Validar y asegurar el formato de la clave secreta
 try:
     settings.SECRET_KEY = ensure_secret_key_format(settings.SECRET_KEY)
-    print(f"[SECURITY] Clave secreta configurada correctamente. Longitud: {len(settings.SECRET_KEY)} caracteres")
-    print(f"[SECURITY] Muestra de clave: {settings.SECRET_KEY[:5]}...")
+    logger.info("[SECURITY] Clave secreta configurada correctamente. Longitud: %s caracteres", len(settings.SECRET_KEY))
+    logger.debug("[SECURITY] Muestra de clave: %s...", settings.SECRET_KEY[:5])
 except ValueError as e:
-    print(f"[ERROR] Error en la configuración de la clave secreta: {str(e)}")
+    logger.error("Error en la configuración de la clave secreta: %s", str(e))
     raise
 
 # NOTA IMPORTANTE: Las claves SECRET_KEY deben ser configuradas en variables de entorno

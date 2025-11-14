@@ -4,6 +4,8 @@ import {
   buildOutputDownloadUrl,
   type AutomationOutput,
 } from '@/api/automationService';
+import apiClient from '@/api/apiClient';
+import tokenService from '@/api/tokenService';
 
 export interface DeliverableFiles {
   json?: AutomationOutput;
@@ -72,17 +74,20 @@ export function useAutomationDeliverables(agent: string) {
     }
   };
 
-  const buildDownloadLinkFor = (file?: AutomationOutput) =>
-    file ? buildOutputDownloadUrl(file.path) : '';
+  const buildDownloadLinkFor = (file?: AutomationOutput) => {
+    if (!file) return '';
+    // Incluir token en la URL para descargas directas
+    const token = tokenService.getToken();
+    const baseUrl = buildOutputDownloadUrl(file.path);
+    return token ? `${baseUrl}?token=${encodeURIComponent(token)}` : baseUrl;
+  };
 
   const fetchDeliverableData = async (deliverable: DeliverableItem) => {
     if (!deliverable.files.json) return null;
-    const url = buildDownloadLinkFor(deliverable.files.json);
-    const response = await fetch(url, { headers: { Accept: 'application/json' } });
-    if (!response.ok) {
-      throw new Error(`No se pudo cargar el entregable (${response.status})`);
-    }
-    return response.json();
+    const [agent, filename] = deliverable.files.json.path.split('/');
+    // Usar axios para incluir el token automáticamente
+    const response = await apiClient.get(`/automation/outputs/${agent}/${filename}`);
+    return response.data;
   };
 
   return {

@@ -36,8 +36,40 @@ class BaseAgent(ABC):
         self.total_requests = 0
         self.total_cost = 0.0
         self.last_request_time = None
+        self.zeus_core_ref = None  # Referencia a ZEUS CORE para comunicación entre agentes
         
         print(f"🏛️ [ZEUS] Agente {self.name} ({self.role}) inicializado")
+    
+    def set_zeus_core_ref(self, zeus_core):
+        """Establecer referencia a ZEUS CORE para comunicación entre agentes"""
+        self.zeus_core_ref = zeus_core
+    
+    def request_agent_help(self, target_agent: str, question: str, context: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        """
+        Solicitar ayuda a otro agente a través de ZEUS CORE
+        
+        Args:
+            target_agent: Nombre del agente al que solicitar ayuda
+            question: Pregunta o solicitud
+            context: Contexto adicional
+        
+        Returns:
+            Dict con respuesta del agente o None si no hay comunicación disponible
+        """
+        if not self.zeus_core_ref:
+            print(f"⚠️ [{self.name}] No hay referencia a ZEUS CORE para comunicación")
+            return None
+        
+        print(f"📡 [{self.name}] Solicitando ayuda a {target_agent}: {question[:100]}...")
+        
+        result = self.zeus_core_ref.communicate_between_agents(
+            from_agent=self.name,
+            to_agent=target_agent,
+            message=question,
+            context=context
+        )
+        
+        return result
     
     @abstractmethod
     def process_request(self, context: Dict[str, Any]) -> Dict[str, Any]:

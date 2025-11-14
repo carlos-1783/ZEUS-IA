@@ -194,7 +194,7 @@ axiosInstance.interceptors.request.use(
   (config) => {
     // Skip adding auth header for login/refresh token endpoints
     const isAuthRequest = config.url?.includes('auth/login') || 
-                         config.url?.includes('auth/refresh-token');
+                         config.url?.includes('auth/refresh');
     
     // Get token from storage
     const token = tokenService.getToken();
@@ -237,17 +237,26 @@ const handleTokenRefresh = async (): Promise<boolean> => {
   }
 
   try {
-    const response = await axiosInstance.post<ApiResponse<AuthTokens>>(
-      'auth/refresh-token',
+    const response = await axiosInstance.post(
+      'auth/refresh',
       { refresh_token: refreshToken },
       { skipAuthRefresh: true } as any
     );
 
-    if (response.data.status === 'success' && response.data.data) {
-      const { access_token, refresh_token } = response.data.data;
-      tokenService.setToken(access_token);
-      if (refresh_token) {
-        tokenService.setRefreshToken(refresh_token);
+    const payload: any = response.data;
+    const tokens: AuthTokens | undefined = payload?.access_token
+      ? payload
+      : payload?.status === 'success'
+        ? payload.data
+        : undefined;
+
+    if (tokens?.access_token) {
+      tokenService.setToken(tokens.access_token);
+      if (tokens.refresh_token) {
+        tokenService.setRefreshToken(tokens.refresh_token);
+      }
+      if (tokens.expires_in) {
+        scheduleTokenRefresh(tokens.expires_in);
       }
       return true;
     }
@@ -340,31 +349,34 @@ const refreshToken = async (refreshTokenValue: string): Promise<AuthTokens> => {
   }
 
   try {
-    const response = await axiosInstance.post<ApiResponse<AuthTokens>>(
-      'auth/refresh-token',
+    const response = await axiosInstance.post(
+      'auth/refresh',
       { refresh_token: refreshTokenValue },
       { skipAuthRefresh: true } as any
     );
 
-    if (response.data.status === 'success' && response.data.data) {
-      const { access_token, refresh_token, expires_in } = response.data.data;
-      
-      // Update tokens
-      tokenService.setToken(access_token);
-      if (refresh_token) {
-        tokenService.setRefreshToken(refresh_token);
+    const payload: any = response.data;
+    const tokens: AuthTokens | undefined = payload?.access_token
+      ? payload
+      : payload?.status === 'success'
+        ? payload.data
+        : undefined;
+
+    if (tokens?.access_token) {
+      tokenService.setToken(tokens.access_token);
+      if (tokens.refresh_token) {
+        tokenService.setRefreshToken(tokens.refresh_token);
       }
 
-      // Schedule next refresh
-      if (expires_in) {
-        const refreshTime = Math.max(expires_in - 300, 60);
+      if (tokens.expires_in) {
+        const refreshTime = Math.max(tokens.expires_in - 300, 60);
         scheduleTokenRefresh(refreshTime);
       }
 
-      return response.data.data;
+      return tokens;
     }
 
-    throw new Error(response.data.error || 'Failed to refresh token');
+    throw new Error(payload?.error || 'Failed to refresh token');
   } catch (error) {
     if (isAxiosError(error) && error.response?.status === 401) {
       tokenService.removeTokens();
@@ -442,7 +454,7 @@ axiosInstance.interceptors.response.use(
     if (status === 401 && !originalRequest._retry) {
       // If this is a login/refresh request, just reject with the error
       if (originalRequest.url?.includes('auth/login') || 
-          originalRequest.url?.includes('auth/refresh-token')) {
+          originalRequest.url?.includes('auth/refresh')) {
         return Promise.reject(createErrorResponse('auth_error', 'Invalid credentials', error, data));
       }
       

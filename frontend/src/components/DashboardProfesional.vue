@@ -820,8 +820,9 @@ const chatWith = (agent) => {
 
 .agent-panel-container {
   position: relative;
-  width: min(720px, 100%);
-  max-height: calc(100vh - 96px);
+  width: min(95vw, 1600px);
+  max-height: calc(100vh - 64px);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 16px;

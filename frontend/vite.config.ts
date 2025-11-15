@@ -103,7 +103,7 @@ export default defineConfig(({ command, mode }: ConfigEnv): UserConfig => {
         changeOrigin: true,
         secure: false,
         ws: true,
-        timeout: 5000, // REDUCIR TIMEOUT
+        timeout: 120000, // Permitir respuestas largas (OpenAI, render, etc.)
         configure: (proxy: any, options: any) => {
           proxy.on('error', (err: any, req: any, res: any) => {
             console.log('Proxy error:', err);
@@ -114,7 +114,7 @@ export default defineConfig(({ command, mode }: ConfigEnv): UserConfig => {
         target: 'ws://localhost:8000',
         ws: true,
         changeOrigin: true,
-        timeout: 5000 // REDUCIR TIMEOUT
+        timeout: 120000 // Mantener sockets abiertos
       }
     }, // <-- Coma añadida aquí
     fs: {

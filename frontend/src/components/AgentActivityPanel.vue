@@ -670,11 +670,14 @@ onMounted(() => {
 .activity-panel {
   background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  padding: 24px;
-  height: 600px;
+  border-radius: 24px;
+  padding: 32px;
+  height: auto;
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
+  width: 100%;
 }
 
 /* Header */
@@ -1131,8 +1134,8 @@ onMounted(() => {
 /* Workspace Tab */
 .workspace-content {
   padding: 0;
-  overflow-y: auto;
-  max-height: 100%;
+  overflow: visible;
+  max-height: none;
 }
 
 .no-workspace {

@@ -42,7 +42,7 @@
       base-uri 'self';
       form-action 'self';
       worker-src 'self' blob:;
-      media-src 'self' data: blob:;
+      media-src 'self' data: blob: http://localhost:8000 http://127.0.0.1:8000 https://zeus-ia-production-16d8.up.railway.app https://zeus-ia-production.up.railway.app;
       child-src 'self' blob:;">
     
     <!-- Deshabilitar COEP/COOP para desarrollo -->

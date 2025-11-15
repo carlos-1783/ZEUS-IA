@@ -8,8 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional, List, Dict
 
-from fastapi import APIRouter, HTTPException, Depends
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, HTTPException, Depends, Response
+from fastapi.responses import FileResponse, JSONResponse
 
 from services.automation.utils import OUTPUT_BASE_DIR
 from app.core.auth import get_current_active_superuser
@@ -47,6 +47,15 @@ def _collect_outputs(agent: Optional[str] = None) -> List[Dict[str, str]]:
     return outputs
 
 
+@router.options("/outputs", include_in_schema=False)
+async def outputs_preflight() -> Response:
+    """
+    Responder manualmente a preflight requests para evitar que FastAPI ejecute
+    dependencias de autenticación durante OPTIONS.
+    """
+    return Response(status_code=204)
+
+
 @router.get("/outputs")
 async def list_outputs(
     agent: Optional[str] = None,
@@ -61,6 +70,11 @@ async def list_outputs(
         "total": len(files),
         "outputs": files,
     }
+
+
+@router.options("/outputs/{agent}/{filename}", include_in_schema=False)
+async def download_preflight(agent: str, filename: str) -> Response:
+    return Response(status_code=204)
 
 
 @router.get("/outputs/{agent}/{filename}")

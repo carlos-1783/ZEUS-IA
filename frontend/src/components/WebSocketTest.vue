@@ -264,7 +264,7 @@ const connectWebSocket = async () => {
     addMessage(`Connecting to WebSocket server...`, 'out', 'info');
     
     // Store the WebSocket URL for display
-    const baseUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
+    const baseUrl = import.meta.env.VITE_WS_URL || (import.meta.env.DEV ? 'ws://localhost:8000' : 'wss://zeus-ia-production-16d8.up.railway.app');
     const cleanBaseUrl = baseUrl.replace(/\/$/, '').replace(/\/ws$/, '');
     wsUrl.value = `${cleanBaseUrl}/ws/${clientId.value}`;
     

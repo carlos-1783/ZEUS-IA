@@ -1,8 +1,15 @@
+const isDev = import.meta.env.DEV;
+const PROD_API_BASE = 'https://zeus-ia-production-16d8.up.railway.app/api/v1';
+const PROD_WS_BASE = 'wss://zeus-ia-production-16d8.up.railway.app/ws';
+
+const FALLBACK_API_BASE = isDev ? 'http://localhost:8000/api/v1' : PROD_API_BASE;
+const FALLBACK_WS_BASE = isDev ? 'ws://localhost:8000/api/v1/ws' : PROD_WS_BASE;
+
 // API configuration
-export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || FALLBACK_API_BASE;
 
 // WebSocket configuration
-export const WS_BASE_URL = import.meta.env.VITE_WS_URL || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
+export const WS_BASE_URL = import.meta.env.VITE_WS_URL || FALLBACK_WS_BASE;
 
 // App configuration
 export const APP_NAME = 'ZEUS-IA';

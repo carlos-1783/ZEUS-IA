@@ -1,5 +1,6 @@
 import type { TokenService, TokenPayload } from './types';
 import { jwtDecode } from 'jwt-decode';
+import { API_BASE_URL } from '@/config';
 
 const TOKEN_KEY = 'auth_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
@@ -95,7 +96,7 @@ export const tokenService: TokenService = {
     }
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || '/api/v1'}/auth/refresh`, {
+      const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

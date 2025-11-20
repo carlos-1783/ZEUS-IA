@@ -67,6 +67,8 @@ const messageLog = ref<Array<{
   error?: string;
 }>>([]);
 
+const WS_BASE_URL = import.meta.env.VITE_WS_URL || (import.meta.env.DEV ? 'ws://localhost:8000' : 'wss://zeus-ia-production-16d8.up.railway.app');
+
 const {
   status: connectionStatus,
   isConnected,
@@ -82,7 +84,7 @@ const socket = ref<WebSocket | null>(null);
 watch(connectionStatus, (newStatus) => {
   if (newStatus === 'connected' && !socket.value) {
     // Store the socket instance when connected
-    socket.value = new WebSocket(`${import.meta.env.VITE_WS_URL || 'ws://localhost:8000'}/ws?token=${authStore.token}`);
+    socket.value = new WebSocket(`${WS_BASE_URL}/ws?token=${authStore.token}`);
   } else if (newStatus === 'disconnected' || newStatus === 'error') {
     socket.value = null;
   }

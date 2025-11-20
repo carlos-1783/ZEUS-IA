@@ -7,6 +7,7 @@ import axios, {
   isAxiosError
 } from 'axios';
 import { decodeToken } from '../utils/tokenService';
+import { API_BASE_URL } from '@/config';
 import type {
   ApiResponse,
   AuthTokens,
@@ -149,7 +150,7 @@ const tokenService: TokenService = {
 // ====================
 
 const axiosInstance: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api/v1',
+  baseURL: API_BASE_URL,
   timeout: 30000, // 30 seconds
   headers: {
     'Content-Type': 'application/json',

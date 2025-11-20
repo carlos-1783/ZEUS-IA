@@ -158,6 +158,7 @@ const plans = {
 }
 
 const selectedPlan = route.params.plan || 'growth'
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000/api/v1' : 'https://zeus-ia-production-16d8.up.railway.app/api/v1')
 const planDetails = computed(() => plans[selectedPlan])
 const totalToday = computed(() => planDetails.value.setupPrice + planDetails.value.monthlyPrice)
 
@@ -219,7 +220,7 @@ const processPayment = async () => {
 
   try {
     // 1. Crear Payment Intent en el backend
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/integrations/stripe/payment-intent`, {
+    const response = await fetch(`${API_URL}/integrations/stripe/payment-intent`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -279,7 +280,7 @@ const processPayment = async () => {
 
 const createUserAccount = async (paymentIntentId) => {
   try {
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/onboarding/create-account`, {
+    const response = await fetch(`${API_URL}/onboarding/create-account`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

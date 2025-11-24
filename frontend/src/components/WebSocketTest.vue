@@ -162,6 +162,7 @@ import { useWebSocket } from '@/utils/WebSocketService';
 import { useAuthStore } from '@/stores/auth';
 import type { WebSocketEvent } from '@/utils/types/websocket';
 import { WebSocketEvents } from '@/utils/types/websocket';
+import { getWebSocketUrl } from '@/config';
 
 const authStore = useAuthStore();
 const webSocket = useWebSocket();
@@ -264,9 +265,9 @@ const connectWebSocket = async () => {
     addMessage(`Connecting to WebSocket server...`, 'out', 'info');
     
     // Store the WebSocket URL for display
-    const baseUrl = import.meta.env.VITE_WS_URL || (import.meta.env.DEV ? 'ws://localhost:8000' : 'wss://zeus-ia-production-16d8.up.railway.app');
-    const cleanBaseUrl = baseUrl.replace(/\/$/, '').replace(/\/ws$/, '');
-    wsUrl.value = `${cleanBaseUrl}/ws/${clientId.value}`;
+    const baseUrl = getWebSocketUrl();
+    const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+    wsUrl.value = clientId.value ? `${cleanBaseUrl}/${clientId.value}` : cleanBaseUrl;
     
     // Connect with the token
     const success = await connect(authStore.token);

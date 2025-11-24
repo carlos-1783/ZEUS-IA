@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/stores/auth';
+import { getWebSocketUrl } from '@/config';
 
 // Make auth store available globally for testing
 const authStore = useAuthStore();
@@ -20,7 +21,8 @@ export async function testLogin(email: string, password: string) {
       // Try to initialize WebSocket
       console.log('\n=== Testing WebSocket connection ===');
       try {
-        const ws = new WebSocket(`ws://localhost:8000/api/v1/ws/test-${Date.now()}?token=${authStore.token}`);
+        const wsUrl = `${getWebSocketUrl(`test-${Date.now()}`)}?token=${authStore.token}`;
+        const ws = new WebSocket(wsUrl);
         
         ws.onopen = () => {
           console.log('✅ WebSocket connected successfully!');

@@ -117,6 +117,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { API_BASE_URL } from '@/config'
 
 const route = useRoute()
 const router = useRouter()
@@ -158,7 +159,7 @@ const plans = {
 }
 
 const selectedPlan = route.params.plan || 'growth'
-const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000/api/v1' : 'https://zeus-ia-production-16d8.up.railway.app/api/v1')
+const API_URL = API_BASE_URL
 const planDetails = computed(() => plans[selectedPlan])
 const totalToday = computed(() => planDetails.value.setupPrice + planDetails.value.monthlyPrice)
 

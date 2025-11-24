@@ -1,6 +1,6 @@
-import { ref, onUnmounted } from 'vue';
+import { ref, onUnmounted, watch } from 'vue';
 import { WebSocketEvents, type WebSocketEvent } from '../utils/types/websocket';
-import webSocketService from '../utils/WebSocketServiceV2';
+import webSocketService from '../utils/WebSocketService';
 import { tokenService } from '../api';
 
 interface UseWebSocketOptions {
@@ -20,10 +20,17 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     onError 
   } = options;
 
-  const isConnected = ref(webSocketService.isConnected);
-  const status = ref(webSocketService.status);
-  const error = ref(webSocketService.error);
-  const clientId = ref(webSocketService.clientId);
+  const baseService = webSocketService.useWebSocket();
+  const status = baseService.status;
+  const isConnected = baseService.isConnected;
+  const clientId = baseService.clientId ?? ref('');
+  const error = ref<Error | null>(baseService.error?.value ?? null);
+
+  if (baseService.error) {
+    watch(baseService.error, (newError) => {
+      error.value = newError ?? null;
+    });
+  }
 
   // Message handler
   const handleMessage = (event: WebSocketEvent) => {
@@ -32,33 +39,29 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
   // Connect handler
   const handleConnect = (event: WebSocketEvent) => {
-    isConnected.value = true;
-    status.value = 'connected';
     onConnect?.(event);
   };
 
   // Disconnect handler
   const handleDisconnect = (event: WebSocketEvent) => {
-    isConnected.value = false;
-    status.value = 'disconnected';
     onDisconnect?.(event);
   };
 
   // Error handler
   const handleError = (event: WebSocketEvent) => {
-    error.value = event.data?.error || new Error('WebSocket error occurred');
     onError?.(event);
   };
 
   // Connect to WebSocket
   const connect = async () => {
-    if (!tokenService.getToken()) {
+    const token = tokenService.getToken();
+    if (!token) {
       console.warn('[useWebSocket] No authentication token available');
       return false;
     }
 
     try {
-      await webSocketService.connect();
+      await webSocketService.connect(token);
       return true;
     } catch (err) {
       console.error('[useWebSocket] Connection error:', err);
@@ -90,9 +93,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     webSocketService.addEventListener(WebSocketEvents.CONNECT, handleConnect);
     webSocketService.addEventListener(WebSocketEvents.DISCONNECT, handleDisconnect);
     webSocketService.addEventListener(WebSocketEvents.ERROR, handleError);
-    webSocketService.addEventListener(WebSocketEvents.STATUS_UPDATE, (event) => {
-      status.value = event.data.status;
-    });
   };
 
   // Clean up event listeners

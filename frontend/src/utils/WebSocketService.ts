@@ -8,6 +8,7 @@ type EventListener<T = any> = (event: WebSocketEvent<T>) => void;
 const status = ref<ConnectionStatus>('disconnected');
 const isConnected = ref(false);
 const error = ref<Error | null>(null);
+const clientIdRef = ref<string>('');
 
 // Instancia de WebSocket
 let ws: WebSocket | null = null;
@@ -148,7 +149,8 @@ const webSocketService = {
       error.value = null;
       
       // Generar un client_id único
-      const clientId = `client-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const generatedClientId = `client-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      clientIdRef.value = generatedClientId;
       
       let wsUrl = (config.ws.url || '').trim();
       if (!wsUrl) {
@@ -158,13 +160,13 @@ const webSocketService = {
       const normalizedWsUrl = wsUrl.replace(/\/$/, '');
 
       // Añadir el token como query parameter
-      const url = new URL(`${normalizedWsUrl}/${clientId}`);
+      const url = new URL(`${normalizedWsUrl}/${generatedClientId}`);
       url.searchParams.set('token', token);
 
       return new Promise<boolean>((resolve, reject) => {
         console.log('Conectando a WebSocket:', url.toString());
         console.log('Token being sent:', token ? `${token.substring(0, 20)}...` : 'null');
-        console.log('Client ID:', clientId);
+        console.log('Client ID:', generatedClientId);
         
         try {
           ws = new WebSocket(url.toString());
@@ -292,6 +294,7 @@ const webSocketService = {
   disconnect(): void {
     // Detener heartbeat
     this._stopHeartbeat();
+    clientIdRef.value = '';
     
     if (ws) {
       try {
@@ -342,6 +345,10 @@ const webSocketService = {
   
   get currentError(): Error | null {
     return error.value;
+  },
+
+  get currentClientId(): string {
+    return clientIdRef.value;
   },
   
   // Iniciar heartbeat
@@ -398,7 +405,8 @@ const webSocketService = {
       cleanup: componentCleanup,
       status: readonly(status),
       isConnected: readonly(isConnected),
-      error: readonly(error)
+      error: readonly(error),
+      clientId: readonly(clientIdRef)
     };
   }
 };

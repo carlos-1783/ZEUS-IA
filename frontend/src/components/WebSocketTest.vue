@@ -180,17 +180,10 @@ const clientId = ref<string>('');
 
 // Watch for clientId changes if it's a ref
 if ('clientId' in webSocket && webSocket.clientId) {
-  if (typeof webSocket.clientId === 'function') {
-    // If it's a getter
-    watch(() => (webSocket.clientId as () => string)(), (newId) => {
-      clientId.value = newId;
-    });
-  } else {
-    // If it's a ref
-    watch(webSocket.clientId as Ref<string>, (newId) => {
-      clientId.value = newId;
-    });
-  }
+  const clientIdSource = webSocket.clientId as Ref<string> | Readonly<Ref<string>>;
+  watch(clientIdSource, (newId) => {
+    clientId.value = newId;
+  });
 }
 
 // State

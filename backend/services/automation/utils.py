@@ -26,21 +26,38 @@ def timestamp() -> str:
     return datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
 
 
-def write_json(agent: str, prefix: str, payload: Dict[str, Any], base_dir: Path = OUTPUT_BASE_DIR) -> str:
+def build_artifact_id(prefix: str) -> str:
+    """Generar un identificador único para los artefactos de un entregable."""
+    return f"{prefix}_{timestamp()}"
+
+
+def write_json(
+    agent: str,
+    prefix: str,
+    payload: Dict[str, Any],
+    base_dir: Path = OUTPUT_BASE_DIR,
+    artifact_id: str | None = None,
+) -> str:
     """Persistir un archivo JSON y devolver su ruta absoluta."""
     agent_dir = ensure_dir(base_dir / agent.lower())
-    filename = f"{prefix}_{timestamp()}.json"
-    file_path = agent_dir / filename
+    base_name = artifact_id or build_artifact_id(prefix)
+    file_path = agent_dir / f"{base_name}.json"
     with file_path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, ensure_ascii=False, indent=2)
     return str(file_path.resolve())
 
 
-def write_markdown(agent: str, prefix: str, content: str, base_dir: Path = OUTPUT_BASE_DIR) -> str:
+def write_markdown(
+    agent: str,
+    prefix: str,
+    content: str,
+    base_dir: Path = OUTPUT_BASE_DIR,
+    artifact_id: str | None = None,
+) -> str:
     """Persistir un archivo Markdown y devolver su ruta absoluta."""
     agent_dir = ensure_dir(base_dir / agent.lower())
-    filename = f"{prefix}_{timestamp()}.md"
-    file_path = agent_dir / filename
+    base_name = artifact_id or build_artifact_id(prefix)
+    file_path = agent_dir / f"{base_name}.md"
     with file_path.open("w", encoding="utf-8") as handle:
         handle.write(content)
     return str(file_path.resolve())

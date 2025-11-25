@@ -33,6 +33,7 @@ def generate_marketing_video(
     deliverable: Dict[str, Any],
     agent: str,
     prefix: str,
+    artifact_id: str | None = None,
 ) -> Dict[str, Any]:
     """
     Genera el recurso de vídeo asociado a un entregable.
@@ -44,7 +45,7 @@ def generate_marketing_video(
         return {"success": False, "reason": "no_frames"}
 
     agent_dir = ensure_dir(OUTPUT_BASE_DIR / agent.lower())
-    base_name = f"{prefix}_{timestamp()}"
+    base_name = artifact_id or f"{prefix}_{timestamp()}"
     mp4_path = agent_dir / f"{base_name}.mp4"
 
     # Intentar generar MP4 primero
@@ -52,14 +53,12 @@ def generate_marketing_video(
     if _write_mp4(frames, mp4_path):
         file_size = mp4_path.stat().st_size if mp4_path.exists() else 0
         logger.info(f"✅ MP4 generado exitosamente: {mp4_path.name} ({file_size} bytes)")
-        return {
-            "success": True,
-            "path": str(mp4_path.resolve()),
-            "format": "mp4",
-            "status": "generated",
-            "frame_count": len(frames),
-            "file_size": file_size,
-        }
+        return _build_video_asset_payload(
+            file_path=mp4_path,
+            fmt="mp4",
+            status="generated",
+            frame_count=len(frames),
+        )
 
     # Si falla MP4, generar GIF como fallback
     logger.warning("MP4 falló, generando GIF como fallback...")
@@ -67,18 +66,44 @@ def generate_marketing_video(
     if _write_gif(frames, gif_path):
         file_size = gif_path.stat().st_size if gif_path.exists() else 0
         logger.info(f"✅ GIF fallback generado: {gif_path.name} ({file_size} bytes)")
-        return {
-            "success": True,
-            "path": str(gif_path.resolve()),
-            "format": "gif",
-            "status": "fallback_gif",
-            "frame_count": len(frames),
-            "file_size": file_size,
-            "note": "MP4 no disponible (FFmpeg requerido). Se generó GIF como alternativa.",
-        }
+        payload = _build_video_asset_payload(
+            file_path=gif_path,
+            fmt="gif",
+            status="fallback_gif",
+            frame_count=len(frames),
+        )
+        payload["note"] = "MP4 no disponible (FFmpeg requerido). Se generó GIF como alternativa."
+        return payload
 
     logger.error("No se pudo generar ni MP4 ni GIF para el entregable PERSEO")
     return {"success": False, "reason": "generation_failed"}
+
+
+def _build_video_asset_payload(
+    file_path: Path,
+    fmt: str,
+    status: str,
+    frame_count: int,
+) -> Dict[str, Any]:
+    file_size = file_path.stat().st_size if file_path.exists() else 0
+    try:
+        relative_path = file_path.relative_to(OUTPUT_BASE_DIR).as_posix()
+    except ValueError:
+        relative_path = file_path.name
+
+    download_path = f"/automation/outputs/{relative_path}".replace("//", "/")
+
+    return {
+        "success": True,
+        "path": str(file_path.resolve()),
+        "relative_path": relative_path,
+        "filename": file_path.name,
+        "download_path": download_path,
+        "format": fmt,
+        "status": status,
+        "frame_count": frame_count,
+        "file_size": file_size,
+    }
 
 
 def _build_frames(deliverable: Dict[str, Any]) -> List[Image.Image]:

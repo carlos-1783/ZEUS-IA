@@ -233,6 +233,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue';
+import type { AutomationOutput } from '@/api/automationService';
 import { useAutomationDeliverables } from '@/composables/useAutomationDeliverables';
 
 const {
@@ -253,15 +254,55 @@ const currentDeliverable = computed(() =>
 );
 
 const buildDownloadLink = buildDownloadLinkFor;
-const videoFile = computed(() => {
+const videoAsset = computed(() => currentDetails.value?.video_asset ?? null);
+const extractRelativePathFromAsset = (asset: any): string | null => {
+  if (!asset) return null;
+  if (asset.relative_path) {
+    return String(asset.relative_path).replace(/\\/g, '/').replace(/^\/+/, '');
+  }
+  if (asset.download_path) {
+    const normalized = String(asset.download_path).replace(/\\/g, '/');
+    const marker = '/automation/outputs/';
+    const lower = normalized.toLowerCase();
+    const idx = lower.indexOf(marker);
+    if (idx !== -1) {
+      return normalized.slice(idx + marker.length);
+    }
+  }
+  if (asset.path) {
+    const normalized = String(asset.path).replace(/\\/g, '/');
+    const marker = '/outputs/';
+    const lower = normalized.toLowerCase();
+    const idx = lower.indexOf(marker);
+    if (idx !== -1) {
+      return normalized.slice(idx + marker.length);
+    }
+  }
+  return null;
+};
+
+const videoFile = computed<AutomationOutput | null>(() => {
   const files = currentDeliverable.value?.files.other ?? [];
-  return files.find((file) => /\.(mp4|webm|mov|m4v|gif)$/i.test(file.path)) ?? null;
+  const existing = files.find((file) => /\.(mp4|webm|mov|m4v|gif)$/i.test(file.path));
+  if (existing) {
+    return existing;
+  }
+  const relativePath = extractRelativePathFromAsset(videoAsset.value);
+  if (!relativePath) {
+    return null;
+  }
+  const filename = videoAsset.value?.filename || relativePath.split('/').pop() || 'video.mp4';
+  return {
+    agent: currentDeliverable.value?.agent ?? 'PERSEO',
+    filename,
+    path: relativePath,
+    size_bytes: videoAsset.value?.file_size ?? 0,
+    created_at: currentDeliverable.value?.createdAt ?? Math.floor(Date.now() / 1000),
+  };
 });
 
 const videoUrl = computed(() => (videoFile.value ? buildDownloadLink(videoFile.value) : ''));
 const isGifVideo = computed(() => (videoFile.value ? /\.gif$/i.test(videoFile.value.path) : false));
-
-const videoAsset = computed(() => currentDetails.value?.video_asset ?? null);
 
 const videoStatusLabel = computed(() => {
   const asset = videoAsset.value;

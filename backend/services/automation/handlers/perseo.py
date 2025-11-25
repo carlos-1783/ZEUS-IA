@@ -89,13 +89,19 @@ def handle_perseo_task(activity: AgentActivity) -> Dict[str, Any]:
         "summary": "Plan integral de lanzamiento listo para ejecutar con IA y canales orgánicos/pagos.",
     }
 
+    artifact_id = utils.build_artifact_id(prefix)
+
     # Importación diferida para evitar circular import
     from services.video_service import generate_marketing_video
-    video_result = generate_marketing_video(deliverable, agent, prefix)
-    video_path = video_result.get("path") if video_result.get("success") else None
+    video_result = generate_marketing_video(deliverable, agent, prefix, artifact_id=artifact_id)
+    video_path = (
+        video_result.get("relative_path")
+        if video_result.get("success")
+        else None
+    ) or video_result.get("path")
     deliverable["video_asset"] = video_result
 
-    json_path = utils.write_json(agent, prefix, deliverable)
+    json_path = utils.write_json(agent, prefix, deliverable, artifact_id=artifact_id)
     markdown_content = utils.summarize_markdown(
         "Plan de Lanzamiento ZEUS IA",
         {
@@ -127,7 +133,7 @@ def handle_perseo_task(activity: AgentActivity) -> Dict[str, Any]:
             ],
         },
     )
-    markdown_path = utils.write_markdown(agent, prefix, markdown_content)
+    markdown_path = utils.write_markdown(agent, prefix, markdown_content, artifact_id=artifact_id)
 
     return {
         "status": "completed",

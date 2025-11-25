@@ -69,31 +69,34 @@ async def shutdown_event():
 
 # Serve static files (frontend) - FIXED
 if os.path.exists("static"):
-    print(f"[DEBUG] Serving static files from: {os.path.abspath('static')}")
-    print(f"[DEBUG] Static files: {os.listdir('static')}")
-    
+    static_abs = os.path.abspath("static")
+    print(f"[DEBUG] Serving static files from: {static_abs}")
+    try:
+        print(f"[DEBUG] Static files: {os.listdir('static')}")
+    except OSError:
+        pass
+
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+
     # Mount assets directory for JS/CSS files
     if os.path.exists("static/assets"):
         app.mount("/assets", StaticFiles(directory="static/assets"), name="assets")
-        print(f"[DEBUG] Assets mounted at /assets")
-    
+        print("[DEBUG] Assets mounted at /assets")
+
     # Serve frontend for all non-API routes
     @app.get("/{full_path:path}")
     async def serve_frontend(request: Request, full_path: str):
-        # Don't serve frontend for API routes
         if full_path.startswith("api/"):
             return {"error": "Not found"}
-        
-        # Serve static files directly
-        static_path = f"static/{full_path}"
-        if os.path.exists(static_path) and os.path.isfile(static_path):
+
+        static_path = os.path.join("static", full_path)
+        if os.path.isfile(static_path):
             return FileResponse(static_path)
-        
-        # Serve index.html for all other routes (SPA)
-        if os.path.exists("static/index.html"):
-            return FileResponse("static/index.html")
-        else:
-            return {"error": "Frontend not built", "path": full_path}
+
+        index_path = os.path.join("static", "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        return {"error": "Frontend not built", "path": full_path}
 else:
     print("[ERROR] Static directory not found!")
 

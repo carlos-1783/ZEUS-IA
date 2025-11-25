@@ -82,6 +82,15 @@ def handle_perseo_task(activity: AgentActivity) -> Dict[str, Any]:
     agent = activity.agent_name.upper()
     prefix = f"{activity.id}_{activity.action_type}"
 
+    details = activity.details or {}
+    image_url = None
+    if isinstance(details, dict):
+        image_url = details.get("image_url")
+        if not image_url:
+            context_block = details.get("context") or details.get("payload")
+            if isinstance(context_block, dict):
+                image_url = context_block.get("image_url")
+
     deliverable = {
         "video_script": _build_video_script(activity),
         "ai_prompts": _build_ai_prompts(),
@@ -93,6 +102,14 @@ def handle_perseo_task(activity: AgentActivity) -> Dict[str, Any]:
 
     # Importación diferida para evitar circular import
     from services.video_service import generate_marketing_video
+    if image_url:
+        deliverable["reference_image_url"] = image_url
+        visual_notes = deliverable["video_script"].setdefault("visual_notes", [])
+        visual_notes.append(f"Imagen de referencia: {image_url}")
+        video_prompt = deliverable["ai_prompts"].get("video_generator", {})
+        if "prompt" in video_prompt:
+            video_prompt["prompt"] = f"{video_prompt['prompt']}\nImagen de referencia: {image_url}"
+
     video_result = generate_marketing_video(deliverable, agent, prefix, artifact_id=artifact_id)
     video_path = (
         video_result.get("relative_path")
@@ -146,6 +163,7 @@ def handle_perseo_task(activity: AgentActivity) -> Dict[str, Any]:
                 },
                 "summary": deliverable["summary"],
                 "video_asset": video_result,
+                **({"image_url": image_url} if image_url else {}),
             }
         },
         "metrics_update": {

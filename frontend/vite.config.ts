@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv, type ConfigEnv, type UserConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import vueJsx from '@vitejs/plugin-vue-jsx';
 import { fileURLToPath } from 'node:url';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { compression } from 'vite-plugin-compression2';
@@ -42,7 +43,8 @@ export default defineConfig(({ command, mode }: ConfigEnv): UserConfig => {
           isCustomElement: (tag: string) => tag.startsWith('ion-')
         }
       }
-    })
+    }),
+    vueJsx(),
   ];
 
   // NO AGREGAR PWA EN DESARROLLO - Solo en producción

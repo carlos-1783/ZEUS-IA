@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     # Static files
     STATIC_URL: str = "/static"
     STATIC_DIR: str = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "static")
+    PERSEO_IMAGES_ENABLED: bool = os.getenv("PERSEO_IMAGES_ENABLED", "true").lower() in ("true", "1", "yes")
+    IMAGE_STORAGE: str = os.getenv("IMAGE_STORAGE", "local")
+    PERSEO_IMAGE_UPLOAD_DIR: str = os.getenv(
+        "PERSEO_IMAGE_UPLOAD_DIR",
+        os.path.join(STATIC_DIR, "uploads", "perseo"),
+    )
+    PERSEO_IMAGE_MAX_BYTES: int = int(os.getenv("PERSEO_IMAGE_MAX_BYTES", str(5 * 1024 * 1024)))
     
     # Security - Configuración de JWT SEGURA PARA PRODUCCIÓN
     # IMPORTANTE: En producción, SIEMPRE usar variables de entorno para SECRET_KEY

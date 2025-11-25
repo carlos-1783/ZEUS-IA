@@ -1,4 +1,4 @@
-import { API_BASE_URL, WS_BASE_URL } from './config/index';
+import { API_BASE_URL, WS_BASE_URL, PERSEO_IMAGES_ENABLED } from './config/index';
 
 export const config = {
   // WebSocket configuration
@@ -25,6 +25,7 @@ export const config = {
   features: {
     enableWebSocket: true,
     enableAnalytics: import.meta.env.VITE_ENABLE_ANALYTICS === 'true',
+    perseoImagesEnabled: PERSEO_IMAGES_ENABLED,
   },
 };
 
@@ -32,4 +33,4 @@ export const config = {
 // Export default config for backward compatibility
 export default config;
 
-export { API_BASE_URL, WS_BASE_URL, getWebSocketUrl } from './config/index';
+export { API_BASE_URL, WS_BASE_URL, PERSEO_IMAGES_ENABLED, getWebSocketUrl } from './config/index';

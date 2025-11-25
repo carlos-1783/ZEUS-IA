@@ -15,6 +15,8 @@ type RuntimeWindow = Window &
 
 const isBrowser = typeof window !== 'undefined';
 const runtimeWindow = isBrowser ? (window as RuntimeWindow) : undefined;
+export const PERSEO_IMAGES_ENABLED =
+  (env.VITE_PERSEO_IMAGES_ENABLED ?? 'true').toLowerCase() !== 'false';
 
 const normalize = (value: string): string => value.trim().replace(/\/+$/, '');
 

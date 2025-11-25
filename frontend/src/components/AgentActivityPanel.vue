@@ -82,6 +82,15 @@
           </div>
         </div>
 
+        <div v-if="isPerseoAgent" class="image-uploader-wrapper">
+          <ImageUploader @uploaded="handleImageUploaded" />
+          <div v-if="imageReferenceUrl" class="image-reference-chip">
+            <span>Imagen adjunta</span>
+            <a :href="imageReferenceUrl" target="_blank" rel="noopener">Ver</a>
+            <button type="button" class="chip-remove" @click="clearImageReference">Quitar</button>
+          </div>
+        </div>
+
         <div class="chat-input-container">
           <input 
             v-model="textInput"
@@ -227,6 +236,7 @@ import RafaelWorkspace from './agent-workspaces/RafaelWorkspace.vue'
 import AfroditaWorkspace from './agent-workspaces/AfroditaWorkspace.vue'
 import ThalosWorkspace from './agent-workspaces/ThalosWorkspace.vue'
 import JusticiaWorkspace from './agent-workspaces/JusticiaWorkspace.vue'
+import ImageUploader from '@/components/ImageUploader.jsx'
 
 const props = defineProps({
   agent: {
@@ -262,6 +272,16 @@ const activeTab = ref(hasWorkspace.value ? 'workspace' : 'chat')
 const messages = ref([])
 const textInput = ref('')
 const messagesContainer = ref(null)
+const isPerseoAgent = computed(() => (props.agent?.name || '').toUpperCase().includes('PERSEO'))
+const imageReferenceUrl = ref(null)
+
+const handleImageUploaded = (payload) => {
+  imageReferenceUrl.value = payload?.url || null
+}
+
+const clearImageReference = () => {
+  imageReferenceUrl.value = null
+}
 
 // Voice chat
 const isListening = ref(false)
@@ -371,6 +391,7 @@ watch(() => props.agent.name, () => {
   loadActivities()
   loadMetrics()
   messages.value = []
+  imageReferenceUrl.value = null
 })
 
 const loadActivities = async () => {
@@ -437,6 +458,11 @@ const sendTextMessage = async () => {
   try {
     // Llamar al API real del agente
     const agentNameUrl = props.agent.name.toLowerCase().replace(/ /g, '-')
+    const contextPayload = {}
+    if (isPerseoAgent.value && imageReferenceUrl.value) {
+      contextPayload.image_url = imageReferenceUrl.value
+    }
+
     const response = await fetch(`/api/v1/chat/${agentNameUrl}/chat`, {
       method: 'POST',
       headers: {
@@ -444,7 +470,7 @@ const sendTextMessage = async () => {
       },
       body: JSON.stringify({
         message: userMessage,
-        context: {}
+        context: contextPayload
       })
     })
     
@@ -815,6 +841,113 @@ onMounted(() => {
   color: rgba(255, 255, 255, 0.4);
   margin-top: 4px;
   padding: 0 8px;
+}
+
+.image-uploader-wrapper {
+  margin: 12px 16px 0;
+  padding: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.25);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.perseo-image-uploader {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.perseo-image-uploader input[type="file"] {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.uploader-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.uploader-link {
+  font-size: 12px;
+  color: #93c5fd;
+}
+
+.uploader-body {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.uploader-btn {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.uploader-preview {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.uploader-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.uploader-reset {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.uploader-error,
+.uploader-hint {
+  font-size: 12px;
+  color: #f87171;
+}
+
+.image-reference-chip {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.2);
+  color: #bfdbfe;
+  font-size: 13px;
+}
+
+.image-reference-chip a {
+  color: #dbeafe;
+  text-decoration: underline;
+}
+
+.chip-remove {
+  border: none;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
 }
 
 .chat-input-container {

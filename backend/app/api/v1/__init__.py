@@ -1,23 +1,24 @@
 from fastapi import APIRouter, WebSocket
 
 from app.api.v1.endpoints import (
-    auth, 
-    commands, 
-    health, 
-    system, 
-    customers, 
-    test, 
-    zeus_core, 
-    agents, 
-    metrics, 
-    chat, 
+    auth,
+    commands,
+    health,
+    system,
+    customers,
+    test,
+    zeus_core,
+    agents,
+    metrics,
+    chat,
     integrations,
     google,
     marketing,
     onboarding,
     activities,
     automation_outputs,
-    system_status
+    system_status,
+    perseo_images,
 )
 from app.api.v1.endpoints.websocket import websocket_endpoint
 
@@ -63,6 +64,7 @@ api_router.include_router(onboarding.router, prefix="/onboarding", tags=["onboar
 api_router.include_router(activities.router, prefix="/activities", tags=["activities"])
 api_router.include_router(automation_outputs.router, prefix="/automation", tags=["automation"])
 api_router.include_router(system_status.router, prefix="/system", tags=["system-status"])
+api_router.include_router(perseo_images.router, tags=["perseo-images"])
 
 # WebSocket endpoint - CORREGIDO para Railway
 @api_router.websocket("/ws/{client_id}")

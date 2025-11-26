@@ -65,7 +65,10 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
         "http://localhost:8000",
-        "http://127.0.0.1:8000"
+        "http://127.0.0.1:8000",
+        "https://zeus-ia-production-16d8.up.railway.app",
+        "https://zeus-ia.com",
+        "https://app.zeus-ia.com",
     ]
     
     # CORS Settings
@@ -207,6 +210,12 @@ def ensure_secret_key_format(secret_key: str) -> str:
 
 # Crear instancia de configuración
 settings = Settings()
+
+# Extender dinámicamente orígenes CORS si existen variables adicionales
+extra_cors = os.getenv("ZEUS_ADDITIONAL_CORS_ORIGINS")
+if extra_cors:
+    extras = [origin.strip() for origin in extra_cors.split(",") if origin.strip()]
+    settings.BACKEND_CORS_ORIGINS = list(dict.fromkeys(settings.BACKEND_CORS_ORIGINS + extras))
 
 # Validar y asegurar el formato de la clave secreta
 try:

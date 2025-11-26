@@ -19,6 +19,8 @@ from app.api.v1.endpoints import (
     automation_outputs,
     system_status,
     perseo_images,
+    teamflow,
+    workspaces,
 )
 from app.api.v1.endpoints.websocket import websocket_endpoint
 
@@ -65,6 +67,8 @@ api_router.include_router(activities.router, prefix="/activities", tags=["activi
 api_router.include_router(automation_outputs.router, prefix="/automation", tags=["automation"])
 api_router.include_router(system_status.router, prefix="/system", tags=["system-status"])
 api_router.include_router(perseo_images.router, tags=["perseo-images"])
+api_router.include_router(teamflow.router, tags=["teamflow"])
+api_router.include_router(workspaces.router, tags=["workspaces"])
 
 # WebSocket endpoint - CORREGIDO para Railway
 @api_router.websocket("/ws/{client_id}")

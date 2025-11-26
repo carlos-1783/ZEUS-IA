@@ -139,11 +139,14 @@
       </div>
     </section>
   </div>
+
+  <RafaelToolsPanel />
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue';
 import { useAutomationDeliverables } from '@/composables/useAutomationDeliverables';
+import RafaelToolsPanel from './RafaelToolsPanel.vue';
 
 const {
   items: deliverables,

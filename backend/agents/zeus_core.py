@@ -5,9 +5,12 @@ El cerebro central que coordina todos los agentes
 
 import json
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, TYPE_CHECKING
 from agents.base_agent import BaseAgent
 from services.activity_logger import activity_logger
+
+if TYPE_CHECKING:
+    from services.teamflow_engine import TeamFlowEngine
 
 
 class ZeusCore(BaseAgent):
@@ -39,6 +42,9 @@ class ZeusCore(BaseAgent):
         self.prelaunch_active = False
         self.prelaunch_plan: Optional[Dict[str, Any]] = None
         self.prelaunch_plan: Optional[Dict[str, Any]] = None
+        self.teamflow_engine: Optional["TeamFlowEngine"] = None
+        self.shared_context: Dict[str, Dict[str, Any]] = {}
+        self.execution_snapshots: List[Dict[str, Any]] = []
         
         print("⚡ ZEUS CORE inicializado - El Olimpo está listo ⚡")
     
@@ -46,6 +52,11 @@ class ZeusCore(BaseAgent):
         """Registrar un agente en el sistema"""
         self.agents[agent.name.upper()] = agent
         print(f"✅ [ZEUS] Agente {agent.name} registrado")
+
+    def set_teamflow_engine(self, engine: "TeamFlowEngine"):
+        """Asociar el motor TeamFlow para coordinación avanzada."""
+        self.teamflow_engine = engine
+        print("🧠 [ZEUS] Motor TeamFlow conectado")
     
     def process_request(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -95,10 +106,23 @@ class ZeusCore(BaseAgent):
         print(f"🎯 [ZEUS] Delegando a {agent_name}...")
         
         result = agent.make_decision(user_message, additional_context=context)
+        self.shared_context[agent_name] = result
         
         # ZEUS agrega metadata de orquestación
         result["routed_by"] = "ZEUS CORE"
         result["selected_agent"] = agent_name
+        result.setdefault("metadata", {})
+        result["metadata"]["decision_metadata"] = self._build_decision_metadata(
+            agent_name=agent_name,
+            task_type=task_type,
+            context=context,
+        )
+
+        if context.get("workflow_id"):
+            result["metadata"]["workflow"] = {
+                "id": context["workflow_id"],
+                "origin": "TeamFlow",
+            }
         
         return result
     
@@ -216,10 +240,14 @@ class ZeusCore(BaseAgent):
             "inter_agent_communication": True,
             **(context or {})
         }
+        if self.shared_context.get(from_agent_upper):
+            agent_context.setdefault("shared_context", {})
+            agent_context["shared_context"][from_agent_upper] = self.shared_context[from_agent_upper]
         
         # Obtener respuesta del agente destinatario
         target_agent = self.agents[to_agent_upper]
         result = target_agent.process_request(agent_context)
+        self.shared_context[to_agent_upper] = result
         
         # Agregar metadata de comunicación
         result["communication_metadata"] = {
@@ -251,6 +279,25 @@ class ZeusCore(BaseAgent):
             Dict con resultados de todos los agentes
         """
         print(f"🎯 [ZEUS] Coordinando tarea multi-agente: {task_description}")
+
+        teamflow_run = None
+        if context and context.get("workflow_id") and self.teamflow_engine:
+            try:
+                teamflow_run = self.teamflow_engine.run_workflow(
+                    workflow_id=context["workflow_id"],
+                    payload=context.get("workflow_payload"),
+                    actor=context.get("requested_by"),
+                )
+                self.execution_snapshots.append(
+                    {
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "workflow": context["workflow_id"],
+                        "execution_id": teamflow_run["execution_id"],
+                        "summary": task_description,
+                    }
+                )
+            except ValueError as exc:
+                print(f"⚠️ [ZEUS] Error iniciando TeamFlow: {exc}")
         
         results = {}
         for agent_name in required_agents:
@@ -278,7 +325,33 @@ class ZeusCore(BaseAgent):
             "task": task_description,
             "agents_involved": required_agents,
             "results": results,
-            "coordinated_by": "ZEUS CORE"
+            "coordinated_by": "ZEUS CORE",
+            "teamflow_execution": teamflow_run
+        }
+
+    def _build_decision_metadata(self, agent_name: str, task_type: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Crear metadata trazable para auditoría y paneles."""
+        return {
+            "agent": agent_name,
+            "task_type": task_type,
+            "phase": context.get("phase", "general"),
+            "workflow_id": context.get("workflow_id"),
+            "scores": context.get("routing_scores"),
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+    def get_execution_panel(self) -> Dict[str, Any]:
+        """Panel resumido de ejecuciones y validaciones."""
+        last_runs = self.execution_snapshots[-5:]
+        teamflow_status = (
+            self.teamflow_engine.validate_integrations()
+            if self.teamflow_engine
+            else {"status": "offline"}
+        )
+        return {
+            "recent_executions": last_runs,
+            "teamflow_status": teamflow_status,
+            "agents_online": len(self.agents),
         }
 
     # ============================================================

@@ -18,6 +18,7 @@ from agents.rafael import Rafael
 from agents.thalos import Thalos
 from agents.justicia import Justicia
 from agents.afrodita import Afrodita
+from services.teamflow_engine import teamflow_engine
 
 router = APIRouter()
 
@@ -26,6 +27,7 @@ try:
     print("🔄 Inicializando ZEUS CORE...")
     zeus = ZeusCore()
     print("✅ ZEUS CORE OK")
+    zeus.set_teamflow_engine(teamflow_engine)
     
     print("🔄 Inicializando PERSEO...")
     perseo = Perseo()
@@ -239,5 +241,16 @@ async def chat_health():
     return {
         "status": "healthy",
         "agents": agents_status
+    }
+
+
+@router.get("/panel/executions")
+async def executions_panel():
+    """Panel de control consolidado de ZEUS CORE."""
+    if zeus is None:
+        raise HTTPException(status_code=500, detail="ZEUS CORE no está disponible")
+    return {
+        "success": True,
+        "panel": zeus.get_execution_panel(),
     }
 

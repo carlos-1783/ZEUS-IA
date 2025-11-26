@@ -166,11 +166,14 @@
       </p>
     </footer>
   </div>
+
+  <JusticiaToolsPanel />
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue';
 import { useAutomationDeliverables } from '@/composables/useAutomationDeliverables';
+import JusticiaToolsPanel from './JusticiaToolsPanel.vue';
 
 const {
   items: deliverables,

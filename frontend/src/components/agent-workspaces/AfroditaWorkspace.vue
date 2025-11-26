@@ -178,11 +178,14 @@
       </p>
     </footer>
   </div>
+
+  <AfroditaToolsPanel />
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue';
 import { useAutomationDeliverables } from '@/composables/useAutomationDeliverables';
+import AfroditaToolsPanel from './AfroditaToolsPanel.vue';
 
 const {
   items: deliverables,

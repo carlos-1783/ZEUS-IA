@@ -161,11 +161,14 @@
       </p>
     </footer>
   </div>
+
+  <ThalosToolsPanel />
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue';
 import { useAutomationDeliverables } from '@/composables/useAutomationDeliverables';
+import ThalosToolsPanel from './ThalosToolsPanel.vue';
 
 const {
   items: deliverables,

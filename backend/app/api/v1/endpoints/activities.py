@@ -195,7 +195,7 @@ async def get_all_agents_summary(
         Resumen por agente
     """
     try:
-        agents = ["ZEUS", "PERSEO", "RAFAEL", "THALOS", "JUSTICIA"]
+        agents = ["ZEUS", "PERSEO", "RAFAEL", "THALOS", "JUSTICIA", "AFRODITA"]
         
         summary = {}
         

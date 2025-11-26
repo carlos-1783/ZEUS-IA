@@ -222,6 +222,8 @@
       </div>
     </section>
 
+    <PerseoToolsPanel />
+
     <footer class="workspace-footer">
       <p>
         Consejo: cuando estés conforme, pulsa “Descargar Markdown” para exportar el briefing directo
@@ -235,6 +237,7 @@
 import { onMounted, ref, computed, watch } from 'vue';
 import type { AutomationOutput } from '@/api/automationService';
 import { useAutomationDeliverables } from '@/composables/useAutomationDeliverables';
+import PerseoToolsPanel from './PerseoToolsPanel.vue';
 
 const {
   items: deliverables,

@@ -115,17 +115,18 @@
             </div>
             
             <div class="price-breakdown">
-              <small>💰 Setup total: €497 (€197 hoy + €300 al deployment)</small>
+              <small>💰 Setup total: €197 (pagas solo cuando ZEUS funcione al 100%)</small>
             </div>
 
             <ul class="features-list">
-              <li>✅ 6 Agentes IA (ZEUS, PERSEO, RAFAEL, THALOS, JUSTICIA, AFRODITA)</li>
-              <li>✅ WhatsApp Automation</li>
-              <li>✅ Email Automation</li>
-              <li>✅ Facturación + Hacienda</li>
-              <li>✅ RRHH + Logística (AFRODITA)</li>
+              <li>✅ Automatización con 6 agentes</li>
+              <li>✅ WhatsApp + Email automation</li>
+              <li>✅ Modelos fiscales básicos vía RAFAEL (preparación, draft only)</li>
+              <li>✅ RRHH y logística esencial vía AFRODITA</li>
               <li>✅ Stripe Payments</li>
               <li>✅ Soporte por email</li>
+              <li>✅ Capacidad recomendada: volumen bajo-medio</li>
+              <li>✅ Velocidad estándar</li>
             </ul>
 
             <button class="btn-primary" @click="selectPlan('startup')">
@@ -159,16 +160,18 @@
             </div>
             
             <div class="price-breakdown">
-              <small>💰 Setup total: €1,497 (€497 hoy + €1,000 al deployment)</small>
+              <small>💰 Setup total: €497 (pagas solo cuando ZEUS funcione al 100%)</small>
             </div>
 
             <ul class="features-list">
-              <li>✅ Todo de ZEUS STARTUP</li>
-              <li>✅ Google Workspace (Calendar, Gmail, Drive, Sheets)</li>
-              <li>✅ Marketing Automation (Google Ads, Meta Ads)</li>
+              <li>✅ Todo STARTUP</li>
+              <li>✅ Google Workspace Integration</li>
+              <li>✅ Marketing Ads (Google Ads + Meta Ads)</li>
               <li>✅ Analytics avanzado</li>
-              <li>✅ Soporte prioritario</li>
               <li>✅ Onboarding personalizado</li>
+              <li>✅ Soporte prioritario</li>
+              <li>✅ Capacidad recomendada: volumen medio</li>
+              <li>✅ Velocidad rápida</li>
             </ul>
 
             <button class="btn-primary pulse" @click="selectPlan('growth')">
@@ -201,17 +204,19 @@
             </div>
             
             <div class="price-breakdown">
-              <small>💰 Setup total: €2,697 (€897 hoy + €1,800 al deployment)</small>
+              <small>💰 Setup total: €897 (pagas solo cuando ZEUS funcione al 100%)</small>
             </div>
 
             <ul class="features-list">
-              <li>✅ Todo de ZEUS GROWTH</li>
+              <li>✅ Todo GROWTH</li>
               <li>✅ Integraciones personalizadas</li>
-              <li>✅ Múltiples usuarios admin</li>
               <li>✅ API access completo</li>
+              <li>✅ Múltiples administradores</li>
+              <li>✅ Account Manager dedicado</li>
               <li>✅ Soporte 24/7</li>
-              <li>✅ Account manager dedicado</li>
               <li>✅ SLA garantizado</li>
+              <li>✅ Capacidad recomendada: volumen alto</li>
+              <li>✅ Velocidad en tiempo real</li>
             </ul>
 
             <button class="btn-primary" @click="selectPlan('business')">
@@ -244,18 +249,20 @@
             </div>
             
             <div class="price-breakdown">
-              <small>💰 Setup total: €5,397+ (€1,797 hoy + €3,600 al deployment)</small>
+              <small>💰 Setup total: €1,797 (pagas solo cuando ZEUS funcione al 100%)</small>
             </div>
 
             <ul class="features-list">
-              <li>✅ Todo de ZEUS BUSINESS</li>
-              <li>✅ Instalación on-premise (opcional)</li>
-              <li>✅ White-label disponible</li>
-              <li>✅ Integraciones enterprise (SAP, Oracle)</li>
-              <li>✅ Compliance y auditorías</li>
+              <li>✅ Todo BUSINESS</li>
+              <li>✅ White-label</li>
+              <li>✅ Instalación on-premise opcional</li>
+              <li>✅ Integraciones SAP/Oracle</li>
+              <li>✅ Auditorías + Compliance avanzados</li>
               <li>✅ Training presencial</li>
               <li>✅ Contrato enterprise SLA 99.9%</li>
               <li>✅ Soporte técnico dedicado</li>
+              <li>✅ Capacidad máxima</li>
+              <li>✅ Velocidad ilimitada en tiempo real</li>
             </ul>
 
             <button class="btn-secondary" @click="contactSales">
@@ -375,8 +382,8 @@
             <p>Ofrecemos demo gratuita de 30 minutos para que veas el sistema en acción.</p>
           </div>
           <div class="faq-item">
-            <h3>¿Cómo funciona el modelo de pago híbrido?</h3>
-            <p>Pagas solo el 33% inicial para empezar (ej: €497 para GROWTH). El resto del setup + primer mes lo pagas SOLO cuando ZEUS esté funcionando al 100% en tu empresa. Si en 60 días no funciona, te devolvemos todo.</p>
+            <h3>¿Cómo funciona el modelo de pago?</h3>
+            <p>El cliente paga el setup completo únicamente cuando ZEUS funcione al 100%. El despliegue funcional es verificado por TeamFlow y human_gatekeeper. No existen límites por mensajes o tokens - los planes se basan en el tamaño de tu empresa.</p>
           </div>
           <div class="faq-item">
             <h3>¿Qué significa "funcionando al 100%"?</h3>

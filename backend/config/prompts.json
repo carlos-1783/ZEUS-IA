@@ -10,7 +10,16 @@
         "top_p": 0.9,
         "max_tokens": 2000,
         "frequency_penalty": 0.2,
-        "presence_penalty": 0
+        "presence_penalty": 0,
+        "hitl_threshold": 0.75,
+        "capabilities": [
+          "motor_de_orquestacion_teamflow",
+          "coordinacion_multiagente",
+          "decision_metadata",
+          "context_sharing_entre_agentes",
+          "validacion_legal_y_riesgos_con_auto_HITL",
+          "panel_de_control_de_ejecuciones"
+        ]
       }
     },
     "agents": {
@@ -22,7 +31,16 @@
           "max_tokens": 1800,
           "domain": "Finanzas/Fiscalidad",
           "country": "España",
-          "hitl_threshold": 0.8
+          "hitl_threshold": 0.8,
+          "capabilities": [
+            "lectura_QR",
+            "lectura_NFC",
+            "lectura_DNIe",
+            "reconocimiento_superusuario",
+            "modo_pre_lanzamiento_para_datos_incompletos",
+            "integracion_TPV_auto_accounting",
+            "modelo_303_support"
+          ]
         }
       },
       "PERSEO": {
@@ -32,7 +50,17 @@
           "temperature": 0.5,
           "max_tokens": 2200,
           "domain": "Marketing/SEO/SEM",
-          "autotuning": true
+          "autotuning": true,
+          "hitl_threshold": 0.7,
+          "capabilities": [
+            "procesamiento_de_multiples_imagenes",
+            "mejora_de_videos_existentes",
+            "creacion_de_assets_para_ads",
+            "SEO_tecnico_auditoria",
+            "keyword_research",
+            "integracion_con_Justicia_para_contratos",
+            "integracion_con_Rafael_para_facturas"
+          ]
         }
       },
       "THALOS": {
@@ -43,7 +71,14 @@
           "max_tokens": 1500,
           "domain": "Seguridad/Ciberdefensa",
           "auto_isolation": false,
-          "critical_action_approval": true
+          "critical_action_approval": true,
+          "hitl_threshold": 0.95,
+          "capabilities": [
+            "deteccion_temprana_anomalias",
+            "aislamiento_automático",
+            "proteccion_de_endpoints",
+            "proteccion_CORS_y_API_gateway"
+          ]
         }
       },
       "JUSTICIA": {
@@ -53,7 +88,37 @@
           "temperature": 0.35,
           "max_tokens": 2000,
           "domain": "Legal/Protección de Datos",
-          "auto_validation": false
+          "auto_validation": false,
+          "hitl_threshold": 0.85,
+          "capabilities": [
+            "firma_digital_de_documentos",
+            "generacion_y_firma_PDF",
+            "integracion_con_Perseo_para_contratos_publicitarios",
+            "integracion_con_Rafael_para_facturas",
+            "auditoria_GDPR_en_tiempo_real",
+            "integracion_TPV_validate_ticket_legality",
+            "gdpr_audit"
+          ]
+        }
+      },
+      "AFRODITA": {
+        "role": "RRHH y Logística",
+        "prompt": "Eres AFRODITA, la agente de Recursos Humanos y Logística de ZEUS-IA. Gestionas todo lo relacionado con el equipo humano y su coordinación: Recursos Humanos (fichajes, horarios, vacaciones, nóminas), Logística (rutas, entregas, gestión de flotas), y Bienestar del equipo (clima laboral, resolución de conflictos). Eres empática y cercana pero profesional, organizada y eficiente, proactiva en detectar problemas antes de que escalen.",
+        "parameters": {
+          "temperature": 0.7,
+          "max_tokens": 2000,
+          "domain": "RRHH/Logística",
+          "hitl_threshold": 0.75,
+          "capabilities": [
+            "fichaje_por_foto",
+            "fichaje_por_QR",
+            "fichaje_por_codigo",
+            "gestion_turnos",
+            "gestion_ausencias",
+            "onboarding_empleados",
+            "integracion_TPV_sync_employees",
+            "role_permissions"
+          ]
         }
       }
     },

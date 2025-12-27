@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Boolean, Column, Integer, String, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.base import Base
@@ -14,6 +14,16 @@ class User(Base):
     is_superuser = Column(Boolean(), default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Legal-Fiscal Firewall fields
+    email_gestor_fiscal = Column(String, nullable=True)
+    email_asesor_legal = Column(String, nullable=True)
+    autoriza_envio_documentos_a_asesores = Column(Boolean(), default=False)
+    
+    # Company info
+    company_name = Column(String, nullable=True)
+    employees = Column(Integer, nullable=True)
+    plan = Column(String, nullable=True)  # startup, growth, business, enterprise
 
     def __repr__(self):
         return f"<User {self.email}>"

@@ -21,6 +21,8 @@ from app.api.v1.endpoints import (
     perseo_images,
     teamflow,
     workspaces,
+    document_approval,
+    tpv,
 )
 from app.api.v1.endpoints.websocket import websocket_endpoint
 
@@ -61,6 +63,12 @@ api_router.include_router(marketing.router, prefix="/marketing", tags=["marketin
 
 # Onboarding (creación de cuentas después del pago)
 api_router.include_router(onboarding.router, prefix="/onboarding", tags=["onboarding"])
+
+# Document Approval (aprobación de documentos RAFAEL/JUSTICIA)
+api_router.include_router(document_approval.router, prefix="/documents", tags=["document-approval"])
+
+# TPV Universal Enterprise
+api_router.include_router(tpv.router, prefix="/tpv", tags=["tpv"])
 
 # Activities (registro de actividades de agentes)
 api_router.include_router(activities.router, prefix="/activities", tags=["activities"])

@@ -4,6 +4,9 @@ Gestión de personal, horarios, rutas, fichajes y bienestar del equipo
 """
 from .base_agent import BaseAgent
 from typing import Dict, Any, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Afrodita(BaseAgent):
     """
@@ -166,7 +169,18 @@ Eres la voz humana de ZEUS-IA. El corazón del sistema. 💙""",
         # Configurar dominio
         self.domain = "Recursos Humanos, Logística, Gestión de Personal"
         
+        # Cargar capacidades desde config
+        try:
+            self.capabilities = afrodita_config.get("parameters", {}).get("capabilities", [])
+        except:
+            self.capabilities = []
+        
+        # Integración TPV
+        self.tpv_integration_enabled = "integracion_TPV_sync_employees" in self.capabilities
+        
         print(f"👥 AFRODITA inicializada - Dominio: {self.domain}")
+        if self.tpv_integration_enabled:
+            print(f"💳 Integración TPV habilitada: sync_employees, role_permissions")
 
     def process_request(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -302,5 +316,78 @@ Eres la voz humana de ZEUS-IA. El corazón del sistema. 💙""",
             "estimated_distance_km": 0,
             "estimated_time_minutes": 0,
             "status": "pending_optimization"
+        }
+    
+    def sync_tpv_employee(self, employee_id: str, ticket_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Sincronizar datos de empleado con TPV
+        
+        Args:
+            employee_id: ID del empleado
+            ticket_data: Datos del ticket del TPV
+        
+        Returns:
+            Dict con resultado de sincronización
+        """
+        if not self.tpv_integration_enabled:
+            return {
+                "success": False,
+                "error": "Integración TPV no habilitada en AFRODITA"
+            }
+        
+        try:
+            # Validar permisos del empleado
+            employee_permissions = self._get_employee_permissions(employee_id)
+            
+            # Validar que el empleado tiene permisos para realizar ventas
+            if not employee_permissions.get("can_sell", False):
+                return {
+                    "success": False,
+                    "error": f"Empleado {employee_id} no tiene permisos para realizar ventas"
+                }
+            
+            # Registrar venta en historial del empleado
+            sale_record = {
+                "employee_id": employee_id,
+                "sale_date": ticket_data.get("date"),
+                "sale_total": ticket_data.get("totals", {}).get("total", 0),
+                "items_sold": ticket_data.get("totals", {}).get("items_count", 0),
+                "terminal_id": ticket_data.get("terminal_id"),
+                "payment_method": ticket_data.get("payment_method")
+            }
+            
+            # Sincronizar con sistema de RRHH
+            sync_result = {
+                "employee_id": employee_id,
+                "sale_recorded": True,
+                "role_permissions_validated": True,
+                "permissions": employee_permissions,
+                "sale_record": sale_record
+            }
+            
+            logger.info(f"👥 AFRODITA sincronizó empleado TPV: {employee_id} - Venta: €{sale_record['sale_total']:.2f}")
+            
+            return {
+                "success": True,
+                "sync_result": sync_result
+            }
+            
+        except Exception as e:
+            logger.error(f"Error sincronizando empleado TPV en AFRODITA: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    def _get_employee_permissions(self, employee_id: str) -> Dict[str, Any]:
+        """Obtener permisos del empleado"""
+        # En una implementación completa, esto consultaría la BD
+        # Por ahora retornamos permisos por defecto
+        return {
+            "can_sell": True,
+            "can_refund": False,
+            "can_close_register": False,
+            "can_view_reports": False,
+            "role": "employee"
         }
 

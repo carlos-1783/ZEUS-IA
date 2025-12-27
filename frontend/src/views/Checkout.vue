@@ -14,7 +14,7 @@
         
         <div class="price-breakdown">
           <div class="price-row">
-            <span>Setup inicial (pago único)</span>
+            <span>Setup inicial</span>
             <span class="price-value">€{{ planDetails.setupPrice }}</span>
           </div>
           <div class="price-row">
@@ -26,7 +26,7 @@
             <span class="price-value"><strong>€{{ totalToday }}</strong></span>
           </div>
           <p class="price-note">
-            Después del setup, pagarás €{{ planDetails.monthlyPrice }}/mes
+            💡 Pagas el setup completo solo cuando ZEUS funcione al 100%. Verificado por TeamFlow y human_gatekeeper.
           </p>
         </div>
       </div>
@@ -74,6 +74,45 @@
               placeholder="10"
               required
             />
+          </div>
+        </div>
+
+        <!-- Advisor Information -->
+        <div class="advisor-section">
+          <h3>Información de asesores (requerido para documentos fiscales y legales)</h3>
+          
+          <div class="form-group">
+            <label>Email del gestor fiscal *</label>
+            <input 
+              v-model="customerData.emailGestorFiscal" 
+              type="email" 
+              placeholder="gestor@asesoriafiscal.com"
+              required
+            />
+            <small class="field-help">RAFAEL enviará documentos fiscales a este email tras tu aprobación</small>
+          </div>
+
+          <div class="form-group">
+            <label>Email del asesor legal *</label>
+            <input 
+              v-model="customerData.emailAsesorLegal" 
+              type="email" 
+              placeholder="abogado@despacholegal.com"
+              required
+            />
+            <small class="field-help">JUSTICIA enviará documentos legales a este email tras tu aprobación</small>
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input 
+                v-model="customerData.autorizaEnvioDocumentos" 
+                type="checkbox" 
+                required
+              />
+              <span>Autorizo el envío de documentos fiscales y legales a los asesores indicados tras mi aprobación explícita</span>
+            </label>
+            <small class="field-help">Los documentos se generan en modo borrador y requieren tu aprobación antes del envío</small>
           </div>
         </div>
 
@@ -127,32 +166,32 @@ const plans = {
   startup: {
     name: 'ZEUS STARTUP',
     description: '1-5 empleados - Ideal para autónomos',
-    setupPrice: 500,
-    monthlyPrice: 99,
+    setupPrice: 197,
+    monthlyPrice: 197,
     priceId: 'price_1SPfE8RkVIjZaYJnVhWpJFCy',
     setupPriceId: 'price_1SPfE8RkVIjZaYJnOsoNG7kZ'
   },
   growth: {
     name: 'ZEUS GROWTH',
     description: '6-25 empleados - Para PYMEs en crecimiento',
-    setupPrice: 1500,
-    monthlyPrice: 299,
+    setupPrice: 497,
+    monthlyPrice: 497,
     priceId: 'price_1SPfE9RkVIjZaYJnXyYjpum9',
     setupPriceId: 'price_1SPfE9RkVIjZaYJna2Pu1wsZ'
   },
   business: {
     name: 'ZEUS BUSINESS',
     description: '26-100 empleados - Empresas establecidas',
-    setupPrice: 2500,
-    monthlyPrice: 699,
+    setupPrice: 897,
+    monthlyPrice: 897,
     priceId: 'price_1SPfEARkVIjZaYJnvJYJQzzI',
     setupPriceId: 'price_1SPfEARkVIjZaYJnyblS25rr'
   },
   enterprise: {
     name: 'ZEUS ENTERPRISE',
     description: '101+ empleados - Grandes corporaciones',
-    setupPrice: 5000,
-    monthlyPrice: 1500,
+    setupPrice: 1797,
+    monthlyPrice: 1797,
     priceId: 'price_1SPfEBRkVIjZaYJnSGFyux8o',
     setupPriceId: 'price_1SPfEBRkVIjZaYJnjk5cB1ma'
   }
@@ -168,7 +207,10 @@ const customerData = ref({
   companyName: '',
   email: '',
   fullName: '',
-  employees: null
+  employees: null,
+  emailGestorFiscal: '',
+  emailAsesorLegal: '',
+  autorizaEnvioDocumentos: false
 })
 
 // Stripe
@@ -211,8 +253,10 @@ const initializeStripe = () => {
 }
 
 const processPayment = async () => {
-  if (!customerData.value.companyName || !customerData.value.email || !customerData.value.fullName) {
-    cardError.value = 'Por favor completa todos los campos'
+  if (!customerData.value.companyName || !customerData.value.email || !customerData.value.fullName || 
+      !customerData.value.emailGestorFiscal || !customerData.value.emailAsesorLegal || 
+      !customerData.value.autorizaEnvioDocumentos) {
+    cardError.value = 'Por favor completa todos los campos requeridos, incluyendo los emails de asesores y la autorización'
     return
   }
 
@@ -234,7 +278,10 @@ const processPayment = async () => {
           plan: selectedPlan,
           company_name: customerData.value.companyName,
           full_name: customerData.value.fullName,
-          employees: customerData.value.employees
+          employees: customerData.value.employees,
+          email_gestor_fiscal: customerData.value.emailGestorFiscal,
+          email_asesor_legal: customerData.value.emailAsesorLegal,
+          autoriza_envio_documentos: customerData.value.autorizaEnvioDocumentos
         }
       })
     })
@@ -292,7 +339,10 @@ const createUserAccount = async (paymentIntentId) => {
         full_name: customerData.value.fullName,
         employees: customerData.value.employees,
         plan: selectedPlan,
-        payment_intent_id: paymentIntentId
+        payment_intent_id: paymentIntentId,
+        email_gestor_fiscal: customerData.value.emailGestorFiscal,
+        email_asesor_legal: customerData.value.emailAsesorLegal,
+        autoriza_envio_documentos_a_asesores: customerData.value.autorizaEnvioDocumentos
       })
     })
 
@@ -442,6 +492,52 @@ const goToDashboard = () => {
   outline: none;
   border-color: #3b82f6;
   background: rgba(255, 255, 255, 0.08);
+}
+
+.advisor-section {
+  margin-top: 32px;
+  padding: 24px;
+  background: rgba(59, 130, 246, 0.05);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 12px;
+}
+
+.advisor-section h3 {
+  font-size: 18px;
+  margin: 0 0 20px;
+  color: #3b82f6;
+}
+
+.field-help {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  font-style: italic;
+}
+
+.checkbox-group {
+  margin-top: 20px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  cursor: pointer;
+}
+
+.checkbox-label span {
+  flex: 1;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .payment-section {

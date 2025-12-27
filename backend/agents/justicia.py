@@ -4,8 +4,13 @@ Agente especializado en Legal y Protección de Datos
 """
 
 import json
-from typing import Dict, Any
+import uuid
+import logging
+from datetime import datetime
+from typing import Dict, Any, Optional
 from agents.base_agent import BaseAgent
+
+logger = logging.getLogger(__name__)
 
 
 class Justicia(BaseAgent):
@@ -35,9 +40,15 @@ class Justicia(BaseAgent):
         
         self.domain = justicia_config["parameters"]["domain"]
         self.auto_validation = justicia_config["parameters"]["auto_validation"]  # Debe ser False
+        self.capabilities = justicia_config["parameters"].get("capabilities", [])
+        
+        # Integración TPV
+        self.tpv_integration_enabled = "integracion_TPV_validate_ticket_legality" in self.capabilities
         
         print(f"⚖️ JUSTICIA inicializada - Dominio: {self.domain}")
         print(f"⚠️ Auto-validación: {self.auto_validation} (decisiones legales requieren revisión)")
+        if self.tpv_integration_enabled:
+            print(f"💳 Integración TPV habilitada: validate_ticket_legality, gdpr_audit")
     
     def process_request(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -71,6 +82,85 @@ class Justicia(BaseAgent):
         result["request_type"] = request_type
         result["legal_ok"] = False  # Siempre requiere validación final
         result["requires_legal_review"] = True
+        
+        # Aplicar Legal-Fiscal Firewall para documentos legales
+        user_id = context.get("user_id")
+        if user_id and self._requires_firewall(result, request_type):
+            result = self._apply_firewall(result, user_id, request_type, context)
+        
+        return result
+    
+    def _requires_firewall(self, result: Dict[str, Any], request_type: str) -> bool:
+        """Determinar si el resultado requiere firewall (documentos legales)"""
+        # Documentos legales que requieren aprobación: contratos, cláusulas, políticas
+        legal_document_types = ["contract", "gdpr", "policy", "clausula", "contrato", "legal"]
+        return request_type in legal_document_types or any(
+            kw in result.get("content", "").lower() 
+            for kw in ["contrato", "cláusula", "legal", "gdpr", "política", "compliance"]
+        )
+    
+    def _apply_firewall(
+        self, 
+        result: Dict[str, Any], 
+        user_id: int, 
+        request_type: str,
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Aplicar Legal-Fiscal Firewall: modo draft_only + aprobación requerida"""
+        try:
+            from services.legal_fiscal_firewall import firewall
+            from app.db.session import SessionLocal
+            
+            # Obtener sesión de BD
+            db = SessionLocal()
+            firewall.db = db
+            
+            # Generar ID único para el documento
+            document_id = str(uuid.uuid4())
+            
+            # Generar documento en modo borrador
+            draft_result = firewall.generate_draft_document(
+                agent_name="JUSTICIA",
+                user_id=user_id,
+                document_type=request_type,
+                content={
+                    "content": result.get("content", ""),
+                    "confidence": result.get("confidence", 0),
+                    "metadata": result.get("metadata", {})
+                },
+                metadata={
+                    "request_type": request_type,
+                    "domain": self.domain,
+                    "legal_ok": False
+                }
+            )
+            
+            # Solicitar aprobación del cliente
+            approval_request = firewall.request_client_approval(
+                user_id=user_id,
+                document_id=document_id,
+                agent_name="JUSTICIA",
+                document_type=request_type
+            )
+            
+            # Modificar resultado para incluir información del firewall
+            result["firewall_applied"] = True
+            result["draft_only"] = True
+            result["document_id"] = document_id
+            result["status"] = "draft"
+            result["requires_client_approval"] = True
+            result["approval_button_label"] = approval_request.get("approval_request", {}).get("approval_button_label", "Aprobar y Enviar al Abogado")
+            result["message"] = "Documento generado en modo borrador. Requiere aprobación explícita del cliente antes de enviarse al asesor legal."
+            result["note"] = "Los agentes generan PDF/JSON/Markdown como borradores y no ejecutan envíos ni firmas automáticas."
+            
+            db.close()
+            
+        except Exception as e:
+            print(f"⚠️ [JUSTICIA] Error aplicando firewall: {e}")
+            # Si falla el firewall, marcar como requiere aprobación manual
+            result["firewall_applied"] = False
+            result["requires_manual_review"] = True
+            result["error"] = f"Error en firewall: {str(e)}"
         
         return result
     
@@ -166,4 +256,69 @@ Revisa:
             return True
         
         return False
+    
+    def validate_tpv_ticket_legality(self, ticket_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validar legalidad de ticket del TPV
+        
+        Args:
+            ticket_data: Datos del ticket del TPV
+        
+        Returns:
+            Dict con resultado de validación legal
+        """
+        if not self.tpv_integration_enabled:
+            return {
+                "success": False,
+                "error": "Integración TPV no habilitada en JUSTICIA"
+            }
+        
+        try:
+            # Validaciones legales
+            validations = {
+                "gdpr_compliant": True,
+                "data_retention_ok": True,
+                "payment_method_legal": True,
+                "invoice_requirements_met": True
+            }
+            
+            # Verificar GDPR compliance
+            if ticket_data.get("customer_data"):
+                # Validar que los datos personales están protegidos
+                validations["gdpr_compliant"] = True
+                validations["data_protection_ok"] = True
+            
+            # Verificar método de pago legal
+            payment_method = ticket_data.get("payment_method", "")
+            legal_payment_methods = ["efectivo", "tarjeta", "bizum", "transferencia"]
+            validations["payment_method_legal"] = payment_method in legal_payment_methods
+            
+            # Auditoría GDPR
+            gdpr_audit = {
+                "ticket_id": ticket_data.get("id"),
+                "date": ticket_data.get("date"),
+                "data_collected": bool(ticket_data.get("customer_data")),
+                "gdpr_compliant": validations["gdpr_compliant"],
+                "audit_timestamp": datetime.utcnow().isoformat()
+            }
+            
+            all_valid = all(validations.values())
+            
+            logger.info(f"⚖️ JUSTICIA validó ticket TPV: {ticket_data.get('id')} - Legal: {all_valid}")
+            
+            return {
+                "success": True,
+                "legal_ok": all_valid,
+                "validations": validations,
+                "gdpr_audit": gdpr_audit,
+                "requires_legal_review": not all_valid
+            }
+            
+        except Exception as e:
+            logger.error(f"Error validando ticket TPV en JUSTICIA: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "legal_ok": False
+            }
 

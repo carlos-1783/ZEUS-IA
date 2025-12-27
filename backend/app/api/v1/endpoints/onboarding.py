@@ -30,6 +30,9 @@ class OnboardingRequest(BaseModel):
     stripe_customer_id: Optional[str] = None
     stripe_subscription_id: Optional[str] = None
     payment_intent_id: Optional[str] = None
+    email_gestor_fiscal: Optional[EmailStr] = None
+    email_asesor_legal: Optional[EmailStr] = None
+    autoriza_envio_documentos_a_asesores: Optional[bool] = False
 
 # ============================================================================
 # HELPERS
@@ -85,7 +88,13 @@ async def create_account_after_payment(
             full_name=request.full_name,
             hashed_password=get_password_hash(temp_password),
             is_active=True,
-            is_superuser=False
+            is_superuser=False,
+            company_name=request.company_name,
+            employees=request.employees,
+            plan=request.plan,
+            email_gestor_fiscal=request.email_gestor_fiscal,
+            email_asesor_legal=request.email_asesor_legal,
+            autoriza_envio_documentos_a_asesores=request.autoriza_envio_documentos_a_asesores or False
         )
         
         db.add(new_user)

@@ -25,65 +25,73 @@ def create_stripe_products():
     print("🚀 Configurando productos en Stripe...")
     print("=" * 80)
     
-    # Definición de productos según MODELO_PRECIOS_ZEUS.md
+    # Definición de productos según nuevo modelo de precios (final_deploy_patch_v1)
     products_config = [
         {
             "name": "ZEUS STARTUP",
             "description": "Plan ideal para autónomos y pequeños estudios (1-5 empleados)",
-            "setup_price": 50000,  # €500 en centavos
-            "monthly_price": 9900,  # €99 en centavos
+            "setup_price": 19700,  # €197 en centavos
+            "monthly_price": 19700,  # €197 en centavos
             "features": [
-                "5 Agentes IA (ZEUS, PERSEO, RAFAEL, THALOS, JUSTICIA)",
-                "WhatsApp Automation",
-                "Email Automation",
-                "Facturación + Hacienda",
+                "Automatización con 6 agentes",
+                "WhatsApp + Email automation",
+                "Modelos fiscales básicos vía RAFAEL (preparación, draft only)",
+                "RRHH y logística esencial vía AFRODITA",
                 "Stripe Payments",
-                "Soporte por email"
+                "Soporte por email",
+                "Capacidad recomendada: volumen bajo-medio",
+                "Velocidad estándar"
             ]
         },
         {
             "name": "ZEUS GROWTH",
             "description": "Plan profesional para PYMEs en crecimiento (6-25 empleados)",
-            "setup_price": 150000,  # €1,500
-            "monthly_price": 29900,  # €299
+            "setup_price": 49700,  # €497
+            "monthly_price": 49700,  # €497
             "features": [
-                "Todo de ZEUS STARTUP",
-                "Google Workspace (Calendar, Gmail, Drive, Sheets)",
-                "Marketing Automation (Google Ads, Meta Ads)",
+                "Todo STARTUP",
+                "Google Workspace Integration",
+                "Marketing Ads (Google Ads + Meta Ads)",
                 "Analytics avanzado",
+                "Onboarding personalizado",
                 "Soporte prioritario",
-                "Onboarding personalizado"
+                "Capacidad recomendada: volumen medio",
+                "Velocidad rápida"
             ]
         },
         {
             "name": "ZEUS BUSINESS",
             "description": "Plan empresarial para empresas establecidas (26-100 empleados)",
-            "setup_price": 250000,  # €2,500
-            "monthly_price": 69900,  # €699
+            "setup_price": 89700,  # €897
+            "monthly_price": 89700,  # €897
             "features": [
-                "Todo de ZEUS GROWTH",
+                "Todo GROWTH",
                 "Integraciones personalizadas",
-                "Múltiples usuarios admin",
                 "API access completo",
+                "Múltiples administradores",
+                "Account Manager dedicado",
                 "Soporte 24/7",
-                "Account manager dedicado",
-                "SLA garantizado"
+                "SLA garantizado",
+                "Capacidad recomendada: volumen alto",
+                "Velocidad en tiempo real"
             ]
         },
         {
             "name": "ZEUS ENTERPRISE",
-            "description": "Plan corporativo para grandes organizaciones (101+ empleados)",
-            "setup_price": 500000,  # €5,000
-            "monthly_price": 150000,  # €1,500
+            "description": "Plan corporativo para grandes organizaciones (100+ empleados)",
+            "setup_price": 179700,  # €1,797
+            "monthly_price": 179700,  # €1,797
             "features": [
-                "Todo de ZEUS BUSINESS",
-                "Instalación on-premise (opcional)",
-                "White-label disponible",
-                "Integraciones enterprise (SAP, Oracle)",
-                "Compliance y auditorías",
+                "Todo BUSINESS",
+                "White-label",
+                "Instalación on-premise opcional",
+                "Integraciones SAP/Oracle",
+                "Auditorías + Compliance avanzados",
                 "Training presencial",
                 "Contrato enterprise SLA 99.9%",
-                "Soporte técnico dedicado"
+                "Soporte técnico dedicado",
+                "Capacidad máxima",
+                "Velocidad ilimitada en tiempo real"
             ]
         }
     ]

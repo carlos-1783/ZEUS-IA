@@ -149,7 +149,7 @@ class Rafael(BaseAgent):
             # Generar ID único para el documento
             document_id = str(uuid.uuid4())
             
-            # Generar documento en modo borrador
+            # Generar documento en modo borrador (esto ahora persiste en BD)
             draft_result = firewall.generate_draft_document(
                 agent_name="RAFAEL",
                 user_id=user_id,
@@ -165,6 +165,11 @@ class Rafael(BaseAgent):
                     "country": self.country
                 }
             )
+            
+            # Obtener document_id del resultado (ahora viene de la BD)
+            persisted_document_id = draft_result.get("document_id")
+            if persisted_document_id:
+                document_id = str(persisted_document_id)
             
             # Solicitar aprobación del cliente
             approval_request = firewall.request_client_approval(
@@ -307,13 +312,14 @@ Por favor, determina:
     
     def process_tpv_ticket(self, ticket_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Procesar datos de ticket del TPV para contabilidad automática
+        Procesar datos de ticket del TPV para contabilidad automática.
+        Genera libro de ingresos, resumen diario y resumen mensual en modo borrador.
         
         Args:
             ticket_data: Datos del ticket del TPV
         
         Returns:
-            Dict con resultado del procesamiento fiscal
+            Dict con resultado del procesamiento fiscal (modo draft_only)
         """
         if not self.tpv_integration_enabled:
             return {
@@ -322,19 +328,77 @@ Por favor, determina:
             }
         
         try:
+            from datetime import datetime
+            
             # Preparar datos fiscales del ticket
+            ticket_date = ticket_data.get("date", datetime.utcnow().isoformat())
+            if isinstance(ticket_date, str):
+                try:
+                    dt = datetime.fromisoformat(ticket_date.replace('Z', '+00:00'))
+                except:
+                    dt = datetime.utcnow()
+            else:
+                dt = ticket_date
+            
             fiscal_data = {
-                "fecha": ticket_data.get("date"),
-                "hora": ticket_data.get("date", "").split("T")[1][:8] if "T" in ticket_data.get("date", "") else "",
+                "ticket_id": ticket_data.get("id"),
+                "fecha": dt.strftime("%Y-%m-%d"),
+                "hora": dt.strftime("%H:%M:%S"),
                 "total": ticket_data.get("totals", {}).get("total", 0),
+                "subtotal": ticket_data.get("totals", {}).get("subtotal", 0),
                 "iva": ticket_data.get("totals", {}).get("iva", 0),
                 "método_pago": ticket_data.get("payment_method"),
-                "productos": ticket_data.get("items", []),
+                "productos": [
+                    {
+                        "nombre": item.get("name", ""),
+                        "cantidad": item.get("quantity", 0),
+                        "precio_unitario": item.get("price", 0),
+                        "subtotal": item.get("subtotal", 0),
+                        "iva": item.get("subtotal_with_iva", 0) - item.get("subtotal", 0),
+                        "tasa_iva": item.get("iva_rate", 21),
+                        "categoria": item.get("category", "")
+                    }
+                    for item in ticket_data.get("items", [])
+                ],
                 "responsable": ticket_data.get("employee_id"),
+                "terminal": ticket_data.get("terminal_id"),
                 "categoria": ticket_data.get("business_profile")
             }
             
-            # Generar entrada contable automática
+            # Generar libro de ingresos (acumulado)
+            libro_ingresos = {
+                "fecha": fiscal_data["fecha"],
+                "tickets": [fiscal_data],
+                "total_dia": fiscal_data["total"],
+                "iva_dia": fiscal_data["iva"],
+                "metodos_pago": {
+                    fiscal_data["método_pago"]: fiscal_data["total"]
+                }
+            }
+            
+            # Resumen diario
+            resumen_diario = {
+                "fecha": fiscal_data["fecha"],
+                "total_ventas": fiscal_data["total"],
+                "total_iva": fiscal_data["iva"],
+                "total_sin_iva": fiscal_data["subtotal"],
+                "numero_tickets": 1,
+                "metodos_pago": {
+                    fiscal_data["método_pago"]: fiscal_data["total"]
+                },
+                "categoria_negocio": fiscal_data["categoria"]
+            }
+            
+            # Resumen mensual (estructura base, se acumulará con más tickets)
+            resumen_mensual = {
+                "mes": dt.strftime("%Y-%m"),
+                "total_ventas": fiscal_data["total"],
+                "total_iva": fiscal_data["iva"],
+                "numero_tickets": 1,
+                "dias_con_ventas": [fiscal_data["fecha"]]
+            }
+            
+            # Generar entrada contable automática (modo borrador)
             accounting_entry = {
                 "tipo": "venta_tpv",
                 "fecha": fiscal_data["fecha"],
@@ -342,20 +406,31 @@ Por favor, determina:
                 "iva": fiscal_data["iva"],
                 "metodo_pago": fiscal_data["método_pago"],
                 "modelo_303_ready": True,
-                "auto_accounting": True
+                "auto_accounting": True,
+                "draft_only": True,
+                "note": "Entrada generada automáticamente desde TPV. Requiere revisión del gestor fiscal antes de presentar a Hacienda."
             }
             
-            logger.info(f"📊 RAFAEL procesó ticket TPV: €{fiscal_data['total']:.2f}")
+            logger.info(f"📊 RAFAEL procesó ticket TPV: €{fiscal_data['total']:.2f} (modo borrador)")
             
             return {
                 "success": True,
                 "accounting_entry": accounting_entry,
                 "fiscal_data": fiscal_data,
-                "model_303_ready": True
+                "libro_ingresos": libro_ingresos,
+                "resumen_diario": resumen_diario,
+                "resumen_mensual": resumen_mensual,
+                "model_303_ready": True,
+                "draft_only": True,
+                "legal_disclaimer": "ZEUS no presenta impuestos ni actúa ante Hacienda. El gestor humano es responsable final de la presentación."
             }
             
         except Exception as e:
             logger.error(f"Error procesando ticket TPV en RAFAEL: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
             return {
                 "success": False,
                 "error": str(e)

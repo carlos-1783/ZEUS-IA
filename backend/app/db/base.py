@@ -17,16 +17,139 @@ def create_tables():
     """Crear todas las tablas en la base de datos"""
     try:
         print("[DATABASE] Creando tablas...")
+        
+        # IMPORTANTE: Ejecutar migración ANTES de crear tablas si es SQLite
+        # Esto asegura que las columnas existan antes de que SQLAlchemy intente usarlas
+        if "sqlite" in settings.DATABASE_URL:
+            _migrate_firewall_columns()
+        
         # Importar modelos aquí para evitar importación circular
         from app.models.user import User, RefreshToken
         from app.models.customer import Customer
         from app.models.erp import Invoice, Product, Payment
         from app.models.agent_activity import AgentActivity
+        from app.models.document_approval import DocumentApproval
         
         Base.metadata.create_all(bind=engine)
         print("[DATABASE] ✅ Tablas creadas correctamente")
+        
+        # Ejecutar migración nuevamente después de crear tablas (por si acaso)
+        if "sqlite" in settings.DATABASE_URL:
+            _migrate_firewall_columns()
     except Exception as e:
         print(f"[DATABASE] ❌ Error al crear tablas: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def _migrate_firewall_columns():
+    """Agregar columnas del Legal-Fiscal Firewall a la tabla users si no existen"""
+    import sqlite3
+    import os
+    
+    try:
+        db_path = settings.DATABASE_URL.replace("sqlite:///", "")
+        
+        # Si es una ruta absoluta, usarla directamente
+        if not os.path.isabs(db_path):
+            # Si es relativa, buscar en el directorio backend
+            backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            db_path = os.path.join(backend_dir, db_path)
+        
+        # Si la base de datos no existe, SQLAlchemy la creará con el esquema correcto
+        # No necesitamos hacer nada aquí
+        if not os.path.exists(db_path):
+            print("[MIGRATION] Base de datos no existe aún, se creará con el esquema correcto")
+            return
+        
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar si la tabla users existe
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+            if not cursor.fetchone():
+                print("[MIGRATION] Tabla 'users' no existe aún, se creará con el esquema correcto")
+                conn.close()
+                return
+            
+            # Verificar qué columnas existen
+            cursor.execute("PRAGMA table_info(users)")
+            existing_columns = [row[1] for row in cursor.fetchall()]
+            
+            # Columnas a agregar (incluyendo company_name y employees que también pueden faltar)
+            columns_to_add = [
+                ("email_gestor_fiscal", "TEXT"),
+                ("email_asesor_legal", "TEXT"),
+                ("autoriza_envio_documentos_a_asesores", "BOOLEAN DEFAULT 0"),
+                ("company_name", "TEXT"),
+                ("employees", "INTEGER")
+            ]
+            
+            added_columns = []
+            for column_name, column_type in columns_to_add:
+                if column_name not in existing_columns:
+                    try:
+                        cursor.execute(f"ALTER TABLE users ADD COLUMN {column_name} {column_type}")
+                        
+                        # Si es BOOLEAN, establecer el valor por defecto para filas existentes
+                        if "BOOLEAN" in column_type:
+                            cursor.execute(f"UPDATE users SET {column_name} = 0 WHERE {column_name} IS NULL")
+                        elif column_type == "INTEGER":
+                            cursor.execute(f"UPDATE users SET {column_name} = 0 WHERE {column_name} IS NULL")
+                        
+                        added_columns.append(column_name)
+                        print(f"[MIGRATION] ✅ Columna '{column_name}' agregada")
+                    except sqlite3.OperationalError as e:
+                        print(f"[MIGRATION] ⚠️ Error agregando columna '{column_name}': {e}")
+                else:
+                    print(f"[MIGRATION] ℹ️ Columna '{column_name}' ya existe")
+            
+            # Crear tabla document_approvals si no existe
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='document_approvals'")
+            if not cursor.fetchone():
+                print("[MIGRATION] Creando tabla 'document_approvals'...")
+                cursor.execute("""
+                    CREATE TABLE document_approvals (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        agent_name VARCHAR(50) NOT NULL,
+                        document_type VARCHAR(100) NOT NULL,
+                        document_payload_json TEXT NOT NULL,
+                        status VARCHAR(50) NOT NULL DEFAULT 'draft',
+                        advisor_email VARCHAR(255),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        approved_at TIMESTAMP,
+                        sent_at TIMESTAMP,
+                        audit_log_json TEXT,
+                        FOREIGN KEY (user_id) REFERENCES users(id)
+                    )
+                """)
+                cursor.execute("CREATE INDEX idx_document_approvals_user_id ON document_approvals(user_id)")
+                cursor.execute("CREATE INDEX idx_document_approvals_agent_name ON document_approvals(agent_name)")
+                cursor.execute("CREATE INDEX idx_document_approvals_status ON document_approvals(status)")
+                print("[MIGRATION] ✅ Tabla 'document_approvals' creada")
+            else:
+                print("[MIGRATION] ℹ️ Tabla 'document_approvals' ya existe")
+            
+            conn.commit()
+            
+            if added_columns:
+                print(f"[MIGRATION] ✅ Migración completada. Columnas agregadas: {', '.join(added_columns)}")
+            else:
+                print("[MIGRATION] ✅ Todas las columnas ya existen.")
+                
+        except Exception as e:
+            conn.rollback()
+            print(f"[MIGRATION] ⚠️ Error durante la migración: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"[MIGRATION] ⚠️ No se pudo ejecutar migración: {e}")
+        import traceback
+        traceback.print_exc()
 
 def get_db():
     db = SessionLocal()

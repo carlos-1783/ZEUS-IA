@@ -165,6 +165,11 @@
         Descarga el Markdown para enviarlo a tu equipo legal o integrarlo en la web sin esfuerzo.
       </p>
     </footer>
+
+    <!-- Documentos Pendientes de Aprobación -->
+    <section class="approval-section">
+      <DocumentApprovalPanel />
+    </section>
   </div>
 
   <JusticiaToolsPanel />
@@ -174,6 +179,7 @@
 import { onMounted, ref, computed, watch } from 'vue';
 import { useAutomationDeliverables } from '@/composables/useAutomationDeliverables';
 import JusticiaToolsPanel from './JusticiaToolsPanel.vue';
+import DocumentApprovalPanel from '@/components/DocumentApprovalPanel.vue';
 
 const {
   items: deliverables,

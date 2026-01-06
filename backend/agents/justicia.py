@@ -118,7 +118,7 @@ class Justicia(BaseAgent):
             # Generar ID único para el documento
             document_id = str(uuid.uuid4())
             
-            # Generar documento en modo borrador
+            # Generar documento en modo borrador (esto ahora persiste en BD)
             draft_result = firewall.generate_draft_document(
                 agent_name="JUSTICIA",
                 user_id=user_id,
@@ -134,6 +134,11 @@ class Justicia(BaseAgent):
                     "legal_ok": False
                 }
             )
+            
+            # Obtener document_id del resultado (ahora viene de la BD)
+            persisted_document_id = draft_result.get("document_id")
+            if persisted_document_id:
+                document_id = str(persisted_document_id)
             
             # Solicitar aprobación del cliente
             approval_request = firewall.request_client_approval(

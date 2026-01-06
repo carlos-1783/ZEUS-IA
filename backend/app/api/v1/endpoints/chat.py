@@ -71,6 +71,18 @@ try:
     except Exception as prelaunch_error:
         print(f"⚠️ No se pudo preparar el plan pre-lanzamiento automáticamente: {prelaunch_error}")
 
+    # Conectar TPV service con agentes
+    try:
+        from services.tpv_service import tpv_service
+        tpv_service.set_integrations(
+            rafael=rafael,
+            justicia=justicia,
+            afrodita=afrodita
+        )
+        print("✅ Integraciones TPV configuradas")
+    except Exception as tpv_error:
+        print(f"⚠️ Error configurando integraciones TPV: {tpv_error}")
+
     print("✅ Todos los agentes inicializados correctamente")
 except Exception as e:
     print(f"❌ Error inicializando agentes: {e}")

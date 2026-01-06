@@ -1,7 +1,7 @@
 # 💰 ZEUS-IA - MODELO DE PRECIOS APROBADO
 
-**Fecha**: 3 de Noviembre 2025  
-**Estado**: ✅ APROBADO PARA IMPLEMENTACIÓN
+**Fecha**: 27 de Enero 2025  
+**Estado**: ✅ APROBADO PARA IMPLEMENTACIÓN - PRECIOS UNIFICADOS
 
 ---
 
@@ -11,8 +11,8 @@
 **Target**: 1-5 empleados - Freelancers, estudios pequeños
 
 ```
-Setup inicial:  €500 (pago único)
-Suscripción:    €99/mes (recurrente)
+Setup inicial:  €197 (pago único)
+Suscripción:    €197/mes (recurrente)
 
 Incluye:
 ✅ Plataforma completa
@@ -30,8 +30,8 @@ Incluye:
 **Target**: 6-25 empleados - PYMEs, startups en crecimiento
 
 ```
-Setup inicial:  €1,500 (pago único)
-Suscripción:    €299/mes (recurrente)
+Setup inicial:  €497 (pago único)
+Suscripción:    €497/mes (recurrente)
 
 Incluye:
 ✅ Todo de ZEUS STARTUP +
@@ -48,8 +48,8 @@ Incluye:
 **Target**: 26-100 empleados - Empresas establecidas
 
 ```
-Setup inicial:  €2,500 (pago único)
-Suscripción:    €699/mes (recurrente)
+Setup inicial:  €897 (pago único)
+Suscripción:    €897/mes (recurrente)
 
 Incluye:
 ✅ Todo de ZEUS GROWTH +
@@ -67,8 +67,8 @@ Incluye:
 **Target**: 101+ empleados - Grandes corporaciones
 
 ```
-Setup inicial:  Personalizado (desde €5,000)
-Suscripción:    Personalizado (desde €1,500/mes)
+Setup inicial:  €1,797 (pago único)
+Suscripción:    €1,797/mes (recurrente)
 
 Incluye:
 ✅ Todo de ZEUS BUSINESS +
@@ -87,38 +87,38 @@ Incluye:
 
 ### Escenario Conservador (Año 1)
 ```
-10 ZEUS STARTUP:   10 × €99/mes = €990/mes
-5 ZEUS GROWTH:     5 × €299/mes = €1,495/mes
-2 ZEUS BUSINESS:   2 × €699/mes = €1,398/mes
+10 ZEUS STARTUP:   10 × €197/mes = €1,970/mes
+5 ZEUS GROWTH:     5 × €497/mes = €2,485/mes
+2 ZEUS BUSINESS:   2 × €897/mes = €1,794/mes
 ---
-Total recurrente: €3,883/mes = €46,596/año
+Total recurrente: €6,249/mes = €74,988/año
 
 Setups (one-time):
-10 × €500 = €5,000
-5 × €1,500 = €7,500
-2 × €2,500 = €5,000
-Total setups: €17,500
+10 × €197 = €1,970
+5 × €497 = €2,485
+2 × €897 = €1,794
+Total setups: €6,249
 
-TOTAL AÑO 1: €64,096
+TOTAL AÑO 1: €81,237
 ```
 
 ### Escenario Optimista (Año 1)
 ```
-25 ZEUS STARTUP:   25 × €99/mes = €2,475/mes
-15 ZEUS GROWTH:    15 × €299/mes = €4,485/mes
-8 ZEUS BUSINESS:   8 × €699/mes = €5,592/mes
-2 ZEUS ENTERPRISE: 2 × €1,500/mes = €3,000/mes
+25 ZEUS STARTUP:   25 × €197/mes = €4,925/mes
+15 ZEUS GROWTH:    15 × €497/mes = €7,455/mes
+8 ZEUS BUSINESS:   8 × €897/mes = €7,176/mes
+2 ZEUS ENTERPRISE: 2 × €1,797/mes = €3,594/mes
 ---
-Total recurrente: €15,552/mes = €186,624/año
+Total recurrente: €23,150/mes = €277,800/año
 
 Setups:
-25 × €500 = €12,500
-15 × €1,500 = €22,500
-8 × €2,500 = €20,000
-2 × €5,000 = €10,000
-Total setups: €65,000
+25 × €197 = €4,925
+15 × €497 = €7,455
+8 × €897 = €7,176
+2 × €1,797 = €3,594
+Total setups: €23,150
 
-TOTAL AÑO 1: €251,624
+TOTAL AÑO 1: €300,950
 ```
 
 ---

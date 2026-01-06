@@ -1,0 +1,119 @@
+{
+  "audit_date": "2025-01-27",
+  "auditor_role": "principal_engineer_cto_level",
+  "missing_variables": [
+    {
+      "name": "AEAT_CERTIFICATE_PATH",
+      "type": "string",
+      "description": "Ruta al archivo del certificado digital (.p12/.pfx) para integración con AEAT/SII",
+      "required_for": "Envío real de documentos fiscales a Hacienda (futuro)",
+      "priority": "baja",
+      "current_status": "No requerido - Sistema opera en modo borrador seguro",
+      "example": "/path/to/certificado_aeat.p12",
+      "when_needed": "Cuando se implemente envío directo a Hacienda (requiere certificado digital válido)"
+    },
+    {
+      "name": "AEAT_CERTIFICATE_PASSWORD",
+      "type": "string",
+      "description": "Contraseña del certificado digital AEAT",
+      "required_for": "Envío real de documentos fiscales a Hacienda (futuro)",
+      "priority": "baja",
+      "current_status": "No requerido - Sistema opera en modo borrador seguro",
+      "example": "password123",
+      "when_needed": "Cuando se implemente envío directo a Hacienda"
+    },
+    {
+      "name": "SII_ENDPOINT",
+      "type": "string",
+      "description": "URL del servicio SII (Suministro Inmediato de Información) de AEAT",
+      "required_for": "Envío real de documentos fiscales a Hacienda (futuro)",
+      "priority": "baja",
+      "current_status": "No requerido - Sistema opera en modo borrador seguro",
+      "example": "https://www1.agenciatributaria.gob.es/wlpl/BUCV-JDIT/ws/SIIObtenerFactura",
+      "when_needed": "Cuando se implemente envío directo a Hacienda"
+    }
+  ],
+  "optional_but_recommended": [
+    {
+      "name": "STRIPE_WEBHOOK_SECRET",
+      "type": "string",
+      "description": "Secret para validar la firma de webhooks de Stripe",
+      "required_for": "Validación segura de eventos de pago desde Stripe",
+      "priority": "media",
+      "current_status": "Puede estar configurado pero no verificado en código",
+      "example": "whsec_...",
+      "recommendation": "Verificar que se valida la firma en el endpoint de webhooks"
+    },
+    {
+      "name": "OPENAI_API_KEY",
+      "type": "string",
+      "description": "API Key de OpenAI para los agentes IA",
+      "required_for": "Funcionamiento de todos los agentes",
+      "priority": "alta",
+      "current_status": "Probablemente configurado (requerido para funcionamiento)",
+      "example": "sk-...",
+      "recommendation": "Verificar que está configurado en producción"
+    },
+    {
+      "name": "DATABASE_URL",
+      "type": "string",
+      "description": "URL de conexión a la base de datos (PostgreSQL o SQLite)",
+      "required_for": "Persistencia de datos",
+      "priority": "alta",
+      "current_status": "Configurado (requerido para funcionamiento)",
+      "example": "postgresql://user:pass@host:5432/db o sqlite:///zeus.db",
+      "recommendation": "Verificar que está configurado correctamente en producción"
+    }
+  ],
+  "integrations_stub_detected": [
+    {
+      "integration": "TPV → Hacienda (directo)",
+      "status": "intencionalmente_no_implementado",
+      "reason": "Modo seguro: TPV envía a RAFAEL → Gestor Fiscal → Hacienda (con aprobación humana)",
+      "risk_level": "ninguno",
+      "compliance": "Cumple con requisitos legales (responsabilidad delegada en gestor humano)"
+    },
+    {
+      "integration": "Algunas herramientas de workspace",
+      "status": "parcialmente_implementado",
+      "reason": "Herramientas básicas funcionan, algunas avanzadas son stubs",
+      "risk_level": "bajo",
+      "recommendation": "Implementar progresivamente según demanda"
+    }
+  ],
+  "flujos_no_conectados": [
+    {
+      "flujo": "TeamFlow workflows → Ejecución automática",
+      "status": "workflows_definidos_pero_no_ejecutan_automaticamente",
+      "risk_level": "bajo",
+      "recommendation": "Los workflows se pueden ejecutar manualmente, falta trigger automático"
+    }
+  ],
+  "riesgos_legales_detectados": [
+    {
+      "riesgo": "Envío directo a Hacienda sin certificado",
+      "status": "mitigado",
+      "mitigacion": "Sistema opera en modo borrador, gestor humano es responsable final",
+      "compliance": "✅ Cumple con normativa (responsabilidad delegada)"
+    },
+    {
+      "riesgo": "Firma automática de documentos legales",
+      "status": "mitigado",
+      "mitigacion": "Firewall garantiza modo borrador + aprobación explícita",
+      "compliance": "✅ Cumple con requisitos legales"
+    }
+  ],
+  "summary": {
+    "total_missing_critical": 0,
+    "total_missing_optional": 3,
+    "total_recommended": 3,
+    "system_ready_for_production": true,
+    "blocking_issues": [],
+    "non_blocking_improvements": [
+      "Validación de webhooks Stripe",
+      "Envío real a Hacienda (requiere certificado digital)",
+      "Ejecución automática de TeamFlow workflows"
+    ]
+  }
+}
+

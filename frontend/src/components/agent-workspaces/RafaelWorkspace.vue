@@ -138,6 +138,11 @@
         <p>Solicita a RAFAEL una tarea para que aparezcan los entregables aquí.</p>
       </div>
     </section>
+
+    <!-- Documentos Pendientes de Aprobación -->
+    <section class="approval-section">
+      <DocumentApprovalPanel />
+    </section>
   </div>
 
   <RafaelToolsPanel />
@@ -147,6 +152,7 @@
 import { onMounted, ref, computed, watch } from 'vue';
 import { useAutomationDeliverables } from '@/composables/useAutomationDeliverables';
 import RafaelToolsPanel from './RafaelToolsPanel.vue';
+import DocumentApprovalPanel from '@/components/DocumentApprovalPanel.vue';
 
 const {
   items: deliverables,

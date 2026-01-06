@@ -18,6 +18,63 @@ import string
 router = APIRouter()
 
 # ============================================================================
+# PRICING MODEL - AUTHORITATIVE PRICES
+# ============================================================================
+
+# Precios oficiales unificados (en euros)
+PRICING_PLANS = {
+    "startup": {
+        "name": "ZEUS STARTUP",
+        "setup_price": 197,
+        "monthly_price": 197,
+        "employee_range": (1, 5),
+        "description": "Ideal para autónomos y pequeños estudios"
+    },
+    "growth": {
+        "name": "ZEUS GROWTH",
+        "setup_price": 497,
+        "monthly_price": 497,
+        "employee_range": (6, 25),
+        "description": "PYMEs y startups en crecimiento"
+    },
+    "business": {
+        "name": "ZEUS BUSINESS",
+        "setup_price": 897,
+        "monthly_price": 897,
+        "employee_range": (26, 100),
+        "description": "Empresas establecidas"
+    },
+    "enterprise": {
+        "name": "ZEUS ENTERPRISE",
+        "setup_price": 1797,
+        "monthly_price": 1797,
+        "employee_range": (101, None),  # None significa sin límite superior
+        "description": "Grandes corporaciones"
+    }
+}
+
+def validate_plan_vs_employees(plan: str, employees: int) -> tuple[bool, Optional[str]]:
+    """
+    Validar que el plan seleccionado corresponde al número de empleados.
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if plan not in PRICING_PLANS:
+        return False, f"Plan '{plan}' no válido. Planes válidos: {list(PRICING_PLANS.keys())}"
+    
+    plan_config = PRICING_PLANS[plan]
+    min_employees, max_employees = plan_config["employee_range"]
+    
+    if employees < min_employees:
+        return False, f"El plan '{plan_config['name']}' requiere mínimo {min_employees} empleados. Tienes {employees}."
+    
+    if max_employees is not None and employees > max_employees:
+        return False, f"El plan '{plan_config['name']}' es para máximo {max_employees} empleados. Tienes {employees}. Considera el plan 'enterprise'."
+    
+    return True, None
+
+# ============================================================================
 # MODELS
 # ============================================================================
 
@@ -71,7 +128,15 @@ async def create_account_after_payment(
         Dict con credenciales y detalles de la cuenta
     """
     try:
-        # 1. Verificar que el email no exista
+        # 1. Validar plan vs número de empleados
+        is_valid, error_msg = validate_plan_vs_employees(request.plan, request.employees)
+        if not is_valid:
+            raise HTTPException(
+                status_code=400,
+                detail=error_msg
+            )
+        
+        # 2. Verificar que el email no exista
         existing_user = db.query(User).filter(User.email == request.email).first()
         if existing_user:
             raise HTTPException(
@@ -79,10 +144,10 @@ async def create_account_after_payment(
                 detail="Ya existe una cuenta con este email"
             )
         
-        # 2. Generar contraseña temporal
+        # 3. Generar contraseña temporal
         temp_password = generate_random_password()
         
-        # 3. Crear usuario
+        # 4. Crear usuario
         new_user = User(
             email=request.email,
             full_name=request.full_name,
@@ -101,13 +166,17 @@ async def create_account_after_payment(
         db.commit()
         db.refresh(new_user)
         
-        # 4. Guardar metadata del plan (podríamos crear tabla separada después)
+        # 5. Guardar metadata del plan (podríamos crear tabla separada después)
         # Por ahora lo guardamos en logs
+        plan_config = PRICING_PLANS[request.plan]
         account_metadata = {
             "user_id": new_user.id,
             "company_name": request.company_name,
             "employees": request.employees,
             "plan": request.plan,
+            "plan_name": plan_config["name"],
+            "setup_price": plan_config["setup_price"],
+            "monthly_price": plan_config["monthly_price"],
             "stripe_customer_id": request.stripe_customer_id,
             "stripe_subscription_id": request.stripe_subscription_id,
             "payment_intent_id": request.payment_intent_id,
@@ -117,7 +186,7 @@ async def create_account_after_payment(
         
         print(f"[ONBOARDING] Nueva cuenta creada: {account_metadata}")
         
-        # 5. Enviar email de bienvenida
+        # 6. Enviar email de bienvenida
         email_sent = await send_welcome_email(
             email=request.email,
             company_name=request.company_name,

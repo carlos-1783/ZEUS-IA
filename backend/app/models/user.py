@@ -47,5 +47,7 @@ class RefreshToken(Base):
         return f"<RefreshToken {self.token}>"
 
 
-# Add relationship to User model
+# Add relationships to User model
 User.refresh_tokens = relationship("RefreshToken", order_by=RefreshToken.id, back_populates="user")
+# Document approvals relationship (lazy import to avoid circular dependency)
+User.document_approvals = relationship("DocumentApproval", order_by="DocumentApproval.created_at.desc()", back_populates="user")

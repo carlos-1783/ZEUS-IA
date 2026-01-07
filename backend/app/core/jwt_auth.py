@@ -37,16 +37,17 @@ def create_jwt_token(
     try:
         to_encode = data.copy()
         
+        now = datetime.utcnow()
         if expires_delta:
-            expire = datetime.utcnow() + expires_delta
+            expire = now + expires_delta
         else:
-            expire = datetime.utcnow() + timedelta(minutes=15)
+            expire = now + timedelta(minutes=15)
             
-        # Añadir claims estándar
+        # Añadir claims estándar - JWT requiere timestamps en formato entero Unix
         to_encode.update({
-            "exp": expire,
-            "iat": datetime.utcnow(),
-            "nbf": datetime.utcnow() - timedelta(seconds=5),  # Válido desde 5 segundos atrás
+            "exp": int(expire.timestamp()),  # Convertir a timestamp Unix (segundos)
+            "iat": int(now.timestamp()),     # Issued at time en segundos
+            "nbf": int((now - timedelta(seconds=5)).timestamp()),  # Not Before (5 segundos atrás)
             "iss": settings.JWT_ISSUER,
             # Usar 'zeus-ia:access' para tokens de acceso y 'zeus-ia:websocket' para WebSockets
             "aud": f"zeus-ia:access" if token_type == settings.JWT_ACCESS_TOKEN_TYPE else f"zeus-ia:{token_type}",

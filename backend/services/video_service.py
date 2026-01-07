@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import textwrap
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from PIL import Image, ImageDraw, ImageFont  # type: ignore
 
@@ -33,7 +33,7 @@ def generate_marketing_video(
     deliverable: Dict[str, Any],
     agent: str,
     prefix: str,
-    artifact_id: str | None = None,
+    artifact_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Genera el recurso de vídeo asociado a un entregable.

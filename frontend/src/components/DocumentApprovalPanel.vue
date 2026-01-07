@@ -91,7 +91,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { api } from '@/api'
+import api from '@/api'
 
 interface Document {
   id: number

@@ -47,7 +47,7 @@ app.add_middleware(
 #     
 #     return await call_next(request)
 
-# Include API routes
+# Include API routes - IMPORTANTE: Debe estar ANTES del catch-all
 app.include_router(api_router, prefix="/api/v1")
 
 # Crear tablas al iniciar la aplicación
@@ -84,18 +84,25 @@ if os.path.exists("static"):
         print("[DEBUG] Assets mounted at /assets")
 
     # Serve frontend for all non-API routes
-    # IMPORTANTE: Este catch-all NO debe capturar rutas que empiecen con "api/"
-    # FastAPI da prioridad a rutas más específicas del router de API
+    # IMPORTANTE: Este catch-all debe ejecutarse DESPUÉS de que FastAPI evalúe las rutas del router
+    # FastAPI evalúa rutas en orden: primero rutas específicas, luego catch-alls
+    # El problema es que el catch-all puede capturar antes. Solución: usar un regex que excluya "/api"
+    from fastapi.routing import APIRoute
+    
     @app.get("/{full_path:path}")
     async def serve_frontend(request: Request, full_path: str):
-        # NO servir rutas de API aquí - deben ir al router de API
-        # FastAPI debería haber manejado estas rutas antes, pero por seguridad verificamos
+        # Si llegamos aquí y la ruta es de API, significa que no existe en el router
+        # Pero NO debemos servir el frontend, sino devolver un 404 apropiado
         if full_path.startswith("api/"):
             from fastapi.responses import JSONResponse
             from fastapi import status
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
-                content={"error": "API endpoint not found", "path": full_path}
+                content={
+                    "error": "API endpoint not found",
+                    "path": f"/{full_path}",
+                    "message": "The requested API endpoint does not exist. Check /api/docs for available endpoints."
+                }
             )
 
         static_path = os.path.join("static", full_path)

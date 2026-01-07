@@ -18,10 +18,9 @@ def create_tables():
     try:
         print("[DATABASE] Creando tablas...")
         
-        # IMPORTANTE: Ejecutar migración ANTES de crear tablas si es SQLite
+        # IMPORTANTE: Ejecutar migración ANTES de crear tablas
         # Esto asegura que las columnas existan antes de que SQLAlchemy intente usarlas
-        if "sqlite" in settings.DATABASE_URL:
-            _migrate_firewall_columns()
+        _migrate_user_columns()
         
         # Importar modelos aquí para evitar importación circular
         from app.models.user import User, RefreshToken
@@ -34,16 +33,87 @@ def create_tables():
         print("[DATABASE] ✅ Tablas creadas correctamente")
         
         # Ejecutar migración nuevamente después de crear tablas (por si acaso)
-        if "sqlite" in settings.DATABASE_URL:
-            _migrate_firewall_columns()
+        _migrate_user_columns()
     except Exception as e:
         print(f"[DATABASE] ❌ Error al crear tablas: {e}")
         import traceback
         traceback.print_exc()
 
 
-def _migrate_firewall_columns():
-    """Agregar columnas del Legal-Fiscal Firewall a la tabla users si no existen"""
+def _migrate_user_columns():
+    """Agregar columnas faltantes a la tabla users si no existen (compatible SQLite y PostgreSQL)"""
+    from sqlalchemy import inspect, text
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+    
+    try:
+        # Verificar si la tabla users existe
+        inspector = inspect(engine)
+        if "users" not in inspector.get_table_names():
+            print("[MIGRATION] Tabla 'users' no existe aún, se creará con el esquema correcto")
+            return
+        
+        # Obtener columnas existentes
+        existing_columns = [col["name"] for col in inspector.get_columns("users")]
+        print(f"[MIGRATION] Columnas existentes en 'users': {existing_columns}")
+        
+        # Detectar tipo de base de datos
+        is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
+        is_sqlite = "sqlite" in settings.DATABASE_URL.lower()
+        
+        # Columnas a agregar con sus tipos según la base de datos
+        columns_to_add = {
+            "email_gestor_fiscal": "VARCHAR(255)" if is_postgres else "TEXT",
+            "email_asesor_legal": "VARCHAR(255)" if is_postgres else "TEXT",
+            "autoriza_envio_documentos_a_asesores": "BOOLEAN" if is_postgres else "BOOLEAN DEFAULT 0",
+            "company_name": "VARCHAR(255)" if is_postgres else "TEXT",
+            "employees": "INTEGER",
+            "plan": "VARCHAR(50)" if is_postgres else "TEXT"
+        }
+        
+        added_columns = []
+        
+        # Ejecutar cada ALTER TABLE en su propia transacción
+        for column_name, column_type in columns_to_add.items():
+            if column_name not in existing_columns:
+                try:
+                    with engine.begin() as conn:
+                        if is_postgres:
+                            # PostgreSQL syntax
+                            sql = f'ALTER TABLE users ADD COLUMN "{column_name}" {column_type}'
+                            if "BOOLEAN" in column_type:
+                                sql += " DEFAULT FALSE"
+                            elif column_type == "INTEGER":
+                                sql += " DEFAULT 0"
+                        else:
+                            # SQLite syntax
+                            sql = f"ALTER TABLE users ADD COLUMN {column_name} {column_type}"
+                        
+                        conn.execute(text(sql))
+                        added_columns.append(column_name)
+                        print(f"[MIGRATION] ✅ Columna '{column_name}' agregada")
+                except (OperationalError, ProgrammingError) as e:
+                    # Si la columna ya existe o hay otro error, continuar
+                    error_msg = str(e)
+                    if "already exists" in error_msg.lower() or "duplicate column" in error_msg.lower() or "already exists" in error_msg:
+                        print(f"[MIGRATION] ℹ️ Columna '{column_name}' ya existe")
+                    else:
+                        print(f"[MIGRATION] ⚠️ Error agregando columna '{column_name}': {e}")
+            else:
+                print(f"[MIGRATION] ℹ️ Columna '{column_name}' ya existe")
+        
+        if added_columns:
+            print(f"[MIGRATION] ✅ Migración completada. Columnas agregadas: {', '.join(added_columns)}")
+        else:
+            print("[MIGRATION] ✅ Todas las columnas ya existen.")
+                
+    except Exception as e:
+        print(f"[MIGRATION] ⚠️ No se pudo ejecutar migración: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def _migrate_firewall_columns_legacy():
+    """DEPRECATED: Usar _migrate_user_columns() en su lugar"""
     import sqlite3
     import os
     

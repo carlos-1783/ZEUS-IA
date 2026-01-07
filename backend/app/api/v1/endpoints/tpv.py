@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.core.auth import get_current_active_user
+from app.core.auth import get_current_active_user, get_current_active_superuser
 from app.models.user import User
 from services.tpv_service import tpv_service, BusinessProfile, PaymentMethod
 
@@ -209,8 +209,11 @@ async def close_register(
 async def get_tpv_status(
     current_user: User = Depends(get_current_active_user)
 ):
-    """Obtener estado del TPV"""
-    return {
+    """Obtener estado del TPV - Los superusuarios ven información completa"""
+    is_superuser = getattr(current_user, 'is_superuser', False)
+    
+    # Información básica para todos los usuarios
+    status = {
         "success": True,
         "business_profile": tpv_service.business_profile.value if tpv_service.business_profile else None,
         "products_count": len(tpv_service.products),
@@ -219,6 +222,28 @@ async def get_tpv_status(
             "rafael": tpv_service.rafael_integration is not None,
             "justicia": tpv_service.justicia_integration is not None,
             "afrodita": tpv_service.afrodita_integration is not None
+        },
+        "user": {
+            "email": current_user.email,
+            "is_superuser": is_superuser,
+            "is_active": current_user.is_active
         }
     }
+    
+    # Información adicional para superusuarios
+    if is_superuser:
+        status["admin_info"] = {
+            "total_products": len(tpv_service.products),
+            "products": list(tpv_service.products.values()) if tpv_service.products else [],
+            "categories": list(tpv_service.categories.values()) if tpv_service.categories else [],
+            "cart": tpv_service.current_cart.copy(),
+            "employees_count": len(tpv_service.employees),
+            "terminals_count": len(tpv_service.terminals),
+            "pricing_rules_count": len(tpv_service.pricing_rules),
+            "inventory_sync_enabled": tpv_service.inventory_sync_enabled,
+            "employees": list(tpv_service.employees.values()) if tpv_service.employees else [],
+            "terminals": list(tpv_service.terminals.values()) if tpv_service.terminals else []
+        }
+    
+    return status
 

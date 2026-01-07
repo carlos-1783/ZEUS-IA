@@ -54,11 +54,8 @@ class CloseRegisterRequest(BaseModel):
     final_cash: float
 
 
-@router.get("/")
-async def get_tpv_root(
-    current_user: User = Depends(get_current_active_user)
-):
-    """Endpoint raíz del TPV - Devuelve información básica y endpoints disponibles"""
+async def _get_tpv_info(current_user: User):
+    """Función auxiliar para obtener información del TPV"""
     is_superuser = getattr(current_user, 'is_superuser', False)
     
     return {
@@ -87,6 +84,15 @@ async def get_tpv_root(
             "afrodita": tpv_service.afrodita_integration is not None
         }
     }
+
+
+@router.get("")
+@router.get("/")
+async def get_tpv_root(
+    current_user: User = Depends(get_current_active_user)
+):
+    """Endpoint raíz del TPV - Devuelve información básica y endpoints disponibles"""
+    return await _get_tpv_info(current_user)
 
 
 @router.post("/detect-business-type")

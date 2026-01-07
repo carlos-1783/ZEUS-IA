@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Depends, Response
 from fastapi.responses import FileResponse, JSONResponse
 
 from services.automation.utils import OUTPUT_BASE_DIR
-from app.core.auth import get_current_active_superuser
+from app.core.auth import get_current_active_user
 from app.models.user import User
 
 router = APIRouter()
@@ -59,7 +59,7 @@ async def outputs_preflight() -> Response:
 @router.get("/outputs")
 async def list_outputs(
     agent: Optional[str] = None,
-    _: User = Depends(get_current_active_superuser),
+    _: User = Depends(get_current_active_user),
 ):
     """
     Listar los entregables generados por los agentes.
@@ -82,7 +82,7 @@ async def download_output(
     agent: str,
     filename: str,
     token: Optional[str] = None,  # Token como query param para descargas directas
-    current_user: User = Depends(get_current_active_superuser),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Descargar un entregable concreto.

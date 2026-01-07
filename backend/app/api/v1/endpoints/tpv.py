@@ -54,6 +54,41 @@ class CloseRegisterRequest(BaseModel):
     final_cash: float
 
 
+@router.get("/")
+async def get_tpv_root(
+    current_user: User = Depends(get_current_active_user)
+):
+    """Endpoint raíz del TPV - Devuelve información básica y endpoints disponibles"""
+    is_superuser = getattr(current_user, 'is_superuser', False)
+    
+    return {
+        "success": True,
+        "service": "TPV Universal Enterprise",
+        "version": "1.0.0",
+        "user": {
+            "email": current_user.email,
+            "is_superuser": is_superuser,
+            "is_active": current_user.is_active
+        },
+        "endpoints": {
+            "status": "/api/v1/tpv/status",
+            "products": "/api/v1/tpv/products",
+            "cart": "/api/v1/tpv/cart",
+            "sale": "/api/v1/tpv/sale",
+            "invoice": "/api/v1/tpv/invoice",
+            "close_register": "/api/v1/tpv/close-register",
+            "detect_business_type": "/api/v1/tpv/detect-business-type"
+        },
+        "business_profile": tpv_service.business_profile.value if tpv_service.business_profile else None,
+        "products_count": len(tpv_service.products),
+        "integrations": {
+            "rafael": tpv_service.rafael_integration is not None,
+            "justicia": tpv_service.justicia_integration is not None,
+            "afrodita": tpv_service.afrodita_integration is not None
+        }
+    }
+
+
 @router.post("/detect-business-type")
 async def detect_business_type(
     request: BusinessDataRequest,

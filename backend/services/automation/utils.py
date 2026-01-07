@@ -10,7 +10,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 OUTPUT_BASE_DIR = Path(os.getenv("AGENT_OUTPUT_DIR", "storage/outputs")).resolve()
@@ -36,7 +36,7 @@ def write_json(
     prefix: str,
     payload: Dict[str, Any],
     base_dir: Path = OUTPUT_BASE_DIR,
-    artifact_id: str | None = None,
+    artifact_id: Optional[str] = None,
 ) -> str:
     """Persistir un archivo JSON y devolver su ruta absoluta."""
     agent_dir = ensure_dir(base_dir / agent.lower())
@@ -52,7 +52,7 @@ def write_markdown(
     prefix: str,
     content: str,
     base_dir: Path = OUTPUT_BASE_DIR,
-    artifact_id: str | None = None,
+    artifact_id: Optional[str] = None,
 ) -> str:
     """Persistir un archivo Markdown y devolver su ruta absoluta."""
     agent_dir = ensure_dir(base_dir / agent.lower())
@@ -73,7 +73,7 @@ def write_log(agent: str, prefix: str, payload: Dict[str, Any]) -> str:
     return str(file_path.resolve())
 
 
-def merge_dict(base: Dict[str, Any] | None, updates: Dict[str, Any]) -> Dict[str, Any]:
+def merge_dict(base: Optional[Dict[str, Any]], updates: Dict[str, Any]) -> Dict[str, Any]:
     merged = dict(base or {})
     merged.update(updates)
     return merged

@@ -9,7 +9,7 @@ import os
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from app.models.agent_activity import AgentActivity
 from .. import utils
@@ -84,7 +84,7 @@ def handle_thalos_backup(activity: AgentActivity) -> Dict[str, Any]:
     utils.ensure_dir(backup_dir)
 
     backup_created = False
-    backup_path: str | None = None
+    backup_path: Optional[str] = None
 
     if source.exists():
         target = backup_dir / f"zeus_backup_{utils.timestamp()}.db"

@@ -28,47 +28,56 @@ async def create_tokens(db: Session, user: User) -> Dict[str, Any]:
     """
     Create access and refresh tokens for user using the new JWT module
     """
-    # Calculate token expiration
-    access_token_expires = timedelta(minutes=float(settings.ACCESS_TOKEN_EXPIRE_MINUTES))
-    refresh_token_expires = timedelta(days=float(settings.REFRESH_TOKEN_EXPIRE_DAYS))
-    
-    # Create access token using the new JWT module
-    user_scopes = resolve_user_scopes(user)
+    try:
+        # Calculate token expiration
+        access_token_expires = timedelta(minutes=float(settings.ACCESS_TOKEN_EXPIRE_MINUTES))
+        refresh_token_expires = timedelta(days=float(settings.REFRESH_TOKEN_EXPIRE_DAYS))
+        
+        # Create access token using the new JWT module
+        user_scopes = resolve_user_scopes(user)
 
-    access_token = create_access_token(
-        user_id=str(user.id),
-        email=user.email,
-        is_active=user.is_active,
-        is_superuser=user.is_superuser,
-        expires_delta=access_token_expires,
-        scopes=user_scopes,
-    )
-    
-    # Create refresh token and store it in the database
-    refresh_token = create_jwt_refresh_token()
-    
-    # Store refresh token in database
-    db_refresh_token = RefreshToken(
-        token=refresh_token,
-        user_id=user.id,
-        expires_at=datetime.utcnow() + refresh_token_expires,
-        is_active=True
-    )
-    db.add(db_refresh_token)
-    db.commit()
-    
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "expires_in": int(access_token_expires.total_seconds()),
-        "user_id": user.id,
-        "email": user.email,
-        "full_name": user.full_name,
-        "is_active": user.is_active,
-        "is_superuser": user.is_superuser,
-        "scopes": user_scopes,
-    }
+        access_token = create_access_token(
+            user_id=str(user.id),
+            email=user.email,
+            is_active=user.is_active,
+            is_superuser=user.is_superuser,
+            expires_delta=access_token_expires,
+            scopes=user_scopes,
+        )
+        
+        # Create refresh token and store it in the database
+        refresh_token = create_jwt_refresh_token()
+        
+        # Store refresh token in database
+        db_refresh_token = RefreshToken(
+            token=refresh_token,
+            user_id=user.id,
+            expires_at=datetime.utcnow() + refresh_token_expires,
+            is_active=True
+        )
+        db.add(db_refresh_token)
+        db.commit()
+        db.refresh(db_refresh_token)
+        
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "expires_in": int(access_token_expires.total_seconds()),
+            "user_id": user.id,
+            "email": user.email,
+            "full_name": user.full_name,
+            "is_active": user.is_active,
+            "is_superuser": user.is_superuser,
+            "scopes": user_scopes,
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating tokens for user {user.email}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating authentication tokens: {str(e)}"
+        )
 
 @router.post(
     "/login",
@@ -87,24 +96,34 @@ async def login(
     OAuth2 compatible token login, get an access token and refresh token for future requests.
     Accepts form data with username (email) and password.
     """
-    # Autenticar al usuario
-    user = authenticate_user(db, username, password)
-    if not user:
+    try:
+        # Autenticar al usuario
+        user = authenticate_user(db, username, password)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Verificar si el usuario está activo
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Inactive user"
+            )
+        
+        # Crear tokens de acceso y actualización
+        return await create_tokens(db, user)
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        logger.error(f"Error in login endpoint for user {username}: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during login"
         )
-    
-    # Verificar si el usuario está activo
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Inactive user"
-        )
-    
-    # Crear tokens de acceso y actualización
-    return await create_tokens(db, user)
 
 # Mantener compatibilidad con OAuth2
 @router.post(
@@ -287,7 +306,7 @@ async def refresh_token(
     
     # Invalidate the used refresh token
     db_token.is_active = False
-    db_token.revoked_at = datetime.utcnow()
+    db_token.updated_at = datetime.utcnow()
     db.commit()
     
     # Create new tokens
@@ -320,7 +339,7 @@ async def logout(
     
     if db_token:
         db_token.is_active = False
-        db_token.revoked_at = datetime.utcnow()
+        db_token.updated_at = datetime.utcnow()
         db.commit()
     
     return {"message": "Successfully logged out"}

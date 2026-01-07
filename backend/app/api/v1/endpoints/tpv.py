@@ -86,8 +86,7 @@ async def _get_tpv_info(current_user: User):
     }
 
 
-@router.get("")
-@router.get("/")
+@router.get("/", include_in_schema=True)
 async def get_tpv_root(
     current_user: User = Depends(get_current_active_user)
 ):

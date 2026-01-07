@@ -84,10 +84,19 @@ if os.path.exists("static"):
         print("[DEBUG] Assets mounted at /assets")
 
     # Serve frontend for all non-API routes
+    # IMPORTANTE: Este catch-all NO debe capturar rutas que empiecen con "api/"
+    # FastAPI da prioridad a rutas más específicas del router de API
     @app.get("/{full_path:path}")
     async def serve_frontend(request: Request, full_path: str):
+        # NO servir rutas de API aquí - deben ir al router de API
+        # FastAPI debería haber manejado estas rutas antes, pero por seguridad verificamos
         if full_path.startswith("api/"):
-            return {"error": "Not found"}
+            from fastapi.responses import JSONResponse
+            from fastapi import status
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": "API endpoint not found", "path": full_path}
+            )
 
         static_path = os.path.join("static", full_path)
         if os.path.isfile(static_path):

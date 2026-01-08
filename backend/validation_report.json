@@ -1,0 +1,429 @@
+{
+  "validation_config": {
+    "task": "zeus_ia_full_ecosystem_go_to_market_certification",
+    "mode": "enterprise_validation",
+    "overwrite": false,
+    "dry_run": false,
+    "description": "Verificar que TODO el ecosistema ZEUS-IA está completo, funcional, coherente y listo para lanzamiento comercial sin riesgos técnicos, legales ni operativos.",
+    "validation_scope": "FULL_ECOSYSTEM"
+  },
+  "timestamp": "2026-01-08T13:07:31.736644",
+  "summary": {
+    "total_checks": 41,
+    "passed": 39,
+    "failed": 2,
+    "warnings": 0,
+    "pass_rate": "95.1%"
+  },
+  "results_by_module": {
+    "CORE": [
+      {
+        "module": "CORE",
+        "check": "Archivo authentication existe",
+        "status": "PASS",
+        "details": "Ubicado en: app/core/auth.py",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.306656"
+      },
+      {
+        "module": "CORE",
+        "check": "Archivo authorization existe",
+        "status": "PASS",
+        "details": "Ubicado en: app/core/auth.py",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.306656"
+      },
+      {
+        "module": "CORE",
+        "check": "Archivo database existe",
+        "status": "PASS",
+        "details": "Ubicado en: app/db/base.py",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.306656"
+      },
+      {
+        "module": "CORE",
+        "check": "Archivo session existe",
+        "status": "PASS",
+        "details": "Ubicado en: app/db/session.py",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.306656"
+      },
+      {
+        "module": "CORE",
+        "check": "Archivo config existe",
+        "status": "PASS",
+        "details": "Ubicado en: app/core/config.py",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.306656"
+      },
+      {
+        "module": "CORE",
+        "check": "Archivo models existe",
+        "status": "PASS",
+        "details": "Ubicado en: app/models/user.py",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.308672"
+      },
+      {
+        "module": "CORE",
+        "check": "Endpoint auth /login",
+        "status": "PASS",
+        "details": "Endpoint implementado",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.311082"
+      },
+      {
+        "module": "CORE",
+        "check": "Endpoint auth /register",
+        "status": "PASS",
+        "details": "Endpoint implementado",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.311082"
+      },
+      {
+        "module": "CORE",
+        "check": "Endpoint auth /refresh",
+        "status": "PASS",
+        "details": "Endpoint implementado",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.311082"
+      },
+      {
+        "module": "CORE",
+        "check": "Endpoint auth /logout",
+        "status": "PASS",
+        "details": "Endpoint implementado",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.311082"
+      },
+      {
+        "module": "CORE",
+        "check": "Endpoint auth /me",
+        "status": "PASS",
+        "details": "Endpoint implementado",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.311082"
+      }
+    ],
+    "AGENTS": [
+      {
+        "module": "AGENTS",
+        "check": "Agente ZEUS_CORE existe",
+        "status": "PASS",
+        "details": "Ubicado en: agents/zeus_core.py",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.313107"
+      },
+      {
+        "module": "AGENTS",
+        "check": "Agente ZEUS_CORE tiene process_request",
+        "status": "PASS",
+        "details": "",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.313107"
+      },
+      {
+        "module": "AGENTS",
+        "check": "Agente RAFAEL existe",
+        "status": "PASS",
+        "details": "Ubicado en: agents/rafael.py",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.315252"
+      },
+      {
+        "module": "AGENTS",
+        "check": "Agente RAFAEL tiene process_request",
+        "status": "PASS",
+        "details": "",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.315252"
+      },
+      {
+        "module": "AGENTS",
+        "check": "Agente JUSTICIA existe",
+        "status": "PASS",
+        "details": "Ubicado en: agents/justicia.py",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.317290"
+      },
+      {
+        "module": "AGENTS",
+        "check": "Agente JUSTICIA tiene process_request",
+        "status": "PASS",
+        "details": "",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.317290"
+      },
+      {
+        "module": "AGENTS",
+        "check": "Agente AFRODITA existe",
+        "status": "PASS",
+        "details": "Ubicado en: agents/afrodita.py",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.319330"
+      },
+      {
+        "module": "AGENTS",
+        "check": "Agente AFRODITA tiene process_request",
+        "status": "PASS",
+        "details": "",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.319330"
+      },
+      {
+        "module": "AGENTS",
+        "check": "Agente PERSEO existe",
+        "status": "PASS",
+        "details": "Ubicado en: agents/perseo.py",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.321358"
+      },
+      {
+        "module": "AGENTS",
+        "check": "Agente PERSEO tiene process_request",
+        "status": "PASS",
+        "details": "",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.321358"
+      },
+      {
+        "module": "AGENTS",
+        "check": "Agente THALOS existe",
+        "status": "PASS",
+        "details": "Ubicado en: agents/thalos.py",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.323390"
+      },
+      {
+        "module": "AGENTS",
+        "check": "Agente THALOS tiene process_request",
+        "status": "PASS",
+        "details": "",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.325425"
+      }
+    ],
+    "BUSINESS": [
+      {
+        "module": "BUSINESS",
+        "check": "TPV Module completo",
+        "status": "PASS",
+        "details": "Servicio y endpoints implementados",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.327728"
+      },
+      {
+        "module": "BUSINESS",
+        "check": "TPV endpoint /status",
+        "status": "PASS",
+        "details": "",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.329761"
+      },
+      {
+        "module": "BUSINESS",
+        "check": "TPV endpoint /products",
+        "status": "PASS",
+        "details": "",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.329761"
+      },
+      {
+        "module": "BUSINESS",
+        "check": "TPV endpoint /cart",
+        "status": "PASS",
+        "details": "",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.329761"
+      },
+      {
+        "module": "BUSINESS",
+        "check": "TPV endpoint /sale",
+        "status": "PASS",
+        "details": "",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.329761"
+      },
+      {
+        "module": "BUSINESS",
+        "check": "Onboarding: validación plan vs empleados",
+        "status": "PASS",
+        "details": "Validación implementada",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.331791"
+      },
+      {
+        "module": "BUSINESS",
+        "check": "Onboarding: creación de cuenta",
+        "status": "PASS",
+        "details": "Endpoint de creación implementado",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.331791"
+      },
+      {
+        "module": "BUSINESS",
+        "check": "Firewall: Modo borrador",
+        "status": "PASS",
+        "details": "",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.337613"
+      },
+      {
+        "module": "BUSINESS",
+        "check": "Firewall: Aprobación cliente",
+        "status": "PASS",
+        "details": "",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.337613"
+      },
+      {
+        "module": "BUSINESS",
+        "check": "Firewall: Envío asesor",
+        "status": "PASS",
+        "details": "",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.339639"
+      },
+      {
+        "module": "BUSINESS",
+        "check": "Firewall: Auditoría",
+        "status": "PASS",
+        "details": "",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.339639"
+      },
+      {
+        "module": "BUSINESS",
+        "check": "Document Approval System",
+        "status": "PASS",
+        "details": "Modelo y endpoints implementados",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.339639"
+      }
+    ],
+    "FLOWS": [
+      {
+        "module": "FLOWS",
+        "check": "Flujo onboarding_to_operation",
+        "status": "PASS",
+        "details": "Todos los pasos implementados",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.350926"
+      },
+      {
+        "module": "FLOWS",
+        "check": "Flujo tpv_to_accounting",
+        "status": "PASS",
+        "details": "Todos los pasos implementados",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.368665"
+      },
+      {
+        "module": "FLOWS",
+        "check": "Flujo legal_fiscal_firewall",
+        "status": "PASS",
+        "details": "Todos los pasos implementados",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.378339"
+      }
+    ],
+    "COMPLIANCE": [
+      {
+        "module": "COMPLIANCE",
+        "check": "ZEUS no firma documentos",
+        "status": "PASS",
+        "details": "Cumplimiento verificado",
+        "impact": "",
+        "fix": "",
+        "timestamp": "2026-01-08T13:07:31.400692"
+      },
+      {
+        "module": "COMPLIANCE",
+        "check": "RAFAEL solo modo borrador",
+        "status": "FAIL",
+        "details": "Keyword prohibido 'presentar' encontrado; Keyword prohibido 'aeat' encontrado",
+        "impact": "CRÍTICO: Riesgo legal/fiscal/seguridad",
+        "fix": "Eliminar keywords prohibidos y agregar validaciones requeridas",
+        "timestamp": "2026-01-08T13:07:31.404739"
+      }
+    ],
+    "SYSTEM": [
+      {
+        "module": "SYSTEM",
+        "check": "Ejecución de validaciones",
+        "status": "FAIL",
+        "details": "Error durante validación: 'C:\\\\Users\\\\Acer\\\\ZEUS-IA\\\\frontend\\\\src\\\\views\\\\AuthTest.vue' is not in the subpath of 'C:\\\\Users\\\\Acer\\\\ZEUS-IA\\\\backend' OR one path is relative and the other is absolute.",
+        "impact": "CRÍTICO: No se pudo completar la validación",
+        "fix": "Revisar error: Traceback (most recent call last):\n  File \"C:\\Users\\Acer\\ZEUS-IA\\backend\\scripts\\validate_ecosystem.py\", line 714, in run_all_validations\n    self.validate_compliance()\n  File \"C:\\Users\\Acer\\ZEUS-IA\\backend\\scripts\\validate_ecosystem.py\", line 486, in validate_compliance\n    details.append(f\"Keyword prohibido '{keyword}' encontrado en {sub_file.relative_to(self.base_dir)}\")\n  File \"C:\\Program Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.10_3.10.3056.0_x64__qbz5n2kfra8p0\\lib\\pathlib.py\", line 818, in relative_to\n    raise ValueError(\"{!r} is not in the subpath of {!r}\"\nValueError: 'C:\\\\Users\\\\Acer\\\\ZEUS-IA\\\\frontend\\\\src\\\\views\\\\AuthTest.vue' is not in the subpath of 'C:\\\\Users\\\\Acer\\\\ZEUS-IA\\\\backend' OR one path is relative and the other is absolute.\n",
+        "timestamp": "2026-01-08T13:07:31.732604"
+      }
+    ]
+  },
+  "critical_failures": [
+    {
+      "module": "COMPLIANCE",
+      "check": "RAFAEL solo modo borrador",
+      "status": "FAIL",
+      "details": "Keyword prohibido 'presentar' encontrado; Keyword prohibido 'aeat' encontrado",
+      "impact": "CRÍTICO: Riesgo legal/fiscal/seguridad",
+      "fix": "Eliminar keywords prohibidos y agregar validaciones requeridas",
+      "timestamp": "2026-01-08T13:07:31.404739"
+    },
+    {
+      "module": "SYSTEM",
+      "check": "Ejecución de validaciones",
+      "status": "FAIL",
+      "details": "Error durante validación: 'C:\\\\Users\\\\Acer\\\\ZEUS-IA\\\\frontend\\\\src\\\\views\\\\AuthTest.vue' is not in the subpath of 'C:\\\\Users\\\\Acer\\\\ZEUS-IA\\\\backend' OR one path is relative and the other is absolute.",
+      "impact": "CRÍTICO: No se pudo completar la validación",
+      "fix": "Revisar error: Traceback (most recent call last):\n  File \"C:\\Users\\Acer\\ZEUS-IA\\backend\\scripts\\validate_ecosystem.py\", line 714, in run_all_validations\n    self.validate_compliance()\n  File \"C:\\Users\\Acer\\ZEUS-IA\\backend\\scripts\\validate_ecosystem.py\", line 486, in validate_compliance\n    details.append(f\"Keyword prohibido '{keyword}' encontrado en {sub_file.relative_to(self.base_dir)}\")\n  File \"C:\\Program Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.10_3.10.3056.0_x64__qbz5n2kfra8p0\\lib\\pathlib.py\", line 818, in relative_to\n    raise ValueError(\"{!r} is not in the subpath of {!r}\"\nValueError: 'C:\\\\Users\\\\Acer\\\\ZEUS-IA\\\\frontend\\\\src\\\\views\\\\AuthTest.vue' is not in the subpath of 'C:\\\\Users\\\\Acer\\\\ZEUS-IA\\\\backend' OR one path is relative and the other is absolute.\n",
+      "timestamp": "2026-01-08T13:07:31.732604"
+    }
+  ],
+  "verdict": "APPROVED_WITH_MINOR_WARNINGS",
+  "verdict_reason": "Pass rate: 95.1%. Fallos menores detectados (2 fallos, 0 warnings). Se recomienda revisar antes de lanzar.",
+  "recommendations": [
+    "URGENTE: Corregir 2 fallos críticos antes de lanzar.",
+    "Revisar y corregir 2 fallos detectados.",
+    "Priorizar correcciones en módulo COMPLIANCE.",
+    "Priorizar correcciones en módulo SYSTEM."
+  ]
+}

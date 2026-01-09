@@ -75,7 +75,7 @@
         <div class="chart-section">
           <h3>Ingresos por Mes</h3>
           <div class="chart-container">
-            <canvas ref="revenueChartCanvas" :style="{ display: chartReady ? 'block' : 'none' }"></canvas>
+            <canvas ref="revenueChartCanvas"></canvas>
             <div v-if="loading && !chartReady" class="chart-loading">
               Cargando datos del gráfico...
             </div>
@@ -266,9 +266,16 @@ const settings = ref({
 let refreshInterval = null
 
 onMounted(async () => {
+  console.log('[AdminPanel] Component mounted, loading data...')
+  
   await loadStats()
   await loadCustomers()
-  await loadChartData()
+  
+  // Cargar gráfico después de que el DOM esté listo
+  await nextTick()
+  setTimeout(async () => {
+    await loadChartData()
+  }, 500)
   
   // Configurar auto-refresh cada 30 segundos
   refreshInterval = setInterval(async () => {
@@ -369,11 +376,15 @@ const loadCustomers = async () => {
 
 const loadChartData = async () => {
   try {
+    console.log('[Chart] Iniciando carga de datos...')
     const token = authStore.getToken ? authStore.getToken() : authStore.token
     if (!token) {
+      console.error('[Chart] No hay token de autenticación')
+      error.value = 'No hay token de autenticación'
       return
     }
 
+    console.log('[Chart] Haciendo petición a /api/v1/admin/revenue-chart...')
     const response = await fetch('/api/v1/admin/revenue-chart?months=12', {
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -381,37 +392,100 @@ const loadChartData = async () => {
       }
     })
 
+    console.log('[Chart] Respuesta recibida:', response.status, response.statusText)
+
     if (!response.ok) {
       if (response.status === 403) {
         console.warn('[Chart] Acceso denegado - solo superusuarios')
+        error.value = 'Acceso denegado. Solo superusuarios pueden ver el gráfico.'
+        // Renderizar gráfico vacío con mensaje
+        renderEmptyChart('Acceso denegado')
         return
       }
+      const errorText = await response.text()
+      console.error('[Chart] Error en respuesta:', errorText)
       throw new Error(`Error ${response.status}: ${response.statusText}`)
     }
 
     const data = await response.json()
+    console.log('[Chart] Datos recibidos:', data)
     
     if (data.success && data.chart_data) {
+      console.log('[Chart] Datos válidos, renderizando gráfico...')
       // Esperar a que el DOM esté actualizado
       await nextTick()
       
       // Esperar un frame más para asegurar que el canvas esté renderizado
       setTimeout(() => {
         renderChart(data.chart_data)
-      }, 100)
+      }, 200)
+    } else {
+      console.warn('[Chart] Datos no válidos o vacíos:', data)
+      renderEmptyChart('No hay datos disponibles')
     }
   } catch (err) {
-    console.error('Error cargando datos del gráfico:', err)
+    console.error('[Chart] Error cargando datos del gráfico:', err)
     error.value = err.message || 'Error cargando datos del gráfico'
+    renderEmptyChart(err.message || 'Error cargando datos')
   }
 }
 
-const renderChart = (chartData) => {
+const renderEmptyChart = (message = 'No hay datos disponibles') => {
   if (!revenueChartCanvas.value) {
-    console.warn('[Chart] Canvas no disponible aún, reintentando...')
+    setTimeout(() => renderEmptyChart(message), 200)
+    return
+  }
+
+  // Destruir gráfico anterior si existe
+  if (revenueChart) {
+    revenueChart.destroy()
+    revenueChart = null
+  }
+
+  // Crear un gráfico simple con un dataset vacío para mostrar el mensaje
+  const ctx = revenueChartCanvas.value.getContext('2d')
+  
+  // Asegurar que el canvas tenga dimensiones
+  const container = revenueChartCanvas.value.parentElement
+  if (container) {
+    const width = container.clientWidth - 40
+    revenueChartCanvas.value.width = width
+    revenueChartCanvas.value.height = 400
+  }
+  
+  // Limpiar el canvas
+  ctx.clearRect(0, 0, revenueChartCanvas.value.width, revenueChartCanvas.value.height)
+  
+  // Dibujar mensaje directamente
+  ctx.save()
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'
+  ctx.font = '18px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(message, revenueChartCanvas.value.width / 2, revenueChartCanvas.value.height / 2)
+  ctx.restore()
+
+  chartReady.value = true
+  console.log('[Chart] Mensaje renderizado:', message)
+}
+
+const renderChart = (chartData) => {
+  console.log('[Chart] Intentando renderizar gráfico...')
+  console.log('[Chart] Canvas disponible?', !!revenueChartCanvas.value)
+  console.log('[Chart] Datos recibidos:', chartData)
+  
+  if (!revenueChartCanvas.value) {
+    console.warn('[Chart] Canvas no disponible aún, reintentando en 200ms...')
     setTimeout(() => {
-      if (revenueChartCanvas.value && chartData) {
-        renderChart(chartData)
+      if (revenueChartCanvas.value) {
+        if (chartData && chartData.labels && chartData.labels.length > 0) {
+          renderChart(chartData)
+        } else {
+          renderEmptyChart('No hay datos disponibles')
+        }
+      } else {
+        console.error('[Chart] Canvas nunca estuvo disponible')
+        error.value = 'No se pudo inicializar el gráfico'
       }
     }, 200)
     return
@@ -419,12 +493,14 @@ const renderChart = (chartData) => {
 
   // Validar que hay datos
   if (!chartData || !chartData.labels || chartData.labels.length === 0) {
-    console.warn('[Chart] No hay datos para mostrar')
+    console.warn('[Chart] No hay datos para mostrar, renderizando gráfico vacío')
+    renderEmptyChart('No hay datos para mostrar')
     return
   }
 
   // Destruir gráfico anterior si existe
   if (revenueChart) {
+    console.log('[Chart] Destruyendo gráfico anterior')
     revenueChart.destroy()
     revenueChart = null
   }
@@ -436,12 +512,30 @@ const renderChart = (chartData) => {
       const date = new Date(parseInt(year), parseInt(month) - 1)
       return date.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })
     } catch (e) {
+      console.warn('[Chart] Error formateando label:', label, e)
       return label
     }
   })
 
+  console.log('[Chart] Labels formateados:', formattedLabels)
+
   // Crear nuevo gráfico
   const ctx = revenueChartCanvas.value.getContext('2d')
+  
+  // Asegurar que el canvas tenga dimensiones correctas
+  const container = revenueChartCanvas.value.parentElement
+  if (container) {
+    const containerWidth = container.clientWidth - 40
+    const containerHeight = 400
+    revenueChartCanvas.value.width = containerWidth
+    revenueChartCanvas.value.height = containerHeight
+  } else {
+    revenueChartCanvas.value.width = 600
+    revenueChartCanvas.value.height = 400
+  }
+  
+  console.log('[Chart] Dimensiones del canvas:', revenueChartCanvas.value.width, 'x', revenueChartCanvas.value.height)
+  
   revenueChart = new Chart(ctx, {
     type: 'line',
     data: {
@@ -526,6 +620,7 @@ const renderChart = (chartData) => {
 
   chartReady.value = true
   console.log('✅ Gráfico renderizado exitosamente')
+  error.value = null // Limpiar errores si el gráfico se renderizó correctamente
 }
 
 // Funciones de formateo
@@ -912,6 +1007,47 @@ td {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   padding: 32px;
+}
+
+.chart-container {
+  height: 400px;
+  position: relative;
+  padding: 20px;
+  min-height: 400px;
+  width: 100%;
+}
+
+.chart-container canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block !important;
+}
+
+.chart-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 16px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.chart-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #ef4444;
+  font-size: 14px;
+  z-index: 10;
+  pointer-events: none;
+  text-align: center;
+  padding: 20px;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 8px;
+  max-width: 80%;
 }
 
 .chart-container {

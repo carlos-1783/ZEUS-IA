@@ -48,34 +48,40 @@
         <div class="stats-grid">
           <div class="stat-card">
             <div class="stat-icon">👥</div>
-            <div class="stat-value">{{ stats.totalCustomers }}</div>
+            <div class="stat-value">{{ formatNumber(stats.totalCustomers) }}</div>
             <div class="stat-label">Clientes Totales</div>
           </div>
           
           <div class="stat-card">
             <div class="stat-icon">💰</div>
-            <div class="stat-value">€{{ stats.monthlyRevenue }}</div>
+            <div class="stat-value">€{{ formatCurrency(stats.monthlyRevenue) }}</div>
             <div class="stat-label">Ingresos Mensuales</div>
           </div>
           
           <div class="stat-card">
             <div class="stat-icon">📈</div>
-            <div class="stat-value">€{{ stats.totalRevenue }}</div>
+            <div class="stat-value">€{{ formatCurrency(stats.totalRevenue) }}</div>
             <div class="stat-label">Ingresos Totales</div>
           </div>
           
           <div class="stat-card">
             <div class="stat-icon">🎯</div>
-            <div class="stat-value">{{ stats.activeSubscriptions }}</div>
+            <div class="stat-value">{{ formatNumber(stats.activeSubscriptions) }}</div>
             <div class="stat-label">Suscripciones Activas</div>
           </div>
         </div>
 
-        <!-- Revenue Chart Placeholder -->
+        <!-- Revenue Chart -->
         <div class="chart-section">
           <h3>Ingresos por Mes</h3>
-          <div class="chart-placeholder">
-            📊 Gráfico de ingresos (implementar con Chart.js)
+          <div class="chart-container">
+            <canvas ref="revenueChartCanvas" :style="{ display: chartReady ? 'block' : 'none' }"></canvas>
+            <div v-if="loading && !chartReady" class="chart-loading">
+              Cargando datos del gráfico...
+            </div>
+            <div v-if="error && !chartReady" class="chart-error">
+              {{ error }}
+            </div>
           </div>
         </div>
       </section>
@@ -143,19 +149,19 @@
         <div class="revenue-summary">
           <div class="revenue-card">
             <h3>Este mes</h3>
-            <p class="amount">€{{ stats.monthlyRevenue }}</p>
-            <p class="detail">{{ stats.activeSubscriptions }} suscripciones activas</p>
+            <p class="amount">€{{ formatCurrency(stats.monthlyRevenue) }}</p>
+            <p class="detail">{{ formatNumber(stats.activeSubscriptions) }} suscripciones activas</p>
           </div>
           
           <div class="revenue-card">
             <h3>Setup fees (total)</h3>
-            <p class="amount">€{{ stats.totalSetupFees }}</p>
+            <p class="amount">€{{ formatCurrency(stats.totalSetupFees) }}</p>
             <p class="detail">Pagos únicos de instalación</p>
           </div>
           
           <div class="revenue-card">
             <h3>Proyección anual</h3>
-            <p class="amount">€{{ stats.monthlyRevenue * 12 }}</p>
+            <p class="amount">€{{ formatCurrency(stats.monthlyRevenue * 12) }}</p>
             <p class="detail">Basado en suscripciones actuales</p>
           </div>
         </div>
@@ -167,7 +173,7 @@
               <span class="plan-name">{{ plan.name }}</span>
               <span class="plan-count">{{ plan.count }} clientes</span>
             </div>
-            <div class="plan-amount">€{{ plan.monthly_total }}/mes</div>
+            <div class="plan-amount">€{{ formatCurrency(plan.monthly_total) }}/mes</div>
           </div>
         </div>
       </section>
@@ -215,10 +221,16 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import { Chart, registerables } from 'chart.js'
+
+// Registrar componentes de Chart.js
+Chart.register(...registerables)
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 const currentView = ref('overview')
 
@@ -233,14 +245,16 @@ const stats = ref({
 
 // Customers
 const customers = ref([])
+const loading = ref(false)
+const error = ref(null)
 
 // Revenue by plan
-const revenueByPlan = ref([
-  { name: 'ZEUS STARTUP', count: 0, monthly_total: 0 },
-  { name: 'ZEUS GROWTH', count: 0, monthly_total: 0 },
-  { name: 'ZEUS BUSINESS', count: 0, monthly_total: 0 },
-  { name: 'ZEUS ENTERPRISE', count: 0, monthly_total: 0 }
-])
+const revenueByPlan = ref([])
+
+// Chart
+const revenueChartCanvas = ref(null)
+let revenueChart = null
+const chartReady = ref(false)
 
 // Settings
 const settings = ref({
@@ -248,25 +262,287 @@ const settings = ref({
   emailOnPaymentFailed: true
 })
 
-onMounted(() => {
-  loadStats()
-  loadCustomers()
+// Auto-refresh interval
+let refreshInterval = null
+
+onMounted(async () => {
+  await loadStats()
+  await loadCustomers()
+  await loadChartData()
+  
+  // Configurar auto-refresh cada 30 segundos
+  refreshInterval = setInterval(async () => {
+    console.log('[AdminPanel] Auto-refreshing data...')
+    await loadStats()
+    await loadCustomers()
+    await loadChartData()
+  }, 30000) // 30 segundos
+})
+
+onUnmounted(() => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval)
+  }
+  if (revenueChart) {
+    revenueChart.destroy()
+  }
 })
 
 const loadStats = async () => {
-  // TODO: Cargar stats reales del backend
-  stats.value = {
-    totalCustomers: 0,
-    monthlyRevenue: 0,
-    totalRevenue: 0,
-    activeSubscriptions: 0,
-    totalSetupFees: 0
+  loading.value = true
+  error.value = null
+  
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) {
+      throw new Error('No hay token de autenticación')
+    }
+
+    const response = await fetch('/api/v1/admin/stats', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Acceso denegado. Solo superusuarios pueden acceder al panel de admin.')
+      }
+      throw new Error(`Error ${response.status}: ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    
+    if (data.success) {
+      stats.value = {
+        totalCustomers: data.stats.total_customers || 0,
+        monthlyRevenue: data.stats.monthly_revenue || 0,
+        totalRevenue: data.stats.total_revenue || 0,
+        activeSubscriptions: data.stats.active_subscriptions || 0,
+        totalSetupFees: data.stats.total_setup_fees || 0
+      }
+      
+      revenueByPlan.value = data.revenue_by_plan || []
+      console.log('✅ Estadísticas cargadas:', stats.value)
+    }
+  } catch (err) {
+    console.error('Error cargando estadísticas:', err)
+    error.value = err.message || 'Error desconocido'
+  } finally {
+    loading.value = false
   }
 }
 
 const loadCustomers = async () => {
-  // TODO: Cargar clientes del backend
-  customers.value = []
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) {
+      return
+    }
+
+    const response = await fetch('/api/v1/admin/customers', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        return // Silenciar error 403, solo mostrar si es necesario
+      }
+      throw new Error(`Error ${response.status}: ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    
+    if (data.success) {
+      customers.value = data.customers || []
+      console.log('✅ Clientes cargados:', customers.value.length)
+    }
+  } catch (err) {
+    console.error('Error cargando clientes:', err)
+    // No mostrar error al usuario, solo log
+  }
+}
+
+const loadChartData = async () => {
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) {
+      return
+    }
+
+    const response = await fetch('/api/v1/admin/revenue-chart?months=12', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        console.warn('[Chart] Acceso denegado - solo superusuarios')
+        return
+      }
+      throw new Error(`Error ${response.status}: ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    
+    if (data.success && data.chart_data) {
+      // Esperar a que el DOM esté actualizado
+      await nextTick()
+      
+      // Esperar un frame más para asegurar que el canvas esté renderizado
+      setTimeout(() => {
+        renderChart(data.chart_data)
+      }, 100)
+    }
+  } catch (err) {
+    console.error('Error cargando datos del gráfico:', err)
+    error.value = err.message || 'Error cargando datos del gráfico'
+  }
+}
+
+const renderChart = (chartData) => {
+  if (!revenueChartCanvas.value) {
+    console.warn('[Chart] Canvas no disponible aún, reintentando...')
+    setTimeout(() => {
+      if (revenueChartCanvas.value && chartData) {
+        renderChart(chartData)
+      }
+    }, 200)
+    return
+  }
+
+  // Validar que hay datos
+  if (!chartData || !chartData.labels || chartData.labels.length === 0) {
+    console.warn('[Chart] No hay datos para mostrar')
+    return
+  }
+
+  // Destruir gráfico anterior si existe
+  if (revenueChart) {
+    revenueChart.destroy()
+    revenueChart = null
+  }
+
+  // Formatear labels de meses (YYYY-MM -> Mes YYYY)
+  const formattedLabels = chartData.labels.map(label => {
+    try {
+      const [year, month] = label.split('-')
+      const date = new Date(parseInt(year), parseInt(month) - 1)
+      return date.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })
+    } catch (e) {
+      return label
+    }
+  })
+
+  // Crear nuevo gráfico
+  const ctx = revenueChartCanvas.value.getContext('2d')
+  revenueChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: formattedLabels,
+      datasets: chartData.datasets.map((dataset, index) => ({
+        ...dataset,
+        tension: 0.4,
+        fill: index === 0, // Solo llenar el primer dataset
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }))
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: 'index',
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          labels: {
+            color: 'rgba(255, 255, 255, 0.8)',
+            font: {
+              size: 12,
+              family: "'Inter', sans-serif"
+            },
+            padding: 15,
+            usePointStyle: true
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(10, 14, 25, 0.95)',
+          titleColor: '#fff',
+          bodyColor: 'rgba(255, 255, 255, 0.9)',
+          borderColor: 'rgba(59, 130, 246, 0.5)',
+          borderWidth: 1,
+          padding: 12,
+          displayColors: true,
+          callbacks: {
+            label: (context) => {
+              const value = context.parsed.y
+              return `${context.dataset.label}: €${formatNumber(value, 2)}`
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: 'rgba(255, 255, 255, 0.6)',
+            font: {
+              size: 11
+            }
+          },
+          grid: {
+            color: 'rgba(255, 255, 255, 0.05)',
+            drawBorder: false
+          }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            color: 'rgba(255, 255, 255, 0.6)',
+            font: {
+              size: 11
+            },
+            callback: (value) => {
+              return '€' + formatNumber(value, 0)
+            }
+          },
+          grid: {
+            color: 'rgba(255, 255, 255, 0.05)',
+            drawBorder: false
+          }
+        }
+      }
+    }
+  })
+
+  chartReady.value = true
+  console.log('✅ Gráfico renderizado exitosamente')
+}
+
+// Funciones de formateo
+const formatCurrency = (value) => {
+  if (value === null || value === undefined) return '0'
+  return Number(value).toLocaleString('es-ES', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })
+}
+
+const formatNumber = (value, decimals = 0) => {
+  if (value === null || value === undefined) return '0'
+  return Number(value).toLocaleString('es-ES', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  })
 }
 
 const getPlanName = (plan) => {
@@ -276,12 +552,20 @@ const getPlanName = (plan) => {
     business: 'BUSINESS',
     enterprise: 'ENTERPRISE'
   }
-  return names[plan] || plan
+  return names[plan] || plan.toUpperCase()
 }
 
 const formatDate = (date) => {
   if (!date) return '-'
-  return new Date(date).toLocaleDateString('es-ES')
+  try {
+    return new Date(date).toLocaleDateString('es-ES', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  } catch (e) {
+    return '-'
+  }
 }
 
 const viewCustomer = (customer) => {
@@ -630,13 +914,36 @@ td {
   padding: 32px;
 }
 
-.chart-placeholder {
-  height: 300px;
+.chart-container {
+  height: 400px;
+  position: relative;
+  padding: 20px;
+}
+
+.chart-loading {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.3);
-  font-size: 18px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+}
+
+.chart-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ef4444;
+  font-size: 14px;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
 }
 
 /* Settings */

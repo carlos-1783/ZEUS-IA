@@ -23,6 +23,7 @@ from app.api.v1.endpoints import (
     workspaces,
     document_approval,
     tpv,
+    admin,
 )
 from app.api.v1.endpoints.websocket import websocket_endpoint
 
@@ -69,6 +70,9 @@ api_router.include_router(document_approval.router, prefix="/documents", tags=["
 
 # TPV Universal Enterprise
 api_router.include_router(tpv.router, prefix="/tpv", tags=["tpv"])
+
+# Admin Panel (solo superusuarios)
+api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 
 # Activities (registro de actividades de agentes)
 api_router.include_router(activities.router, prefix="/activities", tags=["activities"])

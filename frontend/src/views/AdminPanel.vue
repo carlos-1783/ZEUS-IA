@@ -445,28 +445,33 @@ const renderEmptyChart = (message = 'No hay datos disponibles') => {
   // Crear un gráfico simple con un dataset vacío para mostrar el mensaje
   const ctx = revenueChartCanvas.value.getContext('2d')
   
-  // Asegurar que el canvas tenga dimensiones
+  // Asegurar que el canvas tenga dimensiones correctas
   const container = revenueChartCanvas.value.parentElement
+  let width = 600
+  let height = 400
+  
   if (container) {
-    const width = container.clientWidth - 40
-    revenueChartCanvas.value.width = width
-    revenueChartCanvas.value.height = 400
+    width = container.clientWidth - 40
+    height = 400
   }
   
+  revenueChartCanvas.value.width = width
+  revenueChartCanvas.value.height = height
+  
   // Limpiar el canvas
-  ctx.clearRect(0, 0, revenueChartCanvas.value.width, revenueChartCanvas.value.height)
+  ctx.clearRect(0, 0, width, height)
   
   // Dibujar mensaje directamente
   ctx.save()
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'
-  ctx.font = '18px sans-serif'
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
+  ctx.font = 'bold 18px sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(message, revenueChartCanvas.value.width / 2, revenueChartCanvas.value.height / 2)
+  ctx.fillText(message, width / 2, height / 2)
   ctx.restore()
 
   chartReady.value = true
-  console.log('[Chart] Mensaje renderizado:', message)
+  console.log('[Chart] Mensaje renderizado en canvas:', message, 'Dimensiones:', width, 'x', height)
 }
 
 const renderChart = (chartData) => {

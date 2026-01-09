@@ -210,6 +210,16 @@
       ⚙️ ADMIN
     </button>
 
+    <!-- Botón TPV (condicional según permisos) -->
+    <button 
+      v-if="canAccessTPV" 
+      @click="goToTPV" 
+      class="tpv-toggle"
+      title="Abrir TPV Universal Enterprise"
+    >
+      🧾 Abrir TPV
+    </button>
+
     <!-- Notificaciones Divinas -->
     <div class="divine-notifications">
       <transition-group name="notification-slide">
@@ -241,7 +251,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Agent3DAvatar from '@/components/Agent3DAvatar.vue'
@@ -367,6 +377,33 @@ const toggleAgentsPanel = () => {
 const goToAdmin = () => {
   router.push('/admin')
 }
+
+// Navegar al TPV
+const goToTPV = () => {
+  router.push('/tpv')
+}
+
+// Verificar si el usuario puede acceder al TPV
+// Reglas: company_has_tpv_enabled y user_role_allows_sales
+const canAccessTPV = computed(() => {
+  // Validación básica: usuario autenticado
+  if (!authStore.isAuthenticated) return false
+  
+  // Obtener información del usuario desde el store
+  const user = authStore.user
+  if (!user) return false
+  
+  // Verificar que el usuario esté activo
+  const isActive = user.is_active !== false
+  
+  // Por ahora, todos los usuarios autenticados y activos pueden acceder al TPV
+  // En producción, esto debería validarse con el backend:
+  // - Verificar que la empresa tenga TPV habilitado según su plan
+  // - Verificar que el rol del usuario permita realizar ventas
+  // TODO: Implementar validación completa con endpoint /api/v1/user/permissions o similar
+  
+  return isActive
+})
 
 // Inicializar Speech Recognition
 const initSpeechRecognition = () => {
@@ -1312,6 +1349,44 @@ onMounted(() => {
   background: rgba(139, 92, 246, 0.6);
   transform: scale(1.05);
   box-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
+}
+
+.tpv-toggle {
+  position: fixed;
+  top: 30px;
+  right: 380px;
+  padding: 12px 25px;
+  background: rgba(16, 185, 129, 0.9);
+  border: 2px solid rgba(16, 185, 129, 0.4);
+  border-radius: 50px;
+  color: #fff;
+  font-weight: bold;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  z-index: 60;
+  transition: all 0.3s ease;
+}
+
+.tpv-toggle:hover {
+  background: rgba(16, 185, 129, 0.7);
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+}
+
+@media (max-width: 1200px) {
+  .tpv-toggle {
+    right: 200px;
+    top: 80px;
+  }
+}
+
+@media (max-width: 768px) {
+  .tpv-toggle {
+    right: 10px;
+    top: 80px;
+    padding: 10px 20px;
+    font-size: 0.85rem;
+  }
 }
 
 /* ========== NOTIFICACIONES DIVINAS ========== */

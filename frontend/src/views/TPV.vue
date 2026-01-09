@@ -9,8 +9,14 @@
     <!-- Header del TPV -->
     <div class="tpv-header">
       <div class="tpv-title-section">
-        <h1 class="tpv-title">💳 TPV Universal Enterprise</h1>
+        <h1 class="tpv-title">
+          💳 TPV Universal Enterprise
+          <span v-if="isSuperuser" class="superuser-label">🔑 ADMIN</span>
+        </h1>
         <p class="tpv-subtitle">Sistema de Punto de Venta</p>
+        <p v-if="isSuperuser" class="superuser-notice">
+          Acceso completo como superusuario - Todas las funciones disponibles
+        </p>
       </div>
       <div class="tpv-status" v-if="tpvStatus">
         <span class="status-badge" :class="{ online: tpvStatus.success }">
@@ -84,12 +90,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
+
+// Computed para verificar si es superusuario
+const isSuperuser = computed(() => authStore.isAdmin)
 
 // Estado
 const tpvStatus = ref(null)
@@ -107,10 +116,14 @@ const checkStatus = async () => {
   error.value = null
   
   try {
-    const token = authStore.token
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
     if (!token) {
-      throw new Error('No hay token de autenticación')
+      throw new Error('No hay token de autenticación. Por favor, inicia sesión nuevamente.')
     }
+
+    console.log('[TPV] Verificando estado del TPV...')
+    console.log('[TPV] Usuario autenticado:', authStore.isAuthenticated)
+    console.log('[TPV] Es superusuario:', authStore.isAdmin)
 
     const response = await fetch('/api/v1/tpv', {
       headers: {
@@ -120,15 +133,22 @@ const checkStatus = async () => {
     })
 
     if (!response.ok) {
-      throw new Error(`Error ${response.status}: ${response.statusText}`)
+      const errorText = await response.text()
+      console.error('[TPV] Error del servidor:', response.status, errorText)
+      throw new Error(`Error ${response.status}: ${response.statusText}. ${errorText}`)
     }
 
     const data = await response.json()
     tpvStatus.value = data
-    console.log('✅ Estado del TPV cargado:', data)
+    console.log('✅ Estado del TPV cargado exitosamente:', data)
+    
+    // Mostrar información adicional para superusuarios
+    if (authStore.isAdmin) {
+      console.log('🔑 Acceso de superusuario al TPV confirmado')
+    }
   } catch (err) {
-    console.error('Error cargando estado del TPV:', err)
-    error.value = err.message || 'Error desconocido'
+    console.error('❌ Error cargando estado del TPV:', err)
+    error.value = err.message || 'Error desconocido al cargar el TPV'
   } finally {
     loading.value = false
   }
@@ -233,6 +253,41 @@ onMounted(() => {
   color: rgba(255, 255, 255, 0.6);
   margin: 5px 0 0;
   font-size: 0.9rem;
+}
+
+.superuser-label {
+  display: inline-block;
+  margin-left: 15px;
+  padding: 4px 12px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.8) 0%, rgba(255, 215, 0, 0.8) 100%);
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
+  animation: pulse-gold 2s ease-in-out infinite;
+}
+
+@keyframes pulse-gold {
+  0%, 100% { 
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+    transform: scale(1);
+  }
+  50% { 
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
+    transform: scale(1.05);
+  }
+}
+
+.superuser-notice {
+  margin-top: 10px;
+  padding: 8px 15px;
+  background: rgba(139, 92, 246, 0.2);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  border-radius: 8px;
+  color: #c4b5fd;
+  font-size: 0.85rem;
+  font-style: italic;
 }
 
 .tpv-status {

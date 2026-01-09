@@ -210,14 +210,15 @@
       ⚙️ ADMIN
     </button>
 
-    <!-- Botón TPV (condicional según permisos) -->
+    <!-- Botón TPV (siempre visible para usuarios autenticados - validación real en backend) -->
     <button 
-      v-if="canAccessTPV" 
+      v-if="authStore.isAuthenticated" 
       @click="goToTPV" 
       class="tpv-toggle"
-      title="Abrir TPV Universal Enterprise"
+      :class="{ 'superuser-badge': authStore.isAdmin }"
+      title="Abrir TPV Universal Enterprise - Los superusuarios tienen acceso completo"
     >
-      🧾 Abrir TPV
+      🧾 {{ authStore.isAdmin ? 'TPV (Admin)' : 'Abrir TPV' }}
     </button>
 
     <!-- Notificaciones Divinas -->
@@ -383,27 +384,9 @@ const goToTPV = () => {
   router.push('/tpv')
 }
 
-// Verificar si el usuario puede acceder al TPV
-// Reglas: company_has_tpv_enabled y user_role_allows_sales
-const canAccessTPV = computed(() => {
-  // Validación básica: usuario autenticado
-  if (!authStore.isAuthenticated) return false
-  
-  // Obtener información del usuario desde el store
-  const user = authStore.user
-  if (!user) return false
-  
-  // Verificar que el usuario esté activo
-  const isActive = user.is_active !== false
-  
-  // Por ahora, todos los usuarios autenticados y activos pueden acceder al TPV
-  // En producción, esto debería validarse con el backend:
-  // - Verificar que la empresa tenga TPV habilitado según su plan
-  // - Verificar que el rol del usuario permita realizar ventas
-  // TODO: Implementar validación completa con endpoint /api/v1/user/permissions o similar
-  
-  return isActive
-})
+// Nota: El botón TPV ahora se muestra siempre para usuarios autenticados
+// La validación real de permisos se hace en el backend en /api/v1/tpv
+// Los superusuarios siempre tienen acceso completo
 
 // Inicializar Speech Recognition
 const initSpeechRecognition = () => {
@@ -1371,6 +1354,17 @@ onMounted(() => {
   background: rgba(16, 185, 129, 0.7);
   transform: scale(1.05);
   box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+}
+
+.tpv-toggle.superuser-badge {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.9) 0%, rgba(16, 185, 129, 0.9) 100%);
+  border-color: rgba(255, 215, 0, 0.6);
+  box-shadow: 0 0 25px rgba(139, 92, 246, 0.6);
+}
+
+.tpv-toggle.superuser-badge:hover {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 1) 0%, rgba(16, 185, 129, 1) 100%);
+  box-shadow: 0 0 30px rgba(255, 215, 0, 0.8);
 }
 
 @media (max-width: 1200px) {

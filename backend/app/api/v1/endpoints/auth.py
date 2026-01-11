@@ -96,10 +96,13 @@ async def login(
     OAuth2 compatible token login, get an access token and refresh token for future requests.
     Accepts form data with username (email) and password.
     """
+    logger.info(f"Intento de login para usuario: {username}")
+    
     try:
         # Autenticar al usuario
         user = authenticate_user(db, username, password)
         if not user:
+            logger.warning(f"Login fallido para usuario: {username} - Credenciales incorrectas")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password",
@@ -108,10 +111,13 @@ async def login(
         
         # Verificar si el usuario está activo
         if not user.is_active:
+            logger.warning(f"Intento de login de usuario inactivo: {username}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Inactive user"
             )
+        
+        logger.info(f"Login exitoso para usuario: {username}")
         
         # Crear tokens de acceso y actualización
         return await create_tokens(db, user)

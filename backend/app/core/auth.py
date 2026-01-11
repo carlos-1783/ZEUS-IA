@@ -71,20 +71,42 @@ def resolve_user_scopes(user: User, existing_scopes: Optional[List[str]] = None)
     return scope_map.get(user.email.lower(), [])
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
+    """
+    Authenticate a user by email and password.
+    
+    Args:
+        db: Database session
+        email: User email
+        password: Plain text password
+        
+    Returns:
+        User if authentication succeeds, None otherwise
+    """
     logger.debug("Intento de autenticación para: %s", email)
-    user = get_user(db, email=email)
-    if user:
-        logger.debug("Usuario %s localizado para autenticación", email)
+    
     try:
+        # Get user from database
+        user = get_user(db, email)
+        
         if not user:
-            logger.warning(f"Intento de inicio de sesión fallido para el usuario: {email}")
+            logger.warning(f"Usuario no encontrado: {email}")
             return None
+            
+        logger.debug("Usuario %s localizado para autenticación", email)
+        
+        # Verify password
         if not verify_password(password, user.hashed_password):
             logger.warning(f"Contraseña incorrecta para el usuario: {email}")
             return None
+            
+        logger.info(f"Autenticación exitosa para: {email}")
         return user
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions (like database errors) as-is
+        raise
     except Exception as e:
-        logger.error(f"Error en autenticación para {email}: {str(e)}")
+        logger.error(f"Error en autenticación para {email}: {str(e)}", exc_info=True)
         return None
 
 async def get_current_user_from_token(

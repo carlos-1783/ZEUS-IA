@@ -19,10 +19,38 @@ logger = logging.getLogger(__name__)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
 
 def get_user(db: Session, email: str) -> Optional[User]:
+    """
+    Get a user by email (case-insensitive, trimmed).
+    
+    Args:
+        db: Database session
+        email: User email (will be normalized)
+        
+    Returns:
+        User if found, None otherwise
+        
+    Raises:
+        HTTPException: If there's a database error
+    """
+    if not email:
+        return None
+        
+    # Normalize email: trim and convert to lowercase for comparison
+    email_normalized = email.strip().lower()
+    
     try:
-        return db.query(User).filter(User.email == email).first()
+        # Try exact match first (case-insensitive comparison)
+        user = db.query(User).filter(
+            func.lower(User.email) == email_normalized
+        ).first()
+        
+        # Fallback: try direct comparison (for databases that are case-sensitive)
+        if not user:
+            user = db.query(User).filter(User.email == email.strip()).first()
+            
+        return user
     except Exception as e:
-        logger.error(f"Error fetching user {email}: {str(e)}")
+        logger.error(f"Error fetching user {email}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al obtener el usuario"
@@ -76,37 +104,59 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     
     Args:
         db: Database session
-        email: User email
+        email: User email (will be normalized)
         password: Plain text password
         
     Returns:
         User if authentication succeeds, None otherwise
+        
+    Raises:
+        HTTPException: If there's a database error (not authentication failure)
     """
-    logger.debug("Intento de autenticación para: %s", email)
+    if not email or not password:
+        logger.warning("Intento de autenticación con email o contraseña vacíos")
+        return None
+    
+    # Normalize email
+    email_normalized = email.strip().lower()
+    logger.info(f"Intento de autenticación para: {email_normalized}")
     
     try:
-        # Get user from database
-        user = get_user(db, email)
+        # Get user from database (case-insensitive)
+        user = get_user(db, email_normalized)
         
         if not user:
-            logger.warning(f"Usuario no encontrado: {email}")
+            logger.warning(f"Usuario no encontrado en la base de datos: {email_normalized}")
             return None
             
-        logger.debug("Usuario %s localizado para autenticación", email)
+        logger.debug(f"Usuario encontrado: {user.email} (ID: {user.id})")
+        
+        # Check if user is active (additional safety check)
+        if not user.is_active:
+            logger.warning(f"Intento de autenticación de usuario inactivo: {user.email}")
+            return None
         
         # Verify password
-        if not verify_password(password, user.hashed_password):
-            logger.warning(f"Contraseña incorrecta para el usuario: {email}")
+        password_valid = verify_password(password, user.hashed_password)
+        if not password_valid:
+            logger.warning(f"Contraseña incorrecta para el usuario: {user.email}")
             return None
             
-        logger.info(f"Autenticación exitosa para: {email}")
+        logger.info(f"✅ Autenticación exitosa para: {user.email} (ID: {user.id})")
         return user
         
     except HTTPException:
         # Re-raise HTTP exceptions (like database errors) as-is
+        # These are real errors, not authentication failures
+        logger.error(f"Error HTTP durante autenticación para {email_normalized}")
         raise
     except Exception as e:
-        logger.error(f"Error en autenticación para {email}: {str(e)}", exc_info=True)
+        # Log the error but don't expose it to the user
+        logger.error(
+            f"Error inesperado en autenticación para {email_normalized}: {str(e)}", 
+            exc_info=True
+        )
+        # Return None instead of raising to avoid exposing internal errors
         return None
 
 async def get_current_user_from_token(

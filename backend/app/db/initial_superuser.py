@@ -35,7 +35,13 @@ def ensure_initial_superuser() -> None:
 
     db = SessionLocal()
     try:
-        user = db.query(User).filter(User.email == email).first()
+        # Normalize email for comparison (case-insensitive)
+        email_normalized = email.strip().lower()
+        from sqlalchemy import func
+        user = db.query(User).filter(func.lower(User.email) == email_normalized).first()
+        if not user:
+            # Fallback: try direct comparison
+            user = db.query(User).filter(User.email == email.strip()).first()
         hashed_password = get_password_hash(password)
 
         if not user:

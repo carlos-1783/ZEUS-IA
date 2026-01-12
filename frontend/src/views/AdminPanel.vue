@@ -383,6 +383,38 @@ const loadCustomers = async () => {
   }
 }
 
+const loadIntegrationStatus = async () => {
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) {
+      return
+    }
+
+    const response = await fetch('/api/v1/integrations/status', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (!response.ok) {
+      return
+    }
+
+    const data = await response.json()
+    
+    integrationStatus.value = {
+      stripe: data.stripe?.configured || false,
+      whatsapp: data.whatsapp?.configured || false,
+      email: data.email?.configured || false
+    }
+    
+    console.log('✅ Estado de integraciones cargado:', integrationStatus.value)
+  } catch (err) {
+    console.error('Error cargando estado de integraciones:', err)
+  }
+}
+
 const loadChartData = async () => {
   try {
     console.log('[Chart] Iniciando carga de datos...')

@@ -191,11 +191,11 @@
             </div>
             <div class="integration-item">
               <span>📱 WhatsApp (Twilio)</span>
-              <span class="status-dot" :class="{ active: false }"></span>
+              <span class="status-dot" :class="{ active: integrationStatus.whatsapp }"></span>
             </div>
             <div class="integration-item">
               <span>📧 Email (SendGrid)</span>
-              <span class="status-dot" :class="{ active: false }"></span>
+              <span class="status-dot" :class="{ active: integrationStatus.email }"></span>
             </div>
           </div>
         </div>
@@ -260,6 +260,13 @@ const chartReady = ref(false)
 const settings = ref({
   emailOnNewCustomer: true,
   emailOnPaymentFailed: true
+})
+
+// Integration status
+const integrationStatus = ref({
+  stripe: false,
+  whatsapp: false,
+  email: false
 })
 
 // Auto-refresh interval

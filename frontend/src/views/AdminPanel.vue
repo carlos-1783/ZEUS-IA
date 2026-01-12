@@ -187,7 +187,7 @@
           <div class="integration-status">
             <div class="integration-item">
               <span>💳 Stripe</span>
-              <span class="status-dot active"></span>
+              <span class="status-dot" :class="{ active: integrationStatus.stripe }"></span>
             </div>
             <div class="integration-item">
               <span>📱 WhatsApp (Twilio)</span>
@@ -277,6 +277,7 @@ onMounted(async () => {
   
   await loadStats()
   await loadCustomers()
+  await loadIntegrationStatus()
   
   // Cargar gráfico después de que el DOM esté listo
   await nextTick()
@@ -290,6 +291,7 @@ onMounted(async () => {
     await loadStats()
     await loadCustomers()
     await loadChartData()
+    await loadIntegrationStatus()
   }, 30000) // 30 segundos
 })
 

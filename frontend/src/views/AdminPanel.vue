@@ -709,19 +709,108 @@ const formatDate = (date) => {
   }
 }
 
-const viewCustomer = (customer) => {
-  console.log('Ver cliente:', customer)
-  // TODO: Abrir modal con detalles
+const viewCustomer = async (customer) => {
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) {
+      alert('Error: No hay token de autenticación')
+      return
+    }
+    
+    const response = await fetch(`/api/v1/admin/customers/${customer.id}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      // Mostrar modal con detalles (por ahora alert, se puede mejorar con componente modal)
+      alert(`📋 Detalles del Cliente\n\nEmpresa: ${data.company_name || customer.company_name}\nEmail: ${data.email || customer.email}\nPlan: ${data.plan || customer.plan}\nEmpleados: ${data.employees || customer.employees}\nEstado: ${data.status || customer.status}\nFecha registro: ${data.created_at || 'N/A'}`)
+    } else if (response.status === 404) {
+      // Si no existe endpoint, mostrar datos disponibles
+      alert(`📋 Detalles del Cliente\n\nEmpresa: ${customer.company_name}\nEmail: ${customer.email}\nPlan: ${customer.plan}\nEmpleados: ${customer.employees}\nEstado: ${customer.status}\nPróximo pago: ${formatDate(customer.next_payment)}`)
+    } else {
+      alert('⚠️ No se pudieron cargar los detalles completos')
+    }
+  } catch (error) {
+    console.error('Error cargando detalles del cliente:', error)
+    // Fallback a datos disponibles
+    alert(`📋 Detalles del Cliente\n\nEmpresa: ${customer.company_name}\nEmail: ${customer.email}\nPlan: ${customer.plan}\nEmpleados: ${customer.employees}\nEstado: ${customer.status}`)
+  }
 }
 
-const toggleCustomerStatus = (customer) => {
-  console.log('Toggle status:', customer)
-  // TODO: Activar/desactivar cliente
+const toggleCustomerStatus = async (customer) => {
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) {
+      alert('Error: No hay token de autenticación')
+      return
+    }
+    
+    const newStatus = customer.status === 'active' ? 'inactive' : 'active'
+    const response = await fetch(`/api/v1/admin/customers/${customer.id}/toggle-status`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ status: newStatus })
+    })
+    
+    if (response.ok) {
+      // Actualizar estado local
+      customer.status = newStatus
+      alert(`✅ Cliente ${newStatus === 'active' ? 'activado' : 'desactivado'} correctamente`)
+      // Recargar lista
+      await loadCustomers()
+    } else {
+      // Si no existe endpoint, actualizar solo localmente (temporal)
+      customer.status = newStatus
+      alert(`⚠️ Estado cambiado localmente. Endpoint no disponible aún.`)
+    }
+  } catch (error) {
+    console.error('Error cambiando estado del cliente:', error)
+    alert('⚠️ No se pudo cambiar el estado. Endpoint no disponible aún.')
+  }
 }
 
-const saveSettings = () => {
-  console.log('Guardar settings:', settings.value)
-  // TODO: Guardar en backend
+const saveSettings = async () => {
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) {
+      alert('Error: No hay token de autenticación')
+      return
+    }
+    
+    const response = await fetch('/api/v1/admin/settings', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        notifications: {
+          email_on_new_customer: settings.value.emailOnNewCustomer,
+          email_on_payment_failed: settings.value.emailOnPaymentFailed
+        }
+      })
+    })
+    
+    if (response.ok) {
+      alert('✅ Configuración guardada correctamente')
+    } else {
+      // Si no existe endpoint, guardar en localStorage temporalmente
+      localStorage.setItem('zeus_admin_settings', JSON.stringify(settings.value))
+      alert('✅ Configuración guardada localmente. Endpoint no disponible aún.')
+    }
+  } catch (error) {
+    console.error('Error guardando configuración:', error)
+    // Fallback a localStorage
+    localStorage.setItem('zeus_admin_settings', JSON.stringify(settings.value))
+    alert('✅ Configuración guardada localmente')
+  }
 }
 
 const goToDashboard = () => {

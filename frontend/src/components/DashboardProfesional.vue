@@ -197,15 +197,15 @@
             <h3>🔔 Notifications</h3>
             <div class="setting-item">
               <label>Email notifications</label>
-              <input type="checkbox" checked />
+              <input type="checkbox" v-model="notificationSettings.email" />
             </div>
             <div class="setting-item">
               <label>Push notifications</label>
-              <input type="checkbox" checked />
+              <input type="checkbox" v-model="notificationSettings.push" />
             </div>
             <div class="setting-item">
               <label>Agent status updates</label>
-              <input type="checkbox" />
+              <input type="checkbox" v-model="notificationSettings.agentStatus" />
             </div>
           </div>
 
@@ -221,9 +221,10 @@
             </div>
             <div class="setting-item">
               <label>Language</label>
-              <select>
-                <option>Español</option>
-                <option>English</option>
+              <select v-model="currentLanguage">
+                <option v-for="lang in supportedLanguages" :key="lang" :value="lang">
+                  {{ lang === 'es' ? 'Español' : lang === 'en' ? 'English' : lang.toUpperCase() }}
+                </option>
               </select>
             </div>
           </div>
@@ -232,7 +233,7 @@
             <h3>🔐 Security</h3>
             <div class="setting-item">
               <label>Two-factor authentication</label>
-              <button class="btn-secondary">Enable</button>
+              <button class="btn-secondary" @click="handleEnable2FA">Enable</button>
             </div>
             <div class="setting-item">
               <label>Session timeout</label>
@@ -248,11 +249,11 @@
             <h3>⚙️ Advanced</h3>
             <div class="setting-item">
               <label>API Access</label>
-              <button class="btn-secondary">Generate Key</button>
+              <button class="btn-secondary" @click="handleGenerateApiKey">Generate Key</button>
             </div>
             <div class="setting-item">
               <label>Export Data</label>
-              <button class="btn-secondary">Download</button>
+              <button class="btn-secondary" @click="handleExportData">Download</button>
             </div>
           </div>
         </div>
@@ -270,15 +271,32 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import AgentActivityPanel from './AgentActivityPanel.vue'
 import { usePWA } from '@/composables/usePWA'
 
 const router = useRouter()
 
+// i18n
+const { locale, availableLocales } = useI18n()
+
 // PWA Install
 const { isInstallable, isInstalled, promptInstall } = usePWA()
+
+// Idioma actual
+const currentLanguage = computed({
+  get: () => locale.value,
+  set: (value) => {
+    locale.value = value
+    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+      window.localStorage.setItem('zeus_locale', value)
+    }
+  }
+})
+
+const supportedLanguages = computed(() => availableLocales)
 
 const props = defineProps({
   agents: Array
@@ -306,6 +324,102 @@ const handleInstallPWA = async () => {
   const installed = await promptInstall()
   if (installed) {
     console.log('✅ PWA instalación iniciada')
+  }
+}
+
+// Settings handlers
+const handleEnable2FA = async () => {
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) {
+      alert('Error: No hay token de autenticación')
+      return
+    }
+    
+    const response = await fetch('/api/v1/user/2fa/enable', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      alert(`✅ Autenticación de dos factores habilitada\n\nCódigo QR:\n${data.qr_code || 'Disponible en configuración'}`)
+    } else {
+      alert('⚠️ Función disponible próximamente')
+    }
+  } catch (error) {
+    console.error('Error habilitando 2FA:', error)
+    alert('⚠️ Función disponible próximamente')
+  }
+}
+
+const handleGenerateApiKey = async () => {
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) {
+      alert('Error: No hay token de autenticación')
+      return
+    }
+    
+    const response = await fetch('/api/v1/api-keys', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      const apiKey = data.api_key || data.key
+      if (apiKey) {
+        await navigator.clipboard.writeText(apiKey)
+        alert(`✅ Clave API generada y copiada al portapapeles\n\nClave: ${apiKey}\n\n⚠️ Guarda esta clave en un lugar seguro. No se mostrará de nuevo.`)
+      }
+    } else {
+      alert('⚠️ Función disponible próximamente')
+    }
+  } catch (error) {
+    console.error('Error generando API key:', error)
+    alert('⚠️ Función disponible próximamente')
+  }
+}
+
+const handleExportData = async () => {
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) {
+      alert('Error: No hay token de autenticación')
+      return
+    }
+    
+    const response = await fetch('/api/v1/user/export', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    
+    if (response.ok) {
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `zeus-export-${new Date().toISOString().split('T')[0]}.json`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      alert('✅ Datos exportados correctamente')
+    } else {
+      alert('⚠️ Función disponible próximamente')
+    }
+  } catch (error) {
+    console.error('Error exportando datos:', error)
+    alert('⚠️ Función disponible próximamente')
   }
 }
 
@@ -346,8 +460,30 @@ const loadDashboardMetrics = async () => {
   }
 }
 
+// Cargar configuración guardada
+const loadSavedSettings = () => {
+  try {
+    const saved = localStorage.getItem('zeus_notification_settings')
+    if (saved) {
+      notificationSettings.value = { ...notificationSettings.value, ...JSON.parse(saved) }
+    }
+  } catch (error) {
+    console.error('Error cargando settings:', error)
+  }
+}
+
+// Guardar configuración
+const saveNotificationSettings = () => {
+  try {
+    localStorage.setItem('zeus_notification_settings', JSON.stringify(notificationSettings.value))
+  } catch (error) {
+    console.error('Error guardando settings:', error)
+  }
+}
+
 // Cargar al montar y refrescar periódicamente
 onMounted(() => {
+  loadSavedSettings()
   loadDashboardMetrics()
   loadAgentsActivities()
   
@@ -356,6 +492,11 @@ onMounted(() => {
   
   // Refresh actividades de agentes cada minuto
   setInterval(loadAgentsActivities, 60000)
+  
+  // Guardar settings cuando cambien
+  watch(notificationSettings, () => {
+    saveNotificationSettings()
+  }, { deep: true })
 })
 
 const agentsData = ref([

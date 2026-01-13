@@ -427,17 +427,53 @@ const processPayment = async () => {
   
   try {
     const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) {
+      throw new Error('No hay token de autenticación')
+    }
     
-    // Procesar pago (aquí se integraría con el backend)
-    alert(`💳 Procesando pago de €${formatPrice(total.value)}\n\nEsta venta se registrará automáticamente con RAFAEL.`)
+    // Preparar datos de la venta
+    const saleData = {
+      payment_method: 'efectivo', // Por defecto, se puede cambiar después
+      cart_items: cart.value.map(item => ({
+        product_id: item.product.id,
+        quantity: item.quantity,
+        unit_price: item.product.price,
+        iva_rate: item.product.iva_rate || 21.0
+      })),
+      subtotal: subtotal.value,
+      iva_total: ivaTotal.value,
+      total: total.value,
+      table_id: selectedTable.value?.id || null
+    }
     
-    // Limpiar carrito después del pago
+    // Procesar pago en backend
+    const response = await fetch('/api/v1/tpv/sale', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(saleData)
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: response.statusText }))
+      throw new Error(errorData.detail || `Error ${response.status}: ${response.statusText}`)
+    }
+    
+    const result = await response.json()
+    
+    // Limpiar carrito después del pago exitoso
     cart.value = []
+    selectedTable.value = null
     
-    console.log('✅ Venta procesada exitosamente')
+    // Mostrar confirmación
+    alert(`✅ Pago procesado exitosamente\n\nVenta #${result.sale_id || 'N/A'}\nTotal: €${formatPrice(total.value)}\n\nEsta venta se ha registrado automáticamente con RAFAEL.`)
+    
+    console.log('✅ Venta procesada exitosamente:', result)
   } catch (err) {
     console.error('Error procesando pago:', err)
-    alert('Error al procesar el pago: ' + err.message)
+    alert('❌ Error al procesar el pago: ' + err.message)
   }
 }
 

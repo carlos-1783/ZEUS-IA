@@ -81,6 +81,15 @@
           </div>
         </div>
         <div class="header-right">
+          <!-- Botón Instalar PWA -->
+          <button 
+            v-if="isInstallable && !isInstalled"
+            @click="handleInstallPWA"
+            class="pwa-install-btn"
+            title="Instalar ZEUS-IA como aplicación"
+          >
+            📲 Instalar
+          </button>
           <div class="status-badge online">● System Online</div>
         </div>
       </header>
@@ -259,8 +268,12 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import AgentActivityPanel from './AgentActivityPanel.vue'
+import { usePWA } from '@/composables/usePWA'
 
 const router = useRouter()
+
+// PWA Install
+const { isInstallable, isInstalled, promptInstall } = usePWA()
 
 const props = defineProps({
   agents: Array
@@ -281,6 +294,14 @@ const closeSidebarOnMobile = () => {
 
 const goToAdmin = () => {
   router.push('/admin')
+}
+
+// Instalar PWA
+const handleInstallPWA = async () => {
+  const installed = await promptInstall()
+  if (installed) {
+    console.log('✅ PWA instalación iniciada')
+  }
 }
 
 // Métricas reales desde backend
@@ -659,6 +680,31 @@ const chatWith = (agent) => {
 
   .header-right {
     width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  
+  .pwa-install-btn {
+    padding: 8px 16px;
+    background: rgba(59, 130, 246, 0.9);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    border-radius: 20px;
+    color: #fff;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  
+  .pwa-install-btn:hover {
+    background: rgba(59, 130, 246, 0.7);
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
   }
 
   /* Agents grid más compacto en móvil */

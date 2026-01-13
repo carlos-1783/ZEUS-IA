@@ -89,9 +89,14 @@ export function usePWA() {
     const alreadyInstalled = checkIfInstalled()
     console.log('🔧 usePWA: Ya instalada?', alreadyInstalled, 'isInstalled:', isInstalled.value)
     
+    // IMPORTANTE: El evento beforeinstallprompt solo se dispara UNA VEZ
+    // Si el usuario ya lo rechazó o el navegador ya lo procesó, no se volverá a disparar
+    // hasta que se limpien los datos del sitio o se instale la app
+    
     // Escuchar evento beforeinstallprompt (solo Chrome/Edge)
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
     console.log('🔧 usePWA: Listener de beforeinstallprompt agregado')
+    console.log('⚠️ NOTA: Si el prompt ya se mostró/rechazó antes, no aparecerá hasta limpiar cache')
     
     // Escuchar cuando la app es instalada
     window.addEventListener('appinstalled', handleAppInstalled)
@@ -99,6 +104,14 @@ export function usePWA() {
     // Verificar después de un delay para dar tiempo al navegador
     setTimeout(() => {
       console.log('🔧 usePWA: Estado después de 2s - isInstallable:', isInstallable.value, 'isInstalled:', isInstalled.value)
+      if (!isInstallable.value && !isInstalled.value) {
+        console.warn('⚠️ PWA no es instalable. Posibles causas:')
+        console.warn('   1. El prompt ya se mostró/rechazó antes (limpiar cache)')
+        console.warn('   2. La app ya está instalada')
+        console.warn('   3. El navegador no soporta PWA')
+        console.warn('   4. Faltan requisitos (manifest, service worker, HTTPS)')
+        console.warn('   💡 Abre /clear-pwa-cache.html para limpiar el estado')
+      }
     }, 2000)
   })
 

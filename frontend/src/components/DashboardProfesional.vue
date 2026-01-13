@@ -93,6 +93,7 @@
           <!-- Debug: Mostrar estado PWA (temporal para diagnóstico) -->
           <div v-if="!isInstallable || isInstalled" class="pwa-debug-info" title="Estado PWA: installable={{ isInstallable }}, installed={{ isInstalled }}">
             🔧 PWA: {{ isInstalled ? 'Instalada' : isInstallable ? 'Instalable' : 'No disponible' }}
+            <a href="/clear-pwa-cache.html" target="_blank" style="color: #ffa500; margin-left: 8px; text-decoration: underline; font-size: 10px;">Limpiar Cache</a>
           </div>
           <div class="status-badge online">● System Online</div>
         </div>

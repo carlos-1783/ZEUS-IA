@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Limpiar Cache PWA - ZEUS-IA</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #0a0e1a;
+            color: #fff;
+        }
+        button {
+            padding: 12px 24px;
+            margin: 10px 5px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        .success {
+            color: #10b981;
+            margin: 10px 0;
+        }
+        .error {
+            color: #ef4444;
+            margin: 10px 0;
+        }
+        .info {
+            background: #1a1f2e;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧹 Limpiar Cache PWA - ZEUS-IA</h1>
+    
+    <div class="info">
+        <h3>Instrucciones:</h3>
+        <ol>
+            <li>Haz clic en "Desregistrar Service Workers"</li>
+            <li>Haz clic en "Limpiar Cache"</li>
+            <li>Haz clic en "Limpiar LocalStorage"</li>
+            <li>Recarga la página principal (Ctrl+F5)</li>
+        </ol>
+    </div>
+
+    <div>
+        <button onclick="unregisterSW()">1. Desregistrar Service Workers</button>
+        <button onclick="clearCache()">2. Limpiar Cache</button>
+        <button onclick="clearLocalStorage()">3. Limpiar LocalStorage</button>
+        <button onclick="checkStatus()">Verificar Estado</button>
+    </div>
+
+    <div id="status"></div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+
+        async function unregisterSW() {
+            if ('serviceWorker' in navigator) {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                statusDiv.innerHTML = `<p>Encontrados ${registrations.length} Service Worker(s)</p>`;
+                
+                for (let registration of registrations) {
+                    const result = await registration.unregister();
+                    statusDiv.innerHTML += `<p class="${result ? 'success' : 'error'}">Service Worker desregistrado: ${result ? '✅' : '❌'}</p>`;
+                }
+                
+                if (registrations.length === 0) {
+                    statusDiv.innerHTML += '<p class="success">✅ No hay Service Workers registrados</p>';
+                }
+            } else {
+                statusDiv.innerHTML = '<p class="error">❌ Service Workers no soportados</p>';
+            }
+        }
+
+        async function clearCache() {
+            if ('caches' in window) {
+                const cacheNames = await caches.keys();
+                statusDiv.innerHTML = `<p>Encontrados ${cacheNames.length} cache(s)</p>`;
+                
+                for (let cacheName of cacheNames) {
+                    const deleted = await caches.delete(cacheName);
+                    statusDiv.innerHTML += `<p class="${deleted ? 'success' : 'error'}">Cache "${cacheName}": ${deleted ? '✅ Eliminado' : '❌ Error'}</p>`;
+                }
+                
+                if (cacheNames.length === 0) {
+                    statusDiv.innerHTML += '<p class="success">✅ No hay caches</p>';
+                }
+            } else {
+                statusDiv.innerHTML = '<p class="error">❌ Cache API no soportada</p>';
+            }
+        }
+
+        function clearLocalStorage() {
+            try {
+                localStorage.removeItem('zeus-pwa-installed');
+                statusDiv.innerHTML = '<p class="success">✅ LocalStorage limpiado (zeus-pwa-installed)</p>';
+            } catch (e) {
+                statusDiv.innerHTML = `<p class="error">❌ Error: ${e.message}</p>`;
+            }
+        }
+
+        async function checkStatus() {
+            let html = '<h3>Estado Actual:</h3>';
+            
+            // Service Workers
+            if ('serviceWorker' in navigator) {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                html += `<p>Service Workers: ${registrations.length}</p>`;
+                registrations.forEach((reg, i) => {
+                    html += `<p>  - SW ${i+1}: ${reg.scope}</p>`;
+                });
+            }
+            
+            // Caches
+            if ('caches' in window) {
+                const cacheNames = await caches.keys();
+                html += `<p>Caches: ${cacheNames.length}</p>`;
+                cacheNames.forEach(name => {
+                    html += `<p>  - ${name}</p>`;
+                });
+            }
+            
+            // LocalStorage
+            const installed = localStorage.getItem('zeus-pwa-installed');
+            html += `<p>LocalStorage 'zeus-pwa-installed': ${installed || 'no existe'}</p>`;
+            
+            // Display mode
+            if (window.matchMedia('(display-mode: standalone)').matches) {
+                html += '<p class="success">✅ App ejecutándose en modo standalone (instalada)</p>';
+            } else {
+                html += '<p>App ejecutándose en navegador (no instalada)</p>';
+            }
+            
+            statusDiv.innerHTML = html;
+        }
+
+        // Auto-check al cargar
+        checkStatus();
+    </script>
+</body>
+</html>

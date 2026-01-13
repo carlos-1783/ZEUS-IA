@@ -38,10 +38,11 @@ export function usePWA() {
 
   // Manejar el evento beforeinstallprompt
   const handleBeforeInstallPrompt = (e: Event) => {
+    console.log('📱 PWA: Evento beforeinstallprompt recibido!')
     e.preventDefault()
     deferredPrompt.value = e as BeforeInstallPromptEvent
     isInstallable.value = true
-    console.log('📱 PWA puede ser instalada')
+    console.log('✅ PWA: isInstallable establecido en true')
   }
 
   // Manejar cuando la app es instalada
@@ -84,13 +85,21 @@ export function usePWA() {
 
   // Inicializar
   onMounted(() => {
-    checkIfInstalled()
+    console.log('🔧 usePWA: Inicializando...')
+    const alreadyInstalled = checkIfInstalled()
+    console.log('🔧 usePWA: Ya instalada?', alreadyInstalled, 'isInstalled:', isInstalled.value)
     
     // Escuchar evento beforeinstallprompt (solo Chrome/Edge)
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+    console.log('🔧 usePWA: Listener de beforeinstallprompt agregado')
     
     // Escuchar cuando la app es instalada
     window.addEventListener('appinstalled', handleAppInstalled)
+    
+    // Verificar después de un delay para dar tiempo al navegador
+    setTimeout(() => {
+      console.log('🔧 usePWA: Estado después de 2s - isInstallable:', isInstallable.value, 'isInstalled:', isInstalled.value)
+    }, 2000)
   })
 
   // Limpiar listeners

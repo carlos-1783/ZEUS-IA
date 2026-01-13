@@ -28,15 +28,23 @@ requestAnimationFrame(() => {
   console.log('✅ ZEUS IA iniciado')
 })
 
-// Registrar Service Worker para PWA (solo en producción)
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+// Registrar Service Worker para PWA
+if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    const isProd = import.meta.env.PROD
+    console.log('🔧 Service Worker: Intentando registrar... (PROD:', isProd, ')')
+    
     navigator.serviceWorker.register('/service-worker.js')
       .then((registration) => {
         console.log('✅ Service Worker registrado:', registration.scope)
+        console.log('✅ Service Worker activo:', registration.active)
+        console.log('✅ Service Worker esperando:', registration.waiting)
       })
       .catch((error) => {
         console.warn('⚠️ Error registrando Service Worker:', error)
+        console.warn('⚠️ Detalles:', error.message)
       })
   })
+} else {
+  console.warn('⚠️ Service Workers no están soportados en este navegador')
 }

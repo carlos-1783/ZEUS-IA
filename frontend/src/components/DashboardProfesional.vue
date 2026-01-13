@@ -90,6 +90,10 @@
           >
             📲 Instalar
           </button>
+          <!-- Debug: Mostrar estado PWA (temporal para diagnóstico) -->
+          <div v-if="!isInstallable || isInstalled" class="pwa-debug-info" title="Estado PWA: installable={{ isInstallable }}, installed={{ isInstalled }}">
+            🔧 PWA: {{ isInstalled ? 'Instalada' : isInstallable ? 'Instalable' : 'No disponible' }}
+          </div>
           <div class="status-badge online">● System Online</div>
         </div>
       </header>
@@ -701,11 +705,22 @@ const chatWith = (agent) => {
     gap: 6px;
   }
   
-  .pwa-install-btn:hover {
-    background: rgba(59, 130, 246, 0.7);
-    transform: scale(1.05);
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-  }
+.pwa-install-btn:hover {
+  background: rgba(59, 130, 246, 0.7);
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.pwa-debug-info {
+  padding: 6px 12px;
+  background: rgba(255, 165, 0, 0.15);
+  border: 1px solid rgba(255, 165, 0, 0.3);
+  border-radius: 12px;
+  color: #ffa500;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: help;
+}
 
   /* Agents grid más compacto en móvil */
   .agents-grid {

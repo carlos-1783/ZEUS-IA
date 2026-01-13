@@ -1,0 +1,1045 @@
+{
+  "auditoria_completada": true,
+  "fecha_auditoria": "2024-12-19",
+  "version_sistema": "1.0.6",
+  "resumen_ejecutivo": {
+    "total_botones_auditados": 85,
+    "botones_funcionales": 45,
+    "botones_no_funcionales": 12,
+    "botones_stub_placeholder": 28,
+    "total_vistas_auditadas": 8,
+    "vistas_con_i18n": 2,
+    "vistas_sin_i18n": 6,
+    "traducciones_completas": false
+  },
+  "auditoria_ui": {
+    "botones_no_funcionales": [
+      {
+        "view": "TPV.vue",
+        "button_label": "💳 PAGAR",
+        "expected_action": "Procesar pago y crear venta en backend",
+        "actual_action": "Muestra alert() - No procesa pago real",
+        "endpoint": "/api/v1/tpv/sale",
+        "endpoint_exists": true,
+        "status": "stub",
+        "error_detected": "Usa alert() en lugar de llamar al endpoint",
+        "fix_required": "Implementar llamada POST a /api/v1/tpv/sale con datos del carrito"
+      },
+      {
+        "view": "TPV.vue",
+        "button_label": "🖨️ Imprimir Ticket",
+        "expected_action": "Generar y enviar ticket a impresora o descargar PDF",
+        "actual_action": "Muestra alert() - No genera ticket",
+        "endpoint": null,
+        "endpoint_exists": false,
+        "status": "stub",
+        "error_detected": "Funcionalidad no implementada",
+        "fix_required": "Crear endpoint /api/v1/tpv/ticket o usar servicio de impresión del navegador"
+      },
+      {
+        "view": "TPV.vue",
+        "button_label": "🏷️ Descuento",
+        "expected_action": "Aplicar descuento al carrito actual",
+        "actual_action": "Muestra prompt() y alert() - No aplica descuento al carrito",
+        "endpoint": null,
+        "endpoint_exists": false,
+        "status": "stub",
+        "error_detected": "No modifica el estado del carrito",
+        "fix_required": "Implementar lógica de descuento en el carrito (frontend) y opcionalmente en backend"
+      },
+      {
+        "view": "TPV.vue",
+        "button_label": "➕ Añadir Producto",
+        "expected_action": "Abrir modal/formulario para añadir nuevo producto",
+        "actual_action": "Muestra alert('Próximamente')",
+        "endpoint": "/api/v1/tpv/products (POST)",
+        "endpoint_exists": true,
+        "status": "stub",
+        "error_detected": "Funcionalidad completamente sin implementar",
+        "fix_required": "Crear componente modal para añadir productos y conectar con endpoint POST"
+      },
+      {
+        "view": "AdminPanel.vue",
+        "button_label": "👁️ Ver (Cliente)",
+        "expected_action": "Abrir modal/detalle con información completa del cliente",
+        "actual_action": "Solo console.log() - No muestra detalles",
+        "endpoint": null,
+        "endpoint_exists": false,
+        "status": "stub",
+        "error_detected": "Comentario TODO en código",
+        "fix_required": "Crear endpoint /api/v1/admin/customers/{id} y componente modal de detalle"
+      },
+      {
+        "view": "AdminPanel.vue",
+        "button_label": "⏸️/▶️ (Toggle Cliente)",
+        "expected_action": "Activar/desactivar cuenta de cliente",
+        "actual_action": "Solo console.log() - No cambia estado",
+        "endpoint": null,
+        "endpoint_exists": false,
+        "status": "stub",
+        "error_detected": "Comentario TODO en código",
+        "fix_required": "Crear endpoint PATCH /api/v1/admin/customers/{id}/toggle-status"
+      },
+      {
+        "view": "AdminPanel.vue",
+        "button_label": "💾 Guardar configuración",
+        "expected_action": "Guardar preferencias de notificaciones en backend",
+        "actual_action": "Solo console.log() - No guarda",
+        "endpoint": null,
+        "endpoint_exists": false,
+        "status": "stub",
+        "error_detected": "Comentario TODO en código",
+        "fix_required": "Crear endpoint POST /api/v1/admin/settings y persistir en base de datos"
+      },
+      {
+        "view": "DashboardProfesional.vue",
+        "button_label": "Enable (Two-factor authentication)",
+        "expected_action": "Habilitar autenticación de dos factores",
+        "actual_action": "Botón sin handler @click",
+        "endpoint": null,
+        "endpoint_exists": false,
+        "status": "no_functional",
+        "error_detected": "No tiene evento @click asignado",
+        "fix_required": "Agregar método handleEnable2FA y endpoint correspondiente"
+      },
+      {
+        "view": "DashboardProfesional.vue",
+        "button_label": "Generate Key (API Access)",
+        "expected_action": "Generar clave API para el usuario",
+        "actual_action": "Botón sin handler @click",
+        "endpoint": null,
+        "endpoint_exists": false,
+        "status": "no_functional",
+        "error_detected": "No tiene evento @click asignado",
+        "fix_required": "Agregar método generateApiKey y endpoint POST /api/v1/api-keys"
+      },
+      {
+        "view": "DashboardProfesional.vue",
+        "button_label": "Download (Export Data)",
+        "expected_action": "Exportar datos del usuario en formato JSON/CSV",
+        "actual_action": "Botón sin handler @click",
+        "endpoint": null,
+        "endpoint_exists": false,
+        "status": "no_functional",
+        "error_detected": "No tiene evento @click asignado",
+        "fix_required": "Agregar método exportData y endpoint GET /api/v1/user/export"
+      },
+      {
+        "view": "DashboardProfesional.vue",
+        "button_label": "Selectores de Theme/Language en Settings",
+        "expected_action": "Cambiar tema visual o idioma de la aplicación",
+        "actual_action": "Selectores sin v-model funcional, no persisten cambios",
+        "endpoint": null,
+        "endpoint_exists": false,
+        "status": "partial",
+        "error_detected": "Language selector no conectado a i18n, Theme selector sin implementar",
+        "fix_required": "Conectar language selector a i18n.locale, implementar sistema de temas"
+      },
+      {
+        "view": "DashboardProfesional.vue",
+        "button_label": "Checkboxes de Notificaciones",
+        "expected_action": "Guardar preferencias de notificaciones",
+        "actual_action": "Checkboxes no tienen v-model, no guardan estado",
+        "endpoint": null,
+        "endpoint_exists": false,
+        "status": "stub",
+        "error_detected": "No hay bindeo de datos ni persistencia",
+        "fix_required": "Agregar v-model y método para guardar preferencias"
+      }
+    ],
+    "botones_funcionales": [
+      {
+        "view": "OlymposDashboard.vue",
+        "button_label": "⚙️ ADMIN",
+        "expected_action": "Navegar a /admin",
+        "actual_action": "router.push('/admin')",
+        "endpoint": null,
+        "status": "functional",
+        "error_detected": null
+      },
+      {
+        "view": "OlymposDashboard.vue",
+        "button_label": "🧾 Abrir TPV",
+        "expected_action": "Navegar a /tpv",
+        "actual_action": "router.push('/tpv')",
+        "endpoint": null,
+        "status": "functional",
+        "error_detected": null
+      },
+      {
+        "view": "OlymposDashboard.vue",
+        "button_label": "📊 MÉTRICAS",
+        "expected_action": "Mostrar/ocultar panel de métricas",
+        "actual_action": "toggle showMetrics",
+        "endpoint": null,
+        "status": "functional",
+        "error_detected": null
+      },
+      {
+        "view": "AdminPanel.vue",
+        "button_label": "🔄 Actualizar (Clientes)",
+        "expected_action": "Recargar lista de clientes",
+        "actual_action": "fetch('/api/v1/admin/customers')",
+        "endpoint": "/api/v1/admin/customers",
+        "endpoint_exists": true,
+        "status": "functional",
+        "error_detected": null
+      },
+      {
+        "view": "AdminPanel.vue",
+        "button_label": "← Volver al Dashboard",
+        "expected_action": "Navegar a /dashboard",
+        "actual_action": "router.push('/dashboard')",
+        "endpoint": null,
+        "status": "functional",
+        "error_detected": null
+      },
+      {
+        "view": "TPV.vue",
+        "button_label": "📊 Volver al Dashboard",
+        "expected_action": "Navegar a /dashboard",
+        "actual_action": "router.push('/dashboard')",
+        "endpoint": null,
+        "status": "functional",
+        "error_detected": null
+      },
+      {
+        "view": "TPV.vue",
+        "button_label": "🔄 Actualizar",
+        "expected_action": "Recargar productos y estado del TPV",
+        "actual_action": "fetch('/api/v1/tpv/status') y fetch('/api/v1/tpv/products')",
+        "endpoint": "/api/v1/tpv/status, /api/v1/tpv/products",
+        "endpoint_exists": true,
+        "status": "functional",
+        "error_detected": null
+      },
+      {
+        "view": "TPV.vue",
+        "button_label": "Agregar producto al carrito",
+        "expected_action": "Añadir producto seleccionado al carrito",
+        "actual_action": "Añade producto a array cart local",
+        "endpoint": null,
+        "status": "functional",
+        "error_detected": null
+      },
+      {
+        "view": "TPV.vue",
+        "button_label": "Aumentar/Disminuir cantidad",
+        "expected_action": "Modificar cantidad de producto en carrito",
+        "actual_action": "Modifica quantity en array cart",
+        "endpoint": null,
+        "status": "functional",
+        "error_detected": null
+      },
+      {
+        "view": "TPV.vue",
+        "button_label": "🗑️ Limpiar carrito",
+        "expected_action": "Vaciar carrito",
+        "actual_action": "cart.value = []",
+        "endpoint": null,
+        "status": "functional",
+        "error_detected": null
+      },
+      {
+        "view": "DashboardProfesional.vue",
+        "button_label": "💬 Interact (con agente)",
+        "expected_action": "Abrir panel de chat con agente",
+        "actual_action": "Abre AgentActivityPanel",
+        "endpoint": null,
+        "status": "functional",
+        "error_detected": null
+      },
+      {
+        "view": "DashboardProfesional.vue",
+        "button_label": "🔐 Admin Panel",
+        "expected_action": "Navegar a /admin",
+        "actual_action": "router.push('/admin')",
+        "endpoint": null,
+        "status": "functional",
+        "error_detected": null
+      },
+      {
+        "view": "DashboardProfesional.vue",
+        "button_label": "📲 Instalar (PWA)",
+        "expected_action": "Mostrar prompt de instalación PWA",
+        "actual_action": "promptInstall() del composable usePWA",
+        "endpoint": null,
+        "status": "functional",
+        "error_detected": null
+      },
+      {
+        "view": "Checkout.vue",
+        "button_label": "💳 Pagar ahora",
+        "expected_action": "Procesar pago con Stripe y crear cuenta",
+        "actual_action": "stripe.confirmCardPayment() + createUserAccount()",
+        "endpoint": "/api/v1/integrations/stripe/payment-intent, /api/v1/onboarding/create-account",
+        "endpoint_exists": true,
+        "status": "functional",
+        "error_detected": null
+      },
+      {
+        "view": "Login.vue",
+        "button_label": "Iniciar sesión",
+        "expected_action": "Autenticar usuario",
+        "actual_action": "authStore.login()",
+        "endpoint": "/api/v1/auth/login",
+        "endpoint_exists": true,
+        "status": "functional",
+        "error_detected": null
+      }
+    ],
+    "botones_con_funcionalidad_parcial": [
+      {
+        "view": "TPV.vue",
+        "button_label": "🪑 Modo Mesas",
+        "expected_action": "Alternar entre vista de productos y vista de mesas",
+        "actual_action": "Cambia vista pero mesas son datos mock",
+        "endpoint": null,
+        "endpoint_exists": false,
+        "status": "partial",
+        "error_detected": "Mesas hardcodeadas, no hay endpoint para obtener mesas reales",
+        "fix_required": "Crear endpoint GET /api/v1/tpv/tables y cargar mesas desde backend"
+      },
+      {
+        "view": "TPV.vue",
+        "button_label": "➕ Añadir Mesa",
+        "expected_action": "Añadir nueva mesa al sistema",
+        "actual_action": "Añade mesa localmente pero no persiste",
+        "endpoint": null,
+        "endpoint_exists": false,
+        "status": "partial",
+        "error_detected": "No hay endpoint POST /api/v1/tpv/tables",
+        "fix_required": "Crear endpoint y persistir en base de datos"
+      },
+      {
+        "view": "TPV.vue",
+        "button_label": "Seleccionar Mesa",
+        "expected_action": "Cargar pedido de mesa ocupada",
+        "actual_action": "Muestra alert() pero no carga pedido real",
+        "endpoint": null,
+        "endpoint_exists": false,
+        "status": "stub",
+        "error_detected": "No hay endpoint para obtener pedido de mesa",
+        "fix_required": "Crear endpoint GET /api/v1/tpv/tables/{id}/order"
+      }
+    ]
+  },
+  "auditoria_i18n": {
+    "sistema_configurado": true,
+    "framework": "vue-i18n",
+    "idioma_activo_por_defecto": "es",
+    "idiomas_soportados": ["es", "en"],
+    "idiomas_configurados_en_env": true,
+    "persistencia_localStorage": true,
+    "persistencia_backend": false,
+    "cambiar_idioma_funcional": true,
+    "vistas_con_i18n_implementado": [
+      {
+        "view": "Login.vue",
+        "cobertura": "completa",
+        "claves_usadas": [
+          "auth.login.emailPlaceholder",
+          "auth.login.passwordPlaceholder",
+          "auth.login.rememberMe",
+          "auth.login.forgotPassword",
+          "auth.login.submit",
+          "auth.login.submitting",
+          "auth.login.emailRequired",
+          "auth.login.emailInvalid",
+          "auth.login.passwordRequired",
+          "auth.login.passwordLength",
+          "auth.login.tokenError",
+          "auth.login.defaultError",
+          "auth.login.genericError"
+        ]
+      },
+      {
+        "view": "Dashboard.vue",
+        "cobertura": "parcial",
+        "claves_usadas": [
+          "navigation.dashboard",
+          "status.completed",
+          "status.pending",
+          "status.error",
+          "status.noActivities"
+        ]
+      },
+      {
+        "view": "MainLayout.vue",
+        "cobertura": "completa",
+        "claves_usadas": [
+          "layout.openMenu",
+          "layout.logout",
+          "layout.userFallback",
+          "layout.languageLabel",
+          "navigation.dashboard"
+        ],
+        "selector_idioma": true
+      }
+    ],
+    "vistas_sin_i18n": [
+      {
+        "view": "OlymposDashboard.vue",
+        "textos_hardcodeados_espanol": [
+          "⚡ Bienvenido al Olimpo",
+          "📊 OCULTAR",
+          "📊 MÉTRICAS",
+          "⚙️ ADMIN",
+          "🧾 Abrir TPV",
+          "TPV (Admin)",
+          "🏛️ OLIMPO v1.0.6 GLB-FIXED",
+          "está operativo. ¿Qué deseas que haga?",
+          "Panel de agentes invocado",
+          "Ventas Hoy",
+          "Ingresos",
+          "Clientes",
+          "Órdenes"
+        ],
+        "textos_total": 45,
+        "prioridad": "alta"
+      },
+      {
+        "view": "AdminPanel.vue",
+        "textos_hardcodeados_espanol": [
+          "Panel de Administración",
+          "Dashboard General",
+          "Clientes Totales",
+          "Ingresos Mensuales",
+          "Ingresos Totales",
+          "Suscripciones Activas",
+          "Ingresos por Mes",
+          "Cargando datos del gráfico...",
+          "Clientes",
+          "🔄 Actualizar",
+          "Empresa",
+          "Email",
+          "Plan",
+          "Empleados",
+          "Estado",
+          "Próximo pago",
+          "Acciones",
+          "👁️ Ver",
+          "Activo",
+          "Inactivo",
+          "No hay clientes registrados aún",
+          "Ingresos y Facturación",
+          "Este mes",
+          "suscripciones activas",
+          "Setup fees (total)",
+          "Pagos únicos de instalación",
+          "Proyección anual",
+          "Basado en suscripciones actuales",
+          "Por plan",
+          "clientes",
+          "/mes",
+          "Configuración de Admin",
+          "Integraciones",
+          "Estado",
+          "💳 Stripe",
+          "📱 WhatsApp (Twilio)",
+          "📧 Email (SendGrid)",
+          "Notificaciones",
+          "Email cuando hay nuevo cliente",
+          "Email cuando falla un pago",
+          "💾 Guardar configuración",
+          "← Volver al Dashboard"
+        ],
+        "textos_total": 78,
+        "prioridad": "alta"
+      },
+      {
+        "view": "TPV.vue",
+        "textos_hardcodeados_espanol": [
+          "💳 TPV Universal Enterprise",
+          "Sistema de Punto de Venta",
+          "🪑 Modo Mesas",
+          "Ver Productos",
+          "🔄 Actualizar",
+          "📊 Volver al Dashboard",
+          "Todos",
+          "📦 No hay productos en esta categoría",
+          "➕ Añadir Producto",
+          "Mesa",
+          "🟢 Ocupada",
+          "⚪ Libre",
+          "➕ Añadir Mesa",
+          "🛒 Carrito",
+          "🗑️ Limpiar",
+          "El carrito está vacío",
+          "Selecciona productos para comenzar",
+          "Subtotal:",
+          "IVA:",
+          "TOTAL:",
+          "💳 PAGAR",
+          "🖨️ Imprimir Ticket",
+          "🏷️ Descuento",
+          "Cargando TPV...",
+          "Reintentar"
+        ],
+        "textos_total": 52,
+        "prioridad": "alta"
+      },
+      {
+        "view": "DashboardProfesional.vue",
+        "textos_hardcodeados_espanol": [
+          "⚡ ZEUS-IA",
+          "Enterprise AI Platform",
+          "Dashboard",
+          "Analytics",
+          "Settings",
+          "Admin Panel",
+          "System Health",
+          "Active Agents",
+          "AI Agents Control Center",
+          "Dashboard / Agents Overview",
+          "● System Online",
+          "Status",
+          "Actividades 24h",
+          "Interact",
+          "Performance Analytics",
+          "Detailed analytics charts coming soon",
+          "🔔 Notifications",
+          "Email notifications",
+          "Push notifications",
+          "Agent status updates",
+          "🎨 Appearance",
+          "Theme",
+          "Dark (Current)",
+          "Light",
+          "Auto",
+          "Language",
+          "Español",
+          "English",
+          "🔐 Security",
+          "Two-factor authentication",
+          "Enable",
+          "Session timeout",
+          "30 minutes",
+          "1 hour",
+          "4 hours",
+          "⚙️ Advanced",
+          "API Access",
+          "Generate Key",
+          "Export Data",
+          "Download"
+        ],
+        "textos_total": 68,
+        "prioridad": "alta",
+        "nota": "Language selector presente pero no funcional, solo visual"
+      },
+      {
+        "view": "Checkout.vue",
+        "textos_hardcodeados_espanol": [
+          "⚡ ZEUS-IA",
+          "Finalizar compra",
+          "Plan seleccionado:",
+          "Setup inicial",
+          "Suscripción mensual",
+          "/mes",
+          "Total hoy",
+          "💡 Pagas el setup completo solo cuando ZEUS funcione al 100%.",
+          "Información de la empresa",
+          "Nombre de la empresa *",
+          "Email corporativo *",
+          "Nombre completo *",
+          "Número de empleados *",
+          "Información de asesores (requerido para documentos fiscales y legales)",
+          "Email del gestor fiscal *",
+          "RAFAEL enviará documentos fiscales a este email tras tu aprobación",
+          "Email del asesor legal *",
+          "JUSTICIA enviará documentos legales a este email tras tu aprobación",
+          "Método de pago",
+          "💳 Pagar ahora",
+          "Procesando pago...",
+          "Por favor completa todos los campos requeridos"
+        ],
+        "textos_total": 42,
+        "prioridad": "media"
+      },
+      {
+        "view": "Pricing.vue",
+        "textos_hardcodeados_espanol": [
+          "Planes de suscripción",
+          "Todo incluido sin sorpresas",
+          "Precio por empresa, no por usuario",
+          "Todo por 3.6x menos",
+          "Todos los planes incluyen los 6 agentes IA + todas las funcionalidades",
+          "Empezar gratis",
+          "Contratar",
+          "y muchas más..."
+        ],
+        "textos_total": 120,
+        "prioridad": "media"
+      }
+    ],
+    "claves_i18n_faltantes": {
+      "dashboard": {
+        "required_keys": [
+          "dashboard.welcome",
+          "dashboard.metrics",
+          "dashboard.showMetrics",
+          "dashboard.hideMetrics",
+          "dashboard.admin",
+          "dashboard.openTPV",
+          "dashboard.tpvAdmin",
+          "dashboard.installPWA",
+          "dashboard.agents.online",
+          "dashboard.agents.offline",
+          "dashboard.metrics.sales",
+          "dashboard.metrics.revenue",
+          "dashboard.metrics.customers",
+          "dashboard.metrics.orders"
+        ],
+        "priority": "alta"
+      },
+      "admin": {
+        "required_keys": [
+          "admin.panel.title",
+          "admin.overview.title",
+          "admin.stats.totalCustomers",
+          "admin.stats.monthlyRevenue",
+          "admin.stats.totalRevenue",
+          "admin.stats.activeSubscriptions",
+          "admin.revenue.monthly",
+          "admin.revenue.chart.title",
+          "admin.revenue.chart.loading",
+          "admin.customers.title",
+          "admin.customers.refresh",
+          "admin.customers.table.company",
+          "admin.customers.table.email",
+          "admin.customers.table.plan",
+          "admin.customers.table.employees",
+          "admin.customers.table.status",
+          "admin.customers.table.nextPayment",
+          "admin.customers.table.actions",
+          "admin.customers.view",
+          "admin.customers.pause",
+          "admin.customers.resume",
+          "admin.customers.active",
+          "admin.customers.inactive",
+          "admin.customers.empty",
+          "admin.revenue.title",
+          "admin.revenue.thisMonth",
+          "admin.revenue.activeSubscriptions",
+          "admin.revenue.setupFees",
+          "admin.revenue.setupFeesDescription",
+          "admin.revenue.yearlyProjection",
+          "admin.revenue.basedOnCurrent",
+          "admin.revenue.byPlan",
+          "admin.revenue.perMonth",
+          "admin.settings.title",
+          "admin.settings.integrations",
+          "admin.settings.status",
+          "admin.settings.notifications",
+          "admin.settings.emailNewCustomer",
+          "admin.settings.emailPaymentFailed",
+          "admin.settings.save",
+          "admin.backToDashboard"
+        ],
+        "priority": "alta"
+      },
+      "tpv": {
+        "required_keys": [
+          "tpv.title",
+          "tpv.subtitle",
+          "tpv.tablesMode",
+          "tpv.viewProducts",
+          "tpv.refresh",
+          "tpv.backToDashboard",
+          "tpv.categories.all",
+          "tpv.products.empty",
+          "tpv.products.add",
+          "tpv.table",
+          "tpv.table.occupied",
+          "tpv.table.free",
+          "tpv.table.add",
+          "tpv.cart.title",
+          "tpv.cart.clear",
+          "tpv.cart.empty",
+          "tpv.cart.emptyHint",
+          "tpv.cart.subtotal",
+          "tpv.cart.iva",
+          "tpv.cart.total",
+          "tpv.payment.process",
+          "tpv.payment.print",
+          "tpv.payment.discount",
+          "tpv.loading",
+          "tpv.retry"
+        ],
+        "priority": "alta"
+      },
+      "checkout": {
+        "required_keys": [
+          "checkout.title",
+          "checkout.plan.selected",
+          "checkout.setup.initial",
+          "checkout.subscription.monthly",
+          "checkout.total.today",
+          "checkout.setup.note",
+          "checkout.company.title",
+          "checkout.company.name",
+          "checkout.company.email",
+          "checkout.company.fullName",
+          "checkout.company.employees",
+          "checkout.advisors.title",
+          "checkout.advisors.fiscal.email",
+          "checkout.advisors.fiscal.hint",
+          "checkout.advisors.legal.email",
+          "checkout.advisors.legal.hint",
+          "checkout.payment.method",
+          "checkout.payment.process",
+          "checkout.payment.processing",
+          "checkout.validation.required"
+        ],
+        "priority": "media"
+      },
+      "dashboard_profesional": {
+        "required_keys": [
+          "dashboardPro.title",
+          "dashboardPro.subtitle",
+          "dashboardPro.nav.dashboard",
+          "dashboardPro.nav.analytics",
+          "dashboardPro.nav.settings",
+          "dashboardPro.nav.admin",
+          "dashboardPro.metrics.health",
+          "dashboardPro.metrics.agents",
+          "dashboardPro.header.title",
+          "dashboardPro.header.subtitle",
+          "dashboardPro.header.online",
+          "dashboardPro.agent.status",
+          "dashboardPro.agent.activities",
+          "dashboardPro.agent.interact",
+          "dashboardPro.analytics.title",
+          "dashboardPro.analytics.placeholder",
+          "dashboardPro.settings.notifications",
+          "dashboardPro.settings.notifications.email",
+          "dashboardPro.settings.notifications.push",
+          "dashboardPro.settings.notifications.agent",
+          "dashboardPro.settings.appearance",
+          "dashboardPro.settings.appearance.theme",
+          "dashboardPro.settings.appearance.theme.dark",
+          "dashboardPro.settings.appearance.theme.light",
+          "dashboardPro.settings.appearance.theme.auto",
+          "dashboardPro.settings.appearance.language",
+          "dashboardPro.settings.security",
+          "dashboardPro.settings.security.2fa",
+          "dashboardPro.settings.security.enable",
+          "dashboardPro.settings.security.timeout",
+          "dashboardPro.settings.advanced",
+          "dashboardPro.settings.advanced.api",
+          "dashboardPro.settings.advanced.generate",
+          "dashboardPro.settings.advanced.export",
+          "dashboardPro.settings.advanced.download"
+        ],
+        "priority": "alta"
+      }
+    },
+    "archivos_i18n_faltantes": [
+      {
+        "archivo": "frontend/src/i18n/locales/es.json",
+        "descripcion": "Archivo JSON separado para español (opcional pero recomendado)",
+        "prioridad": "baja"
+      },
+      {
+        "archivo": "frontend/src/i18n/locales/en.json",
+        "descripcion": "Archivo JSON separado para inglés (opcional pero recomendado)",
+        "prioridad": "baja"
+      }
+    ],
+    "configuracion_i18n_actual": {
+      "framework": "vue-i18n",
+      "modo": "composition",
+      "legacy": false,
+      "locale_default": "es",
+      "fallback_locale": "en",
+      "persistencia": "localStorage (zeus_locale)",
+      "configuracion_correcta": true,
+      "selector_idioma_visible": true,
+      "selector_idioma_funcional": true,
+      "selector_idioma_ubicacion": ["MainLayout.vue"],
+      "vistas_con_selector_parcial": ["DashboardProfesional.vue (no funcional)"]
+    },
+    "problemas_i18n_detectados": [
+      {
+        "problema": "Selector de idioma en DashboardProfesional.vue no está conectado a i18n",
+        "ubicacion": "DashboardProfesional.vue línea 224",
+        "severidad": "alta",
+        "fix_required": "Conectar select a i18n.locale usando useI18n() composable"
+      },
+      {
+        "problema": "Selector de tema en DashboardProfesional.vue sin funcionalidad",
+        "ubicacion": "DashboardProfesional.vue línea 216",
+        "severidad": "media",
+        "fix_required": "Implementar sistema de temas (dark/light) con persistencia"
+      },
+      {
+        "problema": "85% de las vistas no usan i18n, tienen texto hardcodeado en español",
+        "ubicacion": "Múltiples vistas",
+        "severidad": "alta",
+        "fix_required": "Migrar todos los textos hardcodeados a claves i18n"
+      }
+    ]
+  },
+  "endpoints_backend": {
+    "endpoints_existentes": [
+      {
+        "endpoint": "GET /api/v1/admin/stats",
+        "implementado": true,
+        "usado_por": "AdminPanel.vue",
+        "status": "functional"
+      },
+      {
+        "endpoint": "GET /api/v1/admin/customers",
+        "implementado": true,
+        "usado_por": "AdminPanel.vue",
+        "status": "functional"
+      },
+      {
+        "endpoint": "GET /api/v1/admin/revenue-chart",
+        "implementado": true,
+        "usado_por": "AdminPanel.vue",
+        "status": "functional"
+      },
+      {
+        "endpoint": "GET /api/v1/tpv/status",
+        "implementado": true,
+        "usado_por": "TPV.vue",
+        "status": "functional"
+      },
+      {
+        "endpoint": "GET /api/v1/tpv/products",
+        "implementado": true,
+        "usado_por": "TPV.vue",
+        "status": "functional"
+      },
+      {
+        "endpoint": "POST /api/v1/tpv/sale",
+        "implementado": true,
+        "usado_por": "TPV.vue (pero no se usa)",
+        "status": "available_but_not_used",
+        "fix_required": "Conectar botón PAGAR al endpoint"
+      },
+      {
+        "endpoint": "POST /api/v1/tpv/products",
+        "implementado": true,
+        "usado_por": null,
+        "status": "available_but_not_used",
+        "fix_required": "Conectar botón 'Añadir Producto' al endpoint"
+      },
+      {
+        "endpoint": "GET /api/v1/agents/status",
+        "implementado": true,
+        "usado_por": "OlymposDashboard.vue",
+        "status": "functional"
+      },
+      {
+        "endpoint": "GET /api/v1/integrations/status",
+        "implementado": true,
+        "usado_por": "AdminPanel.vue",
+        "status": "functional"
+      }
+    ],
+    "endpoints_faltantes": [
+      {
+        "endpoint": "GET /api/v1/admin/customers/{id}",
+        "necesario_para": "AdminPanel.vue - Ver detalles de cliente",
+        "prioridad": "media"
+      },
+      {
+        "endpoint": "PATCH /api/v1/admin/customers/{id}/toggle-status",
+        "necesario_para": "AdminPanel.vue - Activar/desactivar cliente",
+        "prioridad": "media"
+      },
+      {
+        "endpoint": "POST /api/v1/admin/settings",
+        "necesario_para": "AdminPanel.vue - Guardar configuración",
+        "prioridad": "baja"
+      },
+      {
+        "endpoint": "GET /api/v1/tpv/tables",
+        "necesario_para": "TPV.vue - Obtener mesas",
+        "prioridad": "baja"
+      },
+      {
+        "endpoint": "POST /api/v1/tpv/tables",
+        "necesario_para": "TPV.vue - Crear nueva mesa",
+        "prioridad": "baja"
+      },
+      {
+        "endpoint": "GET /api/v1/tpv/tables/{id}/order",
+        "necesario_para": "TPV.vue - Cargar pedido de mesa",
+        "prioridad": "baja"
+      },
+      {
+        "endpoint": "POST /api/v1/tpv/ticket",
+        "necesario_para": "TPV.vue - Generar ticket",
+        "prioridad": "baja"
+      },
+      {
+        "endpoint": "POST /api/v1/api-keys",
+        "necesario_para": "DashboardProfesional.vue - Generar clave API",
+        "prioridad": "baja"
+      },
+      {
+        "endpoint": "GET /api/v1/user/export",
+        "necesario_para": "DashboardProfesional.vue - Exportar datos",
+        "prioridad": "baja"
+      }
+    ]
+  },
+  "hallazgos_criticos": [
+    {
+      "categoria": "i18n",
+      "severidad": "alta",
+      "hallazgo": "85% de las vistas tienen texto hardcodeado en español sin usar i18n",
+      "impacto": "Sistema no está listo para mercado internacional",
+      "solucion": "Migrar todos los textos a claves i18n y completar traducciones"
+    },
+    {
+      "categoria": "funcionalidad",
+      "severidad": "alta",
+      "hallazgo": "Botón PAGAR en TPV usa alert() en lugar de procesar pago real",
+      "impacto": "TPV no puede realizar ventas reales",
+      "solucion": "Conectar al endpoint POST /api/v1/tpv/sale que ya existe"
+    },
+    {
+      "categoria": "funcionalidad",
+      "severidad": "media",
+      "hallazgo": "12 botones sin funcionalidad real (stubs con alert/console.log)",
+      "impacto": "Funcionalidades clave no operativas",
+      "solucion": "Implementar funcionalidad real o remover botones temporalmente"
+    }
+  ],
+  "hallazgos_menores": [
+    {
+      "categoria": "i18n",
+      "hallazgo": "Selector de idioma en DashboardProfesional.vue no funcional",
+      "fix_simple": true
+    },
+    {
+      "categoria": "ui",
+      "hallazgo": "Checkboxes en Settings sin v-model",
+      "fix_simple": true
+    },
+    {
+      "categoria": "ui",
+      "hallazgo": "Selectores de tema/language sin handlers",
+      "fix_simple": true
+    }
+  ],
+  "configuracion_i18n_recomendada": {
+    "estructura_archivos": {
+      "opcion_1_recomendada": {
+        "descripcion": "Mantener estructura actual (index.ts) pero expandir messages",
+        "ventajas": ["Ya configurado", "Funciona correctamente", "Fácil de mantener"],
+        "desventajas": ["Archivo grande", "Menos modular"]
+      },
+      "opcion_2": {
+        "descripcion": "Separar en archivos JSON (es.json, en.json)",
+        "ventajas": ["Más modular", "Fácil de traducir", "Mejor para muchos idiomas"],
+        "desventajas": ["Requiere refactor", "Más archivos que gestionar"]
+    }
+  },
+  "prioridades_de_arreglo": {
+    "prioridad_alta": [
+      {
+        "tarea": "Migrar textos hardcodeados a i18n en AdminPanel.vue",
+        "tiempo_estimado": "2-3 horas",
+        "impacto": "Alto - Panel más visible"
+      },
+      {
+        "tarea": "Migrar textos hardcodeados a i18n en TPV.vue",
+        "tiempo_estimado": "1-2 horas",
+        "impacto": "Alto - Funcionalidad crítica"
+      },
+      {
+        "tarea": "Conectar botón PAGAR en TPV al endpoint real",
+        "tiempo_estimado": "30 minutos",
+        "impacto": "Alto - Crítico para ventas"
+      },
+      {
+        "tarea": "Migrar textos hardcodeados a i18n en OlymposDashboard.vue",
+        "tiempo_estimado": "2 horas",
+        "impacto": "Alto - Vista principal"
+      },
+      {
+        "tarea": "Conectar selector de idioma en DashboardProfesional.vue a i18n",
+        "tiempo_estimado": "15 minutos",
+        "impacto": "Medio - Mejora UX"
+      }
+    ],
+    "prioridad_media": [
+      {
+        "tarea": "Implementar endpoints faltantes para AdminPanel",
+        "tiempo_estimado": "2 horas",
+        "impacto": "Medio"
+      },
+      {
+        "tarea": "Migrar textos en Checkout.vue y Pricing.vue",
+        "tiempo_estimado": "2 horas",
+        "impacto": "Medio"
+      },
+      {
+        "tarea": "Implementar funcionalidad de checkboxes en Settings",
+        "tiempo_estimado": "1 hora",
+        "impacto": "Bajo"
+      }
+    ],
+    "prioridad_baja": [
+      {
+        "tarea": "Implementar sistema de temas (dark/light)",
+        "tiempo_estimado": "3 horas",
+        "impacto": "Bajo - Mejora UX"
+      },
+      {
+        "tarea": "Implementar endpoints de mesas TPV",
+        "tiempo_estimado": "2 horas",
+        "impacto": "Bajo - Feature adicional"
+      }
+    ]
+  },
+  "readiness_comercial": {
+    "ready_for_spanish_market": true,
+    "ready_for_english_market": false,
+    "ready_for_international_market": false,
+    "blockers_para_lanzamiento": [
+      "85% de textos sin traducir al inglés",
+      "12 botones sin funcionalidad real",
+      "TPV no puede procesar pagos reales"
+    ],
+    "warnings": [
+      "Sistema funcional en español pero sin traducciones completas",
+      "Algunas funcionalidades son stubs/placeholders"
+    ]
+  },
+  "recomendaciones_finales": {
+    "antes_de_lanzamiento_espanol": [
+      "Conectar botón PAGAR en TPV al endpoint real (30 min)",
+      "Conectar selector de idioma en DashboardProfesional (15 min)",
+      "Arreglar checkboxes en Settings (30 min)"
+    ],
+    "antes_de_lanzamiento_internacional": [
+      "Migrar todos los textos a i18n (8-10 horas)",
+      "Completar traducciones al inglés (4-6 horas)",
+      "Implementar funcionalidades stub críticas (4-6 horas)",
+      "Testing completo en ambos idiomas (2-3 horas)"
+    ],
+    "mejoras_opcionales": [
+      "Separar i18n en archivos JSON modulares",
+      "Implementar persistencia de idioma en backend",
+      "Agregar más idiomas (fr, de, pt, etc.)",
+      "Implementar sistema de temas",
+      "Crear endpoints faltantes para funcionalidades avanzadas"
+    ]
+  },
+  "estado_actual_resumen": {
+    "funcionalidad_core": "✅ Funcional (80%)",
+    "funcionalidad_admin": "✅ Funcional (75%)",
+    "funcionalidad_tpv": "⚠️ Parcial (60% - falta procesar pago real)",
+    "i18n_espanol": "✅ Configurado y operativo",
+    "i18n_ingles": "❌ Solo traducciones básicas (15%)",
+    "i18n_internacional": "❌ No listo",
+    "listo_para_produccion_espanol": "✅ Sí (con fixes menores)",
+    "listo_para_produccion_internacional": "❌ No (falta 85% traducciones)"
+  }
+}

@@ -221,6 +221,16 @@
       🧾 {{ authStore.isAdmin ? 'TPV (Admin)' : 'Abrir TPV' }}
     </button>
 
+    <!-- Botón Instalar PWA -->
+    <button 
+      v-if="isInstallable && !isInstalled"
+      @click="handleInstallPWA"
+      class="pwa-install-toggle"
+      title="Instalar ZEUS-IA como aplicación"
+    >
+      📲 Instalar ZEUS
+    </button>
+
     <!-- Notificaciones Divinas -->
     <div class="divine-notifications">
       <transition-group name="notification-slide">
@@ -257,9 +267,13 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Agent3DAvatar from '@/components/Agent3DAvatar.vue'
 import DashboardProfesional from '@/components/DashboardProfesional.vue'
+import { usePWA } from '@/composables/usePWA'
 
 const router = useRouter()
 const authStore = useAuthStore()
+
+// PWA Install
+const { isInstallable, isInstalled, promptInstall } = usePWA()
 
 // Estado
 const firstPersonMode = ref(true)  // MODO 3D POR DEFECTO
@@ -382,6 +396,14 @@ const goToAdmin = () => {
 // Navegar al TPV
 const goToTPV = () => {
   router.push('/tpv')
+}
+
+// Instalar PWA
+const handleInstallPWA = async () => {
+  const installed = await promptInstall()
+  if (installed) {
+    showNotification('success', '✅ ZEUS-IA se está instalando...')
+  }
 }
 
 // Nota: El botón TPV ahora se muestra siempre para usuarios autenticados
@@ -1367,7 +1389,37 @@ onMounted(() => {
   box-shadow: 0 0 30px rgba(255, 215, 0, 0.8);
 }
 
+.pwa-install-toggle {
+  position: fixed;
+  top: 30px;
+  right: 560px;
+  padding: 12px 25px;
+  background: rgba(59, 130, 246, 0.9);
+  border: 2px solid rgba(59, 130, 246, 0.4);
+  border-radius: 50px;
+  color: #fff;
+  font-weight: bold;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  z-index: 60;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pwa-install-toggle:hover {
+  background: rgba(59, 130, 246, 0.7);
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+}
+
 @media (max-width: 1200px) {
+  .pwa-install-toggle {
+    right: 200px;
+    top: 130px;
+  }
+  
   .tpv-toggle {
     right: 200px;
     top: 80px;

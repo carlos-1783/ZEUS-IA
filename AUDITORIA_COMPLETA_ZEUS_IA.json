@@ -938,6 +938,7 @@
         "descripcion": "Separar en archivos JSON (es.json, en.json)",
         "ventajas": ["Más modular", "Fácil de traducir", "Mejor para muchos idiomas"],
         "desventajas": ["Requiere refactor", "Más archivos que gestionar"]
+      }
     }
   },
   "prioridades_de_arreglo": {

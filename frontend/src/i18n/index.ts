@@ -1,74 +1,10 @@
 import { createI18n } from 'vue-i18n';
+import esMessages from './locales/es.json';
+import enMessages from './locales/en.json';
 
 const messages = {
-  es: {
-    navigation: {
-      dashboard: 'Panel',
-    },
-    layout: {
-      openMenu: 'Abrir menú',
-      logout: 'Cerrar sesión',
-      userFallback: 'Usuario',
-      languageLabel: 'Idioma',
-    },
-    auth: {
-      login: {
-        emailPlaceholder: 'Correo electrónico',
-        passwordPlaceholder: 'Contraseña',
-        rememberMe: 'Recordar sesión',
-        forgotPassword: '¿Olvidaste tu contraseña?',
-        submit: 'Iniciar sesión',
-        submitting: 'Iniciando sesión...',
-        emailRequired: 'El correo electrónico es obligatorio',
-        emailInvalid: 'El correo electrónico no es válido',
-        passwordRequired: 'La contraseña es obligatoria',
-        passwordLength: 'La contraseña debe tener al menos 6 caracteres',
-        tokenError: 'No se pudo guardar el token de autenticación',
-        defaultError: 'Error al iniciar sesión. Por favor, verifica tus credenciales.',
-        genericError: 'Ocurrió un error al intentar iniciar sesión. Por favor, inténtalo de nuevo.',
-      },
-    },
-    status: {
-      completed: 'Completado',
-      pending: 'Pendiente',
-      error: 'Error',
-      noActivities: 'No hay actividades recientes',
-    },
-  },
-  en: {
-    navigation: {
-      dashboard: 'Dashboard',
-    },
-    layout: {
-      openMenu: 'Open menu',
-      logout: 'Log out',
-      userFallback: 'User',
-      languageLabel: 'Language',
-    },
-    auth: {
-      login: {
-        emailPlaceholder: 'Email address',
-        passwordPlaceholder: 'Password',
-        rememberMe: 'Remember me',
-        forgotPassword: 'Forgot your password?',
-        submit: 'Sign in',
-        submitting: 'Signing in...',
-        emailRequired: 'Email address is required',
-        emailInvalid: 'Email address is not valid',
-        passwordRequired: 'Password is required',
-        passwordLength: 'Password must be at least 6 characters',
-        tokenError: 'Authentication token could not be stored',
-        defaultError: 'Failed to sign in. Please check your credentials.',
-        genericError: 'Something went wrong. Please try again.',
-      },
-    },
-    status: {
-      completed: 'Completed',
-      pending: 'Pending',
-      error: 'Error',
-      noActivities: 'No recent activity',
-    },
-  },
+  es: esMessages,
+  en: enMessages,
 };
 
 const parseSupportedLocales = (): string[] => {

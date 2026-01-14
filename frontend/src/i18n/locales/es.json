@@ -1,0 +1,229 @@
+{
+  "app": {
+    "name": "ZEUS-IA",
+    "description": "Plataforma Empresarial de Inteligencia Artificial"
+  },
+  "navigation": {
+    "dashboard": "Panel",
+    "admin": "Administración",
+    "tpv": "TPV",
+    "agents": "Agentes",
+    "settings": "Configuración",
+    "analytics": "Analíticas"
+  },
+  "layout": {
+    "openMenu": "Abrir menú",
+    "logout": "Cerrar sesión",
+    "userFallback": "Usuario",
+    "languageLabel": "Idioma"
+  },
+  "auth": {
+    "login": {
+      "emailPlaceholder": "Correo electrónico",
+      "passwordPlaceholder": "Contraseña",
+      "rememberMe": "Recordar sesión",
+      "forgotPassword": "¿Olvidaste tu contraseña?",
+      "submit": "Iniciar sesión",
+      "submitting": "Iniciando sesión...",
+      "emailRequired": "El correo electrónico es obligatorio",
+      "emailInvalid": "El correo electrónico no es válido",
+      "passwordRequired": "La contraseña es obligatoria",
+      "passwordLength": "La contraseña debe tener al menos 6 caracteres",
+      "tokenError": "No se pudo guardar el token de autenticación",
+      "defaultError": "Error al iniciar sesión. Por favor, verifica tus credenciales.",
+      "genericError": "Ocurrió un error al intentar iniciar sesión. Por favor, inténtalo de nuevo."
+    }
+  },
+  "status": {
+    "completed": "Completado",
+    "pending": "Pendiente",
+    "error": "Error",
+    "noActivities": "No hay actividades recientes",
+    "online": "En línea",
+    "offline": "Desconectado"
+  },
+  "dashboard": {
+    "welcome": "Bienvenido al Olimpo",
+    "metrics": "Métricas",
+    "showMetrics": "MOSTRAR",
+    "hideMetrics": "OCULTAR",
+    "admin": "ADMIN",
+    "openTPV": "Abrir TPV",
+    "tpvAdmin": "TPV (Admin)",
+    "installPWA": "Instalar ZEUS",
+    "agents": {
+      "online": "En línea",
+      "offline": "Desconectado"
+    },
+    "metrics": {
+      "sales": "Ventas Hoy",
+      "revenue": "Ingresos",
+      "customers": "Clientes",
+      "orders": "Órdenes"
+    }
+  },
+  "admin": {
+    "panel": {
+      "title": "Panel de Administración"
+    },
+    "overview": {
+      "title": "Dashboard General"
+    },
+    "stats": {
+      "totalCustomers": "Clientes Totales",
+      "monthlyRevenue": "Ingresos Mensuales",
+      "totalRevenue": "Ingresos Totales",
+      "activeSubscriptions": "Suscripciones Activas"
+    },
+    "revenue": {
+      "monthly": "Ingresos por Mes",
+      "chart": {
+        "title": "Ingresos por Mes",
+        "loading": "Cargando datos del gráfico..."
+      }
+    },
+    "customers": {
+      "title": "Clientes",
+      "refresh": "Actualizar",
+      "table": {
+        "company": "Empresa",
+        "email": "Email",
+        "plan": "Plan",
+        "employees": "Empleados",
+        "status": "Estado",
+        "nextPayment": "Próximo pago",
+        "actions": "Acciones"
+      },
+      "view": "Ver",
+      "pause": "Pausar",
+      "resume": "Reanudar",
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "empty": "No hay clientes registrados aún"
+    },
+    "revenue": {
+      "title": "Ingresos y Facturación",
+      "thisMonth": "Este mes",
+      "activeSubscriptions": "suscripciones activas",
+      "setupFees": "Setup fees (total)",
+      "setupFeesDescription": "Pagos únicos de instalación",
+      "yearlyProjection": "Proyección anual",
+      "basedOnCurrent": "Basado en suscripciones actuales",
+      "byPlan": "Por plan",
+      "perMonth": "/mes"
+    },
+    "settings": {
+      "title": "Configuración de Admin",
+      "integrations": "Integraciones",
+      "status": "Estado",
+      "notifications": "Notificaciones",
+      "emailNewCustomer": "Email cuando hay nuevo cliente",
+      "emailPaymentFailed": "Email cuando falla un pago",
+      "save": "Guardar configuración",
+      "backToDashboard": "Volver al Dashboard"
+    }
+  },
+  "tpv": {
+    "title": "TPV Universal Enterprise",
+    "subtitle": "Sistema de Punto de Venta",
+    "tablesMode": "Modo Mesas",
+    "viewProducts": "Ver Productos",
+    "refresh": "Actualizar",
+    "backToDashboard": "Volver al Dashboard",
+    "categories": {
+      "all": "Todos"
+    },
+    "products": {
+      "empty": "No hay productos en esta categoría",
+      "add": "Añadir Producto"
+    },
+    "table": "Mesa",
+    "tableStatus": {
+      "occupied": "Ocupada",
+      "free": "Libre"
+    },
+    "cart": {
+      "title": "Carrito",
+      "clear": "Limpiar",
+      "empty": "El carrito está vacío",
+      "emptyHint": "Selecciona productos para comenzar",
+      "subtotal": "Subtotal:",
+      "iva": "IVA:",
+      "total": "TOTAL:"
+    },
+    "payment": {
+      "process": "PAGAR",
+      "print": "Imprimir Ticket",
+      "discount": "Descuento"
+    },
+    "loading": "Cargando TPV...",
+    "retry": "Reintentar"
+  },
+  "agents": {
+    "disclaimers": {
+      "rafael": "Modo borrador fiscal. No presenta ante Hacienda. Requiere revisión humana.",
+      "justicia": "Asesor legal automatizado. No sustituye asesor legal humano cualificado.",
+      "perseo": "Marketing automation sin garantía de resultados. Requiere supervisión estratégica.",
+      "thalos": "Sistema de seguridad automatizado. Alertas críticas requieren intervención humana.",
+      "afrodita": "Gestión RRHH automatizada. Documentos legales requieren validación humana.",
+      "zeus": "Orquestador principal. Coordinación automática con supervisión humana recomendada."
+    }
+  },
+  "legal": {
+    "terms": {
+      "title": "Términos de Servicio",
+      "accept": "Acepto los términos de servicio"
+    },
+    "privacy": {
+      "title": "Política de Privacidad",
+      "accept": "Acepto la política de privacidad"
+    },
+    "disclaimer": {
+      "title": "Aviso Legal",
+      "general": "ZEUS-IA es una plataforma de automatización empresarial que asiste en procesos administrativos, fiscales y legales. Los resultados generados son borradores que requieren revisión y aprobación humana antes de su uso oficial."
+    }
+  },
+  "settings": {
+    "notifications": {
+      "title": "Notificaciones",
+      "email": "Email notifications",
+      "push": "Push notifications",
+      "agentStatus": "Agent status updates"
+    },
+    "appearance": {
+      "title": "Apariencia",
+      "theme": "Tema",
+      "themeDark": "Oscuro (Actual)",
+      "themeLight": "Claro",
+      "themeAuto": "Automático",
+      "language": "Idioma"
+    },
+    "security": {
+      "title": "Seguridad",
+      "twoFactor": "Autenticación de dos factores",
+      "enable": "Habilitar",
+      "timeout": "Timeout de sesión"
+    },
+    "advanced": {
+      "title": "Avanzado",
+      "apiAccess": "Acceso API",
+      "generateKey": "Generar Clave",
+      "exportData": "Exportar Datos",
+      "download": "Descargar"
+    }
+  },
+  "common": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "view": "Ver",
+    "close": "Cerrar",
+    "confirm": "Confirmar",
+    "loading": "Cargando...",
+    "error": "Error",
+    "success": "Éxito",
+    "warning": "Advertencia",
+    "info": "Información"
+  }
+}

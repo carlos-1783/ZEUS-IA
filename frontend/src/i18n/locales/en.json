@@ -1,0 +1,229 @@
+{
+  "app": {
+    "name": "ZEUS-IA",
+    "description": "Enterprise AI Platform"
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "admin": "Administration",
+    "tpv": "POS",
+    "agents": "Agents",
+    "settings": "Settings",
+    "analytics": "Analytics"
+  },
+  "layout": {
+    "openMenu": "Open menu",
+    "logout": "Log out",
+    "userFallback": "User",
+    "languageLabel": "Language"
+  },
+  "auth": {
+    "login": {
+      "emailPlaceholder": "Email address",
+      "passwordPlaceholder": "Password",
+      "rememberMe": "Remember me",
+      "forgotPassword": "Forgot your password?",
+      "submit": "Sign in",
+      "submitting": "Signing in...",
+      "emailRequired": "Email address is required",
+      "emailInvalid": "Email address is not valid",
+      "passwordRequired": "Password is required",
+      "passwordLength": "Password must be at least 6 characters",
+      "tokenError": "Authentication token could not be stored",
+      "defaultError": "Failed to sign in. Please check your credentials.",
+      "genericError": "Something went wrong. Please try again."
+    }
+  },
+  "status": {
+    "completed": "Completed",
+    "pending": "Pending",
+    "error": "Error",
+    "noActivities": "No recent activity",
+    "online": "Online",
+    "offline": "Offline"
+  },
+  "dashboard": {
+    "welcome": "Welcome to Olympus",
+    "metrics": "Metrics",
+    "showMetrics": "SHOW",
+    "hideMetrics": "HIDE",
+    "admin": "ADMIN",
+    "openTPV": "Open POS",
+    "tpvAdmin": "POS (Admin)",
+    "installPWA": "Install ZEUS",
+    "agents": {
+      "online": "Online",
+      "offline": "Offline"
+    },
+    "metrics": {
+      "sales": "Sales Today",
+      "revenue": "Revenue",
+      "customers": "Customers",
+      "orders": "Orders"
+    }
+  },
+  "admin": {
+    "panel": {
+      "title": "Administration Panel"
+    },
+    "overview": {
+      "title": "General Dashboard"
+    },
+    "stats": {
+      "totalCustomers": "Total Customers",
+      "monthlyRevenue": "Monthly Revenue",
+      "totalRevenue": "Total Revenue",
+      "activeSubscriptions": "Active Subscriptions"
+    },
+    "revenue": {
+      "monthly": "Monthly Revenue",
+      "chart": {
+        "title": "Revenue by Month",
+        "loading": "Loading chart data..."
+      }
+    },
+    "customers": {
+      "title": "Customers",
+      "refresh": "Refresh",
+      "table": {
+        "company": "Company",
+        "email": "Email",
+        "plan": "Plan",
+        "employees": "Employees",
+        "status": "Status",
+        "nextPayment": "Next payment",
+        "actions": "Actions"
+      },
+      "view": "View",
+      "pause": "Pause",
+      "resume": "Resume",
+      "active": "Active",
+      "inactive": "Inactive",
+      "empty": "No registered customers yet"
+    },
+    "revenue": {
+      "title": "Revenue and Billing",
+      "thisMonth": "This month",
+      "activeSubscriptions": "active subscriptions",
+      "setupFees": "Setup fees (total)",
+      "setupFeesDescription": "One-time setup payments",
+      "yearlyProjection": "Annual projection",
+      "basedOnCurrent": "Based on current subscriptions",
+      "byPlan": "By plan",
+      "perMonth": "/month"
+    },
+    "settings": {
+      "title": "Admin Settings",
+      "integrations": "Integrations",
+      "status": "Status",
+      "notifications": "Notifications",
+      "emailNewCustomer": "Email when there's a new customer",
+      "emailPaymentFailed": "Email when payment fails",
+      "save": "Save settings",
+      "backToDashboard": "Back to Dashboard"
+    }
+  },
+  "tpv": {
+    "title": "Universal Enterprise POS",
+    "subtitle": "Point of Sale System",
+    "tablesMode": "Tables Mode",
+    "viewProducts": "View Products",
+    "refresh": "Refresh",
+    "backToDashboard": "Back to Dashboard",
+    "categories": {
+      "all": "All"
+    },
+    "products": {
+      "empty": "No products in this category",
+      "add": "Add Product"
+    },
+    "table": "Table",
+    "tableStatus": {
+      "occupied": "Occupied",
+      "free": "Free"
+    },
+    "cart": {
+      "title": "Cart",
+      "clear": "Clear",
+      "empty": "Cart is empty",
+      "emptyHint": "Select products to begin",
+      "subtotal": "Subtotal:",
+      "iva": "VAT:",
+      "total": "TOTAL:"
+    },
+    "payment": {
+      "process": "PAY",
+      "print": "Print Ticket",
+      "discount": "Discount"
+    },
+    "loading": "Loading POS...",
+    "retry": "Retry"
+  },
+  "agents": {
+    "disclaimers": {
+      "rafael": "Fiscal draft mode. Does not file with Tax Authority. Requires human review.",
+      "justicia": "Automated legal advisor. Does not replace qualified human legal counsel.",
+      "perseo": "Marketing automation with no results guarantee. Requires strategic supervision.",
+      "thalos": "Automated security system. Critical alerts require human intervention.",
+      "afrodita": "Automated HR management. Legal documents require human validation.",
+      "zeus": "Main orchestrator. Automatic coordination with recommended human supervision."
+    }
+  },
+  "legal": {
+    "terms": {
+      "title": "Terms of Service",
+      "accept": "I accept the terms of service"
+    },
+    "privacy": {
+      "title": "Privacy Policy",
+      "accept": "I accept the privacy policy"
+    },
+    "disclaimer": {
+      "title": "Legal Notice",
+      "general": "ZEUS-IA is an enterprise automation platform that assists in administrative, fiscal, and legal processes. Generated results are drafts that require human review and approval before official use."
+    }
+  },
+  "settings": {
+    "notifications": {
+      "title": "Notifications",
+      "email": "Email notifications",
+      "push": "Push notifications",
+      "agentStatus": "Agent status updates"
+    },
+    "appearance": {
+      "title": "Appearance",
+      "theme": "Theme",
+      "themeDark": "Dark (Current)",
+      "themeLight": "Light",
+      "themeAuto": "Auto",
+      "language": "Language"
+    },
+    "security": {
+      "title": "Security",
+      "twoFactor": "Two-factor authentication",
+      "enable": "Enable",
+      "timeout": "Session timeout"
+    },
+    "advanced": {
+      "title": "Advanced",
+      "apiAccess": "API Access",
+      "generateKey": "Generate Key",
+      "exportData": "Export Data",
+      "download": "Download"
+    }
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "view": "View",
+    "close": "Close",
+    "confirm": "Confirm",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "warning": "Warning",
+    "info": "Information"
+  }
+}

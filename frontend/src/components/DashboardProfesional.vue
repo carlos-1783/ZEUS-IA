@@ -282,10 +282,13 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 // i18n
-const { locale, availableLocales } = useI18n()
+const { locale } = useI18n()
 
 // PWA Install
 const { isInstallable, isInstalled, promptInstall } = usePWA()
+
+// Idiomas soportados
+const supportedLanguages = ['es', 'en']
 
 // Idioma actual
 const currentLanguage = computed({
@@ -295,10 +298,9 @@ const currentLanguage = computed({
     if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
       window.localStorage.setItem('zeus_locale', value)
     }
+    console.log('🌍 Idioma cambiado a:', value)
   }
 })
-
-const supportedLanguages = computed(() => availableLocales)
 
 const props = defineProps({
   agents: Array

@@ -138,9 +138,9 @@ const router = useRouter();
 const authStore = useAuthStore();
 const isSidebarOpen = ref(window.innerWidth >= 768);
 
-const { t, locale, availableLocales } = useI18n();
+const { t, locale } = useI18n();
 
-const supportedLocales = computed(() => availableLocales);
+const supportedLocales = ['es', 'en'];
 
 const currentLocale = computed<string>({
   get: () => locale.value,

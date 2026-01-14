@@ -274,10 +274,12 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useAuthStore } from '@/stores/auth'
 import AgentActivityPanel from './AgentActivityPanel.vue'
 import { usePWA } from '@/composables/usePWA'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 // i18n
 const { locale, availableLocales } = useI18n()

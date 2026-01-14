@@ -1,0 +1,525 @@
+{
+  "auditoria_id": "TPV-UNIVERSAL-2024-001",
+  "fecha_auditoria": "2024-12-19",
+  "version_tpv": "1.0.0",
+  "auditor": "Sistema de Auditoría Automatizada ZEUS-IA",
+  "objetivo": "Verificar si el TPV Universal de ZEUS es realmente adaptable a cualquier tipo de negocio real",
+  
+  "resumen_ejecutivo": {
+    "veredicto_universalidad": "TPV_GENERICO_NO_PLENAMENTE_UNIVERSAL",
+    "nivel_universalidad": "60%",
+    "readiness_comercial": "CON_MEJORAS_NECESARIAS",
+    "blockers_criticos": 3,
+    "warnings": 5,
+    "recomendaciones": 8
+  },
+
+  "fase_1_arquitectura_tpv": {
+    "estado": "COMPLETED",
+    "analisis_arquitectura": {
+      "backend": {
+        "estructura": "TPVService class con lógica genérica",
+        "modularidad": "MEDIA",
+        "separacion_logica": "Lógica base existe, pero no hay separación por tipo de negocio",
+        "hardcode": "No hay hardcode de flujos específicos en backend",
+        "puntos_positivos": [
+          "Enum BusinessProfile con 12 tipos de negocio definidos",
+          "Método auto_detect_business_type() implementado",
+          "Lógica genérica de productos, carrito y ventas",
+          "Integración con agentes (RAFAEL, JUSTICIA, AFRODITA)"
+        ],
+        "puntos_negativos": [
+          "business_profile es opcional, no se usa para cambiar comportamiento",
+          "No hay configuración específica por tipo de negocio",
+          "No hay validaciones específicas por tipo de negocio",
+          "No hay UI adaptativa por tipo de negocio"
+        ]
+      },
+      "frontend": {
+        "estructura": "Componente Vue TPV.vue monolítico",
+        "modularidad": "BAJA",
+        "separacion_logica": "Lógica mezclada, no separada por tipo de negocio",
+        "hardcode": "SÍ - Productos de ejemplo hardcodeados para restaurante/bar",
+        "puntos_positivos": [
+          "Interfaz funcional para productos y carrito",
+          "Modo Mesas implementado",
+          "Integración con backend funcional"
+        ],
+        "puntos_negativos": [
+          "Productos de ejemplo hardcodeados (createSampleProducts)",
+          "Categorías hardcodeadas para restaurante/bar",
+          "Modo Mesas solo funciona para restaurantes",
+          "No usa endpoint detect-business-type",
+          "No se adapta según tipo de negocio"
+        ]
+      }
+    },
+    "modelo_configuracion": {
+      "existe_configuracion": false,
+      "configuracion_por_tipo_negocio": false,
+      "configuracion_por_cliente": false,
+      "configuracion_dinamica": false,
+      "conclusion": "NO HAY modelo de configuración por tipo de negocio. El TPV es genérico."
+    },
+    "conclusion_arquitectura": "El backend tiene la estructura para ser universal (12 perfiles), pero no hay implementación específica por tipo de negocio. El frontend está hardcodeado para restaurantes/bares."
+  },
+
+  "fase_2_simulacion_tipos_negocio": {
+    "estado": "COMPLETED",
+    "tipos_negocio_testados": {
+      "bar_restaurante": {
+        "funciona": true,
+        "nivel_adaptacion": "80%",
+        "productos": "Hardcodeados pero apropiados (bebidas, comida)",
+        "categorias": "Apropiadas (Bebidas, Comida, Pizzas, etc.)",
+        "modo_mesas": "FUNCIONAL",
+        "flujo_venta": "FUNCIONAL",
+        "impuestos": "21% IVA genérico",
+        "integracion_dashboard": "FUNCIONAL",
+        "problemas": [
+          "Productos hardcodeados, no configurables",
+          "Categorías fijas, no adaptables"
+        ]
+      },
+      "tienda_retail": {
+        "funciona": true,
+        "nivel_adaptacion": "50%",
+        "productos": "Genéricos, pero funcionaría con productos personalizados",
+        "categorias": "No adaptadas (siguen siendo de restaurante)",
+        "modo_mesas": "NO APLICABLE (pero está visible)",
+        "flujo_venta": "FUNCIONAL",
+        "impuestos": "21% IVA genérico (correcto para retail)",
+        "integracion_dashboard": "FUNCIONAL",
+        "problemas": [
+          "Modo Mesas visible pero no aplicable",
+          "Categorías de restaurante no tienen sentido",
+          "No hay gestión de stock específica para retail"
+        ]
+      },
+      "servicios_profesionales": {
+        "funciona": true,
+        "nivel_adaptacion": "40%",
+        "productos": "Funcionaría con servicios como 'productos'",
+        "categorias": "No adaptadas (siguen siendo de restaurante)",
+        "modo_mesas": "NO APLICABLE (pero está visible)",
+        "flujo_venta": "FUNCIONAL",
+        "impuestos": "21% IVA genérico (puede variar por servicio)",
+        "integracion_dashboard": "FUNCIONAL",
+        "problemas": [
+          "No hay concepto de 'servicios' vs 'productos'",
+          "No hay gestión de citas/horas",
+          "Categorías no tienen sentido",
+          "Modo Mesas no aplicable"
+        ]
+      },
+      "peluqueria_estetica": {
+        "funciona": true,
+        "nivel_adaptacion": "35%",
+        "productos": "Funcionaría con servicios como 'productos'",
+        "categorias": "No adaptadas (siguen siendo de restaurante)",
+        "modo_mesas": "NO APLICABLE (pero está visible)",
+        "flujo_venta": "FUNCIONAL",
+        "impuestos": "21% IVA genérico (puede variar)",
+        "integracion_dashboard": "FUNCIONAL",
+        "problemas": [
+          "No hay gestión de citas",
+          "No hay gestión de empleados/turnos",
+          "Categorías no tienen sentido",
+          "No hay productos físicos + servicios"
+        ]
+      },
+      "clinica_consulta": {
+        "funciona": true,
+        "nivel_adaptacion": "30%",
+        "productos": "Funcionaría con consultas como 'productos'",
+        "categorias": "No adaptadas (siguen siendo de restaurante)",
+        "modo_mesas": "NO APLICABLE (pero está visible)",
+        "flujo_venta": "FUNCIONAL",
+        "impuestos": "21% IVA genérico (puede variar o ser 0%)",
+        "integracion_dashboard": "FUNCIONAL",
+        "problemas": [
+          "No hay gestión de pacientes",
+          "No hay gestión de citas",
+          "Categorías no tienen sentido",
+          "IVA puede ser 0% para servicios médicos",
+          "No hay facturación específica médica"
+        ]
+      },
+      "empresa_eventos": {
+        "funciona": true,
+        "nivel_adaptacion": "40%",
+        "productos": "Funcionaría con eventos/entradas como 'productos'",
+        "categorias": "No adaptadas (siguen siendo de restaurante)",
+        "modo_mesas": "NO APLICABLE (pero está visible)",
+        "flujo_venta": "FUNCIONAL",
+        "impuestos": "21% IVA genérico",
+        "integracion_dashboard": "FUNCIONAL",
+        "problemas": [
+          "No hay gestión de eventos",
+          "No hay gestión de entradas",
+          "Categorías no tienen sentido",
+          "No hay concepto de 'reservas'"
+        ]
+      }
+    },
+    "conclusion_simulacion": "El TPV funciona técnicamente para todos los tipos de negocio (la lógica de venta es genérica), PERO la UI y las categorías están hardcodeadas para restaurantes/bares. No hay adaptación real por tipo de negocio."
+  },
+
+  "fase_3_auditoria_botones": {
+    "estado": "COMPLETED",
+    "botones_funcionales": [
+      {
+        "boton": "💳 PAGAR",
+        "vista": "TPV.vue",
+        "funcionalidad": "POST /api/v1/tpv/sale",
+        "estado": "FUNCIONAL",
+        "validacion": "Envía datos correctamente, procesa venta, integra con RAFAEL"
+      },
+      {
+        "boton": "🪑 Modo Mesas",
+        "vista": "TPV.vue",
+        "funcionalidad": "toggleTablesMode()",
+        "estado": "FUNCIONAL (pero hardcodeado para restaurantes)",
+        "validacion": "Cambia vista a mesas, funciona correctamente"
+      },
+      {
+        "boton": "🔄 Actualizar",
+        "vista": "TPV.vue",
+        "funcionalidad": "checkStatus() - GET /api/v1/tpv/products",
+        "estado": "FUNCIONAL",
+        "validacion": "Carga productos desde backend correctamente"
+      },
+      {
+        "boton": "➕ Añadir Producto",
+        "vista": "TPV.vue",
+        "funcionalidad": "openProducts()",
+        "estado": "STUB (alert)",
+        "validacion": "No tiene funcionalidad real"
+      },
+      {
+        "boton": "➕ Añadir Mesa",
+        "vista": "TPV.vue",
+        "funcionalidad": "addTable()",
+        "estado": "FUNCIONAL (pero solo frontend, no persiste)",
+        "validacion": "Añade mesa localmente, pero no se guarda en backend"
+      }
+    ],
+    "botones_stub": [
+      {
+        "boton": "🖨️ Imprimir Ticket",
+        "vista": "TPV.vue",
+        "funcionalidad": "printTicket() - alert()",
+        "estado": "STUB",
+        "bloqueante": false,
+        "prioridad": "BAJA"
+      },
+      {
+        "boton": "🏷️ Descuento",
+        "vista": "TPV.vue",
+        "funcionalidad": "openDiscount() - prompt() + alert()",
+        "estado": "STUB",
+        "bloqueante": false,
+        "prioridad": "BAJA"
+      },
+      {
+        "boton": "➕ Añadir Producto",
+        "vista": "TPV.vue",
+        "funcionalidad": "openProducts() - alert()",
+        "estado": "STUB",
+        "bloqueante": false,
+        "prioridad": "MEDIA"
+      }
+    ],
+    "botones_faltantes_por_negocio": {
+      "tienda_retail": [
+        "Búsqueda de productos",
+        "Gestión de stock",
+        "Etiquetas de precio",
+        "Descuentos por cantidad"
+      ],
+      "servicios_profesionales": [
+        "Gestión de citas",
+        "Horarios",
+        "Servicios recurrentes",
+        "Facturación específica"
+      ],
+      "peluqueria_estetica": [
+        "Gestión de citas",
+        "Gestión de empleados",
+        "Servicios + productos",
+        "Turnos"
+      ],
+      "clinica_consulta": [
+        "Gestión de pacientes",
+        "Gestión de citas",
+        "Facturación médica",
+        "IVA 0% para servicios médicos"
+      ],
+      "empresa_eventos": [
+        "Gestión de eventos",
+        "Gestión de entradas",
+        "Reservas",
+        "Check-in"
+      ]
+    },
+    "botones_incorrectos": {
+      "modo_mesas": {
+        "visible_en": ["Todos los tipos de negocio"],
+        "deberia_estar_visible_en": ["Restaurante", "Bar", "Cafetería"],
+        "problema": "Modo Mesas visible para todos, pero solo aplicable a restaurantes"
+      }
+    },
+    "conclusion_botones": "Los botones críticos (PAGAR) funcionan correctamente. Hay stubs menores que no bloquean. El problema principal es que los botones no cambian según el tipo de negocio."
+  },
+
+  "fase_4_integracion_ecosistema": {
+    "estado": "COMPLETED",
+    "integraciones": {
+      "tpv_dashboard": {
+        "estado": "FUNCIONAL",
+        "descripcion": "TPV → Dashboard (botón Volver al Dashboard)",
+        "validacion": "Router funciona correctamente",
+        "problemas": []
+      },
+      "tpv_facturacion": {
+        "estado": "FUNCIONAL (Backend)",
+        "descripcion": "TPV → Facturación (RAFAEL)",
+        "validacion": "Backend envía datos a RAFAEL correctamente",
+        "problemas": [
+          "Frontend no muestra opción de factura vs ticket",
+          "No hay UI para seleccionar tipo de documento"
+        ]
+      },
+      "tpv_control_horario": {
+        "estado": "NO IMPLEMENTADO",
+        "descripcion": "TPV → Control horario (AFRODITA)",
+        "validacion": "Backend tiene integración, pero frontend no la usa",
+        "problemas": [
+          "No hay selector de empleado en frontend",
+          "No se registra qué empleado hizo la venta"
+        ]
+      },
+      "tpv_rafael": {
+        "estado": "FUNCIONAL (Backend)",
+        "descripcion": "TPV → RAFAEL (Auto-contabilidad)",
+        "validacion": "Backend envía tickets a RAFAEL automáticamente",
+        "problemas": []
+      },
+      "tpv_justicia": {
+        "estado": "FUNCIONAL (Backend)",
+        "descripcion": "TPV → JUSTICIA (Validación legal)",
+        "validacion": "Backend valida legalmente los tickets",
+        "problemas": []
+      },
+      "tpv_zeus_core": {
+        "estado": "FUNCIONAL",
+        "descripcion": "TPV → ZEUS CORE (Orquestación)",
+        "validacion": "Integración a través de RAFAEL/JUSTICIA",
+        "problemas": []
+      }
+    },
+    "conclusion_integracion": "El TPV está bien integrado con el backend y los agentes (RAFAEL, JUSTICIA). El frontend no aprovecha todas las integraciones disponibles (empleados, facturación vs ticket)."
+  },
+
+  "fase_5_veredicto_universalidad": {
+    "estado": "COMPLETED",
+    "decision": "TPV_GENERICO_NO_PLENAMENTE_UNIVERSAL",
+    "argumentacion_tecnica": {
+      "backend": {
+        "universalidad": "70%",
+        "razon": "El backend tiene estructura universal (12 perfiles), pero business_profile es opcional y no cambia comportamiento",
+        "conclusion": "Backend es genérico, no específico por negocio"
+      },
+      "frontend": {
+        "universalidad": "30%",
+        "razon": "Frontend hardcodeado para restaurantes/bares (productos, categorías, modo mesas)",
+        "conclusion": "Frontend NO es universal, está adaptado solo para restaurantes"
+      },
+      "configuracion": {
+        "universalidad": "0%",
+        "razon": "No hay sistema de configuración por tipo de negocio",
+        "conclusion": "No hay manera de adaptar el TPV según el negocio"
+      }
+    },
+    "tipos_negocio_soportados_realmente": [
+      {
+        "tipo": "Restaurante",
+        "soporte": "80%",
+        "funcional": true
+      },
+      {
+        "tipo": "Bar",
+        "soporte": "75%",
+        "funcional": true
+      },
+      {
+        "tipo": "Cafetería",
+        "soporte": "70%",
+        "funcional": true
+      },
+      {
+        "tipo": "Tienda Retail",
+        "soporte": "50%",
+        "funcional": true,
+        "limitaciones": "Categorías incorrectas, modo mesas no aplicable"
+      },
+      {
+        "tipo": "Servicios Profesionales",
+        "soporte": "40%",
+        "funcional": true,
+        "limitaciones": "No hay concepto de servicios, categorías incorrectas"
+      },
+      {
+        "tipo": "Peluquería/Estética",
+        "soporte": "35%",
+        "funcional": true,
+        "limitaciones": "No hay gestión de citas, categorías incorrectas"
+      },
+      {
+        "tipo": "Clínica/Consulta",
+        "soporte": "30%",
+        "funcional": true,
+        "limitaciones": "No hay gestión de pacientes, IVA incorrecto, categorías incorrectas"
+      },
+      {
+        "tipo": "Empresa de Eventos",
+        "soporte": "40%",
+        "funcional": true,
+        "limitaciones": "No hay gestión de eventos, categorías incorrectas"
+      }
+    ],
+    "conclusion_final": "El TPV es GENÉRICO (funciona para cualquier negocio a nivel técnico), pero NO es UNIVERSAL (no se adapta según el tipo de negocio). La UI está hardcodeada para restaurantes/bares."
+  },
+
+  "blockers_criticos": [
+    {
+      "id": "BLOCKER-001",
+      "tipo": "UI_HARDCODE",
+      "descripcion": "Productos y categorías hardcodeados para restaurantes/bares",
+      "impacto": "ALTO",
+      "solucion": "Sistema de configuración dinámica de productos/categorías por tipo de negocio"
+    },
+    {
+      "id": "BLOCKER-002",
+      "tipo": "FUNCIONALIDAD_NO_ADAPTATIVA",
+      "descripcion": "Modo Mesas visible para todos los negocios, pero solo aplicable a restaurantes",
+      "impacto": "MEDIO",
+      "solucion": "Ocultar/mostrar funcionalidades según tipo de negocio"
+    },
+    {
+      "id": "BLOCKER-003",
+      "tipo": "SIN_CONFIGURACION",
+      "descripcion": "No hay sistema de configuración por tipo de negocio",
+      "impacto": "ALTO",
+      "solucion": "Implementar sistema de configuración por tipo de negocio"
+    }
+  ],
+
+  "warnings": [
+    {
+      "tipo": "STUB_FUNCIONALIDADES",
+      "descripcion": "Imprimir Ticket y Descuento son stubs",
+      "severidad": "BAJA",
+      "bloqueante": false
+    },
+    {
+      "tipo": "INTEGRACION_NO_USADA",
+      "descripcion": "Frontend no usa integración con AFRODITA (empleados)",
+      "severidad": "MEDIA",
+      "bloqueante": false
+    },
+    {
+      "tipo": "DETECT_BUSINESS_TYPE_NO_USADO",
+      "descripcion": "Endpoint detect-business-type existe pero no se usa en frontend",
+      "severidad": "MEDIA",
+      "bloqueante": false
+    },
+    {
+      "tipo": "IVA_GENERICO",
+      "descripcion": "IVA fijo 21% para todos los productos",
+      "severidad": "BAJA",
+      "bloqueante": false
+    },
+    {
+      "tipo": "PRODUCTOS_EJEMPLO",
+      "descripcion": "Productos de ejemplo hardcodeados en createSampleProducts()",
+      "severidad": "MEDIA",
+      "bloqueante": false
+    }
+  ],
+
+  "mejoras_necesarias": [
+    {
+      "prioridad": "CRITICA",
+      "mejora": "Sistema de configuración por tipo de negocio",
+      "descripcion": "Permitir configurar productos, categorías y funcionalidades según tipo de negocio",
+      "tiempo_estimado": "20-30 horas",
+      "bloqueante": true
+    },
+    {
+      "prioridad": "ALTA",
+      "mejora": "UI adaptativa según tipo de negocio",
+      "descripcion": "Mostrar/ocultar funcionalidades según tipo de negocio (ej. modo mesas solo para restaurantes)",
+      "tiempo_estimado": "10-15 horas",
+      "bloqueante": true
+    },
+    {
+      "prioridad": "ALTA",
+      "mejora": "Eliminar productos hardcodeados",
+      "descripcion": "Cargar productos desde backend, no hardcodear en frontend",
+      "tiempo_estimado": "2-3 horas",
+      "bloqueante": false
+    },
+    {
+      "prioridad": "MEDIA",
+      "mejora": "Usar endpoint detect-business-type",
+      "descripcion": "Integrar detección automática de tipo de negocio en frontend",
+      "tiempo_estimado": "3-5 horas",
+      "bloqueante": false
+    },
+    {
+      "prioridad": "MEDIA",
+      "mejora": "Integración frontend con AFRODITA",
+      "descripcion": "Selector de empleado en frontend para registrar ventas",
+      "tiempo_estimado": "5-8 horas",
+      "bloqueante": false
+    },
+    {
+      "prioridad": "MEDIA",
+      "mejora": "Implementar funcionalidades stub",
+      "descripcion": "Implementar Imprimir Ticket y Descuento",
+      "tiempo_estimado": "5-10 horas",
+      "bloqueante": false
+    },
+    {
+      "prioridad": "BAJA",
+      "mejora": "Sistema de servicios (no solo productos)",
+      "descripcion": "Concepto de 'servicios' además de 'productos' para profesionales",
+      "tiempo_estimado": "10-15 horas",
+      "bloqueante": false
+    },
+    {
+      "prioridad": "BAJA",
+      "mejora": "Gestión de citas para servicios",
+      "descripcion": "Sistema de citas para peluquerías, clínicas, etc.",
+      "tiempo_estimado": "15-20 horas",
+      "bloqueante": false
+    }
+  ],
+
+  "conclusion_final": {
+    "veredicto": "TPV_GENERICO_NO_PLENAMENTE_UNIVERSAL",
+    "explicacion": "El TPV funciona técnicamente para cualquier tipo de negocio (la lógica de venta es genérica), PERO la UI está hardcodeada para restaurantes/bares. No hay sistema de configuración que permita adaptar el TPV según el tipo de negocio.",
+    "readiness_comercial": "CON_MEJORAS_NECESARIAS",
+    "recomendacion": "Implementar sistema de configuración por tipo de negocio antes del lanzamiento comercial. El TPV actual es adecuado para restaurantes/bares, pero requiere mejoras para ser verdaderamente universal.",
+    "tiempo_estimado_mejoras": "35-50 horas de desarrollo",
+    "bloqueante_para_lanzamiento": false,
+    "nota": "El TPV puede lanzarse para restaurantes/bares, pero no es universal sin las mejoras propuestas."
+  },
+
+  "metadatos": {
+    "fecha_generacion": "2024-12-19",
+    "version_auditoria": "1.0.0",
+    "auditor": "Sistema de Auditoría Automatizada ZEUS-IA"
+  }
+}

@@ -310,6 +310,13 @@ const selectedAgent = ref(null)
 const currentView = ref('dashboard')
 const sidebarOpen = ref(false)
 
+// Settings
+const notificationSettings = ref({
+  email: true,
+  push: true,
+  agentStatus: false
+})
+
 const closeSidebarOnMobile = () => {
   // Cerrar sidebar en móvil después de seleccionar una opción
   if (window.innerWidth <= 768) {

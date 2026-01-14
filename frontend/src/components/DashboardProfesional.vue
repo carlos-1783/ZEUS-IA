@@ -282,7 +282,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 // i18n
-const { locale } = useI18n()
+const { locale, t } = useI18n()
 
 // PWA Install
 const { isInstallable, isInstalled, promptInstall } = usePWA()

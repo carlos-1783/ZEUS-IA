@@ -60,6 +60,7 @@ class TPVService:
         self.terminals: Dict[str, Dict[str, Any]] = {}
         self.pricing_rules: List[Dict[str, Any]] = []
         self.inventory_sync_enabled = True
+        self.config: Dict[str, Any] = {}  # Configuración del TPV por tipo de negocio
         
         # Integraciones
         self.rafael_integration = None
@@ -67,6 +68,204 @@ class TPVService:
         self.afrodita_integration = None
         
         logger.info("💳 TPV Universal Enterprise inicializado")
+    
+    def get_business_config(self, profile: BusinessProfile) -> Dict[str, Any]:
+        """
+        Obtener configuración específica por tipo de negocio
+        Define flags funcionales según el tipo de negocio
+        """
+        configs = {
+            BusinessProfile.RESTAURANTE: {
+                "tables_enabled": True,
+                "services_enabled": False,
+                "appointments_enabled": False,
+                "inventory_enabled": True,
+                "default_categories": ["Bebidas", "Comida", "Entrantes", "Platos", "Postres", "Bebidas Alcohólicas"],
+                "default_iva_rate": 21.0,
+                "supports_tickets": True,
+                "supports_invoices": True,
+                "requires_employee": False,
+                "requires_customer_data": False
+            },
+            BusinessProfile.BAR: {
+                "tables_enabled": True,
+                "services_enabled": False,
+                "appointments_enabled": False,
+                "inventory_enabled": True,
+                "default_categories": ["Bebidas", "Bebidas Alcohólicas", "Tapas", "Raciones"],
+                "default_iva_rate": 21.0,
+                "supports_tickets": True,
+                "supports_invoices": False,
+                "requires_employee": False,
+                "requires_customer_data": False
+            },
+            BusinessProfile.CAFETERIA: {
+                "tables_enabled": True,
+                "services_enabled": False,
+                "appointments_enabled": False,
+                "inventory_enabled": True,
+                "default_categories": ["Bebidas", "Café", "Bollería", "Bocadillos", "Tostadas"],
+                "default_iva_rate": 21.0,
+                "supports_tickets": True,
+                "supports_invoices": False,
+                "requires_employee": False,
+                "requires_customer_data": False
+            },
+            BusinessProfile.TIENDA_MINORISTA: {
+                "tables_enabled": False,
+                "services_enabled": False,
+                "appointments_enabled": False,
+                "inventory_enabled": True,
+                "default_categories": ["General", "Electrónica", "Ropa", "Hogar", "Alimentación"],
+                "default_iva_rate": 21.0,
+                "supports_tickets": True,
+                "supports_invoices": True,
+                "requires_employee": False,
+                "requires_customer_data": False
+            },
+            BusinessProfile.PELUQUERIA: {
+                "tables_enabled": False,
+                "services_enabled": True,
+                "appointments_enabled": True,
+                "inventory_enabled": True,
+                "default_categories": ["Servicios", "Productos", "Cortes", "Tintes", "Tratamientos"],
+                "default_iva_rate": 21.0,
+                "supports_tickets": True,
+                "supports_invoices": True,
+                "requires_employee": True,
+                "requires_customer_data": True
+            },
+            BusinessProfile.CENTRO_ESTETICO: {
+                "tables_enabled": False,
+                "services_enabled": True,
+                "appointments_enabled": True,
+                "inventory_enabled": True,
+                "default_categories": ["Servicios", "Productos", "Faciales", "Corporales", "Tratamientos"],
+                "default_iva_rate": 21.0,
+                "supports_tickets": True,
+                "supports_invoices": True,
+                "requires_employee": True,
+                "requires_customer_data": True
+            },
+            BusinessProfile.CLINICA: {
+                "tables_enabled": False,
+                "services_enabled": True,
+                "appointments_enabled": True,
+                "inventory_enabled": False,
+                "default_categories": ["Consultas", "Tratamientos", "Servicios Médicos"],
+                "default_iva_rate": 0.0,  # Servicios médicos pueden estar exentos
+                "supports_tickets": False,
+                "supports_invoices": True,
+                "requires_employee": True,
+                "requires_customer_data": True
+            },
+            BusinessProfile.TALLER: {
+                "tables_enabled": False,
+                "services_enabled": True,
+                "appointments_enabled": True,
+                "inventory_enabled": True,
+                "default_categories": ["Servicios", "Repuestos", "Mano de Obra", "Piezas"],
+                "default_iva_rate": 21.0,
+                "supports_tickets": True,
+                "supports_invoices": True,
+                "requires_employee": True,
+                "requires_customer_data": True
+            },
+            BusinessProfile.DISCOTECA: {
+                "tables_enabled": False,
+                "services_enabled": False,
+                "appointments_enabled": False,
+                "inventory_enabled": True,
+                "default_categories": ["Entradas", "Bebidas", "Bebidas Alcohólicas"],
+                "default_iva_rate": 21.0,
+                "supports_tickets": True,
+                "supports_invoices": False,
+                "requires_employee": False,
+                "requires_customer_data": False
+            },
+            BusinessProfile.FARMACIA: {
+                "tables_enabled": False,
+                "services_enabled": False,
+                "appointments_enabled": False,
+                "inventory_enabled": True,
+                "default_categories": ["Medicamentos", "Parafarmacia", "Higiene", "Cosmética"],
+                "default_iva_rate": 4.0,  # Medicamentos reducido
+                "supports_tickets": True,
+                "supports_invoices": True,
+                "requires_employee": True,
+                "requires_customer_data": False
+            },
+            BusinessProfile.LOGISTICA: {
+                "tables_enabled": False,
+                "services_enabled": True,
+                "appointments_enabled": False,
+                "inventory_enabled": False,
+                "default_categories": ["Envíos", "Servicios", "Paquetes"],
+                "default_iva_rate": 21.0,
+                "supports_tickets": False,
+                "supports_invoices": True,
+                "requires_employee": False,
+                "requires_customer_data": True
+            },
+            BusinessProfile.OTROS: {
+                "tables_enabled": False,
+                "services_enabled": False,
+                "appointments_enabled": False,
+                "inventory_enabled": True,
+                "default_categories": ["General"],
+                "default_iva_rate": 21.0,
+                "supports_tickets": True,
+                "supports_invoices": True,
+                "requires_employee": False,
+                "requires_customer_data": False
+            }
+        }
+        
+        return configs.get(profile, configs[BusinessProfile.OTROS])
+    
+    def set_business_profile(self, profile: BusinessProfile, user_id: Optional[int] = None):
+        """
+        Establecer business_profile y cargar configuración
+        Este método debe llamarse cuando se carga el TPV para un usuario
+        """
+        self.business_profile = profile
+        self.config = self.get_business_config(profile)
+        logger.info(f"🏢 Business profile establecido: {profile.value} para usuario {user_id}")
+    
+    def load_user_profile(self, user_data: Dict[str, Any]):
+        """
+        Cargar business_profile desde datos de usuario
+        Si no existe, usar auto-detección o default
+        """
+        business_profile_str = user_data.get("tpv_business_profile")
+        
+        if business_profile_str:
+            try:
+                profile = BusinessProfile(business_profile_str)
+                self.set_business_profile(profile, user_data.get("id"))
+                return profile
+            except ValueError:
+                logger.warning(f"⚠️ Business profile inválido en usuario: {business_profile_str}")
+        
+        # Auto-detección basada en company_name
+        company_name = user_data.get("company_name", "")
+        if company_name:
+            detected = self.auto_detect_business_type({"name": company_name})
+            self.set_business_profile(detected, user_data.get("id"))
+            return detected
+        
+        # Default
+        default_profile = BusinessProfile.OTROS
+        self.set_business_profile(default_profile, user_data.get("id"))
+        return default_profile
+    
+    def require_business_profile(self) -> BusinessProfile:
+        """
+        Requerir business_profile. Si no está establecido, lanzar error.
+        """
+        if not self.business_profile:
+            raise ValueError("Business profile no establecido. Configure el tipo de negocio antes de usar el TPV.")
+        return self.business_profile
     
     def auto_detect_business_type(self, business_data: Dict[str, Any]) -> BusinessProfile:
         """
@@ -232,6 +431,28 @@ class TPVService:
         Returns:
             Dict con ticket generado y metadata
         """
+        # Requerir business_profile
+        try:
+            self.require_business_profile()
+        except ValueError as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
+        
+        # Validaciones según configuración
+        if self.config.get("requires_employee") and not employee_id:
+            return {
+                "success": False,
+                "error": "Este tipo de negocio requiere especificar un empleado"
+            }
+        
+        if self.config.get("requires_customer_data") and not customer_data:
+            return {
+                "success": False,
+                "error": "Este tipo de negocio requiere datos del cliente"
+            }
+        
         if not self.current_cart:
             return {
                 "success": False,
@@ -240,12 +461,17 @@ class TPVService:
         
         cart_total = self.get_cart_total()
         
-        # Generar ticket
-        ticket_id = f"TKT_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+        # Determinar tipo de documento según configuración
+        document_type = TPVDocumentType.TICKET
+        if self.config.get("supports_invoices") and customer_data:
+            document_type = TPVDocumentType.FACTURA
+        
+        # Generar documento (ticket o factura)
+        doc_id = f"{document_type.value.upper()}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
         
         ticket = {
-            "id": ticket_id,
-            "type": TPVDocumentType.TICKET.value,
+            "id": doc_id,
+            "type": document_type.value,
             "date": datetime.utcnow().isoformat(),
             "items": self.current_cart.copy(),
             "totals": cart_total,
@@ -253,7 +479,8 @@ class TPVService:
             "employee_id": employee_id,
             "terminal_id": terminal_id,
             "customer_data": customer_data,
-            "business_profile": self.business_profile.value if self.business_profile else None
+            "business_profile": self.business_profile.value,
+            "config": self.config
         }
         
         # Validar legalidad con JUSTICIA si está integrado
@@ -278,12 +505,14 @@ class TPVService:
         # Limpiar carrito
         self.current_cart = []
         
-        logger.info(f"💳 Venta procesada: {ticket_id} - €{cart_total['total']:.2f}")
+        logger.info(f"💳 Venta procesada: {doc_id} - €{cart_total['total']:.2f} - Tipo: {document_type.value}")
         
         return {
             "success": True,
             "ticket": ticket,
-            "ticket_id": ticket_id
+            "ticket_id": doc_id,
+            "document_type": document_type.value,
+            "business_profile": self.business_profile.value
         }
     
     def _validate_ticket_legality(self, ticket: Dict[str, Any]) -> Dict[str, Any]:

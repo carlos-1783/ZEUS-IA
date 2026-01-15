@@ -24,6 +24,10 @@ class User(Base):
     company_name = Column(String, nullable=True)
     employees = Column(Integer, nullable=True)
     plan = Column(String, nullable=True)  # startup, growth, business, enterprise
+    
+    # TPV Universal - Business Profile
+    tpv_business_profile = Column(String, nullable=True, index=True)  # restaurante, bar, tienda_minorista, etc.
+    tpv_config = Column(Text, nullable=True)  # JSON config: {"tables_enabled": true, "services_enabled": false, etc.}
 
     def __repr__(self):
         return f"<User {self.email}>"

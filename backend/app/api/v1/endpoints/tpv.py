@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
+import logging
 
 from app.db.session import get_db
 from app.core.auth import get_current_active_user, get_current_active_superuser
@@ -13,6 +14,7 @@ from app.models.user import User
 from services.tpv_service import tpv_service, BusinessProfile, PaymentMethod
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class BusinessDataRequest(BaseModel):
@@ -40,6 +42,7 @@ class ProcessSaleRequest(BaseModel):
     employee_id: Optional[str] = None
     terminal_id: Optional[str] = None
     customer_data: Optional[Dict[str, Any]] = None
+    cart_items: Optional[List[Dict[str, Any]]] = None  # Carrito del frontend (opcional, si no se envía usa el del servicio)
 
 
 class GenerateInvoiceRequest(BaseModel):
@@ -54,9 +57,48 @@ class CloseRegisterRequest(BaseModel):
     final_cash: float
 
 
+class SetBusinessProfileRequest(BaseModel):
+    business_profile: str
+
+
 async def _get_tpv_info(current_user: User):
     """Función auxiliar para obtener información del TPV"""
+    from sqlalchemy.orm import Session
+    from app.db.base import SessionLocal
+    
     is_superuser = getattr(current_user, 'is_superuser', False)
+    
+    # Cargar business_profile del usuario si existe
+    db: Session = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == current_user.id).first()
+        if user:
+            user_data = {
+                "id": user.id,
+                "tpv_business_profile": getattr(user, 'tpv_business_profile', None),
+                "company_name": getattr(user, 'company_name', None)
+            }
+            # Cargar perfil del usuario
+            tpv_service.load_user_profile(user_data)
+        else:
+            # Si no hay perfil, usar auto-detección o default
+            if not tpv_service.business_profile:
+                user_data = {
+                    "id": current_user.id,
+                    "company_name": getattr(current_user, 'company_name', None)
+                }
+                tpv_service.load_user_profile(user_data)
+    except Exception as e:
+        logger.error(f"Error cargando perfil de usuario: {e}")
+        # Usar default si hay error
+        if not tpv_service.business_profile:
+            from services.tpv_service import BusinessProfile
+            tpv_service.set_business_profile(BusinessProfile.OTROS)
+    finally:
+        db.close()
+    
+    # Obtener configuración actual
+    config = tpv_service.config if tpv_service.business_profile else {}
     
     return {
         "success": True,
@@ -77,6 +119,7 @@ async def _get_tpv_info(current_user: User):
             "detect_business_type": "/api/v1/tpv/detect-business-type"
         },
         "business_profile": tpv_service.business_profile.value if tpv_service.business_profile else None,
+        "config": config,
         "products_count": len(tpv_service.products),
         "integrations": {
             "rafael": tpv_service.rafael_integration is not None,
@@ -203,6 +246,33 @@ async def process_sale(
             detail=f"Método de pago inválido. Válidos: {[m.value for m in PaymentMethod]}"
         )
     
+    # Sincronizar carrito del frontend con el servicio si se envía
+    if request.cart_items:
+        # Limpiar carrito actual
+        tpv_service.current_cart = []
+        # Añadir items del frontend al carrito del servicio
+        for item in request.cart_items:
+            # El frontend envía {product_id, quantity, unit_price, iva_rate}
+            # Necesitamos obtener el producto completo del servicio
+            product_id = item.get("product_id")
+            quantity = item.get("quantity", 1)
+            if product_id and product_id in tpv_service.products:
+                tpv_service.add_to_cart(product_id, quantity)
+            else:
+                logger.warning(f"Producto {product_id} no encontrado en servicio, creando item temporal")
+                # Crear item temporal si el producto no existe en el servicio
+                tpv_service.current_cart.append({
+                    "product_id": product_id,
+                    "name": f"Producto {product_id}",
+                    "price": item.get("unit_price", 0),
+                    "price_with_iva": item.get("unit_price", 0) * (1 + item.get("iva_rate", 21) / 100),
+                    "quantity": quantity,
+                    "subtotal": item.get("unit_price", 0) * quantity,
+                    "subtotal_with_iva": item.get("unit_price", 0) * quantity * (1 + item.get("iva_rate", 21) / 100),
+                    "iva_rate": item.get("iva_rate", 21),
+                    "category": "General"
+                })
+    
     result = tpv_service.process_sale(
         payment_method=payment_method,
         employee_id=request.employee_id,
@@ -246,6 +316,38 @@ async def close_register(
     return result
 
 
+@router.post("/set-business-profile")
+async def set_business_profile(
+    request: SetBusinessProfileRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Establecer business_profile para el usuario actual"""
+    try:
+        profile = BusinessProfile(request.business_profile)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Business profile inválido. Válidos: {[p.value for p in BusinessProfile]}"
+        )
+    
+    # Actualizar en base de datos
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if user:
+        user.tpv_business_profile = profile.value
+        db.commit()
+    
+    # Actualizar en servicio TPV
+    tpv_service.set_business_profile(profile, current_user.id)
+    
+    return {
+        "success": True,
+        "business_profile": profile.value,
+        "config": tpv_service.config,
+        "message": f"Business profile actualizado a: {profile.value}"
+    }
+
+
 @router.get("/status")
 async def get_tpv_status(
     current_user: User = Depends(get_current_active_user)
@@ -253,10 +355,28 @@ async def get_tpv_status(
     """Obtener estado del TPV - Los superusuarios ven información completa"""
     is_superuser = getattr(current_user, 'is_superuser', False)
     
+    # Cargar perfil del usuario si no está cargado
+    if not tpv_service.business_profile:
+        from sqlalchemy.orm import Session
+        from app.db.base import SessionLocal
+        db: Session = SessionLocal()
+        try:
+            user = db.query(User).filter(User.id == current_user.id).first()
+            if user:
+                user_data = {
+                    "id": user.id,
+                    "tpv_business_profile": getattr(user, 'tpv_business_profile', None),
+                    "company_name": getattr(user, 'company_name', None)
+                }
+                tpv_service.load_user_profile(user_data)
+        finally:
+            db.close()
+    
     # Información básica para todos los usuarios
     status = {
         "success": True,
         "business_profile": tpv_service.business_profile.value if tpv_service.business_profile else None,
+        "config": tpv_service.config if tpv_service.business_profile else {},
         "products_count": len(tpv_service.products),
         "cart_items": len(tpv_service.current_cart),
         "integrations": {

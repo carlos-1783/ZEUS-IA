@@ -1,0 +1,186 @@
+{
+  "fecha": "2024-12-19",
+  "proyecto": "ZEUS-IA - TPV Universal Enterprise",
+  "estado": "COMPLETADO - LISTO PARA TESTING",
+  "objetivo": "Convertir TPV genérico en TPV Universal real, eliminando hardcodeos y activando configuración por tipo de negocio",
+  
+  "cambios_backend": {
+    "modelo_user": {
+      "estado": "✅ COMPLETADO",
+      "cambios": [
+        "Añadido campo `tpv_business_profile` al modelo User",
+        "Añadido campo `tpv_config` (JSON) para configuración personalizada"
+      ]
+    },
+    "tpv_service": {
+      "estado": "✅ COMPLETADO",
+      "cambios": [
+        "Método `get_business_config()` - Configuración por tipo de negocio con flags funcionales",
+        "Método `set_business_profile()` - Establecer y cargar configuración",
+        "Método `load_user_profile()` - Cargar perfil desde base de datos",
+        "Método `require_business_profile()` - Validación obligatoria",
+        "Validaciones en `process_sale()` según configuración (empleado, cliente requeridos)",
+        "Generación automática de ticket o factura según configuración"
+      ],
+      "configuracion_por_negocio": {
+        "restaurante": {
+          "tables_enabled": true,
+          "services_enabled": false,
+          "appointments_enabled": false,
+          "inventory_enabled": true,
+          "default_iva_rate": 21.0,
+          "supports_tickets": true,
+          "supports_invoices": true
+        },
+        "tienda_minorista": {
+          "tables_enabled": false,
+          "services_enabled": false,
+          "inventory_enabled": true,
+          "supports_invoices": true
+        },
+        "peluqueria": {
+          "tables_enabled": false,
+          "services_enabled": true,
+          "appointments_enabled": true,
+          "requires_employee": true,
+          "requires_customer_data": true
+        },
+        "clinica": {
+          "services_enabled": true,
+          "appointments_enabled": true,
+          "default_iva_rate": 0.0,
+          "supports_tickets": false,
+          "supports_invoices": true,
+          "requires_employee": true,
+          "requires_customer_data": true
+        },
+        "total_perfiles": 12
+      }
+    },
+    "endpoints_api": {
+      "estado": "✅ COMPLETADO",
+      "nuevos_endpoints": [
+        "POST /api/v1/tpv/set-business-profile - Establecer business_profile del usuario",
+        "GET /api/v1/tpv - Ahora incluye configuración (config)"
+      ],
+      "endpoints_modificados": [
+        "POST /api/v1/tpv/sale - Acepta cart_items del frontend, sincroniza con servicio"
+      ]
+    }
+  },
+  
+  "cambios_frontend": {
+    "tpv_vue": {
+      "estado": "✅ COMPLETADO",
+      "eliminaciones": [
+        "❌ createSampleProducts() - Eliminado completamente",
+        "❌ Productos hardcodeados de restaurante",
+        "❌ Mesas hardcodeadas por defecto"
+      ],
+      "nuevas_funcionalidades": [
+        "✅ Carga de business_profile desde backend",
+        "✅ Carga de configuración TPV (tpvConfig)",
+        "✅ UI adaptativa según config.tables_enabled",
+        "✅ Validaciones dinámicas según requires_employee / requires_customer_data",
+        "✅ Badge de business_profile en header",
+        "✅ Botón 'Modo Mesas' solo visible si tables_enabled = true",
+        "✅ Iconos genéricos para múltiples tipos de negocio",
+        "✅ Creación de productos usando default_categories y default_iva_rate",
+        "✅ Generación de ticket/descarga como archivo",
+        "✅ Aplicación real de descuentos",
+        "✅ Creación de productos conectada al backend"
+      ]
+    }
+  },
+  
+  "validaciones_implementadas": {
+    "backend": {
+      "business_profile_obligatorio": "✅ process_sale() valida que business_profile esté establecido",
+      "validacion_empleado": "✅ Si requires_employee=true, valida employee_id",
+      "validacion_cliente": "✅ Si requires_customer_data=true, valida customer_data",
+      "tipo_documento": "✅ Genera ticket o factura según supports_tickets/supports_invoices"
+    },
+    "frontend": {
+      "validacion_empleado": "✅ Prompt si requires_employee=true",
+      "validacion_cliente": "✅ Prompt si requires_customer_data=true",
+      "validacion_mesas": "✅ Botón mesas solo si tables_enabled=true",
+      "validacion_productos": "✅ Mensaje si no hay business_profile configurado"
+    }
+  },
+  
+  "tipos_negocio_soportados": [
+    "restaurante",
+    "bar",
+    "cafetería",
+    "tienda_minorista",
+    "peluquería",
+    "centro_estético",
+    "taller",
+    "clínica",
+    "discoteca",
+    "farmacia",
+    "logística",
+    "otros"
+  ],
+  
+  "integraciones_ecosistema": {
+    "rafael": {
+      "estado": "✅ INTEGRADO",
+      "descripcion": "Ventas se envían automáticamente a RAFAEL para contabilidad"
+    },
+    "justicia": {
+      "estado": "✅ INTEGRADO",
+      "descripcion": "Validación legal/fiscal de tickets con JUSTICIA"
+    },
+    "afrodita": {
+      "estado": "✅ INTEGRADO",
+      "descripcion": "Sincronización de empleados con AFRODITA"
+    }
+  },
+  
+  "botones_funcionales": {
+    "pagar": "✅ Conectado a /api/v1/tpv/sale, procesa venta real",
+    "imprimir_ticket": "✅ Genera y descarga ticket como archivo .txt",
+    "descuento": "✅ Aplica descuento real al carrito",
+    "añadir_producto": "✅ Crea producto real en backend",
+    "modo_mesas": "✅ Visible solo si tables_enabled=true",
+    "limpiar_carrito": "✅ Funcional",
+    "actualizar": "✅ Recarga productos y configuración"
+  },
+  
+  "pendientes_mejoras_futuras": [
+    "Modal para selección de empleado (en lugar de prompt)",
+    "Modal para datos de cliente (en lugar de prompt)",
+    "Selector de método de pago en UI",
+    "Persistencia de mesas en base de datos",
+    "Gestión completa de productos (CRUD)",
+    "Historial de ventas",
+    "Reportes por tipo de negocio"
+  ],
+  
+  "testing_requerido": {
+    "por_tipo_negocio": [
+      "Probar TPV con business_profile = restaurante",
+      "Probar TPV con business_profile = tienda_minorista",
+      "Probar TPV con business_profile = peluqueria (validar empleado/cliente)",
+      "Probar TPV con business_profile = clinica (validar IVA 0%, solo facturas)"
+    ],
+    "flujos_criticos": [
+      "Crear usuario sin business_profile → Verificar auto-detección",
+      "Configurar business_profile → Verificar carga de configuración",
+      "Añadir producto → Verificar creación en backend",
+      "Procesar venta → Verificar integración RAFAEL/JUSTICIA/AFRODITA",
+      "Validar que botones aparecen/desaparecen según configuración"
+    ]
+  },
+  
+  "conclusion": {
+    "tpv_universal": true,
+    "hardcode_removed": true,
+    "ui_adaptive": true,
+    "buttons_functional": true,
+    "ecosystem_integrated": true,
+    "commercial_ready": "PENDIENTE_TESTING",
+    "recomendacion": "El TPV Universal está funcionalmente completo. Requiere testing exhaustivo por tipo de negocio antes del lanzamiento comercial. Todas las funcionalidades críticas están implementadas y conectadas al backend."
+  }
+}

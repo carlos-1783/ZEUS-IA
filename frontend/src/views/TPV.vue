@@ -13,12 +13,20 @@
         <p class="tpv-subtitle">Sistema de Punto de Venta</p>
       </div>
       <div class="header-actions">
-        <button @click="toggleTablesMode" class="header-btn" :class="{ active: tablesMode }">
+        <button 
+          v-if="tpvConfig.tables_enabled"
+          @click="toggleTablesMode" 
+          class="header-btn" 
+          :class="{ active: tablesMode }"
+        >
           🪑 {{ tablesMode ? 'Ver Productos' : 'Modo Mesas' }}
         </button>
         <button @click="checkStatus" class="header-btn">
           🔄 Actualizar
         </button>
+        <div v-if="businessProfile" class="business-profile-badge">
+          🏢 {{ getBusinessProfileLabel(businessProfile) }}
+        </div>
       </div>
     </div>
 
@@ -68,15 +76,19 @@
           
           <!-- Mensaje si no hay productos -->
           <div v-if="filteredProducts.length === 0" class="no-products">
-            <p>📦 No hay productos en esta categoría</p>
-            <button @click="openProducts" class="add-product-btn">
+            <p>📦 No hay productos configurados</p>
+            <button @click="openProducts" class="add-product-btn" v-if="!businessProfileLoading">
               ➕ Añadir Producto
             </button>
+            <p v-if="businessProfileLoading" class="loading-message">Cargando configuración...</p>
+            <p v-else-if="!businessProfile" class="error-message">
+              ⚠️ Por favor, configura el tipo de negocio antes de usar el TPV
+            </p>
           </div>
         </div>
 
-        <!-- Vista de Mesas (Restaurantes) -->
-        <div class="tables-grid" v-if="tablesMode">
+        <!-- Vista de Mesas (Solo si está habilitado en config) -->
+        <div class="tables-grid" v-if="tablesMode && tpvConfig.tables_enabled">
           <div 
             v-for="table in tables" 
             :key="table.id"
@@ -178,8 +190,13 @@
             <button @click="processPayment" class="action-btn pay-btn" :disabled="cart.length === 0">
               💳 PAGAR €{{ formatPrice(total) }}
             </button>
-            <button @click="printTicket" class="action-btn secondary-btn" :disabled="cart.length === 0">
-              🖨️ Imprimir Ticket
+            <button 
+              v-if="tpvConfig.supports_tickets !== false"
+              @click="printTicket" 
+              class="action-btn secondary-btn" 
+              :disabled="cart.length === 0"
+            >
+              🖨️ {{ tpvConfig.supports_invoices && cart.length > 0 ? 'Generar Ticket/Factura' : 'Imprimir Ticket' }}
             </button>
             <button @click="openDiscount" class="action-btn secondary-btn" :disabled="cart.length === 0">
               🏷️ Descuento
@@ -216,14 +233,12 @@ const cart = ref([])
 const selectedCategory = ref('all')
 const tablesMode = ref(false)
 const selectedTable = ref(null)
-const tables = ref([
-  { id: 1, number: 1, status: 'free', order_total: 0 },
-  { id: 2, number: 2, status: 'free', order_total: 0 },
-  { id: 3, number: 3, status: 'occupied', order_total: 45.50 },
-  { id: 4, number: 4, status: 'free', order_total: 0 },
-  { id: 5, number: 5, status: 'occupied', order_total: 78.20 },
-  { id: 6, number: 6, status: 'free', order_total: 0 },
-])
+const tables = ref([])
+
+// TPV Configuration from backend
+const businessProfile = ref(null)
+const tpvConfig = ref({})
+const businessProfileLoading = ref(true)
 
 // Teclado numérico
 const keyboardLayout = [
@@ -271,16 +286,26 @@ const formatPrice = (price) => {
 }
 
 const getProductIcon = (category) => {
+  // Iconos más genéricos que funcionan para cualquier tipo de negocio
   const icons = {
     'Bebidas': '🥤',
+    'Bebidas Alcohólicas': '🍷',
     'Comida': '🍽️',
     'Postres': '🍰',
     'Entrantes': '🥗',
     'Platos': '🍛',
     'Pizzas': '🍕',
     'Hamburguesas': '🍔',
-    'Bebidas Alcohólicas': '🍷',
     'Café': '☕',
+    'Servicios': '💼',
+    'Productos': '📦',
+    'Consultas': '🏥',
+    'Tratamientos': '✨',
+    'Cortes': '✂️',
+    'Repuestos': '🔧',
+    'Envíos': '📦',
+    'Entradas': '🎫',
+    'Medicamentos': '💊',
     'General': '📦',
     'Otros': '📦'
   }
@@ -310,36 +335,64 @@ const checkStatus = async () => {
       if (productsData.success) {
         products.value = productsData.products || []
         console.log('✅ Productos cargados:', products.value.length)
-        
-        // Si no hay productos, crear algunos de ejemplo
-        if (products.value.length === 0) {
-          createSampleProducts()
-        }
       }
     }
+    
+    // Cargar configuración del TPV
+    await loadTPVConfig()
   } catch (err) {
     console.error('Error:', err)
     error.value = err.message || 'Error al cargar el TPV'
-    // Aún así, crear productos de ejemplo
-    createSampleProducts()
   } finally {
     loading.value = false
+    businessProfileLoading.value = false
   }
 }
 
-const createSampleProducts = () => {
-  products.value = [
-    { id: '1', name: 'Coca-Cola', price: 2.50, price_with_iva: 3.03, category: 'Bebidas', iva_rate: 21, stock: 50 },
-    { id: '2', name: 'Agua Mineral', price: 1.50, price_with_iva: 1.82, category: 'Bebidas', iva_rate: 21, stock: 100 },
-    { id: '3', name: 'Café Expreso', price: 1.20, price_with_iva: 1.45, category: 'Café', iva_rate: 21, stock: null },
-    { id: '4', name: 'Hamburguesa Clásica', price: 8.50, price_with_iva: 10.29, category: 'Hamburguesas', iva_rate: 21, stock: 20 },
-    { id: '5', name: 'Pizza Margarita', price: 9.00, price_with_iva: 10.89, category: 'Pizzas', iva_rate: 21, stock: 15 },
-    { id: '6', name: 'Ensalada Mixta', price: 6.50, price_with_iva: 7.87, category: 'Entrantes', iva_rate: 21, stock: 30 },
-    { id: '7', name: 'Pasta Carbonara', price: 11.00, price_with_iva: 13.31, category: 'Platos', iva_rate: 21, stock: 25 },
-    { id: '8', name: 'Tarta de Chocolate', price: 4.50, price_with_iva: 5.45, category: 'Postres', iva_rate: 21, stock: 12 },
-    { id: '9', name: 'Cerveza', price: 3.00, price_with_iva: 3.63, category: 'Bebidas Alcohólicas', iva_rate: 21, stock: 80 },
-    { id: '10', name: 'Vino Tinto', price: 15.00, price_with_iva: 18.15, category: 'Bebidas Alcohólicas', iva_rate: 21, stock: 20 },
-  ]
+const loadTPVConfig = async () => {
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) return
+    
+    const response = await fetch('/api/v1/tpv', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      businessProfile.value = data.business_profile
+      tpvConfig.value = data.config || {}
+      console.log('✅ Configuración TPV cargada:', businessProfile.value, tpvConfig.value)
+      
+      // Si no hay business_profile, mostrar configuración inicial
+      if (!businessProfile.value) {
+        error.value = 'Por favor, configura el tipo de negocio antes de usar el TPV'
+      }
+    }
+  } catch (err) {
+    console.error('Error cargando configuración TPV:', err)
+  }
+}
+
+const getBusinessProfileLabel = (profile) => {
+  const labels = {
+    'restaurante': 'Restaurante',
+    'bar': 'Bar',
+    'cafetería': 'Cafetería',
+    'tienda_minorista': 'Tienda',
+    'peluquería': 'Peluquería',
+    'centro_estético': 'Centro Estético',
+    'taller': 'Taller',
+    'clínica': 'Clínica',
+    'discoteca': 'Discoteca',
+    'farmacia': 'Farmacia',
+    'logística': 'Logística',
+    'otros': 'Otros'
+  }
+  return labels[profile] || profile
 }
 
 const addProductToCart = (product) => {
@@ -398,6 +451,10 @@ const handleKeyPress = (key) => {
 }
 
 const toggleTablesMode = () => {
+  if (!tpvConfig.value.tables_enabled) {
+    alert('⚠️ El modo mesas no está disponible para este tipo de negocio')
+    return
+  }
   tablesMode.value = !tablesMode.value
 }
 
@@ -431,19 +488,39 @@ const processPayment = async () => {
       throw new Error('No hay token de autenticación')
     }
     
+    // Validar según configuración
+    let employeeId = null
+    if (tpvConfig.value.requires_employee) {
+      // En una implementación completa, esto pediría seleccionar empleado
+      employeeId = prompt('ID del empleado (requerido para este tipo de negocio):')
+      if (!employeeId) {
+        alert('⚠️ Debe especificar un empleado para procesar esta venta')
+        return
+      }
+    }
+    
+    let customerData = null
+    if (tpvConfig.value.requires_customer_data) {
+      const customerName = prompt('Nombre del cliente (requerido):')
+      if (!customerName) {
+        alert('⚠️ Debe especificar un cliente para procesar esta venta')
+        return
+      }
+      customerData = { name: customerName }
+    }
+    
     // Preparar datos de la venta
     const saleData = {
       payment_method: 'efectivo', // Por defecto, se puede cambiar después
+      employee_id: employeeId,
+      customer_data: customerData,
+      terminal_id: null,
       cart_items: cart.value.map(item => ({
         product_id: item.product.id,
         quantity: item.quantity,
         unit_price: item.product.price,
         iva_rate: item.product.iva_rate || 21.0
-      })),
-      subtotal: subtotal.value,
-      iva_total: ivaTotal.value,
-      total: total.value,
-      table_id: selectedTable.value?.id || null
+      }))
     }
     
     // Procesar pago en backend
@@ -477,24 +554,138 @@ const processPayment = async () => {
   }
 }
 
-const printTicket = () => {
-  alert('🖨️ Imprimiendo ticket...')
-}
+const printTicket = async () => {
+  if (cart.value.length === 0) {
+    alert('⚠️ El carrito está vacío')
+    return
+  }
+  
+  try {
+    // En una implementación completa, esto generaría y descargaría/imprimiría el ticket
+    // Por ahora, mostramos un mensaje informativo
+    const ticketData = {
+      items: cart.value,
+      subtotal: subtotal.value,
+      iva: ivaTotal.value,
+      total: total.value,
+      date: new Date().toISOString()
+    }
+    
+    // Crear contenido del ticket
+    const ticketText = `
+TICKET DE VENTA
+${new Date().toLocaleString('es-ES')}
 
-const openDiscount = () => {
-  const discount = prompt('Ingresa el descuento (%)')
-  if (discount) {
-    alert(`Descuento del ${discount}% aplicado`)
+${cart.value.map(item => 
+  `${item.product.name} x${item.quantity} - €${formatPrice(item.total)}`
+).join('\n')}
+
+---
+Subtotal: €${formatPrice(subtotal.value)}
+IVA: €${formatPrice(ivaTotal.value)}
+TOTAL: €${formatPrice(total.value)}
+
+Gracias por su compra
+    `.trim()
+    
+    // Descargar como archivo de texto
+    const blob = new Blob([ticketText], { type: 'text/plain' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `ticket-${new Date().toISOString().split('T')[0]}.txt`
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
+    
+    console.log('✅ Ticket generado')
+  } catch (err) {
+    console.error('Error generando ticket:', err)
+    alert('❌ Error al generar el ticket: ' + err.message)
   }
 }
 
-const openProducts = () => {
-  alert('📦 Gestión de productos - Próximamente')
+const openDiscount = () => {
+  if (cart.value.length === 0) {
+    alert('⚠️ El carrito está vacío')
+    return
+  }
+  
+  const discountPercent = prompt('Ingresa el descuento (%):', '0')
+  if (!discountPercent || isNaN(discountPercent)) return
+  
+  const discount = parseFloat(discountPercent)
+  if (discount < 0 || discount > 100) {
+    alert('⚠️ El descuento debe estar entre 0% y 100%')
+    return
+  }
+  
+  // Aplicar descuento al carrito
+  const discountMultiplier = 1 - (discount / 100)
+  cart.value.forEach(item => {
+    item.total = (item.product.price_with_iva * item.quantity * discountMultiplier)
+  })
+  
+  console.log(`✅ Descuento del ${discount}% aplicado`)
+}
+
+const openProducts = async () => {
+  // En una implementación completa, esto abriría un modal o navegaría a gestión de productos
+  // Por ahora, redirigimos al endpoint de creación (se puede mejorar con un modal)
+  const name = prompt('Nombre del producto:')
+  if (!name) return
+  
+  const price = parseFloat(prompt('Precio (sin IVA):', '0'))
+  if (isNaN(price) || price < 0) {
+    alert('⚠️ Precio inválido')
+    return
+  }
+  
+  const category = prompt('Categoría:', tpvConfig.value.default_categories?.[0] || 'General')
+  if (!category) return
+  
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) {
+      throw new Error('No hay token de autenticación')
+    }
+    
+    const response = await fetch('/api/v1/tpv/products', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name,
+        price,
+        category,
+        iva_rate: tpvConfig.value.default_iva_rate || 21.0
+      })
+    })
+    
+    if (response.ok) {
+      const result = await response.json()
+      alert(`✅ Producto "${name}" creado correctamente`)
+      // Recargar productos
+      await checkStatus()
+    } else {
+      const errorData = await response.json().catch(() => ({ detail: response.statusText }))
+      throw new Error(errorData.detail || 'Error al crear producto')
+    }
+  } catch (err) {
+    console.error('Error creando producto:', err)
+    alert('❌ Error al crear producto: ' + err.message)
+  }
 }
 
 // Cargar al montar
-onMounted(() => {
-  checkStatus()
+onMounted(async () => {
+  // Cargar configuración primero
+  await loadTPVConfig()
+  // Luego cargar productos
+  await checkStatus()
 })
 </script>
 
@@ -1048,5 +1239,16 @@ onMounted(() => {
   .back-to-dashboard-btn .btn-label {
     display: none;
   }
+}
+
+.business-profile-badge {
+  padding: 8px 16px;
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-left: 10px;
 }
 </style>

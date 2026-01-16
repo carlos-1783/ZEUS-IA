@@ -3,14 +3,14 @@
     <!-- Botón de vuelta al Dashboard -->
     <button @click="goToDashboard" class="back-to-dashboard-btn fixed-top-left">
       <span class="btn-icon">📊</span>
-      <span class="btn-label">Volver al Dashboard</span>
+      <span class="btn-label">{{ $t('tpv.backToDashboard') }}</span>
     </button>
 
     <!-- Header del TPV -->
     <div class="tpv-header">
       <div class="tpv-title-section">
-        <h1 class="tpv-title">💳 TPV Universal Enterprise</h1>
-        <p class="tpv-subtitle">Sistema de Punto de Venta</p>
+        <h1 class="tpv-title">💳 {{ $t('tpv.title') }}</h1>
+        <p class="tpv-subtitle">{{ $t('tpv.subtitle') }}</p>
       </div>
       <div class="header-actions">
         <button 
@@ -19,10 +19,10 @@
           class="header-btn" 
           :class="{ active: tablesMode }"
         >
-          🪑 {{ tablesMode ? 'Ver Productos' : 'Modo Mesas' }}
+          🪑 {{ tablesMode ? $t('tpv.viewProducts') : $t('tpv.tablesMode') }}
         </button>
         <button @click="checkStatus" class="header-btn">
-          🔄 Actualizar
+          🔄 {{ $t('tpv.refresh') }}
         </button>
         <div v-if="businessProfile" class="business-profile-badge">
           🏢 {{ getBusinessProfileLabel(businessProfile) }}
@@ -46,7 +46,7 @@
             {{ category }}
           </button>
           <button @click="selectedCategory = 'all'" class="category-btn" :class="{ active: selectedCategory === 'all' }">
-            Todos
+            {{ $t('tpv.categories.all') }}
           </button>
         </div>
 
@@ -69,20 +69,20 @@
                 <span class="price-value">{{ formatPrice(product.price_with_iva || product.price) }}</span>
               </div>
               <div v-if="product.stock !== null" class="product-stock">
-                Stock: {{ product.stock }}
+                {{ $t('tpv.products.stock') }}: {{ product.stock }}
               </div>
             </div>
           </div>
           
           <!-- Mensaje si no hay productos -->
           <div v-if="filteredProducts.length === 0" class="no-products">
-            <p>📦 No hay productos configurados</p>
+            <p>📦 {{ $t('tpv.products.empty') }}</p>
             <button @click="openProducts" class="add-product-btn" v-if="!businessProfileLoading">
-              ➕ Añadir Producto
+              ➕ {{ $t('tpv.products.add') }}
             </button>
-            <p v-if="businessProfileLoading" class="loading-message">Cargando configuración...</p>
+            <p v-if="businessProfileLoading" class="loading-message">{{ $t('tpv.products.loading') }}</p>
             <p v-else-if="!businessProfile" class="error-message">
-              ⚠️ Por favor, configura el tipo de negocio antes de usar el TPV
+              ⚠️ {{ $t('tpv.products.configureBusinessProfile') }}
             </p>
           </div>
         </div>
@@ -221,9 +221,11 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useI18n } from 'vue-i18n'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const { t } = useI18n()
 
 // Estado
 const loading = ref(false)
@@ -378,21 +380,7 @@ const loadTPVConfig = async () => {
 }
 
 const getBusinessProfileLabel = (profile) => {
-  const labels = {
-    'restaurante': 'Restaurante',
-    'bar': 'Bar',
-    'cafetería': 'Cafetería',
-    'tienda_minorista': 'Tienda',
-    'peluquería': 'Peluquería',
-    'centro_estético': 'Centro Estético',
-    'taller': 'Taller',
-    'clínica': 'Clínica',
-    'discoteca': 'Discoteca',
-    'farmacia': 'Farmacia',
-    'logística': 'Logística',
-    'otros': 'Otros'
-  }
-  return labels[profile] || profile
+  return t(`tpv.businessProfiles.${profile}`, profile)
 }
 
 const addProductToCart = (product) => {
@@ -452,7 +440,7 @@ const handleKeyPress = (key) => {
 
 const toggleTablesMode = () => {
   if (!tpvConfig.value.tables_enabled) {
-    alert('⚠️ El modo mesas no está disponible para este tipo de negocio')
+    alert(`⚠️ ${t('tpv.messages.tablesNotAvailable')}`)
     return
   }
   tablesMode.value = !tablesMode.value

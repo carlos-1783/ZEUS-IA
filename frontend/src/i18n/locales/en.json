@@ -134,8 +134,11 @@
       "all": "All"
     },
     "products": {
-      "empty": "No products in this category",
-      "add": "Add Product"
+      "empty": "No products configured",
+      "add": "Add Product",
+      "loading": "Loading configuration...",
+      "configureBusinessProfile": "Please configure business type before using POS",
+      "stock": "Stock"
     },
     "table": "Table",
     "tableStatus": {
@@ -149,15 +152,46 @@
       "emptyHint": "Select products to begin",
       "subtotal": "Subtotal:",
       "iva": "VAT:",
-      "total": "TOTAL:"
+      "total": "TOTAL:",
+      "item": "Item",
+      "quantity": "Quantity",
+      "price": "Price"
     },
     "payment": {
       "process": "PAY",
       "print": "Print Ticket",
+      "generateTicketInvoice": "Generate Ticket/Invoice",
       "discount": "Discount"
     },
     "loading": "Loading POS...",
-    "retry": "Retry"
+    "retry": "Retry",
+    "messages": {
+      "tablesNotAvailable": "Tables mode is not available for this business type",
+      "cartEmpty": "Cart is empty",
+      "employeeRequired": "Must specify an employee to process this sale",
+      "customerRequired": "Must specify a customer to process this sale",
+      "saleProcessed": "Payment processed successfully",
+      "ticket": "Ticket",
+      "invoice": "Invoice",
+      "registeredWithRafael": "This sale has been automatically registered with RAFAEL.",
+      "discountInvalid": "Discount must be between 0% and 100%",
+      "productCreated": "created successfully",
+      "errorCreatingProduct": "Error creating product"
+    },
+    "businessProfiles": {
+      "restaurante": "Restaurant",
+      "bar": "Bar",
+      "cafetería": "Cafeteria",
+      "tienda_minorista": "Store",
+      "peluquería": "Hair Salon",
+      "centro_estético": "Beauty Center",
+      "taller": "Workshop",
+      "clínica": "Clinic",
+      "discoteca": "Nightclub",
+      "farmacia": "Pharmacy",
+      "logística": "Logistics",
+      "otros": "Other"
+    }
   },
   "agents": {
     "disclaimers": {

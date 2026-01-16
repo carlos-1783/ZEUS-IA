@@ -134,8 +134,11 @@
       "all": "Todos"
     },
     "products": {
-      "empty": "No hay productos en esta categoría",
-      "add": "Añadir Producto"
+      "empty": "No hay productos configurados",
+      "add": "Añadir Producto",
+      "loading": "Cargando configuración...",
+      "configureBusinessProfile": "Por favor, configura el tipo de negocio antes de usar el TPV",
+      "stock": "Stock"
     },
     "table": "Mesa",
     "tableStatus": {
@@ -149,15 +152,46 @@
       "emptyHint": "Selecciona productos para comenzar",
       "subtotal": "Subtotal:",
       "iva": "IVA:",
-      "total": "TOTAL:"
+      "total": "TOTAL:",
+      "item": "Artículo",
+      "quantity": "Cantidad",
+      "price": "Precio"
     },
     "payment": {
       "process": "PAGAR",
       "print": "Imprimir Ticket",
+      "generateTicketInvoice": "Generar Ticket/Factura",
       "discount": "Descuento"
     },
     "loading": "Cargando TPV...",
-    "retry": "Reintentar"
+    "retry": "Reintentar",
+    "messages": {
+      "tablesNotAvailable": "El modo mesas no está disponible para este tipo de negocio",
+      "cartEmpty": "El carrito está vacío",
+      "employeeRequired": "Debe especificar un empleado para procesar esta venta",
+      "customerRequired": "Debe especificar un cliente para procesar esta venta",
+      "saleProcessed": "Pago procesado exitosamente",
+      "ticket": "Ticket",
+      "invoice": "Factura",
+      "registeredWithRafael": "Esta venta se ha registrado automáticamente con RAFAEL.",
+      "discountInvalid": "El descuento debe estar entre 0% y 100%",
+      "productCreated": "creado correctamente",
+      "errorCreatingProduct": "Error al crear producto"
+    },
+    "businessProfiles": {
+      "restaurante": "Restaurante",
+      "bar": "Bar",
+      "cafetería": "Cafetería",
+      "tienda_minorista": "Tienda",
+      "peluquería": "Peluquería",
+      "centro_estético": "Centro Estético",
+      "taller": "Taller",
+      "clínica": "Clínica",
+      "discoteca": "Discoteca",
+      "farmacia": "Farmacia",
+      "logística": "Logística",
+      "otros": "Otros"
+    }
   },
   "agents": {
     "disclaimers": {

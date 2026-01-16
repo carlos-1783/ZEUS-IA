@@ -73,13 +73,21 @@ async def _get_tpv_info(current_user: User):
     try:
         user = db.query(User).filter(User.id == current_user.id).first()
         if user:
+            # Usar getattr para evitar errores si las columnas no existen aún
             user_data = {
                 "id": user.id,
                 "tpv_business_profile": getattr(user, 'tpv_business_profile', None),
                 "company_name": getattr(user, 'company_name', None)
             }
             # Cargar perfil del usuario
-            tpv_service.load_user_profile(user_data)
+            try:
+                tpv_service.load_user_profile(user_data)
+            except Exception as e:
+                logger.warning(f"Error cargando perfil de usuario: {e}")
+                # Usar default si hay error
+                if not tpv_service.business_profile:
+                    from services.tpv_service import BusinessProfile
+                    tpv_service.set_business_profile(BusinessProfile.OTROS)
         else:
             # Si no hay perfil, usar auto-detección o default
             if not tpv_service.business_profile:
@@ -331,11 +339,16 @@ async def set_business_profile(
             detail=f"Business profile inválido. Válidos: {[p.value for p in BusinessProfile]}"
         )
     
-    # Actualizar en base de datos
+    # Actualizar en base de datos (usar setattr para evitar errores si la columna no existe aún)
     user = db.query(User).filter(User.id == current_user.id).first()
     if user:
-        user.tpv_business_profile = profile.value
-        db.commit()
+        try:
+            setattr(user, 'tpv_business_profile', profile.value)
+            db.commit()
+        except Exception as e:
+            logger.warning(f"Error actualizando tpv_business_profile (columna puede no existir aún): {e}")
+            # Continuar sin error, la migración lo resolverá
+            db.rollback()
     
     # Actualizar en servicio TPV
     tpv_service.set_business_profile(profile, current_user.id)
@@ -363,12 +376,20 @@ async def get_tpv_status(
         try:
             user = db.query(User).filter(User.id == current_user.id).first()
             if user:
+                # Usar getattr para evitar errores si las columnas no existen aún
                 user_data = {
                     "id": user.id,
                     "tpv_business_profile": getattr(user, 'tpv_business_profile', None),
                     "company_name": getattr(user, 'company_name', None)
                 }
-                tpv_service.load_user_profile(user_data)
+                try:
+                    tpv_service.load_user_profile(user_data)
+                except Exception as e:
+                    logger.warning(f"Error cargando perfil de usuario en status: {e}")
+                    # Usar default si hay error
+                    if not tpv_service.business_profile:
+                        from services.tpv_service import BusinessProfile
+                        tpv_service.set_business_profile(BusinessProfile.OTROS)
         finally:
             db.close()
     

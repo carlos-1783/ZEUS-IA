@@ -67,7 +67,9 @@ def _migrate_user_columns():
             "autoriza_envio_documentos_a_asesores": "BOOLEAN" if is_postgres else "BOOLEAN DEFAULT 0",
             "company_name": "VARCHAR(255)" if is_postgres else "TEXT",
             "employees": "INTEGER",
-            "plan": "VARCHAR(50)" if is_postgres else "TEXT"
+            "plan": "VARCHAR(50)" if is_postgres else "TEXT",
+            "tpv_business_profile": "VARCHAR(100)" if is_postgres else "TEXT",
+            "tpv_config": "TEXT"  # JSON config
         }
         
         added_columns = []

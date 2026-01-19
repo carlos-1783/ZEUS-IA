@@ -637,34 +637,37 @@ const saveNotificationSettings = () => {
 
 // Función para actualizar módulos basado en permisos de superusuario
 const updateModulesForSuperuser = () => {
-  if (authStore.isAdmin) {
+  const isAdmin = authStore.isAdmin || authStore.user?.is_superuser || false
+  if (isAdmin) {
     availableModules.value.tpv = true
     availableModules.value.control_horario = true
     availableModules.value.admin = true
     console.log('✅ Módulos habilitados para superusuario:', {
-      isAdmin: authStore.isAdmin,
-      modules: availableModules.value,
-      shouldShowTPV: shouldShowTPV.value,
-      shouldShowControlHorario: shouldShowControlHorario.value,
-      shouldShowAdmin: shouldShowAdmin.value
+      isAdmin: isAdmin,
+      authStoreIsAdmin: authStore.isAdmin,
+      userIsSuperuser: authStore.user?.is_superuser,
+      modules: availableModules.value
     })
-  } else {
-    console.log('⚠️ Usuario no es admin:', authStore.isAdmin)
   }
 }
 
 // Watcher para actualizar módulos cuando cambie el estado de admin
 watch(() => authStore.isAdmin, (isAdmin) => {
-  console.log('🔄 Cambio en isAdmin:', isAdmin)
   if (isAdmin) {
     updateModulesForSuperuser()
   }
 }, { immediate: true })
 
-// Watcher adicional para isAdmin computed
-watch(isAdmin, (newVal) => {
-  console.log('🔄 Cambio en isAdmin computed:', newVal)
-  if (newVal) {
+// Watcher para cuando cambie el usuario
+watch(() => authStore.user?.is_superuser, (isSuperuser) => {
+  if (isSuperuser) {
+    updateModulesForSuperuser()
+  }
+}, { immediate: true })
+
+// Watcher para isAdmin computed
+watch(isAdmin, (isAdmin) => {
+  if (isAdmin) {
     updateModulesForSuperuser()
   }
 }, { immediate: true })
@@ -1603,49 +1606,3 @@ const chatWith = (agent) => {
   border-color: rgba(59, 130, 246, 0.5);
 }
 </style>
-
-
-﻿
-client.ts:19 [vite] connecting...
-client.ts:155 [vite] connected.
-App.vue:10 ✅ ZEUS IA Frontend iniciado
-main.ts:26 ✅ ZEUS IA iniciado
-OlymposDashboard.vue:322 ✅ Backend respondió: 
-Object
-OlymposDashboard.vue:322 ✅ Backend respondió: 
-Object
-OlymposDashboard.vue:322 ✅ Backend respondió: 
-Object
-OlymposDashboard.vue:322 ✅ Backend respondió: 
-Object
-OlymposDashboard.vue:322 ✅ Backend respondió: 
-Object
-  color: #3b82f6;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-secondary:hover {
-  background: rgba(59, 130, 246, 0.25);
-  border-color: rgba(59, 130, 246, 0.5);
-}
-</style>
-
-
-﻿
-client.ts:19 [vite] connecting...
-client.ts:155 [vite] connected.
-App.vue:10 ✅ ZEUS IA Frontend iniciado
-main.ts:26 ✅ ZEUS IA iniciado
-OlymposDashboard.vue:322 ✅ Backend respondió: 
-Object
-OlymposDashboard.vue:322 ✅ Backend respondió: 
-Object
-OlymposDashboard.vue:322 ✅ Backend respondió: 
-Object
-OlymposDashboard.vue:322 ✅ Backend respondió: 
-Object
-OlymposDashboard.vue:322 ✅ Backend respondió: 
-Object

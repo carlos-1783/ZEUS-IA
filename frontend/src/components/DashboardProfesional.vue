@@ -31,18 +31,18 @@
           <span class="icon">📊</span>
           <span>Analytics</span>
         </button>
-        <!-- TPV - Siempre visible para superusuarios, o si está disponible -->
+        <!-- TPV - Siempre visible para superusuarios -->
         <button 
-          v-if="authStore.isAdmin || availableModules.tpv"
+          v-if="shouldShowTPV"
           class="nav-item tpv-nav-btn"
           @click="goToTPV"
         >
           <span class="icon">💳</span>
           <span>TPV</span>
         </button>
-        <!-- Control Horario - Visible para superusuarios o si está disponible -->
+        <!-- Control Horario - Siempre visible para superusuarios -->
         <button 
-          v-if="authStore.isAdmin || availableModules.control_horario"
+          v-if="shouldShowControlHorario"
           class="nav-item control-horario-nav-btn"
           @click="goToControlHorario"
         >
@@ -59,7 +59,7 @@
         </button>
         <!-- Admin Panel - Siempre visible para superusuarios -->
         <button 
-          v-if="authStore.isAdmin || availableModules.admin"
+          v-if="shouldShowAdmin"
           class="nav-item admin-btn"
           @click="goToAdmin"
         >
@@ -479,14 +479,24 @@ const dashboardMetrics = ref({
 // Módulos disponibles (desde endpoint unificado)
 // Inicializar con valores por defecto: superusuarios tienen acceso completo
 const availableModules = ref({
-  tpv: authStore.isAdmin, // Superusuarios siempre tienen TPV
-  control_horario: authStore.isAdmin, // Superusuarios siempre tienen Control Horario
+  tpv: false,
+  control_horario: false,
   dashboard: true,
   analytics: true,
   agents: true,
-  admin: authStore.isAdmin, // Superusuarios siempre tienen Admin Panel
+  admin: false,
   settings: true
 })
+
+// Computed para verificar si el usuario es admin (reactivo)
+const isAdmin = computed(() => {
+  return authStore.isAdmin || false
+})
+
+// Computed para módulos visibles basados en isAdmin (prioridad máxima)
+const shouldShowTPV = computed(() => isAdmin.value || availableModules.value.tpv)
+const shouldShowControlHorario = computed(() => isAdmin.value || availableModules.value.control_horario)
+const shouldShowAdmin = computed(() => isAdmin.value || availableModules.value.admin)
 
 // Cargar datos unificados del dashboard desde endpoint unificado
 const loadDashboardMetrics = async () => {
@@ -583,19 +593,43 @@ const updateModulesForSuperuser = () => {
     availableModules.value.tpv = true
     availableModules.value.control_horario = true
     availableModules.value.admin = true
-    console.log('✅ Módulos habilitados para superusuario:', availableModules.value)
+    console.log('✅ Módulos habilitados para superusuario:', {
+      isAdmin: authStore.isAdmin,
+      modules: availableModules.value,
+      shouldShowTPV: shouldShowTPV.value,
+      shouldShowControlHorario: shouldShowControlHorario.value,
+      shouldShowAdmin: shouldShowAdmin.value
+    })
+  } else {
+    console.log('⚠️ Usuario no es admin:', authStore.isAdmin)
   }
 }
 
 // Watcher para actualizar módulos cuando cambie el estado de admin
 watch(() => authStore.isAdmin, (isAdmin) => {
+  console.log('🔄 Cambio en isAdmin:', isAdmin)
   if (isAdmin) {
+    updateModulesForSuperuser()
+  }
+}, { immediate: true })
+
+// Watcher adicional para isAdmin computed
+watch(isAdmin, (newVal) => {
+  console.log('🔄 Cambio en isAdmin computed:', newVal)
+  if (newVal) {
     updateModulesForSuperuser()
   }
 }, { immediate: true })
 
 // Cargar al montar y refrescar periódicamente
 onMounted(() => {
+  // Debug: Verificar estado de authStore
+  console.log('🔍 Estado inicial de authStore:', {
+    isAdmin: authStore.isAdmin,
+    isAuthenticated: authStore.isAuthenticated,
+    user: authStore.user
+  })
+  
   // Asegurar que superusuarios tengan acceso completo desde el inicio
   updateModulesForSuperuser()
   
@@ -613,6 +647,17 @@ onMounted(() => {
   watch(notificationSettings, () => {
     saveNotificationSettings()
   }, { deep: true })
+  
+  // Verificar después de un breve delay para asegurar que authStore esté listo
+  setTimeout(() => {
+    console.log('🔍 Estado después de delay:', {
+      isAdmin: authStore.isAdmin,
+      shouldShowTPV: shouldShowTPV.value,
+      shouldShowControlHorario: shouldShowControlHorario.value,
+      shouldShowAdmin: shouldShowAdmin.value
+    })
+    updateModulesForSuperuser()
+  }, 100)
 })
 
 const agentsData = ref([

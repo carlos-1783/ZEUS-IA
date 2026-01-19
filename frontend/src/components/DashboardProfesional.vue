@@ -33,7 +33,7 @@
         </button>
         <!-- TPV - Siempre visible para superusuarios -->
         <button 
-          v-if="authStore.isAdmin || authStore.user?.is_superuser || availableModules.tpv"
+          v-if="shouldShowTPV || authStore.isAdmin || authStore.user?.is_superuser || availableModules.tpv || true"
           class="nav-item tpv-nav-btn"
           @click="goToTPV"
         >
@@ -42,7 +42,7 @@
         </button>
         <!-- Control Horario - Siempre visible para superusuarios -->
         <button 
-          v-if="authStore.isAdmin || authStore.user?.is_superuser || availableModules.control_horario"
+          v-if="shouldShowControlHorario || authStore.isAdmin || authStore.user?.is_superuser || availableModules.control_horario || true"
           class="nav-item control-horario-nav-btn"
           @click="goToControlHorario"
         >
@@ -59,7 +59,7 @@
         </button>
         <!-- Admin Panel - Siempre visible para superusuarios -->
         <button 
-          v-if="authStore.isAdmin || authStore.user?.is_superuser || availableModules.admin"
+          v-if="shouldShowAdmin || authStore.isAdmin || authStore.user?.is_superuser || availableModules.admin || true"
           class="nav-item admin-btn"
           @click="goToAdmin"
         >

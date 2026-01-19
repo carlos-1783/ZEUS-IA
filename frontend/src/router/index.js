@@ -186,6 +186,17 @@ const router = createRouter({
       }
     },
     
+    // Control Horario Module (requiere autenticación)
+    {
+      path: '/control-horario',
+      name: 'ControlHorario',
+      component: () => import('../views/ControlHorario.vue'),
+      meta: { 
+        title: 'Control Horario Universal - ZEUS-IA',
+        requiresAuth: true
+      }
+    },
+    
     // Direct login route (redirect to auth/login)
     {
       path: '/login',

@@ -355,11 +355,9 @@ const goToTPV = () => {
   router.push('/tpv')
 }
 
-// Navegar a Control Horario (pendiente implementación de ruta)
+// Navegar a Control Horario
 const goToControlHorario = () => {
-  // TODO: Implementar ruta de Control Horario
-  alert('Módulo de Control Horario - Próximamente')
-  // router.push('/control-horario')
+  router.push('/control-horario')
 }
 
 // Instalar PWA

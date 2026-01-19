@@ -69,7 +69,9 @@ def _migrate_user_columns():
             "employees": "INTEGER",
             "plan": "VARCHAR(50)" if is_postgres else "TEXT",
             "tpv_business_profile": "VARCHAR(100)" if is_postgres else "TEXT",
-            "tpv_config": "TEXT"  # JSON config
+            "tpv_config": "TEXT",  # JSON config
+            "control_horario_business_profile": "VARCHAR(100)" if is_postgres else "TEXT",
+            "control_horario_config": "TEXT"  # JSON config
         }
         
         added_columns = []

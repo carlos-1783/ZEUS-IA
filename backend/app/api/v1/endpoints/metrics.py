@@ -190,8 +190,9 @@ async def get_dashboard_summary(
         
         interactions_change = ((total_interactions - prev_activities) / prev_activities * 100) if prev_activities > 0 else 0
         
-        # Obtener business_profile (pero ignorarlo para superusuarios en permisos)
-        business_profile = getattr(current_user, 'tpv_business_profile', None) if not is_superuser else None
+        # Obtener business_profiles (pero ignorarlos para superusuarios en permisos)
+        tpv_business_profile = getattr(current_user, 'tpv_business_profile', None) if not is_superuser else None
+        control_horario_business_profile = getattr(current_user, 'control_horario_business_profile', None) if not is_superuser else None
         
         # Determinar módulos disponibles
         # Superusuarios tienen acceso a TODO
@@ -209,8 +210,8 @@ async def get_dashboard_summary(
         if not is_superuser:
             # TPV disponible para todos los usuarios autenticados
             available_modules["tpv"] = True
-            # Control horario disponible si tiene business_profile configurado
-            available_modules["control_horario"] = business_profile is not None
+            # Control horario disponible si tiene business_profile configurado o si tiene TPV configurado
+            available_modules["control_horario"] = control_horario_business_profile is not None or tpv_business_profile is not None
         
         return {
             "success": True,

@@ -28,6 +28,10 @@ class User(Base):
     # TPV Universal - Business Profile
     tpv_business_profile = Column(String, nullable=True, index=True)  # restaurante, bar, tienda_minorista, etc.
     tpv_config = Column(Text, nullable=True)  # JSON config: {"tables_enabled": true, "services_enabled": false, etc.}
+    
+    # Control Horario - Business Profile
+    control_horario_business_profile = Column(String, nullable=True, index=True)  # oficina, restaurante, tienda, externo, etc.
+    control_horario_config = Column(Text, nullable=True)  # JSON config: {"strict_check_in": true, "gps_required": false, etc.}
 
     def __repr__(self):
         return f"<User {self.email}>"

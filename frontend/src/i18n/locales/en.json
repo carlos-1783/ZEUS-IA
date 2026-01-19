@@ -246,6 +246,37 @@
       "download": "Download"
     }
   },
+  "controlHorario": {
+    "title": "Universal Time Tracking",
+    "subtitle": "Attendance Control System",
+    "backToDashboard": "Back to Dashboard",
+    "refresh": "Refresh",
+    "loading": "Loading...",
+    "retry": "Retry",
+    "selectMethod": "Select check-in method",
+    "employee": "Employee",
+    "selectEmployee": "Select an employee",
+    "checkIn": "Check In",
+    "checkOut": "Check Out",
+    "currentStatus": "Current Status",
+    "todayHistory": "Today's History",
+    "inside": "Inside",
+    "outside": "Outside",
+    "noEmployees": "No employees registered",
+    "noRecordsToday": "No records today",
+    "totalEmployees": "Total Employees",
+    "insideNow": "Inside Now",
+    "attendanceRate": "Attendance Rate",
+    "gpsRequired": "GPS location required",
+    "getLocation": "Get Location",
+    "methods": {
+      "face": "Facial Recognition",
+      "qr": "QR Code",
+      "code": "Manual Code",
+      "location": "Geolocation",
+      "remote": "Remote"
+    }
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

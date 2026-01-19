@@ -246,6 +246,37 @@
       "download": "Descargar"
     }
   },
+  "controlHorario": {
+    "title": "Control Horario Universal",
+    "subtitle": "Sistema de Control de Asistencia",
+    "backToDashboard": "Volver al Dashboard",
+    "refresh": "Actualizar",
+    "loading": "Cargando...",
+    "retry": "Reintentar",
+    "selectMethod": "Selecciona método de fichaje",
+    "employee": "Empleado",
+    "selectEmployee": "Selecciona un empleado",
+    "checkIn": "Entrada",
+    "checkOut": "Salida",
+    "currentStatus": "Estado Actual",
+    "todayHistory": "Historial de Hoy",
+    "inside": "Dentro",
+    "outside": "Fuera",
+    "noEmployees": "No hay empleados registrados",
+    "noRecordsToday": "No hay registros hoy",
+    "totalEmployees": "Total Empleados",
+    "insideNow": "Dentro Ahora",
+    "attendanceRate": "Tasa de Asistencia",
+    "gpsRequired": "Geolocalización requerida",
+    "getLocation": "Obtener Ubicación",
+    "methods": {
+      "face": "Reconocimiento Facial",
+      "qr": "Código QR",
+      "code": "Código Manual",
+      "location": "Geolocalización",
+      "remote": "Remoto"
+    }
+  },
   "common": {
     "save": "Guardar",
     "cancel": "Cancelar",

@@ -24,6 +24,7 @@ from app.api.v1.endpoints import (
     document_approval,
     tpv,
     admin,
+    control_horario,
 )
 from app.api.v1.endpoints.websocket import websocket_endpoint
 
@@ -70,6 +71,9 @@ api_router.include_router(document_approval.router, prefix="/documents", tags=["
 
 # TPV Universal Enterprise
 api_router.include_router(tpv.router, prefix="/tpv", tags=["tpv"])
+
+# Control Horario Universal Enterprise
+api_router.include_router(control_horario.router, prefix="/control-horario", tags=["control-horario"])
 
 # Admin Panel (solo superusuarios)
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])

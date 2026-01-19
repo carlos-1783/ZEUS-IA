@@ -33,7 +33,7 @@
         </button>
         <!-- TPV - Siempre visible para superusuarios -->
         <button 
-          v-if="shouldShowTPV"
+          v-if="authStore.isAdmin || authStore.user?.is_superuser || availableModules.tpv"
           class="nav-item tpv-nav-btn"
           @click="goToTPV"
         >
@@ -42,7 +42,7 @@
         </button>
         <!-- Control Horario - Siempre visible para superusuarios -->
         <button 
-          v-if="shouldShowControlHorario"
+          v-if="authStore.isAdmin || authStore.user?.is_superuser || availableModules.control_horario"
           class="nav-item control-horario-nav-btn"
           @click="goToControlHorario"
         >
@@ -59,7 +59,7 @@
         </button>
         <!-- Admin Panel - Siempre visible para superusuarios -->
         <button 
-          v-if="shouldShowAdmin"
+          v-if="authStore.isAdmin || authStore.user?.is_superuser || availableModules.admin"
           class="nav-item admin-btn"
           @click="goToAdmin"
         >
@@ -488,15 +488,51 @@ const availableModules = ref({
   settings: true
 })
 
-// Computed para verificar si el usuario es admin (reactivo)
+// Computed para verificar si el usuario es admin (reactivo) - múltiples formas de verificación
 const isAdmin = computed(() => {
-  return authStore.isAdmin || false
+  // Verificar de múltiples formas para asegurar que detectamos al superusuario
+  const isAdmin1 = authStore.isAdmin || false
+  const isAdmin2 = authStore.user?.is_superuser || false
+  
+  const result = isAdmin1 || isAdmin2
+  console.log('🔍 Verificación isAdmin computed:', {
+    isAdmin1,
+    isAdmin2,
+    user: authStore.user,
+    authStoreIsAdmin: authStore.isAdmin,
+    result
+  })
+  return result
 })
 
-// Computed para módulos visibles basados en isAdmin (prioridad máxima)
-const shouldShowTPV = computed(() => isAdmin.value || availableModules.value.tpv)
-const shouldShowControlHorario = computed(() => isAdmin.value || availableModules.value.control_horario)
-const shouldShowAdmin = computed(() => isAdmin.value || availableModules.value.admin)
+// Computed para módulos visibles - SIEMPRE mostrar si es admin o si availableModules lo permite
+// Por defecto, los botones están visibles (availableModules inicializado en true)
+const shouldShowTPV = computed(() => {
+  // Si es admin, mostrar SIEMPRE
+  if (isAdmin.value) {
+    return true
+  }
+  // Si no es admin, verificar availableModules
+  return availableModules.value.tpv
+})
+
+const shouldShowControlHorario = computed(() => {
+  // Si es admin, mostrar SIEMPRE
+  if (isAdmin.value) {
+    return true
+  }
+  // Si no es admin, verificar availableModules
+  return availableModules.value.control_horario
+})
+
+const shouldShowAdmin = computed(() => {
+  // Si es admin, mostrar SIEMPRE
+  if (isAdmin.value) {
+    return true
+  }
+  // Si no es admin, verificar availableModules
+  return availableModules.value.admin
+})
 
 // Cargar datos unificados del dashboard desde endpoint unificado
 const loadDashboardMetrics = async () => {
@@ -534,16 +570,26 @@ const loadDashboardMetrics = async () => {
         successTrend: data.metrics.success_trend || '0%'
       }
 
-      // Actualizar módulos disponibles
-      if (data.available_modules) {
-        availableModules.value = { ...data.available_modules }
-      }
+      // Verificar si es superusuario ANTES de actualizar módulos
+      const isSuperuser = authStore.isAdmin || authStore.user?.is_superuser || data.user?.is_superuser || false
       
-      // Forzar módulos para superusuarios (garantizar acceso completo)
-      if (authStore.isAdmin || data.user?.is_superuser) {
+      // SIEMPRE forzar módulos para superusuarios (garantizar acceso completo)
+      if (isSuperuser) {
         availableModules.value.tpv = true
         availableModules.value.control_horario = true
         availableModules.value.admin = true
+        console.log('✅ Forzando módulos desde endpoint para superusuario:', {
+          authStoreIsAdmin: authStore.isAdmin,
+          userIsSuperuser: authStore.user?.is_superuser,
+          dataUserIsSuperuser: data.user?.is_superuser,
+          isSuperuser
+        })
+      } else {
+        // Solo actualizar módulos si NO es superusuario
+        if (data.available_modules) {
+          availableModules.value = { ...data.available_modules }
+          console.log('⚠️ Usuario no es superusuario, usando módulos del endpoint:', data.available_modules)
+        }
       }
 
       console.log('✅ Dashboard unificado cargado:', {
@@ -558,10 +604,12 @@ const loadDashboardMetrics = async () => {
     console.error('❌ Error cargando dashboard unificado:', error)
     // Usar valores por defecto en caso de error
     // Para superusuarios, siempre mostrar TPV, Control Horario y Admin
-    if (authStore.isAdmin) {
+    const isSuperuser = authStore.isAdmin || authStore.user?.is_superuser || false
+    if (isSuperuser) {
       availableModules.value.tpv = true
       availableModules.value.control_horario = true
       availableModules.value.admin = true
+      console.log('✅ Habilitando módulos por defecto para superusuario (error handler)')
     }
   }
 }
@@ -622,12 +670,19 @@ watch(isAdmin, (newVal) => {
 }, { immediate: true })
 
 // Cargar al montar y refrescar periódicamente
-onMounted(() => {
+onMounted(async () => {
+  // Inicializar authStore si no está inicializado
+  if (!authStore.isAuthenticated && authStore.initialize) {
+    console.log('🔄 Inicializando authStore...')
+    await authStore.initialize()
+  }
+  
   // Debug: Verificar estado de authStore
   console.log('🔍 Estado inicial de authStore:', {
     isAdmin: authStore.isAdmin,
     isAuthenticated: authStore.isAuthenticated,
-    user: authStore.user
+    user: authStore.user,
+    userIsSuperuser: authStore.user?.is_superuser
   })
   
   // Asegurar que superusuarios tengan acceso completo desde el inicio
@@ -648,16 +703,42 @@ onMounted(() => {
     saveNotificationSettings()
   }, { deep: true })
   
-  // Verificar después de un breve delay para asegurar que authStore esté listo
+  // Verificar después de múltiples delays para asegurar que authStore esté listo
   setTimeout(() => {
-    console.log('🔍 Estado después de delay:', {
+    console.log('🔍 Estado después de delay 100ms:', {
       isAdmin: authStore.isAdmin,
+      userIsSuperuser: authStore.user?.is_superuser,
+      user: authStore.user,
       shouldShowTPV: shouldShowTPV.value,
       shouldShowControlHorario: shouldShowControlHorario.value,
       shouldShowAdmin: shouldShowAdmin.value
     })
     updateModulesForSuperuser()
   }, 100)
+  
+  setTimeout(() => {
+    console.log('🔍 Estado después de delay 500ms:', {
+      isAdmin: authStore.isAdmin,
+      userIsSuperuser: authStore.user?.is_superuser,
+      user: authStore.user,
+      shouldShowTPV: shouldShowTPV.value,
+      shouldShowControlHorario: shouldShowControlHorario.value,
+      shouldShowAdmin: shouldShowAdmin.value
+    })
+    updateModulesForSuperuser()
+  }, 500)
+  
+  setTimeout(() => {
+    console.log('🔍 Estado después de delay 1000ms:', {
+      isAdmin: authStore.isAdmin,
+      userIsSuperuser: authStore.user?.is_superuser,
+      user: authStore.user,
+      shouldShowTPV: shouldShowTPV.value,
+      shouldShowControlHorario: shouldShowControlHorario.value,
+      shouldShowAdmin: shouldShowAdmin.value
+    })
+    updateModulesForSuperuser()
+  }, 1000)
 })
 
 const agentsData = ref([
@@ -1510,6 +1591,35 @@ const chatWith = (agent) => {
   background: rgba(59, 130, 246, 0.15);
   border: 1px solid rgba(59, 130, 246, 0.3);
   border-radius: 6px;
+  color: #3b82f6;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: rgba(59, 130, 246, 0.5);
+}
+</style>
+
+
+﻿
+client.ts:19 [vite] connecting...
+client.ts:155 [vite] connected.
+App.vue:10 ✅ ZEUS IA Frontend iniciado
+main.ts:26 ✅ ZEUS IA iniciado
+OlymposDashboard.vue:322 ✅ Backend respondió: 
+Object
+OlymposDashboard.vue:322 ✅ Backend respondió: 
+Object
+OlymposDashboard.vue:322 ✅ Backend respondió: 
+Object
+OlymposDashboard.vue:322 ✅ Backend respondió: 
+Object
+OlymposDashboard.vue:322 ✅ Backend respondió: 
+Object
   color: #3b82f6;
   font-size: 14px;
   font-weight: 600;

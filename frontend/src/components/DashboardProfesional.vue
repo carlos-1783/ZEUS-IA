@@ -31,6 +31,24 @@
           <span class="icon">📊</span>
           <span>Analytics</span>
         </button>
+        <!-- TPV - Visible para superusuarios o si está disponible en availableModules -->
+        <button 
+          v-if="authStore.isAdmin || availableModules?.tpv"
+          class="nav-item tpv-nav-btn"
+          @click="goToTPV"
+        >
+          <span class="icon">💳</span>
+          <span>TPV</span>
+        </button>
+        <!-- Control Horario - Visible para superusuarios o si está disponible -->
+        <button 
+          v-if="authStore.isAdmin || availableModules?.control_horario"
+          class="nav-item control-horario-nav-btn"
+          @click="goToControlHorario"
+        >
+          <span class="icon">⏰</span>
+          <span>Control Horario</span>
+        </button>
         <button 
           class="nav-item"
           :class="{ active: currentView === 'settings' }"
@@ -40,6 +58,7 @@
           <span>Settings</span>
         </button>
         <button 
+          v-if="authStore.isAdmin"
           class="nav-item admin-btn"
           @click="goToAdmin"
         >
@@ -330,6 +349,18 @@ const goToAdmin = () => {
   router.push('/admin')
 }
 
+// Navegar al TPV
+const goToTPV = () => {
+  router.push('/tpv')
+}
+
+// Navegar a Control Horario (pendiente implementación de ruta)
+const goToControlHorario = () => {
+  // TODO: Implementar ruta de Control Horario
+  alert('Módulo de Control Horario - Próximamente')
+  // router.push('/control-horario')
+}
+
 // Instalar PWA
 const handleInstallPWA = async () => {
   const installed = await promptInstall()
@@ -446,28 +477,74 @@ const dashboardMetrics = ref({
   successTrend: '0%'
 })
 
-// Cargar métricas desde backend
+// Módulos disponibles (desde endpoint unificado)
+const availableModules = ref({
+  tpv: false,
+  control_horario: false,
+  dashboard: true,
+  analytics: true,
+  agents: true,
+  admin: false,
+  settings: true
+})
+
+// Cargar datos unificados del dashboard desde endpoint unificado
 const loadDashboardMetrics = async () => {
   try {
-    const response = await fetch('/api/v1/metrics/dashboard')
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) {
+      console.warn('⚠️ No hay token, no se pueden cargar métricas')
+      return
+    }
+
+    // Usar endpoint unificado /summary en lugar de /dashboard
+    const response = await fetch('/api/v1/metrics/summary?days=30', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+
     const data = await response.json()
     
-    if (data.success) {
+    if (data.success && data.metrics) {
+      // Actualizar métricas
       dashboardMetrics.value = {
-        totalInteractions: data.total_interactions || 0,
-        avgResponseTime: data.avg_response_time || '0.0s',
-        costSavings: data.cost_savings || '$0',
-        successRate: data.success_rate || '0%',
-        interactionsTrend: data.interactions_trend || '0%',
-        responseTrend: data.response_trend || '0%',
-        savingsTrend: data.savings_trend || '0%',
-        successTrend: data.success_trend || '0%'
+        totalInteractions: data.metrics.total_interactions || 0,
+        avgResponseTime: data.metrics.avg_response_time || '0.0s',
+        costSavings: data.metrics.cost_savings || '$0',
+        successRate: data.metrics.success_rate || '0%',
+        interactionsTrend: data.metrics.interactions_trend || '0%',
+        responseTrend: data.metrics.response_trend || '0%',
+        savingsTrend: data.metrics.savings_trend || '0%',
+        successTrend: data.metrics.success_trend || '0%'
       }
-      console.log('✅ Métricas del dashboard cargadas')
+
+      // Actualizar módulos disponibles
+      if (data.available_modules) {
+        availableModules.value = { ...data.available_modules }
+      }
+
+      console.log('✅ Dashboard unificado cargado:', {
+        metrics: dashboardMetrics.value,
+        modules: availableModules.value,
+        isSuperuser: data.user?.is_superuser
+      })
+    } else {
+      console.warn('⚠️ Respuesta del servidor sin datos válidos:', data)
     }
   } catch (error) {
-    console.error('Error cargando métricas:', error)
+    console.error('❌ Error cargando dashboard unificado:', error)
     // Usar valores por defecto en caso de error
+    // Para superusuarios, siempre mostrar TPV y Control Horario
+    if (authStore.isAdmin) {
+      availableModules.value.tpv = true
+      availableModules.value.control_horario = true
+    }
   }
 }
 
@@ -682,6 +759,28 @@ const chatWith = (agent) => {
   background: rgba(139, 92, 246, 0.2);
   color: #8b5cf6;
   border-color: rgba(139, 92, 246, 0.5);
+}
+
+.nav-item.tpv-nav-btn {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.nav-item.tpv-nav-btn:hover {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
+.nav-item.control-horario-nav-btn {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.nav-item.control-horario-nav-btn:hover {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+  border-color: rgba(59, 130, 246, 0.5);
 }
 
 .icon {

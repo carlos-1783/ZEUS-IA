@@ -439,6 +439,73 @@ const loadAutomationOutputs = async () => {
   }
 };
 
+// Cargar datos unificados del dashboard (mismo endpoint que DashboardProfesional)
+const loadUnifiedDashboardData = async () => {
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token;
+    if (!token) {
+      console.warn('⚠️ No hay token, no se pueden cargar datos del dashboard');
+      return;
+    }
+
+    const response = await fetch('/api/v1/metrics/summary?days=30', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+
+    if (data.success && data.metrics) {
+      // Actualizar métricas del dashboard con datos normalizados
+      metrics.value = [
+        {
+          title: 'Interacciones',
+          value: data.metrics.total_interactions?.toLocaleString() || '0',
+          icon: 'chart-line',
+          trend: 'up',
+          trendValue: data.metrics.interactions_trend || '0%',
+          loading: false
+        },
+        {
+          title: 'Tiempo Respuesta',
+          value: data.metrics.avg_response_time || '0.0s',
+          icon: 'clock',
+          trend: 'down',
+          trendValue: data.metrics.response_trend || '0%'
+        },
+        {
+          title: 'Ahorro de Costos',
+          value: data.metrics.cost_savings || '€0',
+          icon: 'dollar-sign',
+          trend: 'up',
+          trendValue: data.metrics.savings_trend || '0%'
+        },
+        {
+          title: 'Tasa de Éxito',
+          value: data.metrics.success_rate || '0%',
+          icon: 'check-circle',
+          trend: 'up',
+          trendValue: data.metrics.success_trend || '0%'
+        }
+      ];
+
+      console.log('✅ Dashboard unificado cargado (Dashboard.vue):', {
+        metrics: metrics.value,
+        isSuperuser: data.user?.is_superuser
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error cargando dashboard unificado:', error);
+    // Continuar con valores por defecto
+  }
+};
+
 const handleLogout = async () => {
   try {
     await authStore.logout();
@@ -538,8 +605,8 @@ onMounted(() => {
           userData.value = authStore.user;
         }
         
-        // Performance: Cargar datos adicionales en background (opcional)
-        // await api.getCurrentUser();  // ← Deshabilitado para performance
+        // Performance: Cargar datos adicionales en background usando endpoint unificado
+        loadUnifiedDashboardData()
         
         // Performance: Inicializar gráfico de forma lazy con requestIdleCallback
         if ('requestIdleCallback' in window) {

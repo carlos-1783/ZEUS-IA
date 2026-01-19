@@ -107,12 +107,14 @@
     },
     "credenciales_requeridas": {
       "GOOGLE_ADS_DEVELOPER_TOKEN": {
-        "estado": "PENDIENTE",
-        "donde_obtener": "https://ads.google.com/aw/apicenter",
-        "nota": "Requiere aprobación manual de Google (1-5 días)"
+        "estado": "CONFIGURADO",
+        "valor": "7RBKDH4J9CLXCRWCGAGYS7XD",
+        "fecha_verificacion": "2025-01-16",
+        "nota": "Token obtenido desde Google Ads API Center"
       },
       "GOOGLE_ADS_CLIENT_ID": {
         "estado": "CONFIGURADO",
+        "valor": "680681547648-o31qargufm7fhn4n40b8g968eegqv709.apps.googleusercontent.com",
         "donde_verificar": "Google Cloud Console"
       },
       "GOOGLE_ADS_CLIENT_SECRET": {
@@ -122,13 +124,35 @@
       "GOOGLE_ADS_CUSTOMER_ID": {
         "estado": "CONFIGURADO",
         "valor": "129-046-8001"
+      },
+      "GOOGLE_ADS_REFRESH_TOKEN": {
+        "estado": "CONFIGURADO",
+        "nota": "Token de renovación automática configurado"
+      },
+      "GOOGLE_ADS_MODE": {
+        "estado": "SANDBOX",
+        "valor": "SANDBOX",
+        "nota": "Modo de prueba activo. Cambiar a PRODUCTION cuando esté listo para producción real."
       }
     },
-    "invitacion_administrador": {
-      "email_a_invitar": "marketingdigitalper.seo@gmail.com",
-      "nivel_acceso": "Administrador",
-      "donde_invitar": "Google Ads → Herramientas → Configuración → Acceso y seguridad",
-      "nota": "Ya debe tener acceso como administrador, pero verificar en caso necesario"
+    "metodo_acceso": {
+      "tipo": "OAuth2",
+      "descripcion": "PERSEO accede mediante OAuth2 usando las credenciales configuradas en variables de entorno. NO requiere invitar usuarios adicionales en Google Ads.",
+      "variables_necesarias": [
+        "GOOGLE_ADS_CLIENT_ID",
+        "GOOGLE_ADS_CLIENT_SECRET",
+        "GOOGLE_ADS_DEVELOPER_TOKEN",
+        "GOOGLE_ADS_CUSTOMER_ID",
+        "GOOGLE_ADS_REFRESH_TOKEN"
+      ],
+      "estado_actual": {
+        "descripcion": "TODAS las credenciales están configuradas correctamente en Railway.",
+        "estado": "COMPLETAMENTE_CONFIGURADO",
+        "fecha_completado": "2025-01-16",
+        "impacto": "PERSEO está completamente funcional con Google Ads. Puede crear, optimizar y gestionar campañas en modo SANDBOX.",
+        "nota": "Todas las credenciales están configuradas. PERSEO puede funcionar al 100% con Google Ads. El modo SANDBOX está activo para pruebas seguras.",
+        "recomendacion": "Probar funcionalidad en SANDBOX antes de cambiar GOOGLE_ADS_MODE a PRODUCTION."
+      }
     }
   },
   

@@ -62,13 +62,16 @@ class SetBusinessProfileRequest(BaseModel):
 
 
 async def _get_tpv_info(current_user: User):
-    """Función auxiliar para obtener información del TPV"""
+    """Función auxiliar para obtener información del TPV
+    Los superusuarios tienen acceso completo sin restricciones de business_profile
+    """
     from sqlalchemy.orm import Session
     from app.db.base import SessionLocal
     
     is_superuser = getattr(current_user, 'is_superuser', False)
     
     # Cargar business_profile del usuario si existe
+    # Para superusuarios, esto es opcional - tienen acceso completo de todas formas
     db: Session = SessionLocal()
     try:
         user = db.query(User).filter(User.id == current_user.id).first()
@@ -79,13 +82,17 @@ async def _get_tpv_info(current_user: User):
                 "tpv_business_profile": getattr(user, 'tpv_business_profile', None),
                 "company_name": getattr(user, 'company_name', None)
             }
-            # Cargar perfil del usuario
+            # Cargar perfil del usuario (opcional para superusuarios)
             try:
                 tpv_service.load_user_profile(user_data)
             except Exception as e:
                 logger.warning(f"Error cargando perfil de usuario: {e}")
-                # Usar default si hay error
-                if not tpv_service.business_profile:
+                # Para superusuarios, no requerir business_profile
+                if not tpv_service.business_profile and not is_superuser:
+                    from services.tpv_service import BusinessProfile
+                    tpv_service.set_business_profile(BusinessProfile.OTROS)
+                elif not tpv_service.business_profile and is_superuser:
+                    # Superusuarios pueden usar un perfil genérico o ninguno
                     from services.tpv_service import BusinessProfile
                     tpv_service.set_business_profile(BusinessProfile.OTROS)
         else:
@@ -96,9 +103,17 @@ async def _get_tpv_info(current_user: User):
                     "company_name": getattr(current_user, 'company_name', None)
                 }
                 tpv_service.load_user_profile(user_data)
+                # Si aún no hay perfil y no es superusuario, usar default
+                if not tpv_service.business_profile and not is_superuser:
+                    from services.tpv_service import BusinessProfile
+                    tpv_service.set_business_profile(BusinessProfile.OTROS)
+                elif not tpv_service.business_profile and is_superuser:
+                    # Superusuarios pueden usar perfil genérico
+                    from services.tpv_service import BusinessProfile
+                    tpv_service.set_business_profile(BusinessProfile.OTROS)
     except Exception as e:
         logger.error(f"Error cargando perfil de usuario: {e}")
-        # Usar default si hay error
+        # Usar default si hay error (pero no bloquear superusuarios)
         if not tpv_service.business_profile:
             from services.tpv_service import BusinessProfile
             tpv_service.set_business_profile(BusinessProfile.OTROS)
@@ -106,7 +121,23 @@ async def _get_tpv_info(current_user: User):
         db.close()
     
     # Obtener configuración actual
+    # Superusuarios siempre tienen acceso, incluso sin config
     config = tpv_service.config if tpv_service.business_profile else {}
+    
+    # Para superusuarios, asegurar que tengan acceso completo
+    if is_superuser and not config:
+        # Configuración mínima para superusuarios
+        config = {
+            "tables_enabled": True,
+            "services_enabled": True,
+            "appointments_enabled": True,
+            "products_enabled": True,
+            "stock_enabled": True,
+            "discounts_enabled": True,
+            "requires_employee": False,
+            "requires_customer_data": False,
+            "superuser_override": True
+        }
     
     return {
         "success": True,

@@ -31,9 +31,9 @@
           <span class="icon">📊</span>
           <span>Analytics</span>
         </button>
-        <!-- TPV - Visible para superusuarios o si está disponible en availableModules -->
+        <!-- TPV - Siempre visible para superusuarios, o si está disponible -->
         <button 
-          v-if="authStore.isAdmin || availableModules?.tpv"
+          v-if="authStore.isAdmin || availableModules.tpv"
           class="nav-item tpv-nav-btn"
           @click="goToTPV"
         >
@@ -42,7 +42,7 @@
         </button>
         <!-- Control Horario - Visible para superusuarios o si está disponible -->
         <button 
-          v-if="authStore.isAdmin || availableModules?.control_horario"
+          v-if="authStore.isAdmin || availableModules.control_horario"
           class="nav-item control-horario-nav-btn"
           @click="goToControlHorario"
         >
@@ -57,8 +57,9 @@
           <span class="icon">⚙️</span>
           <span>Settings</span>
         </button>
+        <!-- Admin Panel - Siempre visible para superusuarios -->
         <button 
-          v-if="authStore.isAdmin"
+          v-if="authStore.isAdmin || availableModules.admin"
           class="nav-item admin-btn"
           @click="goToAdmin"
         >
@@ -478,13 +479,14 @@ const dashboardMetrics = ref({
 })
 
 // Módulos disponibles (desde endpoint unificado)
+// Inicializar con valores por defecto: superusuarios tienen acceso completo
 const availableModules = ref({
-  tpv: false,
-  control_horario: false,
+  tpv: authStore.isAdmin, // Superusuarios siempre tienen TPV
+  control_horario: authStore.isAdmin, // Superusuarios siempre tienen Control Horario
   dashboard: true,
   analytics: true,
   agents: true,
-  admin: false,
+  admin: authStore.isAdmin, // Superusuarios siempre tienen Admin Panel
   settings: true
 })
 
@@ -528,6 +530,13 @@ const loadDashboardMetrics = async () => {
       if (data.available_modules) {
         availableModules.value = { ...data.available_modules }
       }
+      
+      // Forzar módulos para superusuarios (garantizar acceso completo)
+      if (authStore.isAdmin || data.user?.is_superuser) {
+        availableModules.value.tpv = true
+        availableModules.value.control_horario = true
+        availableModules.value.admin = true
+      }
 
       console.log('✅ Dashboard unificado cargado:', {
         metrics: dashboardMetrics.value,
@@ -540,10 +549,11 @@ const loadDashboardMetrics = async () => {
   } catch (error) {
     console.error('❌ Error cargando dashboard unificado:', error)
     // Usar valores por defecto en caso de error
-    // Para superusuarios, siempre mostrar TPV y Control Horario
+    // Para superusuarios, siempre mostrar TPV, Control Horario y Admin
     if (authStore.isAdmin) {
       availableModules.value.tpv = true
       availableModules.value.control_horario = true
+      availableModules.value.admin = true
     }
   }
 }
@@ -569,8 +579,28 @@ const saveNotificationSettings = () => {
   }
 }
 
+// Función para actualizar módulos basado en permisos de superusuario
+const updateModulesForSuperuser = () => {
+  if (authStore.isAdmin) {
+    availableModules.value.tpv = true
+    availableModules.value.control_horario = true
+    availableModules.value.admin = true
+    console.log('✅ Módulos habilitados para superusuario:', availableModules.value)
+  }
+}
+
+// Watcher para actualizar módulos cuando cambie el estado de admin
+watch(() => authStore.isAdmin, (isAdmin) => {
+  if (isAdmin) {
+    updateModulesForSuperuser()
+  }
+}, { immediate: true })
+
 // Cargar al montar y refrescar periódicamente
 onMounted(() => {
+  // Asegurar que superusuarios tengan acceso completo desde el inicio
+  updateModulesForSuperuser()
+  
   loadSavedSettings()
   loadDashboardMetrics()
   loadAgentsActivities()

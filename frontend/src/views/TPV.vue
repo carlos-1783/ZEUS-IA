@@ -131,22 +131,50 @@
               v-for="(item, index) in cart" 
               :key="index"
               class="cart-item"
+              :class="{ 'read-only': tpvState !== TPV_STATES.CART }"
             >
               <div class="cart-item-info">
                 <span class="cart-item-name">{{ item.product.name }}</span>
                 <span class="cart-item-price">€{{ formatPrice(item.total) }}</span>
+                <span class="cart-item-unit-price" v-if="item.quantity > 1">
+                  €{{ formatPrice((item.product.price_with_iva || item.product.price)) }} / unidad
+                </span>
               </div>
-              <div class="cart-item-controls">
-                <button @click="decreaseQuantity(index)" class="qty-btn">-</button>
+              <!-- Controles de edición (solo en estado CART) -->
+              <div class="cart-item-controls" v-if="tpvState === TPV_STATES.CART">
+                <button 
+                  @click="decreaseQuantity(index)" 
+                  class="qty-btn decrement-btn"
+                  :title="$t('tpv.cart.decreaseQuantity')"
+                >
+                  ➖
+                </button>
                 <span class="cart-item-qty">{{ item.quantity }}</span>
-                <button @click="increaseQuantity(index)" class="qty-btn">+</button>
-                <button @click="removeFromCart(index)" class="remove-btn">✕</button>
+                <button 
+                  @click="increaseQuantity(index)" 
+                  class="qty-btn increment-btn"
+                  :title="$t('tpv.cart.increaseQuantity')"
+                  :disabled="item.quantity >= 999"
+                >
+                  ➕
+                </button>
+                <button 
+                  @click="removeFromCart(index)" 
+                  class="remove-btn"
+                  :title="$t('tpv.cart.removeItem')"
+                >
+                  🗑
+                </button>
+              </div>
+              <!-- Vista de solo lectura (PRE_PAYMENT, PAYMENT, CLOSED) -->
+              <div class="cart-item-readonly" v-else>
+                <span class="cart-item-qty-readonly">{{ item.quantity }}x</span>
               </div>
             </div>
             
             <div v-if="cart.length === 0" class="empty-cart">
-              <p>El carrito está vacío</p>
-              <p class="empty-cart-hint">Selecciona productos para comenzar</p>
+              <div class="empty-cart-icon">🛒</div>
+              <p class="empty-cart-message">{{ $t('tpv.cart.emptyMessage') || 'Añade productos o servicios para comenzar' }}</p>
             </div>
           </div>
 
@@ -185,22 +213,100 @@
             </div>
           </div>
 
-          <!-- Botones de acción -->
+          <!-- Botones de acción según estado -->
           <div class="action-buttons">
-            <button @click="processPayment" class="action-btn pay-btn" :disabled="cart.length === 0">
-              💳 PAGAR €{{ formatPrice(total) }}
-            </button>
-            <button 
-              v-if="tpvConfig.supports_tickets !== false"
-              @click="printTicket" 
-              class="action-btn secondary-btn" 
-              :disabled="cart.length === 0"
-            >
-              🖨️ {{ tpvConfig.supports_invoices && cart.length > 0 ? 'Generar Ticket/Factura' : 'Imprimir Ticket' }}
-            </button>
-            <button @click="openDiscount" class="action-btn secondary-btn" :disabled="cart.length === 0">
-              🏷️ Descuento
-            </button>
+            <!-- Estado CART: Mostrar botón para revisar y pagar -->
+            <template v-if="tpvState === TPV_STATES.CART">
+              <button 
+                @click="goToPrePayment" 
+                class="action-btn pay-btn" 
+                :disabled="cart.length === 0"
+              >
+                💳 REVISAR Y PAGAR €{{ formatPrice(total) }}
+              </button>
+              <button 
+                v-if="tpvConfig.supports_tickets !== false"
+                @click="printTicket" 
+                class="action-btn secondary-btn" 
+                :disabled="cart.length === 0"
+              >
+                🖨️ {{ tpvConfig.supports_invoices && cart.length > 0 ? 'Generar Ticket/Factura' : 'Imprimir Ticket' }}
+              </button>
+              <button 
+                @click="openDiscount" 
+                class="action-btn secondary-btn" 
+                :disabled="cart.length === 0"
+              >
+                🏷️ Descuento
+              </button>
+            </template>
+            
+            <!-- Estado PRE_PAYMENT: Mostrar botones para volver o confirmar pago -->
+            <template v-else-if="tpvState === TPV_STATES.PRE_PAYMENT">
+              <button 
+                @click="startPayment" 
+                class="action-btn pay-btn"
+              >
+                💳 CONFIRMAR PAGO €{{ formatPrice(total) }}
+              </button>
+              <button 
+                @click="backToCart" 
+                class="action-btn secondary-btn"
+              >
+                ← Volver al Carrito
+              </button>
+              <button 
+                @click="openDiscount" 
+                class="action-btn secondary-btn"
+              >
+                🏷️ Descuento
+              </button>
+            </template>
+            
+            <!-- Estado PAYMENT: Mostrar botones de pago o cancelar -->
+            <template v-else-if="tpvState === TPV_STATES.PAYMENT">
+              <button 
+                @click="processPayment" 
+                class="action-btn pay-btn"
+              >
+                ✅ FINALIZAR PAGO €{{ formatPrice(total) }}
+              </button>
+              <button 
+                @click="cancelPayment" 
+                class="action-btn secondary-btn"
+              >
+                ← Cancelar
+              </button>
+            </template>
+            
+            <!-- Estado CLOSED: Mostrar botones para nueva venta -->
+            <template v-else-if="tpvState === TPV_STATES.CLOSED">
+              <button 
+                @click="resetTPV" 
+                class="action-btn pay-btn"
+              >
+                🆕 NUEVA VENTA
+              </button>
+              <button 
+                v-if="tpvConfig.supports_invoices"
+                @click="generateInvoice" 
+                class="action-btn secondary-btn"
+              >
+                🧾 Generar Factura
+              </button>
+            </template>
+          </div>
+          
+          <!-- Nota de pago (visible en PRE_PAYMENT) -->
+          <div v-if="tpvState === TPV_STATES.PRE_PAYMENT" class="payment-note-section">
+            <label for="payment-note">Nota adicional (opcional):</label>
+            <textarea 
+              id="payment-note"
+              v-model="paymentNote" 
+              class="payment-note-input"
+              placeholder="Añade una nota para esta venta..."
+              rows="2"
+            ></textarea>
           </div>
         </div>
       </div>
@@ -227,6 +333,14 @@ const router = useRouter()
 const authStore = useAuthStore()
 const { t } = useI18n()
 
+// Estados del TPV
+const TPV_STATES = {
+  CART: 'CART',           // Estado editable de venta
+  PRE_PAYMENT: 'PRE_PAYMENT', // Revisión antes del pago
+  PAYMENT: 'PAYMENT',     // Proceso de cobro
+  CLOSED: 'CLOSED'        // Venta finalizada
+}
+
 // Estado
 const loading = ref(false)
 const error = ref(null)
@@ -236,6 +350,8 @@ const selectedCategory = ref('all')
 const tablesMode = ref(false)
 const selectedTable = ref(null)
 const tables = ref([])
+const tpvState = ref(TPV_STATES.CART) // Estado actual del TPV
+const paymentNote = ref('') // Nota adicional para el pago
 
 // TPV Configuration from backend
 const businessProfile = ref(null)
@@ -383,13 +499,25 @@ const getBusinessProfileLabel = (profile) => {
   return t(`tpv.businessProfiles.${profile}`, profile)
 }
 
+// Validar cantidad según reglas (min: 1, max: 999)
+const validateQuantity = (quantity) => {
+  return Math.max(1, Math.min(999, quantity))
+}
+
 const addProductToCart = (product) => {
+  // Solo permitir agregar productos si estamos en estado CART
+  if (tpvState.value !== TPV_STATES.CART) {
+    return
+  }
+  
   const existingItem = cart.value.find(item => item.product.id === product.id)
   
   if (existingItem) {
-    existingItem.quantity++
-    existingItem.total = existingItem.product.price_with_iva * existingItem.quantity
+    // Si existe, incrementar cantidad (validando max: 999)
+    existingItem.quantity = validateQuantity(existingItem.quantity + 1)
+    existingItem.total = (existingItem.product.price_with_iva || existingItem.product.price) * existingItem.quantity
   } else {
+    // Si no existe, crear nueva línea
     cart.value.push({
       product: product,
       quantity: 1,
@@ -399,29 +527,84 @@ const addProductToCart = (product) => {
 }
 
 const removeFromCart = (index) => {
-  cart.value.splice(index, 1)
+  // Solo permitir eliminar si estamos en estado CART
+  if (tpvState.value !== TPV_STATES.CART) {
+    return
+  }
+  
+  if (confirm('¿Estás seguro de eliminar este producto del carrito?')) {
+    cart.value.splice(index, 1)
+  }
 }
 
 const increaseQuantity = (index) => {
+  // Solo permitir modificar cantidad si estamos en estado CART
+  if (tpvState.value !== TPV_STATES.CART) {
+    return
+  }
+  
   const item = cart.value[index]
-  item.quantity++
-  item.total = item.product.price_with_iva * item.quantity
+  item.quantity = validateQuantity(item.quantity + 1)
+  item.total = (item.product.price_with_iva || item.product.price) * item.quantity
 }
 
 const decreaseQuantity = (index) => {
+  // Solo permitir modificar cantidad si estamos en estado CART
+  if (tpvState.value !== TPV_STATES.CART) {
+    return
+  }
+  
   const item = cart.value[index]
   if (item.quantity > 1) {
     item.quantity--
-    item.total = item.product.price_with_iva * item.quantity
+    item.total = (item.product.price_with_iva || item.product.price) * item.quantity
   } else {
+    // Si la cantidad llega a 0, eliminar del carrito (con confirmación)
     removeFromCart(index)
   }
 }
 
 const clearCart = () => {
-  if (confirm('¿Estás seguro de limpiar el carrito?')) {
+  // Solo permitir limpiar si estamos en estado CART
+  if (tpvState.value !== TPV_STATES.CART) {
+    return
+  }
+  
+  if (confirm('¿Estás seguro de limpiar todo el carrito?')) {
     cart.value = []
   }
+}
+
+// Funciones para manejar estados del TPV
+const goToPrePayment = () => {
+  if (cart.value.length > 0 && tpvState.value === TPV_STATES.CART) {
+    tpvState.value = TPV_STATES.PRE_PAYMENT
+  }
+}
+
+const backToCart = () => {
+  if (tpvState.value === TPV_STATES.PRE_PAYMENT) {
+    tpvState.value = TPV_STATES.CART
+  }
+}
+
+const startPayment = () => {
+  if (tpvState.value === TPV_STATES.PRE_PAYMENT) {
+    tpvState.value = TPV_STATES.PAYMENT
+  }
+}
+
+const cancelPayment = () => {
+  if (tpvState.value === TPV_STATES.PAYMENT) {
+    tpvState.value = TPV_STATES.PRE_PAYMENT
+  }
+}
+
+const resetTPV = () => {
+  cart.value = []
+  tpvState.value = TPV_STATES.CART
+  paymentNote.value = ''
+  selectedTable.value = null
 }
 
 const handleKeyPress = (key) => {
@@ -468,7 +651,15 @@ const addTable = () => {
 }
 
 const processPayment = async () => {
-  if (cart.value.length === 0) return
+  // Solo procesar si estamos en estado PAYMENT
+  if (tpvState.value !== TPV_STATES.PAYMENT) {
+    return
+  }
+  
+  if (cart.value.length === 0) {
+    alert('⚠️ El carrito está vacío')
+    return
+  }
   
   try {
     const token = authStore.getToken ? authStore.getToken() : authStore.token
@@ -503,6 +694,7 @@ const processPayment = async () => {
       employee_id: employeeId,
       customer_data: customerData,
       terminal_id: null,
+      note: paymentNote.value || null, // Añadir nota si existe
       cart_items: cart.value.map(item => ({
         product_id: item.product.id,
         quantity: item.quantity,
@@ -512,7 +704,7 @@ const processPayment = async () => {
     }
     
     // Procesar pago en backend
-    const response = await fetch('/api/v1/tpv/sale', {
+    const response = await fetch('/api/v1/tpv/process-sale', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -528,9 +720,8 @@ const processPayment = async () => {
     
     const result = await response.json()
     
-    // Limpiar carrito después del pago exitoso
-    cart.value = []
-    selectedTable.value = null
+    // Cambiar estado a CLOSED después del pago exitoso
+    tpvState.value = TPV_STATES.CLOSED
     
     // Mostrar confirmación
     alert(`✅ Pago procesado exitosamente\n\nVenta #${result.sale_id || 'N/A'}\nTotal: €${formatPrice(total.value)}\n\nEsta venta se ha registrado automáticamente con RAFAEL.`)
@@ -539,7 +730,14 @@ const processPayment = async () => {
   } catch (err) {
     console.error('Error procesando pago:', err)
     alert('❌ Error al procesar el pago: ' + err.message)
+    // Volver al estado PRE_PAYMENT en caso de error
+    tpvState.value = TPV_STATES.PRE_PAYMENT
   }
+}
+
+const generateInvoice = async () => {
+  // En una implementación completa, esto generaría la factura
+  alert('🧾 Generando factura... (Funcionalidad en desarrollo)')
 }
 
 const printTicket = async () => {
@@ -936,6 +1134,29 @@ onMounted(async () => {
   font-weight: 700;
 }
 
+.cart-item-unit-price {
+  display: block;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 2px;
+}
+
+.cart-item.read-only {
+  opacity: 0.8;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.cart-item-readonly {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cart-item-qty-readonly {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+}
+
 .cart-item-controls {
   display: flex;
   align-items: center;
@@ -943,19 +1164,45 @@ onMounted(async () => {
 }
 
 .qty-btn {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-radius: 6px;
   border: none;
   background: rgba(59, 130, 246, 0.3);
   color: #fff;
   cursor: pointer;
   font-weight: 700;
-  font-size: 1.2rem;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
 }
 
-.qty-btn:hover {
+.qty-btn:hover:not(:disabled) {
   background: rgba(59, 130, 246, 0.5);
+  transform: scale(1.1);
+}
+
+.qty-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.increment-btn {
+  background: rgba(16, 185, 129, 0.3);
+}
+
+.increment-btn:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.5);
+}
+
+.decrement-btn {
+  background: rgba(245, 158, 11, 0.3);
+}
+
+.decrement-btn:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.5);
 }
 
 .cart-item-qty {
@@ -965,25 +1212,52 @@ onMounted(async () => {
 }
 
 .remove-btn {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-radius: 6px;
   border: none;
   background: rgba(239, 68, 68, 0.3);
   color: #fca5a5;
   cursor: pointer;
   font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.remove-btn:hover {
+  background: rgba(239, 68, 68, 0.5);
+  transform: scale(1.1);
 }
 
 .empty-cart {
   text-align: center;
-  padding: 40px 20px;
+  padding: 60px 20px;
   color: rgba(255, 255, 255, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.empty-cart-icon {
+  font-size: 4rem;
+  margin-bottom: 15px;
+  opacity: 0.5;
+}
+
+.empty-cart-message {
+  font-size: 1rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .empty-cart-hint {
   font-size: 0.85rem;
   margin-top: 10px;
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .cart-totals {
@@ -1094,6 +1368,43 @@ onMounted(async () => {
 
 .secondary-btn:hover:not(:disabled) {
   background: rgba(59, 130, 246, 0.5);
+}
+
+.payment-note-section {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.payment-note-section label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+}
+
+.payment-note-input {
+  width: 100%;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+  min-height: 60px;
+}
+
+.payment-note-input:focus {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.payment-note-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
 }
 
 /* Mesas */

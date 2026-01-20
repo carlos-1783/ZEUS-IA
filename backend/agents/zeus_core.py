@@ -37,11 +37,27 @@ class ZeusCore(BaseAgent):
             max_tokens=zeus_config["parameters"]["max_tokens"]
         )
         
+        # Cargar configuración de comportamiento y orquestación
+        zeus_core_config_path = os.path.join(base_dir, "config", "zeus_core_config.json")
+        try:
+            with open(zeus_core_config_path, "r", encoding="utf-8") as f:
+                self.orchestration_config = json.load(f)
+            print("⚙️ [ZEUS] Configuración de orquestación cargada")
+        except FileNotFoundError:
+            print("⚠️ [ZEUS] Configuración de orquestación no encontrada, usando defaults")
+            self.orchestration_config = {
+                "project_state_engine": {"default_state": "PRE_LAUNCH", "allowed_states": []},
+                "behavior_rules": {},
+                "context_inference": {},
+                "prelaunch_execution_flow": [],
+                "response_templates": {}
+            }
+        
         # Agentes disponibles (se registrarán después)
         self.agents: Dict[str, BaseAgent] = {}
         self.prelaunch_active = False
         self.prelaunch_plan: Optional[Dict[str, Any]] = None
-        self.prelaunch_plan: Optional[Dict[str, Any]] = None
+        self.project_state = self.orchestration_config.get("project_state_engine", {}).get("default_state", "PRE_LAUNCH")
         self.teamflow_engine: Optional["TeamFlowEngine"] = None
         self.shared_context: Dict[str, Dict[str, Any]] = {}
         self.execution_snapshots: List[Dict[str, Any]] = []
@@ -360,33 +376,106 @@ class ZeusCore(BaseAgent):
 
     def _start_prelaunch_phase(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Iniciar fase de pre-lanzamiento con cronograma y tareas asignadas.
+        Iniciar fase de pre-lanzamiento usando configuración de orquestación.
+        Sigue el flujo definido en zeus_core_config.json: AUTO_DETECT -> PROPOSE -> CONFIRM -> BUILD
         """
-        plan = self._build_prelaunch_plan()
-        tasks_created = False
-
+        # Aplicar reglas de comportamiento para PRE_LAUNCH
+        behavior_rules = self.orchestration_config.get("behavior_rules", {}).get("PRE_LAUNCH", {})
+        interaction_mode = behavior_rules.get("interaction_mode", "GUIDED_PROACTIVE")
+        question_policy = behavior_rules.get("question_policy", "CONFIRM_ONLY")
+        
+        # Paso 1: AUTO_DETECT_PROJECT (inferir contexto)
+        detected_scenario = self._auto_detect_project(context)
+        
+        # Paso 2: PROPOSE_STRATEGY (proponer plan)
+        proposed_strategy = self._propose_prelaunch_strategy(detected_scenario, context)
+        
+        # Si no está activo, crear el plan completo
         if not self.prelaunch_active:
+            plan = self._build_prelaunch_plan()
             self._register_prelaunch_tasks(plan)
             self.prelaunch_active = True
+            self.project_state = "PRE_LAUNCH"
             tasks_created = True
             self.prelaunch_plan = plan
         else:
             print("ℹ️ [ZEUS] Fase PRE-LANZAMIENTO ya estaba activa. Se entrega resumen actualizado.")
-            self.prelaunch_plan = plan
+            plan = self.prelaunch_plan or self._build_prelaunch_plan()
+            tasks_created = False
 
+        # Paso 3: CONFIRMATION_REQUEST (usar plantillas de respuesta)
+        response_templates = self.orchestration_config.get("response_templates", {})
+        intro_text = response_templates.get(
+            "prelaunch_intro", 
+            "Detecto que estás en fase de pre-lanzamiento. Basándome en ZEUS, propongo este escenario inicial."
+        )
+        confirmation_prompt = response_templates.get(
+            "confirmation_prompt",
+            "¿Confirmamos este escenario o ajustamos algo mínimo?"
+        )
+        
         summary_text = self._render_prelaunch_summary(plan, tasks_created=tasks_created)
+        full_content = f"{intro_text}\n\n{summary_text}\n\n{confirmation_prompt}"
 
         return {
             "success": True,
             "agent": self.name,
             "role": self.role,
-            "content": summary_text,
+            "content": full_content,
             "confidence": 0.92,
             "hitl_required": False,
-            "human_approval_required": False,
+            "human_approval_required": question_policy == "CONFIRM_ONLY",
             "plan": plan,
-            "tasks_created": tasks_created
+            "tasks_created": tasks_created,
+            "detected_scenario": detected_scenario,
+            "proposed_strategy": proposed_strategy,
+            "project_state": self.project_state,
+            "interaction_mode": interaction_mode
         }
+    
+    def _auto_detect_project(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Paso 1: Auto-detectar el proyecto basado en contexto y configuración"""
+        inference_config = self.orchestration_config.get("context_inference", {})
+        assumptions = inference_config.get("assumptions_if_missing", {})
+        
+        # Intentar inferir desde datos internos de ZEUS
+        detected = {
+            "product_type": assumptions.get("product_type", "Plataforma IA empresarial"),
+            "market": assumptions.get("market", "B2B"),
+            "goal": assumptions.get("goal", "Validación + captación de leads"),
+            "channels": assumptions.get("channels", ["LinkedIn", "Email", "WhatsApp Business"]),
+            "source": "ZEUS_INTERNAL_DATA"
+        }
+        
+        # Si hay contexto del usuario, intentar mejorar la inferencia
+        if context.get("user_message"):
+            user_msg = context["user_message"].lower()
+            # Detectar keywords para ajustar inferencias
+            if "saas" in user_msg or "software" in user_msg:
+                detected["product_type"] = "SaaS"
+            if "b2c" in user_msg or "consumidor" in user_msg:
+                detected["market"] = "B2C"
+        
+        print(f"🔍 [ZEUS] Proyecto detectado: {detected['product_type']} - {detected['market']}")
+        return detected
+    
+    def _propose_prelaunch_strategy(self, scenario: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+        """Paso 2: Proponer estrategia basada en escenario detectado"""
+        execution_flow = self.orchestration_config.get("prelaunch_execution_flow", [])
+        
+        strategy = {
+            "value_proposition": f"Lanzamiento de {scenario['product_type']} en mercado {scenario['market']}",
+            "main_message": f"Posicionar {scenario['product_type']} como solución líder",
+            "channels": scenario.get("channels", []),
+            "timing": {
+                "7_days": "Setup inicial y configuración",
+                "14_days": "Primeras campañas y validación",
+                "30_days": "Escalado y optimización"
+            }
+        }
+        
+        print(f"💡 [ZEUS] Estrategia propuesta para {scenario['product_type']}")
+        return strategy
 
     def _build_prelaunch_plan(self) -> Dict[str, Any]:
         """Construir cronograma y responsabilidades para la fase de pre-lanzamiento."""

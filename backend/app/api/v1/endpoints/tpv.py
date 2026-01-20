@@ -204,6 +204,9 @@ async def create_product(
     current_user: User = Depends(get_current_active_user)
 ):
     """Crear producto en el TPV"""
+    logger.info(f"📦 Creando producto: {request.name} - Precio: €{request.price}")
+    logger.info(f"📊 Productos existentes antes de crear: {len(tpv_service.products)}")
+    
     product = tpv_service.create_product(
         name=request.name,
         price=request.price,
@@ -213,9 +216,14 @@ async def create_product(
         metadata=request.metadata
     )
     
+    logger.info(f"✅ Producto creado con ID: {product.get('id')}")
+    logger.info(f"📊 Total productos después de crear: {len(tpv_service.products)}")
+    logger.info(f"📋 Lista de productos: {[p.get('name') for p in tpv_service.products.values()]}")
+    
     return {
         "success": True,
-        "product": product
+        "product": product,
+        "total_products": len(tpv_service.products)
     }
 
 

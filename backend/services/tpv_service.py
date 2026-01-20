@@ -340,7 +340,15 @@ class TPVService:
         Returns:
             Dict con información del producto creado
         """
-        product_id = f"PROD_{len(self.products) + 1:06d}"
+        # Generar ID único basado en timestamp para evitar colisiones
+        import time
+        timestamp = int(time.time() * 1000)  # milisegundos
+        product_id = f"PROD_{timestamp:013d}"
+        
+        # Verificar que el ID no existe (por si acaso)
+        while product_id in self.products:
+            timestamp += 1
+            product_id = f"PROD_{timestamp:013d}"
         
         product = {
             "id": product_id,
@@ -357,7 +365,8 @@ class TPVService:
         
         self.products[product_id] = product
         
-        logger.info(f"📦 Producto creado: {name} (€{price:.2f})")
+        logger.info(f"📦 Producto creado: {name} (€{price:.2f}) - ID: {product_id}")
+        logger.info(f"📊 Total productos en sistema: {len(self.products)}")
         
         return product
     

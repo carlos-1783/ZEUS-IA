@@ -1,0 +1,144 @@
+{
+  "simulation_id": "E2E-001",
+  "system": "ZEUS_CORE",
+  "mode": "END_TO_END",
+  "timestamp": "AUTO",
+
+  "actor_1": {
+    "role": "SUPERUSUARIO",
+    "permissions": "ALL",
+    "actions": [
+      "CREATE_COMPANY",
+      "CONFIGURE_MODULES",
+      "ASSIGN_ROLES",
+      "VIEW_GLOBAL_DASHBOARD"
+    ]
+  },
+
+  "company": {
+    "company_id": "NT-001",
+    "name": "NovaTech Solutions SL",
+    "business_type": "PROFESSIONAL_SERVICES",
+    "country": "ES",
+    "currency": "EUR",
+    "status": "ACTIVE"
+  },
+
+  "modules_enabled": {
+    "dashboard": true,
+    "tpv": true,
+    "time_tracking": true,
+    "invoicing": true,
+    "crm": true,
+    "whatsapp": true,
+    "email": true,
+    "analytics": true
+  },
+
+  "tpv_config": {
+    "mode": "SERVICES",
+    "tables_enabled": false,
+    "services_enabled": true,
+    "appointments_enabled": true,
+    "products": [
+      {
+        "id": "S-001",
+        "name": "Consultoría IA",
+        "price": 120,
+        "unit": "hora",
+        "tax": 21
+      }
+    ]
+  },
+
+  "time_tracking": {
+    "required": true,
+    "linked_to": [
+      "services",
+      "employees"
+    ],
+    "rules": {
+      "min_session": "15m",
+      "rounding": "15m"
+    }
+  },
+
+  "users": [
+    {
+      "user_id": "EMP-001",
+      "role": "EMPLOYEE",
+      "permissions": [
+        "TIME_TRACKING",
+        "TPV_USE"
+      ]
+    },
+    {
+      "user_id": "ADMIN-001",
+      "role": "ADMIN",
+      "permissions": [
+        "DASHBOARD",
+        "INVOICING",
+        "CRM"
+      ]
+    }
+  ],
+
+  "end_to_end_flow": [
+    {
+      "step": 1,
+      "event": "LEAD_CREATED",
+      "source": "WhatsApp",
+      "data": {
+        "name": "Cliente Prueba",
+        "service": "Consultoría IA"
+      }
+    },
+    {
+      "step": 2,
+      "event": "SERVICE_STARTED",
+      "employee": "EMP-001",
+      "time_tracking": "START"
+    },
+    {
+      "step": 3,
+      "event": "SERVICE_FINISHED",
+      "duration": "2h",
+      "time_tracking": "STOP"
+    },
+    {
+      "step": 4,
+      "event": "TPV_SALE",
+      "service_id": "S-001",
+      "amount": 240
+    },
+    {
+      "step": 5,
+      "event": "INVOICE_GENERATED",
+      "type": "DIGITAL",
+      "sent_via": "EMAIL"
+    }
+  ],
+
+  "dashboard_metrics": {
+    "revenue": 240,
+    "hours_tracked": 2,
+    "conversion_rate": "100%",
+    "active_clients": 1
+  },
+
+  "mobile_desktop_consistency": {
+    "sync_required": true,
+    "source_of_truth": "BACKEND",
+    "cache_policy": "FORCE_REFRESH"
+  },
+
+  "definition_of_done": {
+    "end_to_end": [
+      "Lead convertido",
+      "Horas registradas",
+      "Venta realizada",
+      "Factura enviada",
+      "Dashboard actualizado"
+    ]
+  }
+}

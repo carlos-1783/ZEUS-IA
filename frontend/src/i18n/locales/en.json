@@ -44,7 +44,6 @@
   },
   "dashboard": {
     "welcome": "Welcome to Olympus",
-    "metrics": "Metrics",
     "showMetrics": "SHOW",
     "hideMetrics": "HIDE",
     "admin": "ADMIN",
@@ -75,13 +74,6 @@
       "totalRevenue": "Total Revenue",
       "activeSubscriptions": "Active Subscriptions"
     },
-    "revenue": {
-      "monthly": "Monthly Revenue",
-      "chart": {
-        "title": "Revenue by Month",
-        "loading": "Loading chart data..."
-      }
-    },
     "customers": {
       "title": "Customers",
       "refresh": "Refresh",
@@ -103,6 +95,7 @@
     },
     "revenue": {
       "title": "Revenue and Billing",
+      "monthly": "Monthly Revenue",
       "thisMonth": "This month",
       "activeSubscriptions": "active subscriptions",
       "setupFees": "Setup fees (total)",
@@ -110,7 +103,11 @@
       "yearlyProjection": "Annual projection",
       "basedOnCurrent": "Based on current subscriptions",
       "byPlan": "By plan",
-      "perMonth": "/month"
+      "perMonth": "/month",
+      "chart": {
+        "title": "Revenue by Month",
+        "loading": "Loading chart data..."
+      }
     },
     "settings": {
       "title": "Admin Settings",

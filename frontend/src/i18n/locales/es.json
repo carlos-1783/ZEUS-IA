@@ -44,7 +44,6 @@
   },
   "dashboard": {
     "welcome": "Bienvenido al Olimpo",
-    "metrics": "Métricas",
     "showMetrics": "MOSTRAR",
     "hideMetrics": "OCULTAR",
     "admin": "ADMIN",
@@ -75,13 +74,6 @@
       "totalRevenue": "Ingresos Totales",
       "activeSubscriptions": "Suscripciones Activas"
     },
-    "revenue": {
-      "monthly": "Ingresos por Mes",
-      "chart": {
-        "title": "Ingresos por Mes",
-        "loading": "Cargando datos del gráfico..."
-      }
-    },
     "customers": {
       "title": "Clientes",
       "refresh": "Actualizar",
@@ -103,6 +95,7 @@
     },
     "revenue": {
       "title": "Ingresos y Facturación",
+      "monthly": "Ingresos por Mes",
       "thisMonth": "Este mes",
       "activeSubscriptions": "suscripciones activas",
       "setupFees": "Setup fees (total)",
@@ -110,7 +103,11 @@
       "yearlyProjection": "Proyección anual",
       "basedOnCurrent": "Basado en suscripciones actuales",
       "byPlan": "Por plan",
-      "perMonth": "/mes"
+      "perMonth": "/mes",
+      "chart": {
+        "title": "Ingresos por Mes",
+        "loading": "Cargando datos del gráfico..."
+      }
     },
     "settings": {
       "title": "Configuración de Admin",

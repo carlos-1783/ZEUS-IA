@@ -54,9 +54,10 @@
         <div class="products-grid" v-if="!tablesMode">
           <div 
             v-for="product in filteredProducts" 
-            :key="product.id"
+            :key="product.id || product.name"
             @click="addProductToCart(product)"
             class="product-card"
+            :title="'Clic para añadir ' + product.name + ' al carrito'"
           >
             <div class="product-image">
               <span class="product-icon">{{ getProductIcon(product.category) }}</span>
@@ -119,7 +120,7 @@
         <!-- Resumen del Carrito -->
         <div class="cart-panel">
           <div class="cart-header">
-            <h2>🛒 Carrito</h2>
+            <h2>🛒 Carrito <span v-if="cart.length > 0" class="cart-count-badge">({{ cart.length }})</span></h2>
             <button @click="clearCart" class="clear-cart-btn" v-if="cart.length > 0">
               🗑️ Limpiar
             </button>
@@ -139,9 +140,8 @@
           <div class="cart-items">
             <div 
               v-for="(item, index) in cart" 
-              :key="index"
+              :key="`cart-item-${item.product.id || item.product.name}-${index}`"
               class="cart-item"
-              :class="{ 'read-only': tpvState !== TPV_STATES.CART }"
             >
               <div class="cart-item-info">
                 <span class="cart-item-name">{{ item.product.name }}</span>
@@ -185,6 +185,7 @@
             <div v-if="cart.length === 0" class="empty-cart">
               <div class="empty-cart-icon">🛒</div>
               <p class="empty-cart-message">{{ $t('tpv.cart.emptyMessage') || 'Añade productos o servicios para comenzar' }}</p>
+              <p class="empty-cart-hint">💡 Haz clic en cualquier producto para añadirlo al carrito</p>
             </div>
           </div>
 
@@ -579,41 +580,47 @@ const removeFromCart = (index) => {
 }
 
 const increaseQuantity = (index) => {
-  // Solo permitir modificar cantidad si estamos en estado CART
+  // Si no estamos en CART, volver a CART
   if (tpvState.value !== TPV_STATES.CART) {
-    return
+    tpvState.value = TPV_STATES.CART
   }
   
   const item = cart.value[index]
-  if (!item) return
+  if (!item) {
+    console.error('❌ Item no encontrado en índice:', index)
+    return
+  }
   
   const oldQuantity = item.quantity
   item.quantity = validateQuantity(item.quantity + 1)
-  item.total = (item.product.price_with_iva || item.product.price) * item.quantity
+  item.total = (item.product.price_with_iva || item.product.price || 0) * item.quantity
   
-  // Feedback visual si se incrementó
-  if (item.quantity > oldQuantity) {
-    showCartFeedback(`${item.product.name}: ${item.quantity} unidades`, 'updated')
-  }
+  console.log('➕ Cantidad incrementada:', item.product.name, oldQuantity, '→', item.quantity)
+  showCartFeedback(`${item.product.name}: ${item.quantity} unidades`, 'updated')
 }
 
 const decreaseQuantity = (index) => {
-  // Solo permitir modificar cantidad si estamos en estado CART
+  // Si no estamos en CART, volver a CART
   if (tpvState.value !== TPV_STATES.CART) {
-    return
+    tpvState.value = TPV_STATES.CART
   }
   
   const item = cart.value[index]
-  if (!item) return
+  if (!item) {
+    console.error('❌ Item no encontrado en índice:', index)
+    return
+  }
   
   if (item.quantity > 1) {
     item.quantity--
-    item.total = (item.product.price_with_iva || item.product.price) * item.quantity
-    // Feedback visual
+    item.total = (item.product.price_with_iva || item.product.price || 0) * item.quantity
+    console.log('➖ Cantidad decrementada:', item.product.name, '→', item.quantity)
     showCartFeedback(`${item.product.name}: ${item.quantity} unidades`, 'updated')
   } else {
-    // Si la cantidad llega a 0, eliminar del carrito (con confirmación)
-    removeFromCart(index)
+    // Si la cantidad llega a 1, eliminar del carrito directamente
+    console.log('🗑️ Eliminando producto (cantidad = 1):', item.product.name)
+    cart.value.splice(index, 1)
+    showCartFeedback(`${item.product.name} eliminado`, 'removed')
   }
 }
 
@@ -961,10 +968,22 @@ const openProducts = async () => {
 
 // Cargar al montar
 onMounted(async () => {
+  // Asegurar que el estado inicial sea CART
+  tpvState.value = TPV_STATES.CART
+  console.log('🔄 TPV montado. Estado inicial:', tpvState.value)
+  
   // Cargar configuración primero
   await loadTPVConfig()
   // Luego cargar productos
   await checkStatus()
+  
+  // Log del estado final
+  console.log('✅ TPV cargado:', {
+    estado: tpvState.value,
+    productos: products.value.length,
+    carrito: cart.value.length,
+    config: tpvConfig.value
+  })
 })
 </script>
 
@@ -1104,6 +1123,8 @@ onMounted(async () => {
   cursor: pointer;
   transition: all 0.3s;
   text-align: center;
+  user-select: none;
+  position: relative;
 }
 
 .product-card:hover {
@@ -1111,6 +1132,25 @@ onMounted(async () => {
   border-color: rgba(59, 130, 246, 0.5);
   box-shadow: 0 8px 25px rgba(59, 130, 246, 0.3);
   background: rgba(59, 130, 246, 0.1);
+}
+
+.product-card:active {
+  transform: translateY(-2px) scale(0.98);
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.5);
+}
+
+.product-card::after {
+  content: '➕';
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  font-size: 1.2rem;
+}
+
+.product-card:hover::after {
+  opacity: 0.6;
 }
 
 .product-icon {
@@ -1184,6 +1224,15 @@ onMounted(async () => {
 .cart-header h2 {
   margin: 0;
   font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cart-count-badge {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 400;
 }
 
 .clear-cart-btn {

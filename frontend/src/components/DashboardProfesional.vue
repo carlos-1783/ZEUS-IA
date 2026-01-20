@@ -698,7 +698,7 @@ const saveNotificationSettings = () => {
   }
 }
 
-// Watch para guardar settings automáticamente (al nivel superior)
+// Watch para guardar settings automáticamente (al nivel superior, no en onMounted)
 watch(notificationSettings, () => {
   saveNotificationSettings()
 }, { deep: true })
@@ -797,8 +797,6 @@ onMounted(async () => {
   
   // Refresh actividades de agentes cada minuto
   setInterval(loadAgentsActivities, 60000)
-  
-  // Guardar settings cuando cambien (fuera de onMounted)
   
   // Verificar después de múltiples delays para asegurar que authStore esté listo
   setTimeout(() => {

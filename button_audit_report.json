@@ -1,0 +1,282 @@
+{
+  "audit_date": "2024-12-19",
+  "auditor": "CURSO Senior Fullstack Architect",
+  "scope": "TPV Universal - Auditoría completa de botones",
+  "summary": {
+    "total_buttons": 20,
+    "buttons_with_handlers": 20,
+    "buttons_without_handlers": 0,
+    "buttons_with_incomplete_logic": 3,
+    "buttons_correct": 17,
+    "issues_found": 3
+  },
+  "buttons": [
+    {
+      "id": "BTN-001",
+      "location": "TPV.vue:4",
+      "type": "Navigation",
+      "label": "Volver al Dashboard",
+      "handler": "goToDashboard",
+      "status": "CORRECT",
+      "notes": "Navegación funcional, no afecta carrito"
+    },
+    {
+      "id": "BTN-002",
+      "location": "TPV.vue:18",
+      "type": "Toggle",
+      "label": "Modo Mesas / Ver Productos",
+      "handler": "toggleTablesMode",
+      "status": "CORRECT",
+      "notes": "Cambia vista correctamente"
+    },
+    {
+      "id": "BTN-003",
+      "location": "TPV.vue:24",
+      "type": "Action",
+      "label": "Refrescar",
+      "handler": "checkStatus",
+      "status": "CORRECT",
+      "notes": "Recarga productos y configuración"
+    },
+    {
+      "id": "BTN-004",
+      "location": "TPV.vue:42",
+      "type": "Filter",
+      "label": "Categoría (dinámico)",
+      "handler": "selectedCategory = category",
+      "status": "CORRECT",
+      "notes": "Filtrado directo, correcto"
+    },
+    {
+      "id": "BTN-005",
+      "location": "TPV.vue:48",
+      "type": "Filter",
+      "label": "Todas las categorías",
+      "handler": "selectedCategory = 'all'",
+      "status": "CORRECT",
+      "notes": "Filtrado directo, correcto"
+    },
+    {
+      "id": "BTN-006",
+      "location": "TPV.vue:58",
+      "type": "Product Action",
+      "label": "Añadir Producto al Carrito",
+      "handler": "addProductToCart(product)",
+      "status": "NEEDS_IMPROVEMENT",
+      "notes": "Funciona pero falta feedback visual inmediato",
+      "recommendations": [
+        "Añadir animación de éxito",
+        "Mostrar notificación toast",
+        "Actualizar contador visual del carrito"
+      ]
+    },
+    {
+      "id": "BTN-007",
+      "location": "TPV.vue:80",
+      "type": "Product Management",
+      "label": "Añadir Producto",
+      "handler": "openProducts",
+      "status": "CORRECT",
+      "notes": "Abre modal/prompt para crear producto"
+    },
+    {
+      "id": "BTN-008",
+      "location": "TPV.vue:95",
+      "type": "Table Selection",
+      "label": "Seleccionar Mesa",
+      "handler": "selectTable(table)",
+      "status": "NEEDS_IMPROVEMENT",
+      "notes": "Funciona pero no preserva estado del carrito al cambiar mesa",
+      "recommendations": [
+        "Preservar carrito al cambiar mesa",
+        "Confirmar antes de limpiar carrito si hay items"
+      ]
+    },
+    {
+      "id": "BTN-009",
+      "location": "TPV.vue:111",
+      "type": "Table Management",
+      "label": "Añadir Mesa",
+      "handler": "addTable",
+      "status": "CORRECT",
+      "notes": "Añade mesa correctamente"
+    },
+    {
+      "id": "BTN-010",
+      "location": "TPV.vue:123",
+      "type": "Cart Action",
+      "label": "Limpiar Carrito",
+      "handler": "clearCart",
+      "status": "CORRECT",
+      "notes": "Tiene confirmación, correcto"
+    },
+    {
+      "id": "BTN-011",
+      "location": "TPV.vue:146",
+      "type": "Quantity Control",
+      "label": "Decrementar Cantidad",
+      "handler": "decreaseQuantity(index)",
+      "status": "CORRECT",
+      "notes": "Funciona correctamente, elimina si llega a 0"
+    },
+    {
+      "id": "BTN-012",
+      "location": "TPV.vue:154",
+      "type": "Quantity Control",
+      "label": "Incrementar Cantidad",
+      "handler": "increaseQuantity(index)",
+      "status": "CORRECT",
+      "notes": "Funciona correctamente, valida máximo 999"
+    },
+    {
+      "id": "BTN-013",
+      "location": "TPV.vue:162",
+      "type": "Cart Action",
+      "label": "Eliminar Producto",
+      "handler": "removeFromCart(index)",
+      "status": "CORRECT",
+      "notes": "Tiene confirmación, correcto"
+    },
+    {
+      "id": "BTN-014",
+      "location": "TPV.vue:203",
+      "type": "Keyboard",
+      "label": "Tecla Numérica/Acción",
+      "handler": "handleKeyPress(key)",
+      "status": "INCOMPLETE",
+      "notes": "Solo implementa 'C' (limpiar) y '⌫' (backspace) - falta implementación completa",
+      "recommendations": [
+        "Implementar búsqueda rápida con números",
+        "Implementar entrada directa de cantidad",
+        "Completar funcionalidad de backspace"
+      ]
+    },
+    {
+      "id": "BTN-015",
+      "location": "TPV.vue:221",
+      "type": "Payment Flow",
+      "label": "Revisar y Pagar",
+      "handler": "goToPrePayment",
+      "status": "CORRECT",
+      "notes": "Cambia a estado PRE_PAYMENT correctamente, deshabilitado si carrito vacío"
+    },
+    {
+      "id": "BTN-016",
+      "location": "TPV.vue:229",
+      "type": "Ticket",
+      "label": "Imprimir Ticket / Generar Ticket/Factura",
+      "handler": "printTicket",
+      "status": "CORRECT",
+      "notes": "Genera y descarga ticket, deshabilitado si carrito vacío"
+    },
+    {
+      "id": "BTN-017",
+      "location": "TPV.vue:236",
+      "type": "Discount",
+      "label": "Descuento",
+      "handler": "openDiscount",
+      "status": "CORRECT",
+      "notes": "Aplica descuento correctamente, deshabilitado si carrito vacío"
+    },
+    {
+      "id": "BTN-018",
+      "location": "TPV.vue:247",
+      "type": "Payment Flow",
+      "label": "Confirmar Pago",
+      "handler": "startPayment",
+      "status": "CORRECT",
+      "notes": "Cambia a estado PAYMENT correctamente"
+    },
+    {
+      "id": "BTN-019",
+      "location": "TPV.vue:253",
+      "type": "Navigation",
+      "label": "Volver al Carrito",
+      "handler": "backToCart",
+      "status": "CORRECT",
+      "notes": "Vuelve a estado CART preservando carrito - CORRECTO"
+    },
+    {
+      "id": "BTN-020",
+      "location": "TPV.vue:269",
+      "type": "Payment",
+      "label": "Finalizar Pago",
+      "handler": "processPayment",
+      "status": "NEEDS_FIX",
+      "notes": "Endpoint incorrecto: usa '/api/v1/tpv/process-sale' pero debería ser '/api/v1/tpv/sale'",
+      "issues": [
+        "URL incorrecta del endpoint",
+        "Falta validación de método de pago en frontend",
+        "Resultado usa 'sale_id' pero backend devuelve 'ticket_id'"
+      ],
+      "recommendations": [
+        "Corregir URL a '/api/v1/tpv/sale'",
+        "Añadir selector de método de pago",
+        "Usar 'ticket_id' del resultado en lugar de 'sale_id'"
+      ]
+    },
+    {
+      "id": "BTN-021",
+      "location": "TPV.vue:275",
+      "type": "Payment Flow",
+      "label": "Cancelar Pago",
+      "handler": "cancelPayment",
+      "status": "CORRECT",
+      "notes": "Vuelve a PRE_PAYMENT preservando carrito"
+    },
+    {
+      "id": "BTN-022",
+      "location": "TPV.vue:285",
+      "type": "Reset",
+      "label": "Nueva Venta",
+      "handler": "resetTPV",
+      "status": "CORRECT",
+      "notes": "Limpia carrito y vuelve a estado inicial"
+    },
+    {
+      "id": "BTN-023",
+      "location": "TPV.vue:292",
+      "type": "Invoice",
+      "label": "Generar Factura",
+      "handler": "generateInvoice",
+      "status": "INCOMPLETE",
+      "notes": "Solo muestra alert, no implementado completamente",
+      "recommendations": [
+        "Implementar llamada a API /api/v1/tpv/invoice",
+        "Obtener ticket_id de la venta procesada",
+        "Solicitar datos del cliente si no están"
+      ]
+    },
+    {
+      "id": "BTN-024",
+      "location": "TPV.vue:321",
+      "type": "Error Recovery",
+      "label": "Reintentar",
+      "handler": "checkStatus",
+      "status": "CORRECT",
+      "notes": "Reintenta carga en caso de error"
+    }
+  ],
+  "critical_issues": [
+    {
+      "button_id": "BTN-020",
+      "issue": "URL incorrecta del endpoint de pago",
+      "severity": "HIGH",
+      "impact": "El pago no funcionará correctamente"
+    }
+  ],
+  "recommendations": [
+    "Corregir URL del endpoint de pago",
+    "Añadir feedback visual al añadir productos",
+    "Completar implementación de teclado numérico",
+    "Implementar generación de factura completa",
+    "Mejorar preservación de estado al cambiar mesa"
+  ],
+  "next_steps": [
+    "Corregir endpoint de pago",
+    "Añadir feedback visual",
+    "Completar lógica de teclado",
+    "Implementar facturación",
+    "Mejorar UX general"
+  ]
+}

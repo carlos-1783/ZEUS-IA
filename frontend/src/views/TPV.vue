@@ -125,6 +125,16 @@
             </button>
           </div>
 
+          <!-- Feedback visual del carrito -->
+          <transition name="fade-slide">
+            <div v-if="cartFeedback" class="cart-feedback" :class="cartFeedback.type">
+              <span class="feedback-icon">
+                {{ cartFeedback.type === 'added' ? '✅' : cartFeedback.type === 'removed' ? '🗑️' : cartFeedback.type === 'cleared' ? '🧹' : '🔄' }}
+              </span>
+              <span class="feedback-message">{{ cartFeedback.message }}</span>
+            </div>
+          </transition>
+
           <!-- Lista de productos en el carrito -->
           <div class="cart-items">
             <div 
@@ -221,6 +231,7 @@
                 @click="goToPrePayment" 
                 class="action-btn pay-btn" 
                 :disabled="cart.length === 0"
+                :title="cart.length === 0 ? 'Añade productos al carrito para continuar' : 'Revisar y proceder al pago'"
               >
                 💳 REVISAR Y PAGAR €{{ formatPrice(total) }}
               </button>
@@ -229,6 +240,7 @@
                 @click="printTicket" 
                 class="action-btn secondary-btn" 
                 :disabled="cart.length === 0"
+                :title="cart.length === 0 ? 'Añade productos al carrito para generar ticket' : 'Generar e imprimir ticket'"
               >
                 🖨️ {{ tpvConfig.supports_invoices && cart.length > 0 ? 'Generar Ticket/Factura' : 'Imprimir Ticket' }}
               </button>
@@ -236,6 +248,7 @@
                 @click="openDiscount" 
                 class="action-btn secondary-btn" 
                 :disabled="cart.length === 0"
+                :title="cart.length === 0 ? 'Añade productos al carrito para aplicar descuento' : 'Aplicar descuento al carrito'"
               >
                 🏷️ Descuento
               </button>
@@ -246,18 +259,21 @@
               <button 
                 @click="startPayment" 
                 class="action-btn pay-btn"
+                :title="'Confirmar y proceder al pago de €' + formatPrice(total)"
               >
                 💳 CONFIRMAR PAGO €{{ formatPrice(total) }}
               </button>
               <button 
                 @click="backToCart" 
                 class="action-btn secondary-btn"
+                title="Volver al carrito para editar productos (no se pierde el estado)"
               >
                 ← Volver al Carrito
               </button>
               <button 
                 @click="openDiscount" 
                 class="action-btn secondary-btn"
+                title="Aplicar descuento al carrito"
               >
                 🏷️ Descuento
               </button>
@@ -268,12 +284,14 @@
               <button 
                 @click="processPayment" 
                 class="action-btn pay-btn"
+                :title="'Finalizar pago de €' + formatPrice(total) + ' - La venta se registrará automáticamente'"
               >
                 ✅ FINALIZAR PAGO €{{ formatPrice(total) }}
               </button>
               <button 
                 @click="cancelPayment" 
                 class="action-btn secondary-btn"
+                title="Cancelar pago y volver a revisión (no se pierde el carrito)"
               >
                 ← Cancelar
               </button>
@@ -284,6 +302,7 @@
               <button 
                 @click="resetTPV" 
                 class="action-btn pay-btn"
+                title="Iniciar una nueva venta (se limpiará el carrito)"
               >
                 🆕 NUEVA VENTA
               </button>
@@ -291,6 +310,7 @@
                 v-if="tpvConfig.supports_invoices"
                 @click="generateInvoice" 
                 class="action-btn secondary-btn"
+                :title="lastSaleTicketId ? 'Generar factura para el ticket #' + lastSaleTicketId : 'Generar factura para el último ticket'"
               >
                 🧾 Generar Factura
               </button>
@@ -401,6 +421,21 @@ const goToDashboard = () => {
 
 const formatPrice = (price) => {
   return Number(price).toFixed(2).replace('.', ',')
+}
+
+// Sistema de feedback visual para acciones del carrito
+const showCartFeedback = (message, type = 'added') => {
+  cartFeedback.value = { message, type }
+  
+  // Limpiar timeout anterior si existe
+  if (cartFeedbackTimeout.value) {
+    clearTimeout(cartFeedbackTimeout.value)
+  }
+  
+  // Ocultar después de 2 segundos
+  cartFeedbackTimeout.value = setTimeout(() => {
+    cartFeedback.value = null
+  }, 2000)
 }
 
 const getProductIcon = (category) => {
@@ -524,6 +559,9 @@ const addProductToCart = (product) => {
       total: product.price_with_iva || product.price
     })
   }
+  
+  // Feedback visual: animación en el producto añadido
+  showCartFeedback(product.name)
 }
 
 const removeFromCart = (index) => {
@@ -532,8 +570,11 @@ const removeFromCart = (index) => {
     return
   }
   
-  if (confirm('¿Estás seguro de eliminar este producto del carrito?')) {
+  const item = cart.value[index]
+  if (item && confirm(`¿Estás seguro de eliminar "${item.product.name}" del carrito?`)) {
     cart.value.splice(index, 1)
+    // Feedback visual
+    showCartFeedback(`${item.product.name} eliminado`, 'removed')
   }
 }
 
@@ -544,8 +585,16 @@ const increaseQuantity = (index) => {
   }
   
   const item = cart.value[index]
+  if (!item) return
+  
+  const oldQuantity = item.quantity
   item.quantity = validateQuantity(item.quantity + 1)
   item.total = (item.product.price_with_iva || item.product.price) * item.quantity
+  
+  // Feedback visual si se incrementó
+  if (item.quantity > oldQuantity) {
+    showCartFeedback(`${item.product.name}: ${item.quantity} unidades`, 'updated')
+  }
 }
 
 const decreaseQuantity = (index) => {
@@ -555,9 +604,13 @@ const decreaseQuantity = (index) => {
   }
   
   const item = cart.value[index]
+  if (!item) return
+  
   if (item.quantity > 1) {
     item.quantity--
     item.total = (item.product.price_with_iva || item.product.price) * item.quantity
+    // Feedback visual
+    showCartFeedback(`${item.product.name}: ${item.quantity} unidades`, 'updated')
   } else {
     // Si la cantidad llega a 0, eliminar del carrito (con confirmación)
     removeFromCart(index)
@@ -570,14 +623,25 @@ const clearCart = () => {
     return
   }
   
-  if (confirm('¿Estás seguro de limpiar todo el carrito?')) {
+  if (cart.value.length === 0) {
+    return
+  }
+  
+  if (confirm(`¿Estás seguro de limpiar todo el carrito? Se eliminarán ${cart.value.length} producto(s).`)) {
     cart.value = []
+    showCartFeedback('Carrito vaciado', 'cleared')
   }
 }
 
 // Funciones para manejar estados del TPV
 const goToPrePayment = () => {
-  if (cart.value.length > 0 && tpvState.value === TPV_STATES.CART) {
+  // Bloquear si el carrito está vacío
+  if (cart.value.length === 0) {
+    alert('⚠️ El carrito está vacío. Añade productos antes de proceder al pago.')
+    return
+  }
+  
+  if (tpvState.value === TPV_STATES.CART) {
     tpvState.value = TPV_STATES.PRE_PAYMENT
   }
 }
@@ -605,19 +669,34 @@ const resetTPV = () => {
   tpvState.value = TPV_STATES.CART
   paymentNote.value = ''
   selectedTable.value = null
+  lastSaleTicketId.value = null
+  cartFeedback.value = null
 }
 
 const handleKeyPress = (key) => {
   if (key === 'C') {
+    // Limpiar carrito
     clearCart()
   } else if (key === '⌫') {
-    // Borrar último carácter (para futuras mejoras)
-    console.log('Backspace')
-  } else if (key === '✓') {
-    processPayment()
-  } else {
-    // Tecla numérica (para futuras mejoras como búsqueda rápida)
-    console.log('Número:', key)
+    // Borrar último producto del carrito si hay items
+    if (cart.value.length > 0 && tpvState.value === TPV_STATES.CART) {
+      const lastIndex = cart.value.length - 1
+      removeFromCart(lastIndex)
+    }
+  } else if (key === '✓' || key === 'Enter') {
+    // Procesar pago si estamos en estado adecuado
+    if (tpvState.value === TPV_STATES.PAYMENT) {
+      processPayment()
+    } else if (tpvState.value === TPV_STATES.PRE_PAYMENT) {
+      startPayment()
+    } else if (tpvState.value === TPV_STATES.CART && cart.value.length > 0) {
+      goToPrePayment()
+    }
+  } else if (!isNaN(parseInt(key))) {
+    // Tecla numérica: búsqueda rápida por número de producto (futuro)
+    // Por ahora, mostrar feedback
+    console.log('Búsqueda rápida:', key)
+    // TODO: Implementar búsqueda rápida de productos
   }
 }
 
@@ -630,13 +709,23 @@ const toggleTablesMode = () => {
 }
 
 const selectTable = (table) => {
+  // Si hay productos en el carrito y se cambia de mesa, preguntar
+  if (cart.value.length > 0 && selectedTable.value?.id !== table.id) {
+    if (!confirm(`¿Deseas limpiar el carrito actual y comenzar una nueva venta para la Mesa ${table.number}?`)) {
+      return
+    }
+  }
+  
   selectedTable.value = table
   if (table.status === 'occupied') {
     // Cargar pedido existente de la mesa
     alert(`Cargando pedido de Mesa ${table.number}`)
+    // TODO: Implementar carga de pedido existente
   } else {
-    // Nueva venta para esta mesa
-    cart.value = []
+    // Nueva venta para esta mesa - solo limpiar si se confirmó
+    if (cart.value.length > 0) {
+      cart.value = []
+    }
   }
 }
 
@@ -704,7 +793,7 @@ const processPayment = async () => {
     }
     
     // Procesar pago en backend
-    const response = await fetch('/api/v1/tpv/process-sale', {
+    const response = await fetch('/api/v1/tpv/sale', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -720,11 +809,15 @@ const processPayment = async () => {
     
     const result = await response.json()
     
+    // Guardar ticket_id para facturación posterior
+    const ticketId = result.ticket_id || result.ticket?.id || null
+    lastSaleTicketId.value = ticketId
+    
     // Cambiar estado a CLOSED después del pago exitoso
     tpvState.value = TPV_STATES.CLOSED
     
-    // Mostrar confirmación
-    alert(`✅ Pago procesado exitosamente\n\nVenta #${result.sale_id || 'N/A'}\nTotal: €${formatPrice(total.value)}\n\nEsta venta se ha registrado automáticamente con RAFAEL.`)
+    // Mostrar confirmación usando ticket_id del resultado
+    alert(`✅ Pago procesado exitosamente\n\nTicket #${ticketId || 'N/A'}\nTotal: €${formatPrice(total.value)}\n\nEsta venta se ha registrado automáticamente con RAFAEL.`)
     
     console.log('✅ Venta procesada exitosamente:', result)
   } catch (err) {
@@ -1549,5 +1642,68 @@ onMounted(async () => {
   font-size: 0.9rem;
   font-weight: 600;
   margin-left: 10px;
+}
+
+/* Feedback visual del carrito */
+.cart-feedback {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  margin-bottom: 15px;
+  border-radius: 8px;
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #10b981;
+  font-weight: 600;
+  animation: slideIn 0.3s ease-out;
+}
+
+.cart-feedback.removed {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+}
+
+.cart-feedback.cleared {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #f59e0b;
+}
+
+.cart-feedback.updated {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #3b82f6;
+}
+
+.feedback-icon {
+  font-size: 1.2rem;
+}
+
+.feedback-message {
+  flex: 1;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 </style>

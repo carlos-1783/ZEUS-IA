@@ -487,9 +487,22 @@ const checkStatus = async () => {
     if (productsResponse.ok) {
       const productsData = await productsResponse.json()
       if (productsData.success) {
-        products.value = productsData.products || []
-        console.log('✅ Productos cargados:', products.value.length)
+        const loadedProducts = productsData.products || []
+        products.value = loadedProducts
+        console.log('✅ Productos cargados:', loadedProducts.length)
+        console.log('📦 Lista de productos:', loadedProducts.map(p => p.name))
+        
+        // Si no hay productos, mostrar mensaje
+        if (loadedProducts.length === 0) {
+          console.warn('⚠️ No hay productos configurados. Usa el botón "➕ Añadir Producto" para crear productos.')
+        }
+      } else {
+        console.error('❌ Error en respuesta de productos:', productsData)
+        products.value = []
       }
+    } else {
+      console.error('❌ Error cargando productos:', productsResponse.status, productsResponse.statusText)
+      products.value = []
     }
     
     // Cargar configuración del TPV

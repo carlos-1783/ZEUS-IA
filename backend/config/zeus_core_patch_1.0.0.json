@@ -1,0 +1,80 @@
+{
+  "zeus_core_patch": {
+    "version": "1.0.0",
+    "scope": "production_fix",
+    "applies_to": ["time_tracking", "tpv", "dashboard", "ux"],
+
+    "time_tracking_validation": {
+      "check_out_requires_check_in": true,
+      "auto_check_in_on_service_start": true,
+      "block_invalid_checkout": true,
+      "ui_rules": {
+        "disable_checkout_until_checkin": true,
+        "show_hint_on_block": "Debes iniciar el servicio antes de finalizarlo"
+      }
+    },
+
+    "business_profile_configuration": {
+      "default_profile": "PROFESSIONAL_SERVICES",
+      "profiles": {
+        "PROFESSIONAL_SERVICES": {
+          "time_tracking": {
+            "methods_allowed": ["ON_SITE", "REMOTE"],
+            "default_method": "ON_SITE",
+            "remote_requires_approval": false
+          },
+          "tpv": {
+            "mode": "SERVICES",
+            "allow_manual_price": true,
+            "requires_customer": true
+          }
+        }
+      },
+      "permissions": {
+        "superuser": {
+          "can_toggle_remote": true,
+          "can_edit_business_profile": true
+        },
+        "employee": {
+          "can_select_method": true,
+          "cannot_override_profile_rules": true
+        }
+      }
+    },
+
+    "warning_to_ux_mapping": {
+      "strategy": "hide_technical_warnings",
+      "log_backend_only": true,
+      "mappings": [
+        {
+          "code": "NO_CHECKIN_FOUND",
+          "severity": "info",
+          "user_message": "El servicio se cerró sin registro previo. Se ha corregido automáticamente.",
+          "log_level": "debug"
+        },
+        {
+          "code": "REMOTE_NOT_ENABLED",
+          "severity": "info",
+          "user_message": "Este servicio se ha registrado como presencial según la configuración de tu empresa.",
+          "log_level": "info"
+        }
+      ]
+    },
+
+    "dashboard_consistency": {
+      "force_single_source_of_truth": true,
+      "recalculate_on_client_load": true,
+      "sync_mobile_desktop": true,
+      "cache_policy": {
+        "mobile": "no_cache",
+        "desktop": "soft_cache_with_revalidation"
+      }
+    },
+
+    "final_state": {
+      "warnings_blocking": false,
+      "ux_production_ready": true,
+      "end_to_end_validated": true
+    }
+  }
+}

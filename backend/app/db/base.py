@@ -30,12 +30,12 @@ def create_tables():
         from app.models.document_approval import DocumentApproval
         
         Base.metadata.create_all(bind=engine)
-        print("[DATABASE] ✅ Tablas creadas correctamente")
+        print("[DATABASE] [OK] Tablas creadas correctamente")
         
         # Ejecutar migración nuevamente después de crear tablas (por si acaso)
         _migrate_user_columns()
     except Exception as e:
-        print(f"[DATABASE] ❌ Error al crear tablas: {e}")
+        print(f"[DATABASE] [ERROR] Error al crear tablas: {e}")
         import traceback
         traceback.print_exc()
 
@@ -94,24 +94,24 @@ def _migrate_user_columns():
                         
                         conn.execute(text(sql))
                         added_columns.append(column_name)
-                        print(f"[MIGRATION] ✅ Columna '{column_name}' agregada")
+                        print(f"[MIGRATION] [OK] Columna '{column_name}' agregada")
                 except (OperationalError, ProgrammingError) as e:
                     # Si la columna ya existe o hay otro error, continuar
                     error_msg = str(e)
                     if "already exists" in error_msg.lower() or "duplicate column" in error_msg.lower() or "already exists" in error_msg:
-                        print(f"[MIGRATION] ℹ️ Columna '{column_name}' ya existe")
+                        print(f"[MIGRATION] [INFO] Columna '{column_name}' ya existe")
                     else:
-                        print(f"[MIGRATION] ⚠️ Error agregando columna '{column_name}': {e}")
+                        print(f"[MIGRATION] [WARN] Error agregando columna '{column_name}': {e}")
             else:
-                print(f"[MIGRATION] ℹ️ Columna '{column_name}' ya existe")
+                print(f"[MIGRATION] [INFO] Columna '{column_name}' ya existe")
         
         if added_columns:
-            print(f"[MIGRATION] ✅ Migración completada. Columnas agregadas: {', '.join(added_columns)}")
+            print(f"[MIGRATION] [OK] Migracion completada. Columnas agregadas: {', '.join(added_columns)}")
         else:
-            print("[MIGRATION] ✅ Todas las columnas ya existen.")
+            print("[MIGRATION] [OK] Todas las columnas ya existen.")
                 
     except Exception as e:
-        print(f"[MIGRATION] ⚠️ No se pudo ejecutar migración: {e}")
+        print(f"[MIGRATION] [WARN] No se pudo ejecutar migracion: {e}")
         import traceback
         traceback.print_exc()
 
@@ -173,11 +173,11 @@ def _migrate_firewall_columns_legacy():
                             cursor.execute(f"UPDATE users SET {column_name} = 0 WHERE {column_name} IS NULL")
                         
                         added_columns.append(column_name)
-                        print(f"[MIGRATION] ✅ Columna '{column_name}' agregada")
+                        print(f"[MIGRATION] [OK] Columna '{column_name}' agregada")
                     except sqlite3.OperationalError as e:
-                        print(f"[MIGRATION] ⚠️ Error agregando columna '{column_name}': {e}")
+                        print(f"[MIGRATION] [WARN] Error agregando columna '{column_name}': {e}")
                 else:
-                    print(f"[MIGRATION] ℹ️ Columna '{column_name}' ya existe")
+                    print(f"[MIGRATION] [INFO] Columna '{column_name}' ya existe")
             
             # Crear tabla document_approvals si no existe
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='document_approvals'")
@@ -202,26 +202,26 @@ def _migrate_firewall_columns_legacy():
                 cursor.execute("CREATE INDEX idx_document_approvals_user_id ON document_approvals(user_id)")
                 cursor.execute("CREATE INDEX idx_document_approvals_agent_name ON document_approvals(agent_name)")
                 cursor.execute("CREATE INDEX idx_document_approvals_status ON document_approvals(status)")
-                print("[MIGRATION] ✅ Tabla 'document_approvals' creada")
+                print("[MIGRATION] [OK] Tabla 'document_approvals' creada")
             else:
-                print("[MIGRATION] ℹ️ Tabla 'document_approvals' ya existe")
+                print("[MIGRATION] [INFO] Tabla 'document_approvals' ya existe")
             
             conn.commit()
             
             if added_columns:
-                print(f"[MIGRATION] ✅ Migración completada. Columnas agregadas: {', '.join(added_columns)}")
+                print(f"[MIGRATION] [OK] Migracion completada. Columnas agregadas: {', '.join(added_columns)}")
             else:
-                print("[MIGRATION] ✅ Todas las columnas ya existen.")
+                print("[MIGRATION] [OK] Todas las columnas ya existen.")
                 
         except Exception as e:
             conn.rollback()
-            print(f"[MIGRATION] ⚠️ Error durante la migración: {e}")
+            print(f"[MIGRATION] [WARN] Error durante la migracion: {e}")
             import traceback
             traceback.print_exc()
         finally:
             conn.close()
     except Exception as e:
-        print(f"[MIGRATION] ⚠️ No se pudo ejecutar migración: {e}")
+        print(f"[MIGRATION] [WARN] No se pudo ejecutar migracion: {e}")
         import traceback
         traceback.print_exc()
 

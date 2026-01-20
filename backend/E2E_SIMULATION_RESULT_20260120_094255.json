@@ -1,0 +1,39 @@
+{
+  "simulation_id": "E2E-001",
+  "started_at": "2026-01-20T09:42:55.579075",
+  "steps_completed": [
+    {
+      "step": 1,
+      "action": "CREATE_COMPANY",
+      "company_id": "NT-001",
+      "company_name": "NovaTech Solutions SL",
+      "status": "SUCCESS"
+    },
+    {
+      "step": 2,
+      "action": "CONFIGURE_MODULES",
+      "modules": {
+        "dashboard": true,
+        "tpv": true,
+        "time_tracking": true,
+        "invoicing": true,
+        "crm": true,
+        "whatsapp": true,
+        "email": true,
+        "analytics": true
+      },
+      "status": "SUCCESS"
+    },
+    {
+      "step": 3,
+      "action": "CREATE_USERS",
+      "users_count": 2,
+      "status": "SUCCESS"
+    }
+  ],
+  "errors": [],
+  "metrics": {},
+  "status": "FAILED",
+  "error": "'charmap' codec can't encode character '\\U0001f504' in position 2: character maps to <undefined>",
+  "completed_at": "2026-01-20T09:42:55.993869"
+}

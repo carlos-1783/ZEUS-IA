@@ -1,0 +1,10 @@
+{
+  "simulation_id": "E2E-001",
+  "started_at": "2026-01-20T09:30:13.856373",
+  "steps_completed": [],
+  "errors": [],
+  "metrics": {},
+  "status": "FAILED",
+  "error": "(sqlite3.OperationalError) no such column: users.email_gestor_fiscal\n[SQL: SELECT users.id AS users_id, users.email AS users_email, users.full_name AS users_full_name, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.is_superuser AS users_is_superuser, users.created_at AS users_created_at, users.updated_at AS users_updated_at, users.email_gestor_fiscal AS users_email_gestor_fiscal, users.email_asesor_legal AS users_email_asesor_legal, users.autoriza_envio_documentos_a_asesores AS users_autoriza_envio_documentos_a_asesores, users.company_name AS users_company_name, users.employees AS users_employees, users.\"plan\" AS users_plan, users.tpv_business_profile AS users_tpv_business_profile, users.tpv_config AS users_tpv_config, users.control_horario_business_profile AS users_control_horario_business_profile, users.control_horario_config AS users_control_horario_config \nFROM users \nWHERE users.is_superuser = 1\n LIMIT ? OFFSET ?]\n[parameters: (1, 0)]\n(Background on this error at: https://sqlalche.me/e/20/e3q8)",
+  "completed_at": "2026-01-20T09:30:13.974772"
+}

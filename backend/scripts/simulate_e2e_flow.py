@@ -15,8 +15,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.models.user import User
-from services.tpv_service import tpv_service
-from services.control_horario_service import control_horario_service
+from services.tpv_service import TPVService, BusinessProfile as TPVBusinessProfile
+from services.control_horario_service import ControlHorarioService, HorarioBusinessProfile, CheckInMethod
 
 
 class E2ESimulation:
@@ -33,13 +33,21 @@ class E2ESimulation:
             "status": "RUNNING"
         }
         self.db: Optional[Session] = None
+        self.tpv_service = TPVService()
+        self.control_horario_service = ControlHorarioService()
     
     def run(self) -> Dict[str, Any]:
         """Ejecutar simulación completa"""
         try:
-            print("🚀 Iniciando simulación E2E de ZEUS-IA...")
-            print(f"📋 Simulación: {self.results['simulation_id']}")
-            print(f"🏢 Empresa: {self.config['company']['name']}\n")
+            print("[INICIANDO] Simulacion E2E de ZEUS-IA...")
+            print(f"[SIMULACION] {self.results['simulation_id']}")
+            print(f"[EMPRESA] {self.config['company']['name']}\n")
+            
+            # Ejecutar migraciones de base de datos antes de conectar
+            print("[MIGRACION] Ejecutando migraciones de base de datos...")
+            from app.db.base import _migrate_user_columns
+            _migrate_user_columns()
+            print("[MIGRACION] Migraciones completadas\n")
             
             # Conectar a la base de datos
             self.db = SessionLocal()
@@ -65,14 +73,14 @@ class E2ESimulation:
             self.results["status"] = "COMPLETED"
             self.results["completed_at"] = datetime.utcnow().isoformat()
             
-            print("\n✅ Simulación completada exitosamente")
+            print("\n[OK] Simulacion completada exitosamente")
             return self.results
             
         except Exception as e:
             self.results["status"] = "FAILED"
             self.results["error"] = str(e)
             self.results["completed_at"] = datetime.utcnow().isoformat()
-            print(f"\n❌ Error en simulación: {e}")
+            print(f"\n[ERROR] Error en simulacion: {e}")
             return self.results
         finally:
             if self.db:
@@ -80,7 +88,7 @@ class E2ESimulation:
     
     def step_1_create_company(self):
         """Paso 1: Crear o configurar empresa"""
-        print("📝 Paso 1: Creando/Configurando empresa...")
+        print("[PASO 1] Creando/Configurando empresa...")
         
         company = self.config["company"]
         
@@ -103,11 +111,11 @@ class E2ESimulation:
             "status": "SUCCESS"
         })
         
-        print(f"   ✅ Empresa '{company['name']}' configurada")
+        print(f"   [OK] Empresa '{company['name']}' configurada")
     
     def step_2_configure_modules(self):
         """Paso 2: Configurar módulos habilitados"""
-        print("\n⚙️ Paso 2: Configurando módulos...")
+        print("\n[PASO 2] Configurando modulos...")
         
         modules = self.config.get("modules_enabled", {})
         tpv_config = self.config.get("tpv_config", {})
@@ -120,20 +128,19 @@ class E2ESimulation:
             superuser = self.db.query(User).filter(User.is_superuser == True).first()
             
             # Configurar TPV
-            tpv_service.load_user_profile({
+            self.tpv_service.load_user_profile({
                 "id": superuser.id,
                 "tpv_business_profile": business_profile
             })
             
-            print(f"   ✅ TPV configurado: {business_profile}")
+            print(f"   [OK] TPV configurado: {business_profile}")
         
         # Configurar Control Horario
         if modules.get("time_tracking"):
             superuser = self.db.query(User).filter(User.is_superuser == True).first()
             
             # Configurar perfil de negocio
-            from services.control_horario_service import HorarioBusinessProfile
-            control_horario_service.set_business_profile(
+            self.control_horario_service.set_business_profile(
                 HorarioBusinessProfile.SERVICIOS,
                 superuser.id
             )
@@ -142,7 +149,7 @@ class E2ESimulation:
             superuser.control_horario_business_profile = "servicios"
             self.db.commit()
             
-            print(f"   ✅ Control Horario configurado: SERVICIOS")
+            print(f"   [OK] Control Horario configurado: SERVICIOS")
         
         self.results["steps_completed"].append({
             "step": 2,
@@ -153,12 +160,12 @@ class E2ESimulation:
     
     def step_3_create_users(self):
         """Paso 3: Crear usuarios de prueba (simulado)"""
-        print("\n👥 Paso 3: Configurando usuarios...")
+        print("\n[PASO 3] Configurando usuarios...")
         
         users = self.config.get("users", [])
         
         for user_config in users:
-            print(f"   ✅ Usuario {user_config['user_id']} configurado ({user_config['role']})")
+            print(f"   [OK] Usuario {user_config['user_id']} configurado ({user_config['role']})")
         
         self.results["steps_completed"].append({
             "step": 3,
@@ -169,7 +176,7 @@ class E2ESimulation:
     
     def step_4_execute_flow(self):
         """Paso 4: Ejecutar flujo end-to-end completo"""
-        print("\n🔄 Paso 4: Ejecutando flujo end-to-end...")
+        print("\n[PASO 4] Ejecutando flujo end-to-end...")
         
         flow = self.config.get("end_to_end_flow", [])
         superuser = self.db.query(User).filter(User.is_superuser == True).first()
@@ -178,41 +185,41 @@ class E2ESimulation:
             step_num = step_config["step"]
             event = step_config["event"]
             
-            print(f"\n   📍 Paso {step_num}: {event}")
+            print(f"\n   [PASO {step_num}] {event}")
             
             if event == "LEAD_CREATED":
                 # Simular creación de lead
-                print(f"      ✅ Lead creado: {step_config['data']['name']}")
+                print(f"      [OK] Lead creado: {step_config['data']['name']}")
                 
             elif event == "SERVICE_STARTED":
                 # Simular inicio de servicio y time tracking
                 employee_id = step_config.get("employee", "EMP-001")
                 
                 # Añadir empleado al servicio (simulación - en memoria)
-                if employee_id not in control_horario_service.employees:
-                    control_horario_service.employees[employee_id] = {
+                if employee_id not in self.control_horario_service.employees:
+                    self.control_horario_service.employees[employee_id] = {
                         "id": employee_id,
                         "name": "Empleado Prueba",
                         "role": "Consultor",
                         "status": "active"
                     }
-                    print(f"      ✅ Empleado {employee_id} añadido")
+                    print(f"      [OK] Empleado {employee_id} anadido")
                 
-                # Check-in del empleado
+                # Check-in del empleado (usar ON_SITE según configuración del patch)
                 try:
-                    from services.control_horario_service import CheckInMethod
-                    result = control_horario_service.check_in(
+                    result = self.control_horario_service.check_in(
                         employee_id=employee_id,
-                        method=CheckInMethod.REMOTE,
+                        method=CheckInMethod.ON_SITE,
                         location="Oficina Principal",
-                        user_id=superuser.id
+                        user_id=superuser.id,
+                        auto_check_in=True  # Auto check-in al iniciar servicio
                     )
                     if result.get("success"):
-                        print(f"      ✅ Time tracking iniciado para {employee_id}")
+                        print(f"      [OK] Time tracking iniciado para {employee_id}")
                     else:
-                        print(f"      ⚠️ Time tracking: {result.get('error', 'Error desconocido')}")
+                        print(f"      [WARN] Time tracking: {result.get('error', 'Error desconocido')}")
                 except Exception as e:
-                    print(f"      ⚠️ Time tracking: {e}")
+                    print(f"      [WARN] Time tracking: {e}")
                 
             elif event == "SERVICE_FINISHED":
                 # Simular fin de servicio y check-out
@@ -220,18 +227,18 @@ class E2ESimulation:
                 duration = step_config.get("duration", "2h")
                 
                 try:
-                    from services.control_horario_service import CheckInMethod
-                    result = control_horario_service.check_out(
+                    result = self.control_horario_service.check_out(
                         employee_id=employee_id,
-                        method=CheckInMethod.REMOTE,
-                        location="Oficina Principal"
+                        method=CheckInMethod.ON_SITE,
+                        location="Oficina Principal",
+                        auto_create_checkin=True  # Auto crear check-in si no existe (según patch)
                     )
                     if result.get("success"):
-                        print(f"      ✅ Time tracking finalizado ({duration})")
+                        print(f"      [OK] Time tracking finalizado ({duration})")
                     else:
-                        print(f"      ⚠️ Check-out: {result.get('error', 'Error desconocido')}")
+                        print(f"      [WARN] Check-out: {result.get('error', 'Error desconocido')}")
                 except Exception as e:
-                    print(f"      ⚠️ Check-out: {e}")
+                    print(f"      [WARN] Check-out: {e}")
                 
             elif event == "TPV_SALE":
                 # Simular venta en TPV
@@ -257,7 +264,7 @@ class E2ESimulation:
                             "total": amount
                         }
                         
-                        print(f"      ✅ Venta registrada: {product['name']} - €{amount}")
+                        print(f"      [OK] Venta registrada: {product['name']} - EUR {amount}")
                         
                         # Guardar en resultados
                         if "sales" not in self.results["metrics"]:
@@ -265,14 +272,14 @@ class E2ESimulation:
                         self.results["metrics"]["sales"].append(sale_data)
                         
                     except Exception as e:
-                        print(f"      ⚠️ Venta: {e}")
+                        print(f"      [WARN] Venta: {e}")
                 
             elif event == "INVOICE_GENERATED":
                 # Simular generación de factura
                 invoice_type = step_config.get("type", "DIGITAL")
                 sent_via = step_config.get("sent_via", "EMAIL")
                 
-                print(f"      ✅ Factura generada ({invoice_type}) y enviada por {sent_via}")
+                print(f"      [OK] Factura generada ({invoice_type}) y enviada por {sent_via}")
             
             self.results["steps_completed"].append({
                 "step": step_num,
@@ -282,7 +289,7 @@ class E2ESimulation:
     
     def step_5_validate_dashboard(self):
         """Paso 5: Validar métricas del dashboard"""
-        print("\n📊 Paso 5: Validando métricas del dashboard...")
+        print("\n[PASO 5] Validando metricas del dashboard...")
         
         expected_metrics = self.config.get("dashboard_metrics", {})
         
@@ -306,9 +313,9 @@ class E2ESimulation:
             }
             
             if is_valid:
-                print(f"   ✅ {key}: {actual_value} (esperado: {expected_value})")
+                print(f"   [OK] {key}: {actual_value} (esperado: {expected_value})")
             else:
-                print(f"   ⚠️ {key}: {actual_value} (esperado: {expected_value})")
+                print(f"   [WARN] {key}: {actual_value} (esperado: {expected_value})")
         
         self.results["metrics"]["dashboard"] = {
             "expected": expected_metrics,
@@ -324,14 +331,14 @@ class E2ESimulation:
     
     def step_6_validate_consistency(self):
         """Paso 6: Validar consistencia móvil/desktop"""
-        print("\n📱 Paso 6: Validando consistencia móvil/desktop...")
+        print("\n[PASO 6] Validando consistencia movil/desktop...")
         
         consistency_config = self.config.get("mobile_desktop_consistency", {})
         
         if consistency_config.get("sync_required"):
-            print("   ✅ Política de sincronización verificada")
-            print(f"   ✅ Fuente de verdad: {consistency_config.get('source_of_truth', 'BACKEND')}")
-            print(f"   ✅ Política de caché: {consistency_config.get('cache_policy', 'FORCE_REFRESH')}")
+            print("   [OK] Politica de sincronizacion verificada")
+            print(f"   [OK] Fuente de verdad: {consistency_config.get('source_of_truth', 'BACKEND')}")
+            print(f"   [OK] Politica de cache: {consistency_config.get('cache_policy', 'FORCE_REFRESH')}")
         
         self.results["steps_completed"].append({
             "step": 6,
@@ -473,18 +480,18 @@ def main():
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
     
-    print(f"\n📄 Resultados guardados en: {output_path}")
+    print(f"\n[ARCHIVO] Resultados guardados en: {output_path}")
     
     # Mostrar resumen
     print("\n" + "="*60)
-    print("📊 RESUMEN DE SIMULACIÓN")
+    print("[RESUMEN] SIMULACION E2E")
     print("="*60)
     print(f"Status: {results['status']}")
     print(f"Pasos completados: {len(results['steps_completed'])}")
     print(f"Errores: {len(results['errors'])}")
     
     if results.get("metrics"):
-        print("\n📈 Métricas:")
+        print("\n[METRICAS]:")
         for key, value in results["metrics"].items():
             print(f"   {key}: {value}")
     

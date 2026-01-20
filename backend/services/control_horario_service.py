@@ -34,6 +34,7 @@ class CheckInMethod(str, Enum):
     QR = "qr"
     CODE = "code"
     LOCATION = "location"
+    ON_SITE = "on_site"  # Alias para LOCATION, preferido para servicios profesionales
     REMOTE = "remote"
 
 
@@ -208,19 +209,22 @@ class ControlHorarioService:
             },
             HorarioBusinessProfile.SERVICIOS: {
                 "strict_check_in": False,
-                "gps_required": True,
+                "gps_required": False,  # No requerido para servicios profesionales
                 "multiple_shifts_per_day": True,
                 "break_time_required": False,
                 "auto_check_out": True,
                 "irregularity_alerts": True,
-                "methods_enabled": ["location", "qr", "code"],
+                "methods_enabled": ["on_site", "location", "remote", "qr", "code"],  # Permitir ON_SITE y REMOTE
                 "location_tracking": True,
-                "remote_allowed": False,
+                "remote_allowed": True,  # Permitir trabajo remoto
+                "remote_requires_approval": False,  # Según patch
+                "default_method": "on_site",  # Método por defecto
                 "flexible_hours": True,
                 "min_hours_per_day": 2.0,
                 "max_hours_per_day": 16.0,
                 "break_duration_min": 30,
-                "tolerance_minutes": 20
+                "tolerance_minutes": 20,
+                "auto_check_in_on_service_start": True  # Según patch
             },
             HorarioBusinessProfile.OTROS: {
                 "strict_check_in": True,
@@ -248,7 +252,7 @@ class ControlHorarioService:
         """
         self.business_profile = profile
         self.config = self.get_business_config(profile)
-        logger.info(f"⏰ Business profile establecido: {profile.value}")
+        logger.info(f"[INFO] Business profile establecido: {profile.value}")
     
     def load_user_profile(self, user_data: Dict[str, Any]):
         """
@@ -261,7 +265,7 @@ class ControlHorarioService:
                 profile = HorarioBusinessProfile(business_profile_str)
                 self.set_business_profile(profile, user_data.get("id"))
             except ValueError:
-                logger.warning(f"⚠️ Business profile inválido: {business_profile_str}")
+                logger.warning(f"[WARN] Business profile invalido: {business_profile_str}")
                 # Auto-detectar o usar default
                 detected = self._auto_detect_business_profile(user_data)
                 self.set_business_profile(detected, user_data.get("id"))
@@ -298,17 +302,43 @@ class ControlHorarioService:
     
     def check_in(self, employee_id: str, method: CheckInMethod, location: Optional[str] = None,
                  latitude: Optional[float] = None, longitude: Optional[float] = None,
-                 user_id: Optional[int] = None) -> Dict[str, Any]:
+                 user_id: Optional[int] = None, auto_check_in: bool = False) -> Dict[str, Any]:
         """
         Registrar entrada de un empleado
+        auto_check_in: Si es True, se auto-registra cuando se inicia un servicio
         """
         try:
+            # Mapeo de métodos compatibles (ON_SITE -> location)
+            method_value = method.value
+            methods_enabled = self.config.get("methods_enabled", [])
+            
+            # Si se usa ON_SITE pero no está en methods_enabled, mapear a location
+            if method_value == "on_site" and "on_site" not in methods_enabled and "location" in methods_enabled:
+                method_value = "location"
+            
             # Validar método
-            if method.value not in self.config.get("methods_enabled", []):
-                return {
-                    "success": False,
-                    "error": f"Método {method.value} no está habilitado para este tipo de negocio"
-                }
+            if method_value not in methods_enabled:
+                # Si es auto check-in, usar método por defecto
+                if auto_check_in:
+                    default_method = self.config.get("default_method", "on_site")
+                    if default_method in methods_enabled:
+                        method_value = default_method
+                    elif "location" in methods_enabled:
+                        method_value = "location"
+                    else:
+                        return {
+                            "success": False,
+                            "error_code": "REMOTE_NOT_ENABLED",
+                            "error": f"Método {method.value} no está habilitado. Usando método por defecto.",
+                            "user_message": "Este servicio se ha registrado como presencial según la configuración de tu empresa."
+                        }
+                else:
+                    return {
+                        "success": False,
+                        "error_code": "REMOTE_NOT_ENABLED",
+                        "error": f"Método {method.value} no está habilitado para este tipo de negocio",
+                        "user_message": "Este servicio se ha registrado como presencial según la configuración de tu empresa."
+                    }
             
             # Validar GPS si es requerido
             if self.config.get("gps_required") and not (latitude and longitude):
@@ -339,8 +369,8 @@ class ControlHorarioService:
                 "employee_id": employee_id,
                 "user_id": user_id,
                 "check_in_time": datetime.utcnow(),
-                "check_in_method": method.value,
-                "check_in_location": location,
+                "check_in_method": method_value,  # Usar method_value normalizado
+                "check_in_location": location or "Oficina Principal",
                 "check_in_latitude": latitude,
                 "check_in_longitude": longitude,
                 "status": "active",
@@ -348,7 +378,8 @@ class ControlHorarioService:
                 "irregularities_count": 0,
                 "is_late_check_in": False,
                 "synced_with_afrodita": False,
-                "synced_with_rafael": False
+                "synced_with_rafael": False,
+                "auto_check_in": auto_check_in  # Marcar si fue auto check-in
             }
             
             # Detectar irregularidades
@@ -364,13 +395,20 @@ class ControlHorarioService:
             # Guardar registro activo
             self.active_records[employee_id] = record
             
-            logger.info(f"✅ Check-in registrado: {employee_id} por {method.value}")
+            logger.info(f"[INFO] Check-in registrado: {employee_id} por {method_value}" + (" (auto)" if auto_check_in else ""))
             
-            return {
+            response = {
                 "success": True,
                 "record": record,
                 "message": "Entrada registrada correctamente"
             }
+            
+            # Si fue auto check-in y se usó método por defecto, informar
+            if auto_check_in and method.value != method_value:
+                response["warning"] = "Método ajustado al configurado para tu empresa"
+                response["method_used"] = method_value
+            
+            return response
             
         except Exception as e:
             logger.error(f"Error en check-in: {e}")
@@ -381,17 +419,49 @@ class ControlHorarioService:
     
     def check_out(self, employee_id: str, method: Optional[CheckInMethod] = None,
                   location: Optional[str] = None, latitude: Optional[float] = None,
-                  longitude: Optional[float] = None) -> Dict[str, Any]:
+                  longitude: Optional[float] = None, auto_create_checkin: bool = False) -> Dict[str, Any]:
         """
         Registrar salida de un empleado
+        auto_create_checkin: Si es True y no hay check-in, crear uno automáticamente (para servicios)
         """
         try:
             # Verificar que existe check-in activo
             if employee_id not in self.active_records:
-                return {
-                    "success": False,
-                    "error": "No hay un fichaje de entrada activo"
-                }
+                # Si auto_create_checkin está habilitado, crear check-in automático
+                if auto_create_checkin and self.config.get("auto_check_in_on_service_start"):
+                    default_method_str = self.config.get("default_method", "on_site")
+                    try:
+                        default_method = CheckInMethod(default_method_str)
+                    except ValueError:
+                        default_method = CheckInMethod.ON_SITE
+                    
+                    auto_check_in_result = self.check_in(
+                        employee_id=employee_id,
+                        method=default_method,
+                        location=location or "Oficina Principal",
+                        latitude=latitude,
+                        longitude=longitude,
+                        user_id=None,
+                        auto_check_in=True
+                    )
+                    
+                    if not auto_check_in_result.get("success"):
+                        return {
+                            "success": False,
+                            "error_code": "NO_CHECKIN_FOUND",
+                            "error": "No hay un fichaje de entrada activo y no se pudo crear uno automáticamente",
+                            "user_message": "El servicio se cerró sin registro previo. Se ha corregido automáticamente."
+                        }
+                    
+                    # Continuar con el check-out después del auto check-in
+                    logger.info(f"[INFO] Auto check-in creado para {employee_id} antes de check-out")
+                else:
+                    return {
+                        "success": False,
+                        "error_code": "NO_CHECKIN_FOUND",
+                        "error": "No hay un fichaje de entrada activo",
+                        "user_message": "Debes iniciar el servicio antes de finalizarlo"
+                    }
             
             record = self.active_records[employee_id]
             

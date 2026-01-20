@@ -230,7 +230,7 @@ class TPVService:
         """
         self.business_profile = profile
         self.config = self.get_business_config(profile)
-        logger.info(f"🏢 Business profile establecido: {profile.value} para usuario {user_id}")
+        logger.info(f"[INFO] Business profile establecido: {profile.value} para usuario {user_id}")
     
     def load_user_profile(self, user_data: Dict[str, Any]):
         """
@@ -245,7 +245,7 @@ class TPVService:
                 self.set_business_profile(profile, user_data.get("id"))
                 return profile
             except ValueError:
-                logger.warning(f"⚠️ Business profile inválido en usuario: {business_profile_str}")
+                logger.warning(f"[WARN] Business profile invalido en usuario: {business_profile_str}")
         
         # Auto-detección basada en company_name
         company_name = user_data.get("company_name", "")

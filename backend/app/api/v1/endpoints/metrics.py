@@ -219,7 +219,8 @@ async def get_dashboard_summary(
                 "id": current_user.id,
                 "email": current_user.email,
                 "is_superuser": is_superuser,
-                "business_profile": business_profile
+                "tpv_business_profile": tpv_business_profile,
+                "control_horario_business_profile": control_horario_business_profile
             },
             "metrics": {
                 "total_interactions": total_interactions,
@@ -252,7 +253,8 @@ async def get_dashboard_summary(
                 "id": current_user.id if current_user else None,
                 "email": current_user.email if current_user else None,
                 "is_superuser": getattr(current_user, 'is_superuser', False) if current_user else False,
-                "business_profile": getattr(current_user, 'tpv_business_profile', None) if current_user and not getattr(current_user, 'is_superuser', False) else None
+                "tpv_business_profile": getattr(current_user, 'tpv_business_profile', None) if current_user and not getattr(current_user, 'is_superuser', False) else None,
+                "control_horario_business_profile": getattr(current_user, 'control_horario_business_profile', None) if current_user and not getattr(current_user, 'is_superuser', False) else None
             },
             "metrics": {
                 "total_interactions": 0,

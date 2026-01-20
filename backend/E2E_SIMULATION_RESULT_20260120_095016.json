@@ -1,0 +1,125 @@
+{
+  "simulation_id": "E2E-001",
+  "started_at": "2026-01-20T09:50:15.862152",
+  "steps_completed": [
+    {
+      "step": 1,
+      "action": "CREATE_COMPANY",
+      "company_id": "NT-001",
+      "company_name": "NovaTech Solutions SL",
+      "status": "SUCCESS"
+    },
+    {
+      "step": 2,
+      "action": "CONFIGURE_MODULES",
+      "modules": {
+        "dashboard": true,
+        "tpv": true,
+        "time_tracking": true,
+        "invoicing": true,
+        "crm": true,
+        "whatsapp": true,
+        "email": true,
+        "analytics": true
+      },
+      "status": "SUCCESS"
+    },
+    {
+      "step": 3,
+      "action": "CREATE_USERS",
+      "users_count": 2,
+      "status": "SUCCESS"
+    },
+    {
+      "step": 1,
+      "event": "LEAD_CREATED",
+      "status": "SUCCESS"
+    },
+    {
+      "step": 2,
+      "event": "SERVICE_STARTED",
+      "status": "SUCCESS"
+    },
+    {
+      "step": 3,
+      "event": "SERVICE_FINISHED",
+      "status": "SUCCESS"
+    },
+    {
+      "step": 4,
+      "event": "TPV_SALE",
+      "status": "SUCCESS"
+    },
+    {
+      "step": 5,
+      "event": "INVOICE_GENERATED",
+      "status": "SUCCESS"
+    },
+    {
+      "step": 5,
+      "action": "VALIDATE_DASHBOARD",
+      "status": "SUCCESS"
+    },
+    {
+      "step": 6,
+      "action": "VALIDATE_CONSISTENCY",
+      "status": "SUCCESS"
+    }
+  ],
+  "errors": [],
+  "metrics": {
+    "sales": [
+      {
+        "items": [
+          {
+            "product_id": "S-001",
+            "name": "Consultoría IA",
+            "quantity": 1,
+            "price": 120,
+            "tax_rate": 21
+          }
+        ],
+        "payment_method": "CARD",
+        "total": 240
+      }
+    ],
+    "dashboard": {
+      "expected": {
+        "revenue": 240,
+        "hours_tracked": 2,
+        "conversion_rate": "100%",
+        "active_clients": 1
+      },
+      "actual": {
+        "revenue": 240,
+        "hours_tracked": 2.0,
+        "conversion_rate": "100%",
+        "active_clients": 1
+      },
+      "validation": {
+        "revenue": {
+          "expected": 240,
+          "actual": 240,
+          "valid": true
+        },
+        "hours_tracked": {
+          "expected": 2,
+          "actual": 2.0,
+          "valid": true
+        },
+        "conversion_rate": {
+          "expected": "100%",
+          "actual": "100%",
+          "valid": true
+        },
+        "active_clients": {
+          "expected": 1,
+          "actual": 1,
+          "valid": true
+        }
+      }
+    }
+  },
+  "status": "COMPLETED",
+  "completed_at": "2026-01-20T09:50:16.109580"
+}

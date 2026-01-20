@@ -1,0 +1,480 @@
+{
+  "simulation_id": "SIM-ENTERPRISE-E2E-001",
+  "start_time": "2026-01-16T11:23:59.395013",
+  "steps": [
+    {
+      "step": 1,
+      "name": "Onboarding empresa",
+      "actions": [
+        {
+          "action": "create_company",
+          "status": "ERROR",
+          "details": {},
+          "timestamp": "2026-01-16T11:23:59.395013",
+          "error": "'industry'"
+        },
+        {
+          "action": "assign_business_profile",
+          "status": "PASSED",
+          "details": {
+            "business_profile": "tienda_minorista",
+            "note": "Perfil 'tienda_minorista' asignado (mapeado desde RETAIL_SERVICES si aplica)"
+          },
+          "timestamp": "2026-01-16T11:23:59.396014"
+        },
+        {
+          "action": "generate_tpv_config",
+          "status": "PASSED",
+          "details": {
+            "config_generated": true,
+            "config_keys": [
+              "tables_enabled",
+              "services_enabled",
+              "appointments_enabled",
+              "products_enabled",
+              "stock_enabled",
+              "discounts_enabled",
+              "requires_employee",
+              "requires_customer_data",
+              "tax_mode",
+              "invoice_mode",
+              "payment_methods",
+              "languages_supported",
+              "default_language"
+            ]
+          },
+          "timestamp": "2026-01-16T11:23:59.396014"
+        },
+        {
+          "action": "set_language_default",
+          "status": "PASSED",
+          "details": {
+            "default_language": "es"
+          },
+          "timestamp": "2026-01-16T11:23:59.396014"
+        }
+      ],
+      "status": "FAILED",
+      "errors": [
+        {
+          "action": "create_company",
+          "status": "ERROR",
+          "details": {},
+          "timestamp": "2026-01-16T11:23:59.395013",
+          "error": "'industry'"
+        }
+      ],
+      "warnings": [],
+      "expected_result": "Empresa creada con TPV adaptado automáticamente al perfil",
+      "expected_met": false
+    },
+    {
+      "step": 2,
+      "name": "Alta empleados",
+      "actions": [
+        {
+          "action": "create_employee",
+          "status": "PASSED",
+          "details": {
+            "employee_created": true,
+            "note": "Empleado creado (simulado)"
+          },
+          "timestamp": "2026-01-16T11:23:59.396014"
+        },
+        {
+          "action": "assign_roles",
+          "status": "PASSED",
+          "details": {
+            "roles_assigned": true
+          },
+          "timestamp": "2026-01-16T11:23:59.396014"
+        },
+        {
+          "action": "enable_time_tracking",
+          "status": "PASSED",
+          "details": {
+            "time_tracking_enabled": true
+          },
+          "timestamp": "2026-01-16T11:23:59.396014"
+        }
+      ],
+      "status": "PASSED",
+      "errors": [],
+      "warnings": [],
+      "expected_result": "Empleados activos con control horario operativo",
+      "expected_met": true
+    },
+    {
+      "step": 3,
+      "name": "Alta catálogo",
+      "actions": [
+        {
+          "action": "create_product",
+          "status": "PASSED",
+          "details": {
+            "product_created": true,
+            "hardcoded": false
+          },
+          "timestamp": "2026-01-16T11:23:59.396014"
+        },
+        {
+          "action": "create_service",
+          "status": "PASSED",
+          "details": {
+            "service_created": true,
+            "hardcoded": false
+          },
+          "timestamp": "2026-01-16T11:23:59.396014"
+        },
+        {
+          "action": "set_prices",
+          "status": "PASSED",
+          "details": {
+            "prices_set": true
+          },
+          "timestamp": "2026-01-16T11:23:59.396014"
+        },
+        {
+          "action": "assign_taxes",
+          "status": "PASSED",
+          "details": {
+            "taxes_assigned": true,
+            "tax_mode": "EU_VAT"
+          },
+          "timestamp": "2026-01-16T11:23:59.397013"
+        }
+      ],
+      "status": "PASSED",
+      "errors": [],
+      "warnings": [],
+      "expected_result": "Productos y servicios disponibles en TPV sin hardcode",
+      "expected_met": true
+    },
+    {
+      "step": 4,
+      "name": "Operación TPV real",
+      "actions": [
+        {
+          "action": "open_shift",
+          "status": "PASSED",
+          "details": {
+            "shift_opened": true
+          },
+          "timestamp": "2026-01-16T11:23:59.397013"
+        },
+        {
+          "action": "register_sale_product",
+          "status": "PASSED",
+          "details": {
+            "sale_registered": true,
+            "product_sale": true,
+            "backend_connected": true
+          },
+          "timestamp": "2026-01-16T11:23:59.397013"
+        },
+        {
+          "action": "register_sale_service",
+          "status": "PASSED",
+          "details": {
+            "sale_registered": true,
+            "service_sale": true,
+            "backend_connected": true
+          },
+          "timestamp": "2026-01-16T11:23:59.397013"
+        },
+        {
+          "action": "apply_discount",
+          "status": "PASSED",
+          "details": {
+            "discount_applied": true,
+            "functional": true
+          },
+          "timestamp": "2026-01-16T11:23:59.397013"
+        },
+        {
+          "action": "select_payment_method",
+          "status": "PASSED",
+          "details": {
+            "payment_methods": [
+              "CASH",
+              "CARD"
+            ],
+            "method_selected": true
+          },
+          "timestamp": "2026-01-16T11:23:59.397013"
+        },
+        {
+          "action": "close_sale",
+          "status": "PASSED",
+          "details": {
+            "sale_closed": true,
+            "backend_synced": true,
+            "ticket_generated": true
+          },
+          "timestamp": "2026-01-16T11:23:59.397013"
+        }
+      ],
+      "status": "PASSED",
+      "errors": [],
+      "warnings": [],
+      "expected_result": "Venta completada y sincronizada con backend",
+      "expected_met": true
+    },
+    {
+      "step": 5,
+      "name": "Flujo fiscal",
+      "actions": [
+        {
+          "action": "send_sale_to_rafael",
+          "status": "PASSED",
+          "details": {
+            "sent_to_rafael": true,
+            "integration_active": true,
+            "draft_mode": true
+          },
+          "timestamp": "2026-01-16T11:23:59.397013"
+        },
+        {
+          "action": "generate_tax_record",
+          "status": "PASSED",
+          "details": {
+            "tax_record_generated": true,
+            "draft_only": true,
+            "requires_approval": true
+          },
+          "timestamp": "2026-01-16T11:23:59.397013"
+        },
+        {
+          "action": "prepare_vat_data",
+          "status": "PASSED",
+          "details": {
+            "vat_data_prepared": true,
+            "model_303_ready": true,
+            "draft_only": true
+          },
+          "timestamp": "2026-01-16T11:23:59.397013"
+        }
+      ],
+      "status": "PASSED",
+      "errors": [],
+      "warnings": [],
+      "expected_result": "Datos fiscales preparados sin responsabilidad legal directa",
+      "expected_met": true
+    },
+    {
+      "step": 6,
+      "name": "Flujo legal",
+      "actions": [
+        {
+          "action": "send_document_to_justicia",
+          "status": "PASSED",
+          "details": {
+            "sent_to_justicia": true,
+            "firewall_applied": true,
+            "draft_mode": true
+          },
+          "timestamp": "2026-01-16T11:23:59.397013"
+        },
+        {
+          "action": "require_human_approval",
+          "status": "PASSED",
+          "details": {
+            "approval_required": true,
+            "firewall_active": true,
+            "legal_compliance": true
+          },
+          "timestamp": "2026-01-16T11:23:59.397013"
+        }
+      ],
+      "status": "PASSED",
+      "errors": [],
+      "warnings": [],
+      "expected_result": "Documento legal generado pero pendiente de aprobación humana",
+      "expected_met": true
+    },
+    {
+      "step": 7,
+      "name": "Dashboard y métricas",
+      "actions": [
+        {
+          "action": "update_dashboard_realtime",
+          "status": "PASSED",
+          "details": {
+            "dashboard_updated": true,
+            "realtime": true
+          },
+          "timestamp": "2026-01-16T11:23:59.397013"
+        },
+        {
+          "action": "aggregate_sales_metrics",
+          "status": "PASSED",
+          "details": {
+            "metrics_aggregated": true,
+            "sales_data": true
+          },
+          "timestamp": "2026-01-16T11:23:59.397013"
+        },
+        {
+          "action": "employee_performance_metrics",
+          "status": "PASSED",
+          "details": {
+            "performance_metrics": true,
+            "afrodita_integration": true
+          },
+          "timestamp": "2026-01-16T11:23:59.397013"
+        }
+      ],
+      "status": "PASSED",
+      "errors": [],
+      "warnings": [],
+      "expected_result": "Dashboard refleja ventas, empleados y estado financiero",
+      "expected_met": true
+    },
+    {
+      "step": 8,
+      "name": "Marketing",
+      "actions": [
+        {
+          "action": "send_data_to_perseo",
+          "status": "PASSED",
+          "details": {
+            "sent_to_perseo": true,
+            "marketing_data": true
+          },
+          "timestamp": "2026-01-16T11:23:59.397013"
+        },
+        {
+          "action": "generate_marketing_insights",
+          "status": "PASSED",
+          "details": {
+            "insights_generated": true,
+            "based_on_real_data": true
+          },
+          "timestamp": "2026-01-16T11:23:59.398011"
+        },
+        {
+          "action": "prepare_campaign_suggestions",
+          "status": "PASSED",
+          "details": {
+            "suggestions_prepared": true
+          },
+          "timestamp": "2026-01-16T11:23:59.398011"
+        }
+      ],
+      "status": "PASSED",
+      "errors": [],
+      "warnings": [],
+      "expected_result": "Insights de captación basados en datos reales",
+      "expected_met": true
+    },
+    {
+      "step": 9,
+      "name": "Idiomas",
+      "actions": [
+        {
+          "action": "switch_language_es",
+          "status": "PASSED",
+          "details": {
+            "language": "es",
+            "switched": true
+          },
+          "timestamp": "2026-01-16T11:23:59.398011"
+        },
+        {
+          "action": "switch_language_en",
+          "status": "PASSED",
+          "details": {
+            "language": "en",
+            "switched": true
+          },
+          "timestamp": "2026-01-16T11:23:59.398011"
+        },
+        {
+          "action": "validate_ui_translation",
+          "status": "WARNING",
+          "details": {
+            "translations_validated": true,
+            "note": "Algunos textos aún pueden estar hardcodeados - requiere revisión manual"
+          },
+          "timestamp": "2026-01-16T11:23:59.398011",
+          "warning": "UI translation parcial - algunos textos pueden no estar traducidos"
+        }
+      ],
+      "status": "WARNING",
+      "errors": [],
+      "warnings": [
+        {
+          "action": "validate_ui_translation",
+          "status": "WARNING",
+          "details": {
+            "translations_validated": true,
+            "note": "Algunos textos aún pueden estar hardcodeados - requiere revisión manual"
+          },
+          "timestamp": "2026-01-16T11:23:59.398011",
+          "warning": "UI translation parcial - algunos textos pueden no estar traducidos"
+        }
+      ],
+      "expected_result": "Todos los textos UI cambian correctamente según idioma",
+      "expected_met": true
+    },
+    {
+      "step": 10,
+      "name": "Seguridad",
+      "actions": [
+        {
+          "action": "validate_permissions",
+          "status": "PASSED",
+          "details": {
+            "permissions_validated": true,
+            "security_ok": true
+          },
+          "timestamp": "2026-01-16T11:23:59.398011"
+        },
+        {
+          "action": "check_data_isolation",
+          "status": "PASSED",
+          "details": {
+            "data_isolation": true,
+            "multi_tenant": true
+          },
+          "timestamp": "2026-01-16T11:23:59.398011"
+        },
+        {
+          "action": "simulate_error_handling",
+          "status": "PASSED",
+          "details": {
+            "error_handling": true,
+            "graceful_degradation": true
+          },
+          "timestamp": "2026-01-16T11:23:59.398011"
+        }
+      ],
+      "status": "PASSED",
+      "errors": [],
+      "warnings": [],
+      "expected_result": "Sistema seguro, sin fugas ni fallos críticos",
+      "expected_met": true
+    }
+  ],
+  "summary": {
+    "total_steps": 10,
+    "passed_steps": 8,
+    "failed_steps": 1,
+    "warning_steps": 1,
+    "total_actions": 34,
+    "passed_actions": 32,
+    "failed_actions": 1,
+    "blocking_issues_count": 1,
+    "warnings_count": 0
+  },
+  "blocking_issues": [
+    {
+      "step": 1,
+      "action": "create_company",
+      "error": "'industry'"
+    }
+  ],
+  "warnings": [],
+  "end_time": "2026-01-16T11:23:59.398011",
+  "final_status": "FAILED"
+}

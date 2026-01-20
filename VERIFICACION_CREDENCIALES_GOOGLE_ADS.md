@@ -117,6 +117,18 @@ Una vez tengas el **Developer Token**:
 
 ---
 
+## ✅ Importante: PERSEO NO Necesita Invitar Usuarios
+
+**PERSEO accede a Google Ads mediante OAuth2**, usando las credenciales configuradas en las variables de entorno:
+- `GOOGLE_ADS_CLIENT_ID`
+- `GOOGLE_ADS_CLIENT_SECRET`
+- `GOOGLE_ADS_DEVELOPER_TOKEN`
+- `GOOGLE_ADS_CUSTOMER_ID`
+
+**No es necesario invitar usuarios adicionales** en Google Ads. PERSEO funciona directamente con estas credenciales OAuth2.
+
+---
+
 ## 🆘 Si No Puedes Acceder al API Center
 
 Si definitivamente no puedes acceder al API Center, hay dos opciones:
@@ -126,9 +138,9 @@ Si definitivamente no puedes acceder al API Center, hay dos opciones:
 - Pide ayuda para solicitar un Developer Token para tu aplicación
 
 ### Opción B: Verificar Permisos de Cuenta
-- Asegúrate de que `marketingdigitalper.seo@gmail.com` tenga permisos de **Administrador** (no solo "Usuario")
+- Asegúrate de que el email administrador tenga permisos de **Administrador** (no solo "Usuario")
 - En Google Ads: Herramientas → Configuración → Acceso y seguridad
-- Verifica que tu email tenga nivel **"Administrador"**
+- Verifica que el email tenga nivel **"Administrador"** (solo necesario para solicitar el Developer Token, no para el funcionamiento de PERSEO)
 
 ---
 

@@ -698,6 +698,26 @@ const saveNotificationSettings = () => {
   }
 }
 
+// Watch para guardar settings automáticamente (al nivel superior)
+watch(notificationSettings, () => {
+  saveNotificationSettings()
+}, { deep: true })
+
+// Watch para guardar tema automáticamente
+watch(theme, (newVal) => {
+  if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+    window.localStorage.setItem('zeus_theme', newVal)
+    document.documentElement.setAttribute('data-theme', newVal)
+  }
+})
+
+// Watch para guardar timeout automáticamente
+watch(sessionTimeout, (newVal) => {
+  if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+    window.localStorage.setItem('zeus_session_timeout', newVal)
+  }
+})
+
 // Función para actualizar módulos basado en permisos de superusuario
 const updateModulesForSuperuser = () => {
   const isAdmin = authStore.isAdmin || authStore.user?.is_superuser || false
@@ -778,25 +798,7 @@ onMounted(async () => {
   // Refresh actividades de agentes cada minuto
   setInterval(loadAgentsActivities, 60000)
   
-  // Guardar settings cuando cambien
-  watch(notificationSettings, () => {
-    saveNotificationSettings()
-  }, { deep: true })
-  
-  // Guardar tema cuando cambie
-  watch(theme, (newVal) => {
-    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-      window.localStorage.setItem('zeus_theme', newVal)
-      document.documentElement.setAttribute('data-theme', newVal)
-    }
-  })
-  
-  // Guardar timeout cuando cambie
-  watch(sessionTimeout, (newVal) => {
-    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-      window.localStorage.setItem('zeus_session_timeout', newVal)
-    }
-  })
+  // Guardar settings cuando cambien (fuera de onMounted)
   
   // Verificar después de múltiples delays para asegurar que authStore esté listo
   setTimeout(() => {

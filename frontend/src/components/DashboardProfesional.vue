@@ -233,10 +233,10 @@
             <h3>🎨 Appearance</h3>
             <div class="setting-item">
               <label>Theme</label>
-              <select>
-                <option>Dark (Current)</option>
-                <option>Light</option>
-                <option>Auto</option>
+              <select v-model="theme" @change="handleThemeChange">
+                <option value="dark">Dark (Current)</option>
+                <option value="light">Light</option>
+                <option value="auto">Auto</option>
               </select>
             </div>
             <div class="setting-item">
@@ -257,10 +257,10 @@
             </div>
             <div class="setting-item">
               <label>Session timeout</label>
-              <select>
-                <option>30 minutes</option>
-                <option>1 hour</option>
-                <option>4 hours</option>
+              <select v-model="sessionTimeout" @change="handleSessionTimeoutChange">
+                <option value="30">30 minutes</option>
+                <option value="60">1 hour</option>
+                <option value="240">4 hours</option>
               </select>
             </div>
           </div>
@@ -338,6 +338,9 @@ const notificationSettings = ref({
   push: true,
   agentStatus: false
 })
+
+const theme = ref('dark')
+const sessionTimeout = ref('60')
 
 const closeSidebarOnMobile = () => {
   // Cerrar sidebar en móvil después de seleccionar una opción
@@ -456,11 +459,71 @@ const handleExportData = async () => {
       document.body.removeChild(a)
       alert('✅ Datos exportados correctamente')
     } else {
-      alert('⚠️ Función disponible próximamente')
+      // Fallback: exportar datos locales
+      const localData = {
+        user: authStore.user,
+        settings: {
+          notifications: notificationSettings.value,
+          theme: theme.value,
+          sessionTimeout: sessionTimeout.value,
+          language: locale.value
+        },
+        exportedAt: new Date().toISOString()
+      }
+      const dataStr = JSON.stringify(localData, null, 2)
+      const blob = new Blob([dataStr], { type: 'application/json' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `zeus-export-${new Date().toISOString().split('T')[0]}.json`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      alert('✅ Datos exportados correctamente (datos locales)')
     }
   } catch (error) {
     console.error('Error exportando datos:', error)
-    alert('⚠️ Función disponible próximamente')
+    // Fallback: exportar datos locales
+    const localData = {
+      user: authStore.user,
+      settings: {
+        notifications: notificationSettings.value,
+        theme: theme.value,
+        sessionTimeout: sessionTimeout.value,
+        language: locale.value
+      },
+      exportedAt: new Date().toISOString()
+    }
+    const dataStr = JSON.stringify(localData, null, 2)
+    const blob = new Blob([dataStr], { type: 'application/json' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `zeus-export-${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
+    alert('✅ Datos exportados correctamente (datos locales)')
+  }
+}
+
+const handleThemeChange = () => {
+  // Guardar tema en localStorage
+  if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+    window.localStorage.setItem('zeus_theme', theme.value)
+    // Aplicar tema al documento
+    document.documentElement.setAttribute('data-theme', theme.value)
+    alert(`✅ Tema cambiado a: ${theme.value}`)
+  }
+}
+
+const handleSessionTimeoutChange = () => {
+  // Guardar timeout en localStorage
+  if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+    window.localStorage.setItem('zeus_session_timeout', sessionTimeout.value)
+    alert(`✅ Timeout de sesión configurado: ${sessionTimeout.value} minutos`)
   }
 }
 
@@ -695,6 +758,20 @@ onMounted(async () => {
   loadDashboardMetrics()
   loadAgentsActivities()
   
+  // Cargar configuraciones guardadas
+  if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+    const savedTheme = window.localStorage.getItem('zeus_theme')
+    if (savedTheme) {
+      theme.value = savedTheme
+      document.documentElement.setAttribute('data-theme', savedTheme)
+    }
+    
+    const savedTimeout = window.localStorage.getItem('zeus_session_timeout')
+    if (savedTimeout) {
+      sessionTimeout.value = savedTimeout
+    }
+  }
+  
   // Refresh dashboard metrics cada 30 segundos
   setInterval(loadDashboardMetrics, 30000)
   
@@ -705,6 +782,21 @@ onMounted(async () => {
   watch(notificationSettings, () => {
     saveNotificationSettings()
   }, { deep: true })
+  
+  // Guardar tema cuando cambie
+  watch(theme, (newVal) => {
+    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+      window.localStorage.setItem('zeus_theme', newVal)
+      document.documentElement.setAttribute('data-theme', newVal)
+    }
+  })
+  
+  // Guardar timeout cuando cambie
+  watch(sessionTimeout, (newVal) => {
+    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+      window.localStorage.setItem('zeus_session_timeout', newVal)
+    }
+  })
   
   // Verificar después de múltiples delays para asegurar que authStore esté listo
   setTimeout(() => {

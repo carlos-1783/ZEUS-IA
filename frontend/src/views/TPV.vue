@@ -52,12 +52,13 @@
 
         <!-- Grid de Productos -->
         <div class="products-grid" v-if="!tablesMode">
-          <!-- Botón Añadir Producto (siempre visible si tiene permisos) -->
+          <!-- Botón Añadir Producto (siempre visible, validación en función) -->
           <button 
-            v-if="!businessProfileLoading && canEditProducts"
+            v-if="!businessProfileLoading"
             @click="openProducts" 
             class="add-product-card"
-            title="Añadir nuevo producto"
+            :class="{ 'disabled': !canEditProducts }"
+            :title="canEditProducts ? 'Añadir nuevo producto' : 'No tienes permisos para crear productos'"
           >
             <div class="add-product-content">
               <span class="add-product-icon">➕</span>
@@ -683,9 +684,60 @@ const checkStatus = async () => {
     // Cargar información del usuario para permisos
     try {
       const userInfo = authStore.user || {}
-      isSuperuser.value = userInfo.is_superuser || false
-      userRole.value = userInfo.role || (isSuperuser.value ? 'SUPERUSER' : 'EMPLOYEE')
-      console.log('👤 Permisos usuario:', { isSuperuser: isSuperuser.value, role: userRole.value })
+      console.log('🔍 User info completo:', userInfo)
+      
+      // Intentar múltiples formas de obtener is_superuser
+      isSuperuser.value = userInfo.is_superuser || 
+                         userInfo.isSuperuser || 
+                         authStore.isAdmin || 
+                         false
+      
+      // Intentar múltiples formas de obtener role
+      userRole.value = userInfo.role || 
+                      userInfo.user_role ||
+                      (isSuperuser.value ? 'SUPERUSER' : null) ||
+                      'EMPLOYEE'
+      
+      console.log('👤 Permisos usuario:', { 
+        isSuperuser: isSuperuser.value, 
+        role: userRole.value,
+        canEditProducts: canEditProducts.value,
+        authStoreUser: authStore.user,
+        authStoreIsAdmin: authStore.isAdmin
+      })
+      
+      // Si no tenemos permisos claros, intentar obtenerlos del backend
+      if (!isSuperuser.value && userRole.value !== 'ADMIN') {
+        console.log('⚠️ Permisos no claros, verificando con backend...')
+        try {
+          const userResponse = await fetch('/api/v1/user/me', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          })
+          
+          if (userResponse.ok) {
+            const userData = await userResponse.json()
+            console.log('👤 Datos del usuario desde backend:', userData)
+            
+            if (userData.is_superuser || userData.isSuperuser) {
+              isSuperuser.value = true
+              userRole.value = 'SUPERUSER'
+            } else if (userData.role) {
+              userRole.value = userData.role
+            }
+            
+            console.log('✅ Permisos actualizados:', { 
+              isSuperuser: isSuperuser.value, 
+              role: userRole.value,
+              canEditProducts: canEditProducts.value
+            })
+          }
+        } catch (err) {
+          console.warn('⚠️ No se pudieron obtener permisos del backend:', err)
+        }
+      }
     } catch (err) {
       console.warn('⚠️ No se pudieron cargar permisos:', err)
     }
@@ -1264,9 +1316,53 @@ const openDiscount = () => {
 
 // REQUIRED FUNCTION: createProduct - push into products array
 const openProducts = async () => {
+  console.log('🔍 openProducts llamado:', {
+    canEditProducts: canEditProducts.value,
+    isSuperuser: isSuperuser.value,
+    userRole: userRole.value,
+    authStoreUser: authStore.user,
+    authStoreIsAdmin: authStore.isAdmin
+  })
+  
+  // Verificar permisos de nuevo antes de abrir
   if (!canEditProducts.value) {
-    alert('⚠️ No tienes permisos para crear productos')
-    return
+    // Intentar verificar permisos una vez más
+    try {
+      const token = getAuthToken()
+      if (token) {
+        const userResponse = await fetch('/api/v1/user/me', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+        
+        if (userResponse.ok) {
+          const userData = await userResponse.json()
+          console.log('👤 Verificación de permisos:', userData)
+          
+          if (userData.is_superuser || userData.isSuperuser) {
+            isSuperuser.value = true
+            userRole.value = 'SUPERUSER'
+          } else if (userData.role === 'ADMIN') {
+            userRole.value = 'ADMIN'
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ Error verificando permisos:', err)
+    }
+    
+    // Si aún no tiene permisos, mostrar mensaje
+    if (!canEditProducts.value) {
+      alert('⚠️ No tienes permisos para crear productos. Se requiere rol ADMIN o SUPERUSER.\n\nContacta con un administrador para obtener permisos.')
+      console.error('❌ Permisos insuficientes:', {
+        isSuperuser: isSuperuser.value,
+        userRole: userRole.value,
+        canEditProducts: canEditProducts.value
+      })
+      return
+    }
   }
   
   // Abrir modal para crear producto
@@ -1283,6 +1379,7 @@ const openProducts = async () => {
   imageFile.value = null
   imagePreview.value = null
   showProductModal.value = true
+  console.log('✅ Modal de producto abierto')
 }
 
 // Manejar selección de imagen
@@ -2273,10 +2370,17 @@ onMounted(async () => {
   margin-bottom: 20px;
 }
 
-.add-product-card:hover {
+.add-product-card:hover:not(.disabled) {
   background: rgba(59, 130, 246, 0.2);
   border-color: rgba(59, 130, 246, 0.8);
   transform: scale(1.02);
+}
+
+.add-product-card.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .add-product-content {

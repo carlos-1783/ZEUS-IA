@@ -1737,6 +1737,43 @@ onMounted(async () => {
   max-width: 200px;
   max-height: 200px;
   border-radius: 8px;
+  border: 2px solid rgba(59, 130, 246, 0.3);
+  margin-bottom: 10px;
+}
+
+.btn-remove-image {
+  background: rgba(239, 68, 68, 0.3);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.btn-remove-image:hover {
+  background: rgba(239, 68, 68, 0.5);
+  transform: scale(1.05);
+}
+
+.product-image-file {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.image-preview {
+  margin-top: 10px;
+  text-align: center;
+}
+
+.image-preview img {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 8px;
   border: 2px solid rgba(59, 130, 246, 0.5);
   margin-bottom: 10px;
 }

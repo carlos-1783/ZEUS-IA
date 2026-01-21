@@ -58,6 +58,7 @@
             @click="openProducts" 
             class="add-product-card"
             :class="{ 'disabled': !canEditProducts }"
+            :disabled="!canEditProducts"
             :title="canEditProducts ? 'Añadir nuevo producto' : 'No tienes permisos para crear productos'"
           >
             <div class="add-product-content">
@@ -459,7 +460,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
@@ -2376,11 +2377,19 @@ onMounted(async () => {
   transform: scale(1.02);
 }
 
-.add-product-card.disabled {
+.add-product-card.disabled,
+.add-product-card:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   border-color: rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.05);
+  pointer-events: none;
+}
+
+.add-product-card:disabled:hover {
+  transform: none;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .add-product-content {

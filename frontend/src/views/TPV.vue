@@ -594,14 +594,51 @@ const getProductIcon = (category) => {
   return icons[category] || '📦'
 }
 
+// Función auxiliar para obtener token de forma robusta
+const getAuthToken = () => {
+  // Intentar múltiples formas de obtener el token
+  if (authStore.getToken) {
+    const token = authStore.getToken()
+    if (token) return token
+  }
+  
+  if (authStore.token) {
+    return authStore.token
+  }
+  
+  // Intentar desde localStorage directamente
+  const storedToken = localStorage.getItem('auth_token')
+  if (storedToken) {
+    return storedToken
+  }
+  
+  return null
+}
+
 const checkStatus = async () => {
   loading.value = true
   error.value = null
   
   try {
-    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    // Obtener token de forma robusta
+    let token = getAuthToken()
+    
+    // Si no hay token, intentar inicializar el store
     if (!token) {
-      throw new Error('No hay token de autenticación')
+      console.warn('⚠️ No hay token, intentando inicializar auth store...')
+      await authStore.initialize()
+      token = getAuthToken()
+    }
+    
+    // Si aún no hay token, redirigir al login
+    if (!token) {
+      console.error('❌ No hay token de autenticación disponible')
+      error.value = 'Sesión expirada. Por favor, inicia sesión nuevamente.'
+      // Redirigir al login después de 2 segundos
+      setTimeout(() => {
+        router.push('/login?redirect=/tpv')
+      }, 2000)
+      return
     }
 
     // Cargar información del usuario para permisos
@@ -622,6 +659,18 @@ const checkStatus = async () => {
       }
     })
 
+    if (productsResponse.status === 401) {
+      // Token expirado o inválido
+      console.error('❌ Token expirado o inválido (401)')
+      error.value = 'Sesión expirada. Por favor, inicia sesión nuevamente.'
+      // Limpiar token y redirigir
+      authStore.resetAuthState()
+      setTimeout(() => {
+        router.push('/login?redirect=/tpv')
+      }, 2000)
+      return
+    }
+
     if (productsResponse.ok) {
       const productsData = await productsResponse.json()
       if (productsData.success) {
@@ -640,6 +689,13 @@ const checkStatus = async () => {
       }
     } else {
       console.error('❌ Error cargando productos:', productsResponse.status, productsResponse.statusText)
+      if (productsResponse.status === 401) {
+        error.value = 'Sesión expirada. Redirigiendo al login...'
+        authStore.resetAuthState()
+        setTimeout(() => {
+          router.push('/login?redirect=/tpv')
+        }, 2000)
+      }
       products.value = []
     }
     
@@ -656,8 +712,11 @@ const checkStatus = async () => {
 
 const loadTPVConfig = async () => {
   try {
-    const token = authStore.getToken ? authStore.getToken() : authStore.token
-    if (!token) return
+    const token = getAuthToken()
+    if (!token) {
+      console.warn('⚠️ No hay token para cargar configuración TPV')
+      return
+    }
     
     const response = await fetch('/api/v1/tpv', {
       headers: {
@@ -665,6 +724,17 @@ const loadTPVConfig = async () => {
         'Content-Type': 'application/json'
       }
     })
+    
+    if (response.status === 401) {
+      // Token expirado o inválido
+      console.error('❌ Token expirado o inválido (401) al cargar configuración')
+      authStore.resetAuthState()
+      error.value = 'Sesión expirada. Redirigiendo al login...'
+      setTimeout(() => {
+        router.push('/login?redirect=/tpv')
+      }, 2000)
+      return
+    }
     
     if (response.ok) {
       const data = await response.json()
@@ -676,6 +746,12 @@ const loadTPVConfig = async () => {
       if (!businessProfile.value) {
         error.value = 'Por favor, configura el tipo de negocio antes de usar el TPV'
       }
+    } else if (response.status === 401) {
+      error.value = 'Sesión expirada. Redirigiendo al login...'
+      authStore.resetAuthState()
+      setTimeout(() => {
+        router.push('/login?redirect=/tpv')
+      }, 2000)
     }
   } catch (err) {
     console.error('Error cargando configuración TPV:', err)
@@ -981,9 +1057,12 @@ const processPayment = async () => {
   }
   
   try {
-    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    const token = getAuthToken()
     if (!token) {
-      throw new Error('No hay token de autenticación')
+      console.error('❌ No hay token de autenticación')
+      alert('⚠️ Sesión expirada. Por favor, inicia sesión nuevamente.')
+      router.push('/login?redirect=/tpv')
+      return
     }
     
     // Validar según configuración
@@ -1193,9 +1272,12 @@ const deleteProduct = async (product) => {
   }
   
   try {
-    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    const token = getAuthToken()
     if (!token) {
-      throw new Error('No hay token de autenticación')
+      console.error('❌ No hay token de autenticación')
+      alert('⚠️ Sesión expirada. Por favor, inicia sesión nuevamente.')
+      router.push('/login?redirect=/tpv')
+      return
     }
     
     const response = await fetch(`/api/v1/tpv/products/${product.id}`, {
@@ -1205,6 +1287,14 @@ const deleteProduct = async (product) => {
         'Content-Type': 'application/json'
       }
     })
+    
+    if (response.status === 401) {
+      console.error('❌ Token expirado (401) al eliminar producto')
+      authStore.resetAuthState()
+      alert('⚠️ Sesión expirada. Por favor, inicia sesión nuevamente.')
+      router.push('/login?redirect=/tpv')
+      return
+    }
     
     if (response.ok) {
       const result = await response.json()
@@ -1216,6 +1306,12 @@ const deleteProduct = async (product) => {
       alert(`✅ Producto "${product.name}" eliminado correctamente`)
     } else {
       const errorData = await response.json().catch(() => ({ detail: response.statusText }))
+      if (response.status === 401) {
+        authStore.resetAuthState()
+        alert('⚠️ Sesión expirada. Por favor, inicia sesión nuevamente.')
+        router.push('/login?redirect=/tpv')
+        return
+      }
       throw new Error(errorData.detail || 'Error al eliminar producto')
     }
   } catch (err) {
@@ -1237,9 +1333,12 @@ const saveProduct = async () => {
   }
   
   try {
-    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    const token = getAuthToken()
     if (!token) {
-      throw new Error('No hay token de autenticación')
+      console.error('❌ No hay token de autenticación')
+      alert('⚠️ Sesión expirada. Por favor, inicia sesión nuevamente.')
+      router.push('/login?redirect=/tpv')
+      return
     }
     
     const isEditing = editingProduct.value !== null
@@ -1261,6 +1360,14 @@ const saveProduct = async () => {
         stock: productForm.value.stock ? parseInt(productForm.value.stock) : null
       })
     })
+    
+    if (response.status === 401) {
+      console.error('❌ Token expirado (401) al guardar producto')
+      authStore.resetAuthState()
+      alert('⚠️ Sesión expirada. Por favor, inicia sesión nuevamente.')
+      router.push('/login?redirect=/tpv')
+      return
+    }
     
     if (response.ok) {
       const result = await response.json()
@@ -1285,6 +1392,12 @@ const saveProduct = async () => {
       editingProduct.value = null
     } else {
       const errorData = await response.json().catch(() => ({ detail: response.statusText }))
+      if (response.status === 401) {
+        authStore.resetAuthState()
+        alert('⚠️ Sesión expirada. Por favor, inicia sesión nuevamente.')
+        router.push('/login?redirect=/tpv')
+        return
+      }
       throw new Error(errorData.detail || 'Error al guardar producto')
     }
   } catch (err) {
@@ -1299,6 +1412,23 @@ onMounted(async () => {
   tpvState.value = TPV_STATES.CART
   console.log('🔄 TPV montado. Estado inicial:', tpvState.value)
   
+  // Inicializar authStore para asegurar que el token esté disponible
+  try {
+    await authStore.initialize()
+    console.log('✅ AuthStore inicializado')
+    
+    // Verificar autenticación
+    if (!authStore.isAuthenticated) {
+      console.warn('⚠️ Usuario no autenticado, redirigiendo al login')
+      router.push('/login?redirect=/tpv')
+      return
+    }
+  } catch (err) {
+    console.error('❌ Error inicializando authStore:', err)
+    router.push('/login?redirect=/tpv')
+    return
+  }
+  
   // Cargar configuración primero
   await loadTPVConfig()
   // Luego cargar productos
@@ -1309,7 +1439,8 @@ onMounted(async () => {
     estado: tpvState.value,
     productos: products.value.length,
     carrito: cart.value.length,
-    config: tpvConfig.value
+    config: tpvConfig.value,
+    autenticado: authStore.isAuthenticated
   })
 })
 </script>

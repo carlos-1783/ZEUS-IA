@@ -52,6 +52,19 @@
 
         <!-- Grid de Productos -->
         <div class="products-grid" v-if="!tablesMode">
+          <!-- Botón Añadir Producto (siempre visible si tiene permisos) -->
+          <button 
+            v-if="!businessProfileLoading && canEditProducts"
+            @click="openProducts" 
+            class="add-product-card"
+            title="Añadir nuevo producto"
+          >
+            <div class="add-product-content">
+              <span class="add-product-icon">➕</span>
+              <span class="add-product-label">{{ $t('tpv.products.add') || 'Añadir Producto' }}</span>
+            </div>
+          </button>
+          
           <div 
             v-for="product in filteredProducts" 
             :key="product.id || product.name"
@@ -96,13 +109,6 @@
           <!-- Mensaje si no hay productos -->
           <div v-if="filteredProducts.length === 0" class="no-products">
             <p>📦 {{ $t('tpv.products.empty') }}</p>
-            <button 
-              @click="openProducts" 
-              class="add-product-btn" 
-              v-if="!businessProfileLoading && canEditProducts"
-            >
-              ➕ {{ $t('tpv.products.add') }}
-            </button>
             <p v-if="businessProfileLoading" class="loading-message">{{ $t('tpv.products.loading') }}</p>
             <p v-else-if="!businessProfile" class="error-message">
               ⚠️ {{ $t('tpv.products.configureBusinessProfile') }}
@@ -2096,6 +2102,45 @@ onMounted(async () => {
   text-align: center;
   padding: 60px 20px;
   color: rgba(255, 255, 255, 0.5);
+}
+
+/* Tarjeta para añadir producto (visible siempre si tiene permisos) */
+.add-product-card {
+  min-height: 200px;
+  border: 2px dashed rgba(59, 130, 246, 0.5);
+  border-radius: 12px;
+  background: rgba(59, 130, 246, 0.1);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.add-product-card:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.8);
+  transform: scale(1.02);
+}
+
+.add-product-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.add-product-icon {
+  font-size: 3rem;
+  opacity: 0.8;
+}
+
+.add-product-label {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: rgba(59, 130, 246, 0.9);
 }
 
 .add-product-btn {

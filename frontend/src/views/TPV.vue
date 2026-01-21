@@ -52,14 +52,12 @@
 
         <!-- Grid de Productos -->
         <div class="products-grid" v-if="!tablesMode">
-          <!-- Botón Añadir Producto (siempre visible, validación en función) -->
+          <!-- Botón Añadir Producto (siempre visible, validación al guardar) -->
           <button 
             v-if="!businessProfileLoading"
             @click="openProducts" 
             class="add-product-card"
-            :class="{ 'disabled': !canEditProducts }"
-            :disabled="!canEditProducts"
-            :title="canEditProducts ? 'Añadir nuevo producto' : 'No tienes permisos para crear productos'"
+            title="Añadir nuevo producto"
           >
             <div class="add-product-content">
               <span class="add-product-icon">➕</span>
@@ -1502,6 +1500,59 @@ const deleteProduct = async (product) => {
 
 // Guardar producto (crear o actualizar)
 const saveProduct = async () => {
+  console.log('🔍 ===== saveProduct INICIADO =====')
+  console.log('🔍 Estado:', {
+    canEditProducts: canEditProducts.value,
+    isSuperuser: isSuperuser.value,
+    userRole: userRole.value,
+    productForm: productForm.value
+  })
+  
+  // Verificar permisos ANTES de validar el formulario
+  if (!canEditProducts.value) {
+    console.log('⚠️ Verificando permisos antes de guardar...')
+    
+    // Intentar verificar permisos una vez más
+    try {
+      const token = getAuthToken()
+      if (token) {
+        const userResponse = await fetch('/api/v1/user/me', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+        
+        if (userResponse.ok) {
+          const userData = await userResponse.json()
+          console.log('👤 Verificación de permisos desde backend:', userData)
+          
+          if (userData.is_superuser || userData.isSuperuser) {
+            isSuperuser.value = true
+            userRole.value = 'SUPERUSER'
+            console.log('✅ Permisos actualizados: SUPERUSER')
+          } else if (userData.role === 'ADMIN') {
+            userRole.value = 'ADMIN'
+            console.log('✅ Permisos actualizados: ADMIN')
+          }
+        }
+      }
+    } catch (err) {
+      console.error('❌ Error verificando permisos:', err)
+    }
+    
+    // Si aún no tiene permisos, mostrar mensaje
+    if (!canEditProducts.value) {
+      alert('⚠️ No tienes permisos para crear productos. Se requiere rol ADMIN o SUPERUSER.\n\nContacta con un administrador para obtener permisos.')
+      console.error('❌ Permisos insuficientes:', {
+        isSuperuser: isSuperuser.value,
+        userRole: userRole.value,
+        canEditProducts: canEditProducts.value
+      })
+      return
+    }
+  }
+  
   if (!productForm.value.name || !productForm.value.name.trim()) {
     alert('⚠️ El nombre del producto es requerido')
     return

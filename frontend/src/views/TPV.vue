@@ -140,14 +140,14 @@
           <div class="cart-items">
             <div 
               v-for="(item, index) in cart" 
-              :key="`cart-item-${item.product.id || item.product.name}-${index}`"
+              :key="`cart-item-${item.id || item.product?.id || index}-${index}`"
               class="cart-item"
             >
               <div class="cart-item-info">
-                <span class="cart-item-name">{{ item.product.name }}</span>
-                <span class="cart-item-price">€{{ formatPrice(item.total) }}</span>
+                <span class="cart-item-name">{{ item.name || item.product?.name || 'Producto' }}</span>
+                <span class="cart-item-price">€{{ formatPrice(item.total || item.subtotal || 0) }}</span>
                 <span class="cart-item-unit-price" v-if="item.quantity > 1">
-                  €{{ formatPrice((item.product.price_with_iva || item.product.price)) }} / unidad
+                  €{{ formatPrice(item.price || item.product?.price_with_iva || item.product?.price || 0) }} / unidad
                 </span>
               </div>
               <!-- Controles de edición (solo en estado CART) -->
@@ -231,8 +231,8 @@
               <button 
                 @click="goToPrePayment" 
                 class="action-btn pay-btn" 
-                :disabled="cart.length === 0"
-                :title="cart.length === 0 ? 'Añade productos al carrito para continuar' : 'Revisar y proceder al pago'"
+                :disabled="!Array.isArray(cart) || cart.length === 0"
+                :title="(!Array.isArray(cart) || cart.length === 0) ? 'Añade productos al carrito para continuar' : 'Revisar y proceder al pago'"
               >
                 💳 REVISAR Y PAGAR €{{ formatPrice(total) }}
               </button>
@@ -400,14 +400,32 @@ const filteredProducts = computed(() => {
   return products.value.filter(p => p.category === selectedCategory.value)
 })
 
+// REQUIRED FUNCTION: calculateTotal - sum subtotals
 const subtotal = computed(() => {
-  return cart.value.reduce((sum, item) => sum + (item.product.price * item.quantity), 0)
+  if (!Array.isArray(cart.value) || cart.value.length === 0) {
+    return 0
+  }
+  
+  return cart.value.reduce((sum, item) => {
+    // Usar subtotal si existe, sino calcular
+    if (item.subtotal !== undefined) {
+      return sum + item.subtotal
+    }
+    const price = item.price || item.product?.price || 0
+    return sum + (price * (item.quantity || 1))
+  }, 0)
 })
 
 const ivaTotal = computed(() => {
+  if (!Array.isArray(cart.value) || cart.value.length === 0) {
+    return 0
+  }
+  
   return cart.value.reduce((sum, item) => {
-    const ivaRate = item.product.iva_rate || 21
-    return sum + (item.product.price * item.quantity * ivaRate / 100)
+    const price = item.price || item.product?.price || 0
+    const ivaRate = item.product?.iva_rate || item.iva_rate || 21
+    const quantity = item.quantity || 1
+    return sum + (price * quantity * ivaRate / 100)
   }, 0)
 })
 
@@ -553,49 +571,68 @@ const validateQuantity = (quantity) => {
   return Math.max(1, Math.min(999, quantity))
 }
 
+// REQUIRED FUNCTION: addProduct - push product into cart array
 const addProductToCart = (product) => {
-  // Solo permitir agregar productos si estamos en estado CART
-  if (tpvState.value !== TPV_STATES.CART) {
+  // Validar producto
+  if (!product || !product.id) {
+    console.error('❌ Producto inválido:', product)
     return
   }
   
-  const existingItem = cart.value.find(item => item.product.id === product.id)
+  // Asegurar que estamos en estado CART
+  if (tpvState.value !== TPV_STATES.CART) {
+    tpvState.value = TPV_STATES.CART
+  }
+  
+  // Asegurar que cart es un array
+  if (!Array.isArray(cart.value)) {
+    cart.value = []
+  }
+  
+  // Buscar si el producto ya existe en el carrito
+  const existingItem = cart.value.find(item => {
+    const itemProductId = item.product?.id || item.id
+    return itemProductId === product.id
+  })
   
   if (existingItem) {
-    // Si existe, incrementar cantidad (validando max: 999)
+    // Si existe, incrementar cantidad
     existingItem.quantity = validateQuantity(existingItem.quantity + 1)
-    existingItem.total = (existingItem.product.price_with_iva || existingItem.product.price) * existingItem.quantity
+    existingItem.subtotal = (existingItem.product?.price_with_iva || existingItem.product?.price || existingItem.price || 0) * existingItem.quantity
+    existingItem.total = existingItem.subtotal
   } else {
-    // Si no existe, crear nueva línea
+    // Si no existe, crear nueva entrada en el array
+    const price = product.price_with_iva || product.price || 0
     cart.value.push({
-      product: product,
+      id: product.id,
+      name: product.name,
+      price: price,
       quantity: 1,
-      total: product.price_with_iva || product.price
+      subtotal: price,
+      product: product // Mantener referencia completa del producto
     })
   }
   
-  // Feedback visual: animación en el producto añadido
-  showCartFeedback(product.name)
+  console.log('✅ Producto añadido. Carrito tiene', cart.value.length, 'items')
+  showCartFeedback(product.name || 'Producto', 'added')
 }
 
+// REQUIRED FUNCTION: removeProduct - remove product by index or id
 const removeFromCart = (index) => {
-  // Solo permitir eliminar si estamos en estado CART
-  if (tpvState.value !== TPV_STATES.CART) {
+  // Asegurar que cart es un array
+  if (!Array.isArray(cart.value)) {
+    cart.value = []
     return
   }
   
-  const item = cart.value[index]
-  if (item && confirm(`¿Estás seguro de eliminar "${item.product.name}" del carrito?`)) {
-    cart.value.splice(index, 1)
-    // Feedback visual
-    showCartFeedback(`${item.product.name} eliminado`, 'removed')
-  }
-}
-
-const increaseQuantity = (index) => {
-  // Si no estamos en CART, volver a CART
+  // Asegurar que estamos en estado CART
   if (tpvState.value !== TPV_STATES.CART) {
     tpvState.value = TPV_STATES.CART
+  }
+  
+  if (index < 0 || index >= cart.value.length) {
+    console.error('❌ Índice inválido:', index)
+    return
   }
   
   const item = cart.value[index]
@@ -604,18 +641,63 @@ const increaseQuantity = (index) => {
     return
   }
   
-  const oldQuantity = item.quantity
-  item.quantity = validateQuantity(item.quantity + 1)
-  item.total = (item.product.price_with_iva || item.product.price || 0) * item.quantity
+  const itemName = item.name || item.product?.name || 'Producto'
+  cart.value.splice(index, 1)
   
-  console.log('➕ Cantidad incrementada:', item.product.name, oldQuantity, '→', item.quantity)
-  showCartFeedback(`${item.product.name}: ${item.quantity} unidades`, 'updated')
+  console.log('✅ Producto eliminado. Carrito tiene', cart.value.length, 'items')
+  showCartFeedback(`${itemName} eliminado`, 'removed')
 }
 
-const decreaseQuantity = (index) => {
-  // Si no estamos en CART, volver a CART
+// REQUIRED FUNCTION: updateQuantity - recalculate subtotal
+const increaseQuantity = (index) => {
+  // Asegurar que cart es un array
+  if (!Array.isArray(cart.value)) {
+    cart.value = []
+    return
+  }
+  
+  // Asegurar que estamos en estado CART
   if (tpvState.value !== TPV_STATES.CART) {
     tpvState.value = TPV_STATES.CART
+  }
+  
+  if (index < 0 || index >= cart.value.length) {
+    console.error('❌ Índice inválido:', index)
+    return
+  }
+  
+  const item = cart.value[index]
+  if (!item) {
+    console.error('❌ Item no encontrado en índice:', index)
+    return
+  }
+  
+  const price = item.price || item.product?.price_with_iva || item.product?.price || 0
+  item.quantity = validateQuantity(item.quantity + 1)
+  item.subtotal = price * item.quantity
+  item.total = item.subtotal
+  
+  const itemName = item.name || item.product?.name || 'Producto'
+  console.log('➕ Cantidad incrementada:', itemName, '→', item.quantity)
+  showCartFeedback(`${itemName}: ${item.quantity} unidades`, 'updated')
+}
+
+// REQUIRED FUNCTION: updateQuantity - recalculate subtotal (decrease)
+const decreaseQuantity = (index) => {
+  // Asegurar que cart es un array
+  if (!Array.isArray(cart.value)) {
+    cart.value = []
+    return
+  }
+  
+  // Asegurar que estamos en estado CART
+  if (tpvState.value !== TPV_STATES.CART) {
+    tpvState.value = TPV_STATES.CART
+  }
+  
+  if (index < 0 || index >= cart.value.length) {
+    console.error('❌ Índice inválido:', index)
+    return
   }
   
   const item = cart.value[index]
@@ -625,15 +707,17 @@ const decreaseQuantity = (index) => {
   }
   
   if (item.quantity > 1) {
+    const price = item.price || item.product?.price_with_iva || item.product?.price || 0
     item.quantity--
-    item.total = (item.product.price_with_iva || item.product.price || 0) * item.quantity
-    console.log('➖ Cantidad decrementada:', item.product.name, '→', item.quantity)
-    showCartFeedback(`${item.product.name}: ${item.quantity} unidades`, 'updated')
+    item.subtotal = price * item.quantity
+    item.total = item.subtotal
+    
+    const itemName = item.name || item.product?.name || 'Producto'
+    console.log('➖ Cantidad decrementada:', itemName, '→', item.quantity)
+    showCartFeedback(`${itemName}: ${item.quantity} unidades`, 'updated')
   } else {
-    // Si la cantidad llega a 1, eliminar del carrito directamente
-    console.log('🗑️ Eliminando producto (cantidad = 1):', item.product.name)
-    cart.value.splice(index, 1)
-    showCartFeedback(`${item.product.name} eliminado`, 'removed')
+    // Si la cantidad llega a 1, eliminar del carrito
+    removeFromCart(index)
   }
 }
 
@@ -654,8 +738,14 @@ const clearCart = () => {
 }
 
 // Funciones para manejar estados del TPV
+// BLOCKING RULE: No permitir pago si cart.length === 0
 const goToPrePayment = () => {
-  // Bloquear si el carrito está vacío
+  // Asegurar que cart es un array
+  if (!Array.isArray(cart.value)) {
+    cart.value = []
+  }
+  
+  // BLOQUEAR si el carrito está vacío
   if (cart.value.length === 0) {
     alert('⚠️ El carrito está vacío. Añade productos antes de proceder al pago.')
     return
@@ -797,7 +887,12 @@ const processPayment = async () => {
       customerData = { name: customerName }
     }
     
-    // Preparar datos de la venta
+    // Preparar datos de la venta - Asegurar que cart es array
+    if (!Array.isArray(cart.value) || cart.value.length === 0) {
+      alert('⚠️ El carrito está vacío')
+      return
+    }
+    
     const saleData = {
       payment_method: 'efectivo', // Por defecto, se puede cambiar después
       employee_id: employeeId,
@@ -805,10 +900,10 @@ const processPayment = async () => {
       terminal_id: null,
       note: paymentNote.value || null, // Añadir nota si existe
       cart_items: cart.value.map(item => ({
-        product_id: item.product.id,
-        quantity: item.quantity,
-        unit_price: item.product.price,
-        iva_rate: item.product.iva_rate || 21.0
+        product_id: item.id || item.product?.id || 'UNKNOWN',
+        quantity: item.quantity || 1,
+        unit_price: item.price || item.product?.price || 0,
+        iva_rate: item.product?.iva_rate || item.iva_rate || 21.0
       }))
     }
     

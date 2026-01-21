@@ -340,15 +340,17 @@ class TPVService:
         Returns:
             Dict con información del producto creado
         """
-        # Generar ID único basado en timestamp para evitar colisiones
+        # Generar ID único - usar timestamp + contador para garantizar unicidad
         import time
-        timestamp = int(time.time() * 1000)  # milisegundos
-        product_id = f"PROD_{timestamp:013d}"
+        import random
+        base_id = int(time.time() * 1000)
+        counter = len(self.products)
+        product_id = f"PROD_{base_id}_{counter:04d}"
         
         # Verificar que el ID no existe (por si acaso)
         while product_id in self.products:
-            timestamp += 1
-            product_id = f"PROD_{timestamp:013d}"
+            counter += 1
+            product_id = f"PROD_{base_id}_{counter:04d}"
         
         product = {
             "id": product_id,
@@ -369,6 +371,103 @@ class TPVService:
         logger.info(f"📊 Total productos en sistema: {len(self.products)}")
         
         return product
+    
+    def update_product(
+        self,
+        product_id: str,
+        name: Optional[str] = None,
+        price: Optional[float] = None,
+        category: Optional[str] = None,
+        iva_rate: Optional[float] = None,
+        stock: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Actualizar producto existente
+        
+        Args:
+            product_id: ID del producto a actualizar
+            name: Nuevo nombre (opcional)
+            price: Nuevo precio (opcional)
+            category: Nueva categoría (opcional)
+            iva_rate: Nueva tasa de IVA (opcional)
+            stock: Nuevo stock (opcional)
+            metadata: Nueva metadata (opcional)
+        
+        Returns:
+            Dict con producto actualizado o error
+        """
+        if product_id not in self.products:
+            return {
+                "success": False,
+                "error": f"Producto {product_id} no encontrado"
+            }
+        
+        product = self.products[product_id]
+        
+        # Actualizar solo campos proporcionados
+        if name is not None:
+            product["name"] = name
+        if price is not None:
+            product["price"] = price
+            # Recalcular price_with_iva si cambia precio o iva_rate
+            current_iva = iva_rate if iva_rate is not None else product.get("iva_rate", 21.0)
+            product["price_with_iva"] = price * (1 + current_iva / 100)
+        if category is not None:
+            product["category"] = category
+        if iva_rate is not None:
+            product["iva_rate"] = iva_rate
+            # Recalcular price_with_iva
+            current_price = product.get("price", 0)
+            product["price_with_iva"] = current_price * (1 + iva_rate / 100)
+        if stock is not None:
+            product["stock"] = stock
+        if metadata is not None:
+            product["metadata"] = metadata
+        
+        product["updated_at"] = datetime.utcnow().isoformat()
+        
+        logger.info(f"✏️ Producto actualizado: {product_id} - {product.get('name')}")
+        
+        return {
+            "success": True,
+            "product": product
+        }
+    
+    def delete_product(self, product_id: str) -> Dict[str, Any]:
+        """
+        Eliminar producto del sistema
+        
+        Args:
+            product_id: ID del producto a eliminar
+        
+        Returns:
+            Dict con resultado de la eliminación
+        """
+        if product_id not in self.products:
+            return {
+                "success": False,
+                "error": f"Producto {product_id} no encontrado"
+            }
+        
+        # BLOCKING RULE: No permitir eliminar si es el último producto
+        if len(self.products) <= 1:
+            return {
+                "success": False,
+                "error": "No se puede eliminar el último producto. El TPV requiere al menos 1 producto activo."
+            }
+        
+        product_name = self.products[product_id].get("name", product_id)
+        del self.products[product_id]
+        
+        logger.info(f"🗑️ Producto eliminado: {product_id} - {product_name}")
+        logger.info(f"📊 Total productos restantes: {len(self.products)}")
+        
+        return {
+            "success": True,
+            "message": f"Producto {product_name} eliminado correctamente",
+            "remaining_products": len(self.products)
+        }
     
     def add_to_cart(self, product_id: str, quantity: int = 1) -> Dict[str, Any]:
         """Agregar producto al carrito"""

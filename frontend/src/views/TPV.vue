@@ -55,35 +55,60 @@
           <div 
             v-for="product in filteredProducts" 
             :key="product.id || product.name"
-            @click="addProductToCart(product)"
             class="product-card"
-            :title="'Clic para añadir ' + product.name + ' al carrito'"
           >
-            <div class="product-image">
-              <span class="product-icon">{{ getProductIcon(product.category) }}</span>
+            <div @click="addProductToCart(product)" class="product-clickable">
+              <div class="product-image">
+                <span class="product-icon">{{ getProductIcon(product.category) }}</span>
+              </div>
+              <div class="product-info">
+                <h3 class="product-name">{{ product.name }}</h3>
+                <p class="product-category">{{ product.category }}</p>
+                <div class="product-price">
+                  <span class="price-label">€</span>
+                  <span class="price-value">{{ formatPrice(product.price_with_iva || product.price) }}</span>
+                </div>
+                <div v-if="product.stock !== null" class="product-stock">
+                  {{ $t('tpv.products.stock') }}: {{ product.stock }}
+                </div>
+              </div>
             </div>
-            <div class="product-info">
-              <h3 class="product-name">{{ product.name }}</h3>
-              <p class="product-category">{{ product.category }}</p>
-              <div class="product-price">
-                <span class="price-label">€</span>
-                <span class="price-value">{{ formatPrice(product.price_with_iva || product.price) }}</span>
-              </div>
-              <div v-if="product.stock !== null" class="product-stock">
-                {{ $t('tpv.products.stock') }}: {{ product.stock }}
-              </div>
+            <!-- Botones CRUD (solo para ADMIN y SUPERUSER) -->
+            <div class="product-actions" v-if="canEditProducts">
+              <button 
+                @click.stop="editProduct(product)" 
+                class="product-action-btn edit-btn"
+                title="Editar producto"
+              >
+                ✏️
+              </button>
+              <button 
+                v-if="isSuperuser"
+                @click.stop="deleteProduct(product)" 
+                class="product-action-btn delete-btn"
+                title="Eliminar producto"
+              >
+                🗑️
+              </button>
             </div>
           </div>
           
           <!-- Mensaje si no hay productos -->
           <div v-if="filteredProducts.length === 0" class="no-products">
             <p>📦 {{ $t('tpv.products.empty') }}</p>
-            <button @click="openProducts" class="add-product-btn" v-if="!businessProfileLoading">
+            <button 
+              @click="openProducts" 
+              class="add-product-btn" 
+              v-if="!businessProfileLoading && canEditProducts"
+            >
               ➕ {{ $t('tpv.products.add') }}
             </button>
             <p v-if="businessProfileLoading" class="loading-message">{{ $t('tpv.products.loading') }}</p>
             <p v-else-if="!businessProfile" class="error-message">
               ⚠️ {{ $t('tpv.products.configureBusinessProfile') }}
+            </p>
+            <p v-else-if="!canEditProducts" class="error-message">
+              ⚠️ No tienes permisos para crear productos. Contacta con un administrador.
             </p>
           </div>
         </div>
@@ -341,6 +366,73 @@
       <p>❌ {{ error }}</p>
       <button @click="checkStatus" class="retry-btn">Reintentar</button>
     </div>
+    
+    <!-- Modal de Producto (Crear/Editar) -->
+    <div v-if="showProductModal" class="modal-overlay" @click.self="showProductModal = false">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>{{ editingProduct ? '✏️ Editar Producto' : '➕ Crear Producto' }}</h2>
+          <button @click="showProductModal = false" class="modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Nombre del producto *</label>
+            <input 
+              v-model="productForm.name" 
+              type="text" 
+              placeholder="Ej: Café con leche"
+              class="form-input"
+            />
+          </div>
+          <div class="form-group">
+            <label>Precio (sin IVA) *</label>
+            <input 
+              v-model.number="productForm.price" 
+              type="number" 
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              class="form-input"
+            />
+          </div>
+          <div class="form-group">
+            <label>Categoría</label>
+            <input 
+              v-model="productForm.category" 
+              type="text" 
+              placeholder="General"
+              class="form-input"
+            />
+          </div>
+          <div class="form-group">
+            <label>IVA (%)</label>
+            <input 
+              v-model.number="productForm.iva_rate" 
+              type="number" 
+              step="0.1"
+              min="0"
+              max="100"
+              placeholder="21.0"
+              class="form-input"
+            />
+          </div>
+          <div class="form-group">
+            <label>Stock (opcional)</label>
+            <input 
+              v-model.number="productForm.stock" 
+              type="number" 
+              min="0"
+              placeholder="Dejar vacío si no aplica"
+              class="form-input"
+            />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button @click="showProductModal = false" class="btn-cancel">Cancelar</button>
+          <button @click="saveProduct" class="btn-save">{{ editingProduct ? 'Guardar Cambios' : 'Crear Producto' }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -378,6 +470,24 @@ const paymentNote = ref('') // Nota adicional para el pago
 const businessProfile = ref(null)
 const tpvConfig = ref({})
 const businessProfileLoading = ref(true)
+
+// Permisos de usuario
+const userRole = ref(null)
+const isSuperuser = ref(false)
+const canEditProducts = computed(() => {
+  return isSuperuser.value || userRole.value === 'ADMIN'
+})
+
+// Estado del modal de producto
+const showProductModal = ref(false)
+const editingProduct = ref(null)
+const productForm = ref({
+  name: '',
+  price: 0,
+  category: 'General',
+  iva_rate: 21.0,
+  stock: null
+})
 
 // Teclado numérico
 const keyboardLayout = [
@@ -494,6 +604,16 @@ const checkStatus = async () => {
       throw new Error('No hay token de autenticación')
     }
 
+    // Cargar información del usuario para permisos
+    try {
+      const userInfo = authStore.user || {}
+      isSuperuser.value = userInfo.is_superuser || false
+      userRole.value = userInfo.role || (isSuperuser.value ? 'SUPERUSER' : 'EMPLOYEE')
+      console.log('👤 Permisos usuario:', { isSuperuser: isSuperuser.value, role: userRole.value })
+    } catch (err) {
+      console.warn('⚠️ No se pudieron cargar permisos:', err)
+    }
+    
     // Cargar productos
     const productsResponse = await fetch('/api/v1/tpv/products', {
       headers: {
@@ -510,9 +630,9 @@ const checkStatus = async () => {
         console.log('✅ Productos cargados:', loadedProducts.length)
         console.log('📦 Lista de productos:', loadedProducts.map(p => p.name))
         
-        // Si no hay productos, mostrar mensaje
+        // BLOCKING RULE: Validar que hay al menos 1 producto
         if (loadedProducts.length === 0) {
-          console.warn('⚠️ No hay productos configurados. Usa el botón "➕ Añadir Producto" para crear productos.')
+          console.warn('⚠️ No hay productos configurados. El TPV requiere al menos 1 producto activo.')
         }
       } else {
         console.error('❌ Error en respuesta de productos:', productsData)
@@ -1228,11 +1348,17 @@ onMounted(async () => {
   border: 2px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   padding: 15px;
-  cursor: pointer;
   transition: all 0.3s;
   text-align: center;
   user-select: none;
   position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.product-clickable {
+  cursor: pointer;
+  flex: 1;
 }
 
 .product-card:hover {
@@ -1242,23 +1368,34 @@ onMounted(async () => {
   background: rgba(59, 130, 246, 0.1);
 }
 
-.product-card:active {
-  transform: translateY(-2px) scale(0.98);
-  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.5);
+.product-actions {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.product-card::after {
-  content: '➕';
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  opacity: 0;
-  transition: opacity 0.2s;
-  font-size: 1.2rem;
+.product-action-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
 }
 
-.product-card:hover::after {
-  opacity: 0.6;
+.product-action-btn.edit-btn:hover {
+  background: rgba(59, 130, 246, 0.4);
+  transform: scale(1.1);
+}
+
+.product-action-btn.delete-btn:hover {
+  background: rgba(239, 68, 68, 0.4);
+  transform: scale(1.1);
 }
 
 .product-icon {
@@ -1799,6 +1936,159 @@ onMounted(async () => {
   font-size: 0.9rem;
   font-weight: 600;
   margin-left: 10px;
+}
+
+/* Modal de Producto */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 0.2s;
+}
+
+.modal-content {
+  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 15px;
+  padding: 0;
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.3s;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #fff;
+}
+
+.modal-close {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.modal-close:hover {
+  background: rgba(239, 68, 68, 0.4);
+  transform: scale(1.1);
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.form-input {
+  width: 100%;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1rem;
+  transition: all 0.2s;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.modal-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.btn-cancel {
+  padding: 12px 24px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-save {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+}
+
+.btn-save:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Feedback visual del carrito */

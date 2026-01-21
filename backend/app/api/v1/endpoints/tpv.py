@@ -204,6 +204,16 @@ async def create_product(
     current_user: User = Depends(get_current_active_user)
 ):
     """Crear producto en el TPV"""
+    is_superuser = getattr(current_user, 'is_superuser', False)
+    is_admin = getattr(current_user, 'is_admin', False) or is_superuser
+    
+    # Permisos: Solo ADMIN y SUPERUSER pueden crear
+    if not (is_admin or is_superuser):
+        raise HTTPException(
+            status_code=403,
+            detail="No tienes permisos para crear productos. Se requiere rol ADMIN o SUPERUSER."
+        )
+    
     logger.info(f"📦 Creando producto: {request.name} - Precio: €{request.price}")
     logger.info(f"📊 Productos existentes antes de crear: {len(tpv_service.products)}")
     
@@ -236,6 +246,70 @@ async def list_products(
         "success": True,
         "products": list(tpv_service.products.values())
     }
+
+
+@router.put("/products/{product_id}")
+async def update_product(
+    product_id: str,
+    request: ProductCreateRequest,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Actualizar producto en el TPV"""
+    is_superuser = getattr(current_user, 'is_superuser', False)
+    is_admin = getattr(current_user, 'is_admin', False) or is_superuser
+    
+    # Permisos: Solo ADMIN y SUPERUSER pueden actualizar
+    if not (is_admin or is_superuser):
+        raise HTTPException(
+            status_code=403,
+            detail="No tienes permisos para actualizar productos. Se requiere rol ADMIN o SUPERUSER."
+        )
+    
+    logger.info(f"✏️ Actualizando producto: {product_id}")
+    
+    result = tpv_service.update_product(
+        product_id=product_id,
+        name=request.name,
+        price=request.price,
+        category=request.category,
+        iva_rate=request.iva_rate,
+        stock=request.stock,
+        metadata=request.metadata
+    )
+    
+    if not result.get("success"):
+        raise HTTPException(status_code=404, detail=result.get("error"))
+    
+    logger.info(f"✅ Producto actualizado: {product_id}")
+    
+    return result
+
+
+@router.delete("/products/{product_id}")
+async def delete_product(
+    product_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Eliminar producto del TPV"""
+    is_superuser = getattr(current_user, 'is_superuser', False)
+    
+    # Permisos: Solo SUPERUSER puede eliminar
+    if not is_superuser:
+        raise HTTPException(
+            status_code=403,
+            detail="No tienes permisos para eliminar productos. Se requiere rol SUPERUSER."
+        )
+    
+    logger.info(f"🗑️ Eliminando producto: {product_id}")
+    
+    result = tpv_service.delete_product(product_id)
+    
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error"))
+    
+    logger.info(f"✅ Producto eliminado: {product_id}")
+    
+    return result
 
 
 @router.post("/cart/add")

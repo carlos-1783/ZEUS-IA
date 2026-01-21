@@ -72,7 +72,22 @@
           >
             <div @click="addProductToCart(product)" class="product-clickable">
               <div class="product-image">
-                <span class="product-icon">{{ getProductIcon(product.category) }}</span>
+                <!-- Prioridad: image > icon > default -->
+                <img 
+                  v-if="product.image" 
+                  :src="product.image" 
+                  :alt="product.name"
+                  class="product-image-file"
+                  @error="handleImageError"
+                />
+                <span 
+                  v-else-if="product.icon" 
+                  class="product-icon"
+                >{{ getIconEmoji(product.icon) }}</span>
+                <span 
+                  v-else 
+                  class="product-icon"
+                >{{ getProductIcon(product.category) }}</span>
               </div>
               <div class="product-info">
                 <h3 class="product-name">{{ product.name }}</h3>
@@ -598,6 +613,24 @@ const getProductIcon = (category) => {
     'Otros': '📦'
   }
   return icons[category] || '📦'
+}
+
+// Obtener emoji según icono predefinido
+const getIconEmoji = (icon) => {
+  const iconMap = {
+    'coffee': '☕',
+    'food': '🍽️',
+    'service': '💼',
+    'house': '🏠',
+    'default': '📦'
+  }
+  return iconMap[icon] || '📦'
+}
+
+// Manejar error al cargar imagen
+const handleImageError = (event) => {
+  console.warn('⚠️ Error cargando imagen, usando icono por defecto')
+  event.target.style.display = 'none'
 }
 
 // Función auxiliar para obtener token de forma robusta
@@ -1243,9 +1276,48 @@ const openProducts = async () => {
     price: 0,
     category: tpvConfig.value.default_categories?.[0] || 'General',
     iva_rate: tpvConfig.value.default_iva_rate || 21.0,
-    stock: null
+    stock: null,
+    image: null,
+    icon: null
   }
+  imageFile.value = null
+  imagePreview.value = null
   showProductModal.value = true
+}
+
+// Manejar selección de imagen
+const handleImageSelect = (event) => {
+  const file = event.target.files[0]
+  if (!file) return
+  
+  // Validar tamaño (max 2MB)
+  if (file.size > 2 * 1024 * 1024) {
+    alert('⚠️ La imagen supera el límite de 2MB')
+    return
+  }
+  
+  // Validar tipo
+  const allowedTypes = ['image/png', 'image/jpeg', 'image/webp']
+  if (!allowedTypes.includes(file.type)) {
+    alert('⚠️ Formato no soportado. Usa PNG, JPEG o WEBP')
+    return
+  }
+  
+  imageFile.value = file
+  
+  // Crear preview
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    imagePreview.value = e.target.result
+  }
+  reader.readAsDataURL(file)
+}
+
+// Limpiar imagen
+const clearImage = () => {
+  imageFile.value = null
+  imagePreview.value = null
+  productForm.value.image = null
 }
 
 // REQUIRED FUNCTION: updateProduct - replace by id
@@ -1261,8 +1333,12 @@ const editProduct = (product) => {
     price: product.price || 0,
     category: product.category || 'General',
     iva_rate: product.iva_rate || 21.0,
-    stock: product.stock || null
+    stock: product.stock || null,
+    image: product.image || null,
+    icon: product.icon || null
   }
+  imageFile.value = null
+  imagePreview.value = product.image || null
   showProductModal.value = true
 }
 
@@ -1363,7 +1439,9 @@ const saveProduct = async () => {
         price: parseFloat(productForm.value.price),
         category: productForm.value.category || 'General',
         iva_rate: parseFloat(productForm.value.iva_rate) || 21.0,
-        stock: productForm.value.stock ? parseInt(productForm.value.stock) : null
+        stock: productForm.value.stock ? parseInt(productForm.value.stock) : null,
+        image: imageUrl,
+        icon: productForm.value.icon || null
       })
     })
     
@@ -1396,6 +1474,8 @@ const saveProduct = async () => {
       
       showProductModal.value = false
       editingProduct.value = null
+      imageFile.value = null
+      imagePreview.value = null
     } else {
       const errorData = await response.json().catch(() => ({ detail: response.statusText }))
       if (response.status === 401) {
@@ -1638,6 +1718,43 @@ onMounted(async () => {
   font-size: 3rem;
   display: block;
   margin-bottom: 10px;
+}
+
+.product-image-file {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.image-preview {
+  margin-top: 10px;
+  text-align: center;
+}
+
+.image-preview img {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 8px;
+  border: 2px solid rgba(59, 130, 246, 0.5);
+  margin-bottom: 10px;
+}
+
+.btn-remove-image {
+  padding: 6px 12px;
+  background: rgba(239, 68, 68, 0.3);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  border-radius: 6px;
+  color: #fca5a5;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.btn-remove-image:hover {
+  background: rgba(239, 68, 68, 0.5);
+  transform: scale(1.05);
 }
 
 .product-name {

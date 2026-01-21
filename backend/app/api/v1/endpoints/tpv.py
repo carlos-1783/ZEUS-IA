@@ -2,14 +2,18 @@
 💳 TPV Universal Enterprise API Endpoints
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, File, UploadFile
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
 import logging
+from pathlib import Path
+from datetime import datetime
+import secrets
 
 from app.db.session import get_db
 from app.core.auth import get_current_active_user, get_current_active_superuser
+from app.core.config import settings
 from app.models.user import User
 from services.tpv_service import tpv_service, BusinessProfile, PaymentMethod
 
@@ -29,6 +33,8 @@ class ProductCreateRequest(BaseModel):
     category: str
     iva_rate: float = 21.0
     stock: Optional[int] = None
+    image: Optional[str] = None
+    icon: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
 
 
@@ -223,6 +229,8 @@ async def create_product(
         category=request.category,
         iva_rate=request.iva_rate,
         stock=request.stock,
+        image=request.image,
+        icon=request.icon,
         metadata=request.metadata
     )
     
@@ -283,6 +291,72 @@ async def update_product(
     logger.info(f"✅ Producto actualizado: {product_id}")
     
     return result
+
+
+@router.post("/products/upload-image")
+async def upload_product_image(
+    image: UploadFile = File(...),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Subir imagen de producto"""
+    is_superuser = getattr(current_user, 'is_superuser', False)
+    is_admin = getattr(current_user, 'is_admin', False) or is_superuser
+    
+    # Permisos: Solo ADMIN y SUPERUSER pueden subir imágenes
+    if not (is_admin or is_superuser):
+        raise HTTPException(
+            status_code=403,
+            detail="No tienes permisos para subir imágenes. Se requiere rol ADMIN o SUPERUSER."
+        )
+    
+    # Validar tipo de archivo
+    allowed_types = ["image/png", "image/jpeg", "image/webp"]
+    if image.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Formato no soportado. Usa: {', '.join(allowed_types)}"
+        )
+    
+    # Validar tamaño (max 2MB)
+    MAX_SIZE = 2 * 1024 * 1024  # 2MB
+    contents = await image.read()
+    if len(contents) > MAX_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail="La imagen supera el límite de 2MB"
+        )
+    
+    # Crear directorio de productos si no existe
+    upload_dir = Path(settings.STATIC_DIR) / "uploads" / "products"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Generar nombre único
+    extension = {
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+        "image/webp": ".webp"
+    }[image.content_type]
+    
+    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
+    token = secrets.token_urlsafe(6)
+    filename = f"product_{timestamp}_{token}{extension}"
+    destination = upload_dir / filename
+    
+    # Guardar archivo
+    destination.write_bytes(contents)
+    
+    # Construir URL pública
+    public_url = f"{settings.STATIC_URL.rstrip('/')}/uploads/products/{filename}"
+    
+    logger.info(f"📸 Imagen de producto subida: {filename}")
+    
+    return {
+        "success": True,
+        "url": public_url,
+        "filename": filename,
+        "content_type": image.content_type,
+        "size_bytes": len(contents)
+    }
 
 
 @router.delete("/products/{product_id}")

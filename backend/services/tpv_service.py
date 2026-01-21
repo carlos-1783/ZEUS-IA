@@ -324,6 +324,8 @@ class TPVService:
         category: str,
         iva_rate: float = 21.0,
         stock: Optional[int] = None,
+        image: Optional[str] = None,
+        icon: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
@@ -335,6 +337,8 @@ class TPVService:
             category: Categoría del producto
             iva_rate: Tasa de IVA (21%, 10%, 4%, 0%)
             stock: Stock disponible (opcional)
+            image: URL de la imagen del producto (opcional)
+            icon: Icono del producto (opcional: coffee, food, service, house, default)
             metadata: Metadata adicional
         
         Returns:
@@ -360,6 +364,8 @@ class TPVService:
             "category": category,
             "iva_rate": iva_rate,
             "stock": stock,
+            "image": image,  # URL de la imagen
+            "icon": icon,    # Icono predefinido
             "metadata": metadata or {},
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat()
@@ -380,6 +386,8 @@ class TPVService:
         category: Optional[str] = None,
         iva_rate: Optional[float] = None,
         stock: Optional[int] = None,
+        image: Optional[str] = None,
+        icon: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
@@ -422,6 +430,10 @@ class TPVService:
             product["price_with_iva"] = current_price * (1 + iva_rate / 100)
         if stock is not None:
             product["stock"] = stock
+        if image is not None:
+            product["image"] = image
+        if icon is not None:
+            product["icon"] = icon
         if metadata is not None:
             product["metadata"] = metadata
         

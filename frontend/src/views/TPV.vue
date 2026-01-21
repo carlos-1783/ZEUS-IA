@@ -1144,20 +1144,53 @@ const openDiscount = () => {
   console.log(`✅ Descuento del ${discount}% aplicado`)
 }
 
+// REQUIRED FUNCTION: createProduct - push into products array
 const openProducts = async () => {
-  // En una implementación completa, esto abriría un modal o navegaría a gestión de productos
-  // Por ahora, redirigimos al endpoint de creación (se puede mejorar con un modal)
-  const name = prompt('Nombre del producto:')
-  if (!name) return
-  
-  const price = parseFloat(prompt('Precio (sin IVA):', '0'))
-  if (isNaN(price) || price < 0) {
-    alert('⚠️ Precio inválido')
+  if (!canEditProducts.value) {
+    alert('⚠️ No tienes permisos para crear productos')
     return
   }
   
-  const category = prompt('Categoría:', tpvConfig.value.default_categories?.[0] || 'General')
-  if (!category) return
+  // Abrir modal para crear producto
+  editingProduct.value = null
+  productForm.value = {
+    name: '',
+    price: 0,
+    category: tpvConfig.value.default_categories?.[0] || 'General',
+    iva_rate: tpvConfig.value.default_iva_rate || 21.0,
+    stock: null
+  }
+  showProductModal.value = true
+}
+
+// REQUIRED FUNCTION: updateProduct - replace by id
+const editProduct = (product) => {
+  if (!canEditProducts.value) {
+    alert('⚠️ No tienes permisos para editar productos')
+    return
+  }
+  
+  editingProduct.value = product
+  productForm.value = {
+    name: product.name || '',
+    price: product.price || 0,
+    category: product.category || 'General',
+    iva_rate: product.iva_rate || 21.0,
+    stock: product.stock || null
+  }
+  showProductModal.value = true
+}
+
+// REQUIRED FUNCTION: deleteProduct - filter by id
+const deleteProduct = async (product) => {
+  if (!isSuperuser.value) {
+    alert('⚠️ Solo los superusuarios pueden eliminar productos')
+    return
+  }
+  
+  if (!confirm(`¿Estás seguro de eliminar el producto "${product.name}"?\n\nEsta acción no se puede deshacer.`)) {
+    return
+  }
   
   try {
     const token = authStore.getToken ? authStore.getToken() : authStore.token
@@ -1165,32 +1198,98 @@ const openProducts = async () => {
       throw new Error('No hay token de autenticación')
     }
     
-    const response = await fetch('/api/v1/tpv/products', {
-      method: 'POST',
+    const response = await fetch(`/api/v1/tpv/products/${product.id}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+    
+    if (response.ok) {
+      const result = await response.json()
+      console.log('✅ Producto eliminado:', result)
+      
+      // STATE MANAGEMENT: filter by id (sin refresh)
+      products.value = products.value.filter(p => p.id !== product.id)
+      
+      alert(`✅ Producto "${product.name}" eliminado correctamente`)
+    } else {
+      const errorData = await response.json().catch(() => ({ detail: response.statusText }))
+      throw new Error(errorData.detail || 'Error al eliminar producto')
+    }
+  } catch (err) {
+    console.error('❌ Error eliminando producto:', err)
+    alert('❌ Error al eliminar producto: ' + err.message)
+  }
+}
+
+// Guardar producto (crear o actualizar)
+const saveProduct = async () => {
+  if (!productForm.value.name || !productForm.value.name.trim()) {
+    alert('⚠️ El nombre del producto es requerido')
+    return
+  }
+  
+  if (!productForm.value.price || productForm.value.price <= 0) {
+    alert('⚠️ El precio debe ser mayor a 0')
+    return
+  }
+  
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) {
+      throw new Error('No hay token de autenticación')
+    }
+    
+    const isEditing = editingProduct.value !== null
+    const url = isEditing 
+      ? `/api/v1/tpv/products/${editingProduct.value.id}`
+      : '/api/v1/tpv/products'
+    
+    const response = await fetch(url, {
+      method: isEditing ? 'PUT' : 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        name,
-        price,
-        category,
-        iva_rate: tpvConfig.value.default_iva_rate || 21.0
+        name: productForm.value.name.trim(),
+        price: parseFloat(productForm.value.price),
+        category: productForm.value.category || 'General',
+        iva_rate: parseFloat(productForm.value.iva_rate) || 21.0,
+        stock: productForm.value.stock ? parseInt(productForm.value.stock) : null
       })
     })
     
     if (response.ok) {
       const result = await response.json()
-      alert(`✅ Producto "${name}" creado correctamente`)
-      // Recargar productos
-      await checkStatus()
+      console.log('✅ Producto guardado:', result)
+      
+      const savedProduct = result.product || result
+      
+      if (isEditing) {
+        // STATE MANAGEMENT: replace by id (sin refresh)
+        const index = products.value.findIndex(p => p.id === savedProduct.id)
+        if (index !== -1) {
+          products.value[index] = savedProduct
+        }
+        alert(`✅ Producto "${savedProduct.name}" actualizado correctamente`)
+      } else {
+        // STATE MANAGEMENT: push into products (sin refresh)
+        products.value.push(savedProduct)
+        alert(`✅ Producto "${savedProduct.name}" creado correctamente`)
+      }
+      
+      showProductModal.value = false
+      editingProduct.value = null
     } else {
       const errorData = await response.json().catch(() => ({ detail: response.statusText }))
-      throw new Error(errorData.detail || 'Error al crear producto')
+      throw new Error(errorData.detail || 'Error al guardar producto')
     }
   } catch (err) {
-    console.error('Error creando producto:', err)
-    alert('❌ Error al crear producto: ' + err.message)
+    console.error('❌ Error guardando producto:', err)
+    alert('❌ Error al guardar producto: ' + err.message)
   }
 }
 

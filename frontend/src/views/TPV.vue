@@ -1318,70 +1318,91 @@ const openDiscount = () => {
 
 // REQUIRED FUNCTION: createProduct - push into products array
 const openProducts = async () => {
-  console.log('🔍 openProducts llamado:', {
+  console.log('🔍 ===== openProducts INICIADO =====')
+  console.log('🔍 Estado actual:', {
     canEditProducts: canEditProducts.value,
     isSuperuser: isSuperuser.value,
     userRole: userRole.value,
     authStoreUser: authStore.user,
-    authStoreIsAdmin: authStore.isAdmin
+    authStoreIsAdmin: authStore.isAdmin,
+    businessProfileLoading: businessProfileLoading.value,
+    showProductModal: showProductModal.value
   })
   
-  // Verificar permisos de nuevo antes de abrir
-  if (!canEditProducts.value) {
-    // Intentar verificar permisos una vez más
-    try {
-      const token = getAuthToken()
-      if (token) {
-        const userResponse = await fetch('/api/v1/user/me', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        })
-        
-        if (userResponse.ok) {
-          const userData = await userResponse.json()
-          console.log('👤 Verificación de permisos:', userData)
-          
-          if (userData.is_superuser || userData.isSuperuser) {
-            isSuperuser.value = true
-            userRole.value = 'SUPERUSER'
-          } else if (userData.role === 'ADMIN') {
-            userRole.value = 'ADMIN'
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('⚠️ Error verificando permisos:', err)
+  try {
+    // SIEMPRE permitir abrir el modal, la validación de permisos se hace al guardar
+    console.log('✅ Abriendo modal (validación de permisos al guardar)')
+    
+    // Resetear estado
+    editingProduct.value = null
+    productForm.value = {
+      name: '',
+      price: 0,
+      category: tpvConfig.value.default_categories?.[0] || 'General',
+      iva_rate: tpvConfig.value.default_iva_rate || 21.0,
+      stock: null,
+      image: null,
+      icon: null
+    }
+    imageFile.value = null
+    imagePreview.value = null
+    
+    // Cerrar modal primero si está abierto (para forzar re-render)
+    if (showProductModal.value) {
+      showProductModal.value = false
+      await nextTick()
+      await new Promise(resolve => setTimeout(resolve, 50))
     }
     
-    // Si aún no tiene permisos, mostrar mensaje
-    if (!canEditProducts.value) {
-      alert('⚠️ No tienes permisos para crear productos. Se requiere rol ADMIN o SUPERUSER.\n\nContacta con un administrador para obtener permisos.')
-      console.error('❌ Permisos insuficientes:', {
-        isSuperuser: isSuperuser.value,
-        userRole: userRole.value,
-        canEditProducts: canEditProducts.value
-      })
-      return
-    }
+    // Abrir modal
+    showProductModal.value = true
+    
+    // Forzar actualización del DOM
+    await nextTick()
+    await new Promise(resolve => setTimeout(resolve, 50))
+    
+    console.log('✅ Modal abierto, showProductModal:', showProductModal.value)
+    console.log('✅ productForm:', productForm.value)
+    
+    // Verificar si el modal está realmente visible
+    setTimeout(() => {
+      const modal = document.querySelector('.modal-overlay')
+      const modalContent = document.querySelector('.modal-content')
+      
+      if (modal) {
+        const styles = window.getComputedStyle(modal)
+        console.log('✅ Modal encontrado en DOM')
+        console.log('✅ Modal display:', styles.display)
+        console.log('✅ Modal visibility:', styles.visibility)
+        console.log('✅ Modal opacity:', styles.opacity)
+        console.log('✅ Modal z-index:', styles.zIndex)
+        
+        if (styles.display === 'none' || styles.visibility === 'hidden') {
+          console.error('❌ Modal está oculto en CSS')
+          // Forzar visibilidad
+          modal.style.display = 'flex'
+          modal.style.visibility = 'visible'
+          modal.style.opacity = '1'
+        }
+      } else {
+        console.error('❌ Modal NO encontrado en DOM')
+        console.error('❌ showProductModal.value:', showProductModal.value)
+      }
+      
+      if (modalContent) {
+        console.log('✅ Modal content encontrado')
+      } else {
+        console.error('❌ Modal content NO encontrado')
+      }
+    }, 200)
+    
+    // Mostrar alerta de debug (temporal)
+    console.log('🔔 Si no ves el modal, revisa la consola para más detalles')
+    
+  } catch (error) {
+    console.error('❌ Error en openProducts:', error)
+    alert('Error al abrir el formulario: ' + error.message)
   }
-  
-  // Abrir modal para crear producto
-  editingProduct.value = null
-  productForm.value = {
-    name: '',
-    price: 0,
-    category: tpvConfig.value.default_categories?.[0] || 'General',
-    iva_rate: tpvConfig.value.default_iva_rate || 21.0,
-    stock: null,
-    image: null,
-    icon: null
-  }
-  imageFile.value = null
-  imagePreview.value = null
-  showProductModal.value = true
-  console.log('✅ Modal de producto abierto')
 }
 
 // Manejar selección de imagen

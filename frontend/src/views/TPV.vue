@@ -2584,12 +2584,158 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
-  .products-grid {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  .tpv-container {
+    padding: 10px;
   }
-  
+
+  .back-to-dashboard-btn.fixed-top-left {
+    top: 10px;
+    left: 10px;
+    padding: 10px 16px;
+    font-size: 14px;
+  }
+
   .back-to-dashboard-btn .btn-label {
     display: none;
+  }
+
+  .tpv-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+    padding: 15px 20px;
+    margin: 60px 10px 15px 10px;
+  }
+
+  .tpv-title {
+    font-size: 1.5rem;
+  }
+
+  .tpv-subtitle {
+    font-size: 0.9rem;
+  }
+
+  .header-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .header-btn {
+    padding: 8px 16px;
+    font-size: 14px;
+    flex: 1;
+    min-width: calc(50% - 4px);
+  }
+
+  .business-profile-badge {
+    width: 100%;
+    text-align: center;
+    padding: 8px;
+    font-size: 0.85rem;
+  }
+
+  .tpv-main-interface {
+    margin: 10px;
+    gap: 15px;
+  }
+
+  .tpv-left-panel,
+  .tpv-right-panel {
+    padding: 15px;
+  }
+
+  .products-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+  }
+
+  .categories-bar {
+    gap: 8px;
+    margin-bottom: 15px;
+  }
+
+  .category-btn {
+    padding: 8px 16px;
+    font-size: 14px;
+  }
+
+  .product-card {
+    padding: 12px;
+  }
+
+  .product-name {
+    font-size: 1rem;
+  }
+
+  .product-price {
+    font-size: 1.1rem;
+  }
+
+  .cart-item {
+    padding: 12px;
+  }
+
+  .cart-summary {
+    padding: 15px;
+  }
+
+  .cart-total {
+    font-size: 1.3rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .tpv-container {
+    padding: 8px;
+  }
+
+  .back-to-dashboard-btn.fixed-top-left {
+    top: 8px;
+    left: 8px;
+    padding: 8px 12px;
+  }
+
+  .tpv-header {
+    margin: 50px 8px 12px 8px;
+    padding: 12px 15px;
+  }
+
+  .tpv-title {
+    font-size: 1.3rem;
+  }
+
+  .header-btn {
+    padding: 8px 12px;
+    font-size: 13px;
+    min-width: 100%;
+  }
+
+  .tpv-main-interface {
+    margin: 8px;
+    gap: 12px;
+  }
+
+  .products-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 10px;
+  }
+
+  .product-card {
+    padding: 10px;
+  }
+
+  .product-image {
+    height: 80px;
+  }
+
+  .product-name {
+    font-size: 0.9rem;
+  }
+
+  .category-btn {
+    padding: 6px 12px;
+    font-size: 13px;
   }
 }
 

@@ -646,7 +646,7 @@ const handleImageError = (event) => {
 }
 
 // Función auxiliar para obtener token de forma robusta
-const getAuthToken = () => {
+const getAuthToken = async () => {
   // Intentar múltiples formas de obtener el token
   if (authStore.getToken) {
     const token = authStore.getToken()
@@ -657,10 +657,39 @@ const getAuthToken = () => {
     return authStore.token
   }
   
-  // Intentar desde localStorage directamente
-  const storedToken = localStorage.getItem('auth_token')
-  if (storedToken) {
-    return storedToken
+  // Intentar desde localStorage directamente (con verificación de disponibilidad)
+  try {
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      const storedToken = localStorage.getItem('auth_token')
+      if (storedToken) {
+        // Actualizar el store con el token encontrado
+        if (authStore.setAuthTokens) {
+          const refreshToken = localStorage.getItem('refresh_token') || ''
+          authStore.setAuthTokens({
+            access_token: storedToken,
+            refresh_token: refreshToken,
+            expires_in: 3600,
+            token_type: 'Bearer'
+          })
+        }
+        return storedToken
+      }
+    }
+  } catch (e) {
+    console.warn('⚠️ Error accediendo a localStorage:', e)
+  }
+  
+  // Si no hay token, intentar inicializar el store
+  if (!authStore.isAuthenticated) {
+    try {
+      await authStore.initialize()
+      if (authStore.getToken) {
+        const token = authStore.getToken()
+        if (token) return token
+      }
+    } catch (err) {
+      console.warn('⚠️ Error inicializando authStore:', err)
+    }
   }
   
   return null
@@ -671,15 +700,8 @@ const checkStatus = async () => {
   errorMessage.value = null
   
   try {
-    // Obtener token de forma robusta
-    let token = getAuthToken()
-    
-    // Si no hay token, intentar inicializar el store
-    if (!token) {
-      console.warn('⚠️ No hay token, intentando inicializar auth store...')
-      await authStore.initialize()
-      token = getAuthToken()
-    }
+    // Obtener token de forma robusta (ahora es async)
+    let token = await getAuthToken()
     
     // Si aún no hay token, redirigir al login
     if (!token) {
@@ -690,6 +712,24 @@ const checkStatus = async () => {
         router.push('/login?redirect=/tpv')
       }, 2000)
       return
+    }
+    
+    // Verificar que el token no esté expirado
+    try {
+      const decoded = jwtDecode(token)
+      const now = Math.floor(Date.now() / 1000)
+      if (decoded.exp && decoded.exp < now) {
+        console.warn('⚠️ Token expirado, intentando refresh...')
+        const refreshed = await authStore.refreshAccessToken()
+        if (refreshed) {
+          token = await getAuthToken()
+        } else {
+          throw new Error('Token expirado y no se pudo refrescar')
+        }
+      }
+    } catch (tokenError) {
+      console.warn('⚠️ Error verificando token:', tokenError)
+      // Continuar de todas formas, el backend validará
     }
 
     // Cargar información del usuario para permisos
@@ -814,9 +854,19 @@ const checkStatus = async () => {
 
 const loadTPVConfig = async () => {
   try {
-    const token = getAuthToken()
+    const token = await getAuthToken()
     if (!token) {
       console.warn('⚠️ No hay token para cargar configuración TPV')
+      // Intentar inicializar y obtener token nuevamente
+      await authStore.initialize()
+      const retryToken = await getAuthToken()
+      if (!retryToken) {
+        errorMessage.value = 'Sesión expirada. Redirigiendo al login...'
+        setTimeout(() => {
+          router.push('/login?redirect=/tpv')
+        }, 2000)
+        return
+      }
       return
     }
     
@@ -1161,7 +1211,7 @@ const processPayment = async () => {
   }
   
   try {
-    const token = getAuthToken()
+    const token = await getAuthToken()
     if (!token) {
       console.error('❌ No hay token de autenticación')
       warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
@@ -1485,7 +1535,7 @@ const deleteProduct = async (product) => {
   }
   
   try {
-    const token = getAuthToken()
+    const token = await getAuthToken()
     if (!token) {
       console.error('❌ No hay token de autenticación')
       warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
@@ -1549,7 +1599,7 @@ const saveProduct = async () => {
     
     // Intentar verificar permisos una vez más
     try {
-      const token = getAuthToken()
+      const token = await getAuthToken()
       if (token) {
         const userResponse = await fetch('/api/v1/user/me', {
           headers: {
@@ -1599,7 +1649,7 @@ const saveProduct = async () => {
   }
   
   try {
-    const token = getAuthToken()
+    const token = await getAuthToken()
     if (!token) {
       console.error('❌ No hay token de autenticación')
       warning('Sesión expirada. Por favor, inicia sesión nuevamente.')

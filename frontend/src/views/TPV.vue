@@ -510,8 +510,15 @@ const productForm = ref({
   price: 0,
   category: 'General',
   iva_rate: 21.0,
-  stock: null
+  stock: null,
+  image: null,
+  icon: null
 })
+
+// Refs para manejo de imágenes
+const imageFile = ref(null)
+const imagePreview = ref(null)
+const iconOptions = ['coffee', 'food', 'service', 'house', 'default']
 
 // Teclado numérico
 const keyboardLayout = [
@@ -1594,6 +1601,44 @@ const saveProduct = async () => {
       alert('⚠️ Sesión expirada. Por favor, inicia sesión nuevamente.')
       router.push('/login?redirect=/tpv')
       return
+    }
+    
+    // Subir imagen si hay un archivo seleccionado
+    let imageUrl = productForm.value.image || null
+    if (imageFile.value) {
+      try {
+        const formData = new FormData()
+        formData.append('image', imageFile.value)
+        
+        const uploadResponse = await fetch('/api/v1/tpv/products/upload-image', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        })
+        
+        if (uploadResponse.status === 401) {
+          console.error('❌ Token expirado (401) al subir imagen')
+          authStore.resetAuthState()
+          alert('⚠️ Sesión expirada. Por favor, inicia sesión nuevamente.')
+          router.push('/login?redirect=/tpv')
+          return
+        }
+        
+        if (uploadResponse.ok) {
+          const uploadResult = await uploadResponse.json()
+          imageUrl = uploadResult.url || uploadResult.image_url || uploadResult.public_url
+          console.log('✅ Imagen subida:', imageUrl)
+        } else {
+          const errorData = await uploadResponse.json().catch(() => ({ detail: uploadResponse.statusText }))
+          console.warn('⚠️ Error al subir imagen:', errorData)
+          // Continuar sin imagen si falla la subida
+        }
+      } catch (uploadError) {
+        console.error('❌ Error al subir imagen:', uploadError)
+        // Continuar sin imagen si falla la subida
+      }
     }
     
     const isEditing = editingProduct.value !== null

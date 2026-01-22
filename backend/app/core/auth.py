@@ -50,6 +50,13 @@ def get_user(db: Session, email: str) -> Optional[User]:
             user = db.query(User).filter(User.email == email.strip()).first()
             
         return user
+    except (OperationalError, DisconnectionError) as e:
+        error_msg = str(e).lower()
+        logger.error(f"Error de conexión a base de datos al obtener usuario {email}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database service temporarily unavailable"
+        )
     except Exception as e:
         logger.error(f"Error fetching user {email}: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -124,7 +131,23 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     
     try:
         # Get user from database (case-insensitive)
-        user = get_user(db, email_normalized)
+        try:
+            user = get_user(db, email_normalized)
+        except Exception as db_error:
+            error_msg = str(db_error).lower()
+            is_connection_error = any(keyword in error_msg for keyword in [
+                "connection", "conexión", "timeout", "operationalerror",
+                "database", "base de datos"
+            ])
+            if is_connection_error:
+                logger.error(f"Error de conexión a base de datos al autenticar usuario {email_normalized}: {db_error}")
+                # Re-lanzar como HTTPException para que el endpoint lo maneje
+                from fastapi import HTTPException
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Database service temporarily unavailable"
+                )
+            raise  # Re-lanzar otros errores
         
         if not user:
             logger.warning(f"Usuario no encontrado en la base de datos: {email_normalized}")

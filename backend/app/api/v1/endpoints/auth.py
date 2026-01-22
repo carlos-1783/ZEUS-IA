@@ -125,11 +125,24 @@ async def login(
         # Re-raise HTTP exceptions as-is
         raise
     except Exception as e:
-        logger.error(f"Error in login endpoint for user {username}: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error during login"
-        )
+        error_msg = str(e).lower()
+        is_db_error = any(keyword in error_msg for keyword in [
+            "connection", "conexión", "timeout", "operationalerror", 
+            "database", "base de datos", "connection timeout"
+        ])
+        
+        if is_db_error:
+            logger.error(f"Error de conexión a base de datos durante login para {username}: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database service temporarily unavailable. Please try again in a few moments."
+            )
+        else:
+            logger.error(f"Error in login endpoint for user {username}: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Internal server error during login"
+            )
 
 # Mantener compatibilidad con OAuth2
 @router.post(

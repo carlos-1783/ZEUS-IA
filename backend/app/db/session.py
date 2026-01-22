@@ -16,11 +16,15 @@ def get_db():
             db: Session = SessionLocal()
             # Verificar que la conexión funciona con una query simple
             try:
-                db.execute("SELECT 1")
-            except Exception:
+                from sqlalchemy import text
+                db.execute(text("SELECT 1"))
+            except Exception as verify_error:
                 # Si falla la verificación, cerrar y reintentar
                 db.close()
-                raise
+                error_msg = str(verify_error).lower()
+                if any(keyword in error_msg for keyword in ["connection", "conexión", "timeout"]):
+                    raise  # Re-lanzar para que se maneje en el retry
+                raise  # Re-lanzar otros errores
             try:
                 yield db
             finally:

@@ -1,13 +1,36 @@
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool, QueuePool
 from app.core.config import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 SQLALCHEMY_DATABASE_URL = settings.DATABASE_URL
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
-) if "sqlite" in settings.DATABASE_URL else create_engine(SQLALCHEMY_DATABASE_URL)
+# Configuración del engine con manejo de errores mejorado
+if "sqlite" in settings.DATABASE_URL:
+    engine = create_engine(
+        SQLALCHEMY_DATABASE_URL, 
+        connect_args={"check_same_thread": False},
+        poolclass=NullPool
+    )
+else:
+    # Para PostgreSQL, usar pool con reintentos y timeout
+    engine = create_engine(
+        SQLALCHEMY_DATABASE_URL,
+        poolclass=QueuePool,
+        pool_size=5,
+        max_overflow=10,
+        pool_pre_ping=True,  # Verificar conexiones antes de usarlas
+        pool_recycle=3600,   # Reciclar conexiones cada hora
+        connect_args={
+            "connect_timeout": 10,  # Timeout de 10 segundos
+            "options": "-c statement_timeout=30000"  # Timeout de 30 segundos por query
+        }
+    )
+    logger.info(f"🔌 Engine PostgreSQL configurado con pool_size=5, max_overflow=10")
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -15,29 +38,54 @@ Base = declarative_base()
 
 def create_tables():
     """Crear todas las tablas en la base de datos"""
-    try:
-        print("[DATABASE] Creando tablas...")
-        
-        # IMPORTANTE: Ejecutar migración ANTES de crear tablas
-        # Esto asegura que las columnas existan antes de que SQLAlchemy intente usarlas
-        _migrate_user_columns()
-        
-        # Importar modelos aquí para evitar importación circular
-        from app.models.user import User, RefreshToken
-        from app.models.customer import Customer
-        from app.models.erp import Invoice, Product, Payment
-        from app.models.agent_activity import AgentActivity
-        from app.models.document_approval import DocumentApproval
-        
-        Base.metadata.create_all(bind=engine)
-        print("[DATABASE] [OK] Tablas creadas correctamente")
-        
-        # Ejecutar migración nuevamente después de crear tablas (por si acaso)
-        _migrate_user_columns()
-    except Exception as e:
-        print(f"[DATABASE] [ERROR] Error al crear tablas: {e}")
-        import traceback
-        traceback.print_exc()
+    import time
+    max_retries = 3
+    retry_delay = 2
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"[DATABASE] Intento {attempt + 1}/{max_retries}: Creando tablas...")
+            
+            # IMPORTANTE: Ejecutar migración ANTES de crear tablas
+            # Esto asegura que las columnas existan antes de que SQLAlchemy intente usarlas
+            _migrate_user_columns()
+            
+            # Importar modelos aquí para evitar importación circular
+            from app.models.user import User, RefreshToken
+            from app.models.customer import Customer
+            from app.models.erp import Invoice, Product, Payment
+            from app.models.agent_activity import AgentActivity
+            from app.models.document_approval import DocumentApproval
+            
+            Base.metadata.create_all(bind=engine)
+            print("[DATABASE] [OK] Tablas creadas correctamente")
+            
+            # Ejecutar migración nuevamente después de crear tablas (por si acaso)
+            _migrate_user_columns()
+            return  # Éxito, salir de la función
+            
+        except Exception as e:
+            error_msg = str(e)
+            is_connection_error = any(keyword in error_msg.lower() for keyword in [
+                "conexión", "connection", "timeout", "connection timeout", 
+                "connection refused", "connection reset", "operationalerror"
+            ])
+            
+            if is_connection_error and attempt < max_retries - 1:
+                print(f"[DATABASE] [ADVERTENCIA] Error de conexión (intento {attempt + 1}/{max_retries}): {error_msg}")
+                print(f"[DATABASE] Reintentando en {retry_delay} segundos...")
+                logger.warning(f"Error de conexión a BD, reintentando: {error_msg}")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Backoff exponencial
+                continue
+            else:
+                print(f"[DATABASE] [ERROR] Error al crear tablas después de {max_retries} intentos: {e}")
+                logger.error(f"Error crítico al crear tablas: {e}")
+                import traceback
+                traceback.print_exc()
+                # No lanzar el error, permitir que la aplicación continúe
+                print("[DATABASE] [ADVERTENCIA] La aplicación continuará sin base de datos. Algunas funciones pueden no estar disponibles.")
+                return
 
 
 def _migrate_user_columns():

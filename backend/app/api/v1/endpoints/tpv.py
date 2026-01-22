@@ -15,6 +15,7 @@ from app.db.session import get_db
 from app.core.auth import get_current_active_user, get_current_active_superuser
 from app.core.config import settings
 from app.models.user import User
+from app.models.erp import TPVProduct
 from services.tpv_service import tpv_service, BusinessProfile, PaymentMethod
 
 router = APIRouter()
@@ -165,7 +166,7 @@ async def _get_tpv_info(current_user: User):
         },
         "business_profile": tpv_service.business_profile.value if tpv_service.business_profile else None,
         "config": config,
-        "products_count": len(tpv_service.products),
+        "products_count": db.query(TPVProduct).filter(TPVProduct.user_id == current_user.id).count() if current_user else 0,
         "integrations": {
             "rafael": tpv_service.rafael_integration is not None,
             "justicia": tpv_service.justicia_integration is not None,
@@ -207,9 +208,10 @@ async def detect_business_type(
 @router.post("/products")
 async def create_product(
     request: ProductCreateRequest,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
-    """Crear producto en el TPV"""
+    """Crear producto en el TPV - PERSISTIDO EN BD CON MULTI-TENANCY"""
     is_superuser = getattr(current_user, 'is_superuser', False)
     is_admin = getattr(current_user, 'is_admin', False) or is_superuser
     
@@ -220,39 +222,105 @@ async def create_product(
             detail="No tienes permisos para crear productos. Se requiere rol ADMIN o SUPERUSER."
         )
     
-    logger.info(f"📦 Creando producto: {request.name} - Precio: €{request.price}")
-    logger.info(f"📊 Productos existentes antes de crear: {len(tpv_service.products)}")
+    logger.info(f"📦 Creando producto: {request.name} - Precio: €{request.price} - Usuario: {current_user.id}")
     
-    product = tpv_service.create_product(
+    # Generar ID único
+    import time
+    base_id = int(time.time() * 1000)
+    # Contar productos existentes del usuario para garantizar unicidad
+    existing_count = db.query(TPVProduct).filter(TPVProduct.user_id == current_user.id).count()
+    product_id = f"PROD_{base_id}_{existing_count:04d}"
+    
+    # Verificar que el ID no existe (por si acaso)
+    while db.query(TPVProduct).filter(
+        TPVProduct.product_id == product_id,
+        TPVProduct.user_id == current_user.id
+    ).first():
+        existing_count += 1
+        product_id = f"PROD_{base_id}_{existing_count:04d}"
+    
+    # Calcular precio con IVA
+    price_with_iva = request.price * (1 + request.iva_rate / 100)
+    
+    # Crear producto en BD
+    db_product = TPVProduct(
+        user_id=current_user.id,  # MULTI-TENANCY: Filtrar por usuario
+        product_id=product_id,
         name=request.name,
-        price=request.price,
         category=request.category,
+        price=request.price,
+        price_with_iva=price_with_iva,
         iva_rate=request.iva_rate,
         stock=request.stock,
         image=request.image,
         icon=request.icon,
-        metadata=request.metadata
+        metadata_=request.metadata or {}
     )
     
-    logger.info(f"✅ Producto creado con ID: {product.get('id')}")
-    logger.info(f"📊 Total productos después de crear: {len(tpv_service.products)}")
-    logger.info(f"📋 Lista de productos: {[p.get('name') for p in tpv_service.products.values()]}")
+    db.add(db_product)
+    db.commit()
+    db.refresh(db_product)
+    
+    # Convertir a formato dict para mantener compatibilidad con API
+    product = {
+        "id": db_product.product_id,
+        "name": db_product.name,
+        "price": db_product.price,
+        "price_with_iva": db_product.price_with_iva,
+        "category": db_product.category,
+        "iva_rate": db_product.iva_rate,
+        "stock": db_product.stock,
+        "image": db_product.image,
+        "icon": db_product.icon,
+        "metadata": db_product.metadata_ or {},
+        "created_at": db_product.created_at.isoformat() if db_product.created_at else datetime.utcnow().isoformat(),
+        "updated_at": db_product.updated_at.isoformat() if db_product.updated_at else datetime.utcnow().isoformat()
+    }
+    
+    total_products = db.query(TPVProduct).filter(TPVProduct.user_id == current_user.id).count()
+    
+    logger.info(f"✅ Producto creado con ID: {product_id} - Usuario: {current_user.id}")
+    logger.info(f"📊 Total productos del usuario: {total_products}")
     
     return {
         "success": True,
         "product": product,
-        "total_products": len(tpv_service.products)
+        "total_products": total_products
     }
 
 
 @router.get("/products")
 async def list_products(
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
-    """Listar todos los productos"""
+    """Listar todos los productos DEL USUARIO ACTUAL - MULTI-TENANCY"""
+    # Filtrar SOLO productos del usuario actual
+    db_products = db.query(TPVProduct).filter(TPVProduct.user_id == current_user.id).all()
+    
+    # Convertir a formato dict para mantener compatibilidad con API
+    products = []
+    for db_product in db_products:
+        products.append({
+            "id": db_product.product_id,
+            "name": db_product.name,
+            "price": db_product.price,
+            "price_with_iva": db_product.price_with_iva,
+            "category": db_product.category,
+            "iva_rate": db_product.iva_rate,
+            "stock": db_product.stock,
+            "image": db_product.image,
+            "icon": db_product.icon,
+            "metadata": db_product.metadata_ or {},
+            "created_at": db_product.created_at.isoformat() if db_product.created_at else None,
+            "updated_at": db_product.updated_at.isoformat() if db_product.updated_at else None
+        })
+    
+    logger.info(f"📋 Listando {len(products)} productos para usuario {current_user.id}")
+    
     return {
         "success": True,
-        "products": list(tpv_service.products.values())
+        "products": products
     }
 
 
@@ -260,9 +328,10 @@ async def list_products(
 async def update_product(
     product_id: str,
     request: ProductCreateRequest,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
-    """Actualizar producto en el TPV"""
+    """Actualizar producto en el TPV - MULTI-TENANCY: Solo productos del usuario"""
     is_superuser = getattr(current_user, 'is_superuser', False)
     is_admin = getattr(current_user, 'is_admin', False) or is_superuser
     
@@ -273,24 +342,59 @@ async def update_product(
             detail="No tienes permisos para actualizar productos. Se requiere rol ADMIN o SUPERUSER."
         )
     
-    logger.info(f"✏️ Actualizando producto: {product_id}")
+    logger.info(f"✏️ Actualizando producto: {product_id} - Usuario: {current_user.id}")
     
-    result = tpv_service.update_product(
-        product_id=product_id,
-        name=request.name,
-        price=request.price,
-        category=request.category,
-        iva_rate=request.iva_rate,
-        stock=request.stock,
-        metadata=request.metadata
-    )
+    # Buscar producto SOLO del usuario actual (multi-tenancy)
+    db_product = db.query(TPVProduct).filter(
+        TPVProduct.product_id == product_id,
+        TPVProduct.user_id == current_user.id
+    ).first()
     
-    if not result.get("success"):
-        raise HTTPException(status_code=404, detail=result.get("error"))
+    if not db_product:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Producto {product_id} no encontrado o no tienes permisos para modificarlo"
+        )
     
-    logger.info(f"✅ Producto actualizado: {product_id}")
+    # Calcular precio con IVA
+    price_with_iva = request.price * (1 + request.iva_rate / 100)
     
-    return result
+    # Actualizar campos
+    db_product.name = request.name
+    db_product.price = request.price
+    db_product.price_with_iva = price_with_iva
+    db_product.category = request.category
+    db_product.iva_rate = request.iva_rate
+    db_product.stock = request.stock
+    db_product.image = request.image
+    db_product.icon = request.icon
+    db_product.metadata_ = request.metadata or {}
+    
+    db.commit()
+    db.refresh(db_product)
+    
+    # Convertir a formato dict
+    product = {
+        "id": db_product.product_id,
+        "name": db_product.name,
+        "price": db_product.price,
+        "price_with_iva": db_product.price_with_iva,
+        "category": db_product.category,
+        "iva_rate": db_product.iva_rate,
+        "stock": db_product.stock,
+        "image": db_product.image,
+        "icon": db_product.icon,
+        "metadata": db_product.metadata_ or {},
+        "created_at": db_product.created_at.isoformat() if db_product.created_at else None,
+        "updated_at": db_product.updated_at.isoformat() if db_product.updated_at else None
+    }
+    
+    logger.info(f"✅ Producto actualizado: {product_id} - Usuario: {current_user.id}")
+    
+    return {
+        "success": True,
+        "product": product
+    }
 
 
 @router.post("/products/upload-image")
@@ -362,9 +466,10 @@ async def upload_product_image(
 @router.delete("/products/{product_id}")
 async def delete_product(
     product_id: str,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
-    """Eliminar producto del TPV"""
+    """Eliminar producto del TPV - MULTI-TENANCY: Solo productos del usuario"""
     is_superuser = getattr(current_user, 'is_superuser', False)
     
     # Permisos: Solo SUPERUSER puede eliminar
@@ -374,16 +479,34 @@ async def delete_product(
             detail="No tienes permisos para eliminar productos. Se requiere rol SUPERUSER."
         )
     
-    logger.info(f"🗑️ Eliminando producto: {product_id}")
+    logger.info(f"🗑️ Eliminando producto: {product_id} - Usuario: {current_user.id}")
     
-    result = tpv_service.delete_product(product_id)
+    # Buscar producto SOLO del usuario actual (multi-tenancy)
+    db_product = db.query(TPVProduct).filter(
+        TPVProduct.product_id == product_id,
+        TPVProduct.user_id == current_user.id
+    ).first()
     
-    if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("error"))
+    if not db_product:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Producto {product_id} no encontrado o no tienes permisos para eliminarlo"
+        )
     
-    logger.info(f"✅ Producto eliminado: {product_id}")
+    product_name = db_product.name
+    db.delete(db_product)
+    db.commit()
     
-    return result
+    remaining_count = db.query(TPVProduct).filter(TPVProduct.user_id == current_user.id).count()
+    
+    logger.info(f"✅ Producto eliminado: {product_id} ({product_name}) - Usuario: {current_user.id}")
+    logger.info(f"📊 Productos restantes del usuario: {remaining_count}")
+    
+    return {
+        "success": True,
+        "message": f"Producto '{product_name}' eliminado correctamente",
+        "remaining_products": remaining_count
+    }
 
 
 @router.post("/cart/add")
@@ -430,9 +553,10 @@ async def clear_cart(
 @router.post("/sale")
 async def process_sale(
     request: ProcessSaleRequest,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
-    """Procesar venta y generar ticket"""
+    """Procesar venta y generar ticket - MULTI-TENANCY: Solo productos del usuario"""
     try:
         payment_method = PaymentMethod(request.payment_method.lower())
     except ValueError:
@@ -448,31 +572,52 @@ async def process_sale(
         # Añadir items del frontend al carrito del servicio
         for item in request.cart_items:
             # El frontend envía {product_id, quantity, unit_price, iva_rate}
-            # Necesitamos obtener el producto completo del servicio
+            # Buscar producto en BD del usuario actual (multi-tenancy)
             product_id = item.get("product_id")
             quantity = item.get("quantity", 1)
-            if product_id and product_id in tpv_service.products:
-                tpv_service.add_to_cart(product_id, quantity)
-            else:
-                logger.warning(f"Producto {product_id} no encontrado en servicio, creando item temporal")
-                # Crear item temporal si el producto no existe en el servicio
-                tpv_service.current_cart.append({
-                    "product_id": product_id,
-                    "name": f"Producto {product_id}",
-                    "price": item.get("unit_price", 0),
-                    "price_with_iva": item.get("unit_price", 0) * (1 + item.get("iva_rate", 21) / 100),
-                    "quantity": quantity,
-                    "subtotal": item.get("unit_price", 0) * quantity,
-                    "subtotal_with_iva": item.get("unit_price", 0) * quantity * (1 + item.get("iva_rate", 21) / 100),
-                    "iva_rate": item.get("iva_rate", 21),
-                    "category": "General"
-                })
+            
+            if product_id:
+                # Buscar producto en BD del usuario actual
+                db_product = db.query(TPVProduct).filter(
+                    TPVProduct.product_id == product_id,
+                    TPVProduct.user_id == current_user.id
+                ).first()
+                
+                if db_product:
+                    # Producto encontrado en BD del usuario
+                    tpv_service.current_cart.append({
+                        "product_id": db_product.product_id,
+                        "name": db_product.name,
+                        "price": db_product.price,
+                        "price_with_iva": db_product.price_with_iva,
+                        "quantity": quantity,
+                        "subtotal": db_product.price * quantity,
+                        "subtotal_with_iva": db_product.price_with_iva * quantity,
+                        "iva_rate": db_product.iva_rate,
+                        "category": db_product.category
+                    })
+                else:
+                    # Producto no encontrado - usar datos del frontend como fallback
+                    logger.warning(f"Producto {product_id} no encontrado en BD del usuario {current_user.id}, usando datos del frontend")
+                    tpv_service.current_cart.append({
+                        "product_id": product_id,
+                        "name": f"Producto {product_id}",
+                        "price": item.get("unit_price", 0),
+                        "price_with_iva": item.get("unit_price", 0) * (1 + item.get("iva_rate", 21) / 100),
+                        "quantity": quantity,
+                        "subtotal": item.get("unit_price", 0) * quantity,
+                        "subtotal_with_iva": item.get("unit_price", 0) * quantity * (1 + item.get("iva_rate", 21) / 100),
+                        "iva_rate": item.get("iva_rate", 21),
+                        "category": "General"
+                    })
     
     result = tpv_service.process_sale(
         payment_method=payment_method,
         employee_id=request.employee_id,
         terminal_id=request.terminal_id,
-        customer_data=request.customer_data
+        customer_data=request.customer_data,
+        user_id=current_user.id,  # Pasar user_id para persistencia fiscal
+        db=db  # Pasar db para persistencia fiscal
     )
     
     if not result.get("success"):
@@ -550,7 +695,8 @@ async def set_business_profile(
 
 @router.get("/status")
 async def get_tpv_status(
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
     """Obtener estado del TPV - Los superusuarios ven información completa"""
     is_superuser = getattr(current_user, 'is_superuser', False)
@@ -601,9 +747,19 @@ async def get_tpv_status(
     
     # Información adicional para superusuarios
     if is_superuser:
+        user_products = db.query(TPVProduct).filter(TPVProduct.user_id == current_user.id).all()
+        products_list = []
+        for db_product in user_products:
+            products_list.append({
+                "id": db_product.product_id,
+                "name": db_product.name,
+                "price": db_product.price,
+                "price_with_iva": db_product.price_with_iva,
+                "category": db_product.category
+            })
         status["admin_info"] = {
-            "total_products": len(tpv_service.products),
-            "products": list(tpv_service.products.values()) if tpv_service.products else [],
+            "total_products": len(products_list),
+            "products": products_list,
             "categories": list(tpv_service.categories.values()) if tpv_service.categories else [],
             "cart": tpv_service.current_cart.copy(),
             "employees_count": len(tpv_service.employees),

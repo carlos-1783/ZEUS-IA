@@ -17,9 +17,13 @@ class DocumentStatus(str, Enum):
     """Estado de un documento en el firewall"""
     DRAFT = "draft"  # Borrador generado, esperando aprobación
     PENDING_APPROVAL = "pending_approval"  # Enviado para aprobación del cliente
+    PENDING_REVIEW = "pending_review"  # Pendiente de revisión (alias de pending_approval)
     APPROVED = "approved"  # Aprobado por el cliente
+    APPROVED_BY_MANAGER = "approved_by_manager"  # Aprobado por gestor/manager
     REJECTED = "rejected"  # Rechazado por el cliente
     SENT_TO_ADVISOR = "sent_to_advisor"  # Enviado al asesor
+    EXPORTED = "exported"  # Documento exportado (JSON/XML/PDF) para gestor
+    FILED_EXTERNAL = "filed_external"  # Gestor confirmó presentación externa (Hacienda)
     FAILED = "failed"  # Error en el proceso
 
 
@@ -293,10 +297,17 @@ class LegalFiscalFirewall:
         if doc_approval:
             try:
                 if send_result.get("success"):
-                    doc_approval.status = DocumentStatus.SENT_TO_ADVISOR.value
-                    doc_approval.sent_at = datetime.utcnow()
-                    approval_record["status"] = DocumentStatus.SENT_TO_ADVISOR.value
-                    approval_record["sent_at"] = datetime.utcnow().isoformat()
+                    # Si el documento fue exportado, mantener estado exported, sino sent_to_advisor
+                    if doc_approval.status == DocumentStatus.EXPORTED.value:
+                        # Ya está exportado, solo marcar como enviado
+                        doc_approval.sent_at = datetime.utcnow()
+                        approval_record["status"] = DocumentStatus.EXPORTED.value
+                        approval_record["sent_at"] = datetime.utcnow().isoformat()
+                    else:
+                        doc_approval.status = DocumentStatus.SENT_TO_ADVISOR.value
+                        doc_approval.sent_at = datetime.utcnow()
+                        approval_record["status"] = DocumentStatus.SENT_TO_ADVISOR.value
+                        approval_record["sent_at"] = datetime.utcnow().isoformat()
                 else:
                     doc_approval.status = DocumentStatus.FAILED.value
                     approval_record["status"] = DocumentStatus.FAILED.value

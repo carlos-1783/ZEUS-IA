@@ -32,10 +32,18 @@ class DocumentApproval(Base):
     
     # Estado del documento
     status = Column(String(50), nullable=False, default="draft", index=True)  
-    # Estados: draft, pending_approval, approved, rejected, sent_to_advisor, failed
+    # Estados: draft, pending_approval, pending_review, approved, approved_by_manager, 
+    #          rejected, sent_to_advisor, exported, filed_external, failed
     
     # Email del asesor al que se enviará
     advisor_email = Column(String(255), nullable=True)
+    
+    # Campos fiscales específicos (para documentos de TPV)
+    ticket_id = Column(String(100), nullable=True, index=True)  # ID del ticket TPV que generó este documento
+    fiscal_document_type = Column(String(50), nullable=True)  # ticket, factura, modelo_303, resumen_diario, etc.
+    export_format = Column(String(20), nullable=True)  # json, xml, pdf
+    exported_at = Column(DateTime(timezone=True), nullable=True)  # Timestamp de exportación
+    filed_external_at = Column(DateTime(timezone=True), nullable=True)  # Timestamp de presentación externa (Hacienda)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -64,6 +72,11 @@ class DocumentApproval(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "approved_at": self.approved_at.isoformat() if self.approved_at else None,
             "sent_at": self.sent_at.isoformat() if self.sent_at else None,
+            "ticket_id": self.ticket_id,
+            "fiscal_document_type": self.fiscal_document_type,
+            "export_format": self.export_format,
+            "exported_at": self.exported_at.isoformat() if self.exported_at else None,
+            "filed_external_at": self.filed_external_at.isoformat() if self.filed_external_at else None,
             "audit_log": json.loads(self.audit_log_json) if self.audit_log_json else []
         }
     

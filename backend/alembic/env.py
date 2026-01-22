@@ -25,7 +25,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from app.db.base import Base
 from app.models.user import User
 from app.models.customer import Customer
-from app.models.erp import Product, ProductVariant, InventoryMovement, Invoice, InvoiceItem, Payment
+from app.models.erp import Product, ProductVariant, InventoryMovement, Invoice, InvoiceItem, Payment, TPVProduct
 
 target_metadata = Base.metadata
 

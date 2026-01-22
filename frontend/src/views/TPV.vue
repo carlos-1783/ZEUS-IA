@@ -31,7 +31,7 @@
     </div>
 
     <!-- Interfaz Principal del TPV -->
-    <div class="tpv-main-interface" v-if="!loading && !error">
+    <div class="tpv-main-interface" v-if="!loading && !errorMessage">
       <!-- Panel Izquierdo: Productos o Mesas -->
       <div class="tpv-left-panel">
         <!-- Selector de categorías -->
@@ -386,8 +386,8 @@
     <div v-if="loading" class="loading-overlay">
       <p>Cargando TPV...</p>
     </div>
-    <div v-if="error" class="error-overlay">
-      <p>❌ {{ error }}</p>
+    <div v-if="errorMessage" class="error-overlay">
+      <p>❌ {{ errorMessage }}</p>
       <button @click="checkStatus" class="retry-btn">Reintentar</button>
     </div>
     
@@ -465,10 +465,12 @@ import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
+import { useNotifications } from '@/composables/useNotifications'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const { t } = useI18n()
+const { success, error, warning, info } = useNotifications()
 
 // Estados del TPV
 const TPV_STATES = {
@@ -480,7 +482,7 @@ const TPV_STATES = {
 
 // Estado
 const loading = ref(false)
-const error = ref(null)
+const errorMessage = ref(null)
 const products = ref([])
 const cart = ref([])
 const selectedCategory = ref('all')
@@ -666,7 +668,7 @@ const getAuthToken = () => {
 
 const checkStatus = async () => {
   loading.value = true
-  error.value = null
+  errorMessage.value = null
   
   try {
     // Obtener token de forma robusta
@@ -682,7 +684,7 @@ const checkStatus = async () => {
     // Si aún no hay token, redirigir al login
     if (!token) {
       console.error('❌ No hay token de autenticación disponible')
-      error.value = 'Sesión expirada. Por favor, inicia sesión nuevamente.'
+      errorMessage.value = 'Sesión expirada. Por favor, inicia sesión nuevamente.'
       // Redirigir al login después de 2 segundos
       setTimeout(() => {
         router.push('/login?redirect=/tpv')
@@ -762,7 +764,7 @@ const checkStatus = async () => {
     if (productsResponse.status === 401) {
       // Token expirado o inválido
       console.error('❌ Token expirado o inválido (401)')
-      error.value = 'Sesión expirada. Por favor, inicia sesión nuevamente.'
+      errorMessage.value = 'Sesión expirada. Por favor, inicia sesión nuevamente.'
       // Limpiar token y redirigir
       authStore.resetAuthState()
       setTimeout(() => {
@@ -790,7 +792,7 @@ const checkStatus = async () => {
     } else {
       console.error('❌ Error cargando productos:', productsResponse.status, productsResponse.statusText)
       if (productsResponse.status === 401) {
-        error.value = 'Sesión expirada. Redirigiendo al login...'
+        errorMessage.value = 'Sesión expirada. Redirigiendo al login...'
         authStore.resetAuthState()
         setTimeout(() => {
           router.push('/login?redirect=/tpv')
@@ -803,7 +805,7 @@ const checkStatus = async () => {
     await loadTPVConfig()
   } catch (err) {
     console.error('Error:', err)
-    error.value = err.message || 'Error al cargar el TPV'
+    errorMessage.value = err.message || 'Error al cargar el TPV'
   } finally {
     loading.value = false
     businessProfileLoading.value = false
@@ -829,7 +831,7 @@ const loadTPVConfig = async () => {
       // Token expirado o inválido
       console.error('❌ Token expirado o inválido (401) al cargar configuración')
       authStore.resetAuthState()
-      error.value = 'Sesión expirada. Redirigiendo al login...'
+      errorMessage.value = 'Sesión expirada. Redirigiendo al login...'
       setTimeout(() => {
         router.push('/login?redirect=/tpv')
       }, 2000)
@@ -844,10 +846,10 @@ const loadTPVConfig = async () => {
       
       // Si no hay business_profile, mostrar configuración inicial
       if (!businessProfile.value) {
-        error.value = 'Por favor, configura el tipo de negocio antes de usar el TPV'
+        errorMessage.value = 'Por favor, configura el tipo de negocio antes de usar el TPV'
       }
     } else if (response.status === 401) {
-      error.value = 'Sesión expirada. Redirigiendo al login...'
+      errorMessage.value = 'Sesión expirada. Redirigiendo al login...'
       authStore.resetAuthState()
       setTimeout(() => {
         router.push('/login?redirect=/tpv')
@@ -1027,9 +1029,11 @@ const clearCart = () => {
     return
   }
   
-  if (confirm(`¿Estás seguro de limpiar todo el carrito? Se eliminarán ${cart.value.length} producto(s).`)) {
+  // Usar confirm nativo solo para confirmaciones críticas (limpiar carrito)
+  if (window.confirm(`¿Estás seguro de limpiar todo el carrito? Se eliminarán ${cart.value.length} producto(s).`)) {
     cart.value = []
     showCartFeedback('Carrito vaciado', 'cleared')
+    success('Carrito vaciado correctamente')
   }
 }
 
@@ -1043,7 +1047,7 @@ const goToPrePayment = () => {
   
   // BLOQUEAR si el carrito está vacío
   if (cart.value.length === 0) {
-    alert('⚠️ El carrito está vacío. Añade productos antes de proceder al pago.')
+    warning('El carrito está vacío. Añade productos antes de proceder al pago.')
     return
   }
   
@@ -1108,7 +1112,7 @@ const handleKeyPress = (key) => {
 
 const toggleTablesMode = () => {
   if (!tpvConfig.value.tables_enabled) {
-    alert(`⚠️ ${t('tpv.messages.tablesNotAvailable')}`)
+    warning(t('tpv.messages.tablesNotAvailable') || 'Las mesas no están disponibles para este tipo de negocio')
     return
   }
   tablesMode.value = !tablesMode.value
@@ -1125,7 +1129,7 @@ const selectTable = (table) => {
   selectedTable.value = table
   if (table.status === 'occupied') {
     // Cargar pedido existente de la mesa
-    alert(`Cargando pedido de Mesa ${table.number}`)
+    info(`Cargando pedido de Mesa ${table.number}`)
     // TODO: Implementar carga de pedido existente
   } else {
     // Nueva venta para esta mesa - solo limpiar si se confirmó
@@ -1152,7 +1156,7 @@ const processPayment = async () => {
   }
   
   if (cart.value.length === 0) {
-    alert('⚠️ El carrito está vacío')
+    warning('El carrito está vacío')
     return
   }
   
@@ -1160,7 +1164,7 @@ const processPayment = async () => {
     const token = getAuthToken()
     if (!token) {
       console.error('❌ No hay token de autenticación')
-      alert('⚠️ Sesión expirada. Por favor, inicia sesión nuevamente.')
+      warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
       router.push('/login?redirect=/tpv')
       return
     }
@@ -1171,7 +1175,7 @@ const processPayment = async () => {
       // En una implementación completa, esto pediría seleccionar empleado
       employeeId = prompt('ID del empleado (requerido para este tipo de negocio):')
       if (!employeeId) {
-        alert('⚠️ Debe especificar un empleado para procesar esta venta')
+        warning('Debe especificar un empleado para procesar esta venta')
         return
       }
     }
@@ -1180,7 +1184,7 @@ const processPayment = async () => {
     if (tpvConfig.value.requires_customer_data) {
       const customerName = prompt('Nombre del cliente (requerido):')
       if (!customerName) {
-        alert('⚠️ Debe especificar un cliente para procesar esta venta')
+        warning('Debe especificar un cliente para procesar esta venta')
         return
       }
       customerData = { name: customerName }
@@ -1188,7 +1192,7 @@ const processPayment = async () => {
     
     // Preparar datos de la venta - Asegurar que cart es array
     if (!Array.isArray(cart.value) || cart.value.length === 0) {
-      alert('⚠️ El carrito está vacío')
+      warning('El carrito está vacío')
       return
     }
     
@@ -1231,12 +1235,12 @@ const processPayment = async () => {
     tpvState.value = TPV_STATES.CLOSED
     
     // Mostrar confirmación usando ticket_id del resultado
-    alert(`✅ Pago procesado exitosamente\n\nTicket #${ticketId || 'N/A'}\nTotal: €${formatPrice(total.value)}\n\nEsta venta se ha registrado automáticamente con RAFAEL.`)
+    success(`Pago procesado exitosamente. Ticket #${ticketId || 'N/A'}. Total: €${formatPrice(total.value)}. Esta venta se ha registrado automáticamente con RAFAEL.`)
     
     console.log('✅ Venta procesada exitosamente:', result)
   } catch (err) {
     console.error('Error procesando pago:', err)
-    alert('❌ Error al procesar el pago: ' + err.message)
+    error('Error al procesar el pago: ' + err.message)
     // Volver al estado PRE_PAYMENT en caso de error
     tpvState.value = TPV_STATES.PRE_PAYMENT
   }
@@ -1244,12 +1248,12 @@ const processPayment = async () => {
 
 const generateInvoice = async () => {
   // En una implementación completa, esto generaría la factura
-  alert('🧾 Generando factura... (Funcionalidad en desarrollo)')
+  info('Generando factura... (Funcionalidad en desarrollo)')
 }
 
 const printTicket = async () => {
   if (cart.value.length === 0) {
-    alert('⚠️ El carrito está vacío')
+    warning('El carrito está vacío')
     return
   }
   
@@ -1295,13 +1299,13 @@ Gracias por su compra
     console.log('✅ Ticket generado')
   } catch (err) {
     console.error('Error generando ticket:', err)
-    alert('❌ Error al generar el ticket: ' + err.message)
+    error('Error al generar el ticket: ' + err.message)
   }
 }
 
 const openDiscount = () => {
   if (cart.value.length === 0) {
-    alert('⚠️ El carrito está vacío')
+    warning('El carrito está vacío')
     return
   }
   
@@ -1310,7 +1314,7 @@ const openDiscount = () => {
   
   const discount = parseFloat(discountPercent)
   if (discount < 0 || discount > 100) {
-    alert('⚠️ El descuento debe estar entre 0% y 100%')
+    warning('El descuento debe estar entre 0% y 100%')
     return
   }
   
@@ -1408,7 +1412,7 @@ const openProducts = async () => {
     
   } catch (error) {
     console.error('❌ Error en openProducts:', error)
-    alert('Error al abrir el formulario: ' + error.message)
+    error('Error al abrir el formulario: ' + error.message)
   }
 }
 
@@ -1419,14 +1423,14 @@ const handleImageSelect = (event) => {
   
   // Validar tamaño (max 2MB)
   if (file.size > 2 * 1024 * 1024) {
-    alert('⚠️ La imagen supera el límite de 2MB')
+    warning('La imagen supera el límite de 2MB')
     return
   }
   
   // Validar tipo
   const allowedTypes = ['image/png', 'image/jpeg', 'image/webp']
   if (!allowedTypes.includes(file.type)) {
-    alert('⚠️ Formato no soportado. Usa PNG, JPEG o WEBP')
+    warning('Formato no soportado. Usa PNG, JPEG o WEBP')
     return
   }
   
@@ -1450,7 +1454,7 @@ const clearImage = () => {
 // REQUIRED FUNCTION: updateProduct - replace by id
 const editProduct = (product) => {
   if (!canEditProducts.value) {
-    alert('⚠️ No tienes permisos para editar productos')
+    warning('No tienes permisos para editar productos')
     return
   }
   
@@ -1472,7 +1476,7 @@ const editProduct = (product) => {
 // REQUIRED FUNCTION: deleteProduct - filter by id
 const deleteProduct = async (product) => {
   if (!isSuperuser.value) {
-    alert('⚠️ Solo los superusuarios pueden eliminar productos')
+    warning('Solo los superusuarios pueden eliminar productos')
     return
   }
   
@@ -1484,7 +1488,7 @@ const deleteProduct = async (product) => {
     const token = getAuthToken()
     if (!token) {
       console.error('❌ No hay token de autenticación')
-      alert('⚠️ Sesión expirada. Por favor, inicia sesión nuevamente.')
+      warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
       router.push('/login?redirect=/tpv')
       return
     }
@@ -1500,7 +1504,7 @@ const deleteProduct = async (product) => {
     if (response.status === 401) {
       console.error('❌ Token expirado (401) al eliminar producto')
       authStore.resetAuthState()
-      alert('⚠️ Sesión expirada. Por favor, inicia sesión nuevamente.')
+      warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
       router.push('/login?redirect=/tpv')
       return
     }
@@ -1512,12 +1516,12 @@ const deleteProduct = async (product) => {
       // STATE MANAGEMENT: filter by id (sin refresh)
       products.value = products.value.filter(p => p.id !== product.id)
       
-      alert(`✅ Producto "${product.name}" eliminado correctamente`)
+      success(`Producto "${product.name}" eliminado correctamente`)
     } else {
       const errorData = await response.json().catch(() => ({ detail: response.statusText }))
       if (response.status === 401) {
         authStore.resetAuthState()
-        alert('⚠️ Sesión expirada. Por favor, inicia sesión nuevamente.')
+        warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
         router.push('/login?redirect=/tpv')
         return
       }
@@ -1525,7 +1529,7 @@ const deleteProduct = async (product) => {
     }
   } catch (err) {
     console.error('❌ Error eliminando producto:', err)
-    alert('❌ Error al eliminar producto: ' + err.message)
+    error('Error al eliminar producto: ' + err.message)
   }
 }
 
@@ -1574,7 +1578,7 @@ const saveProduct = async () => {
     
     // Si aún no tiene permisos, mostrar mensaje
     if (!canEditProducts.value) {
-      alert('⚠️ No tienes permisos para crear productos. Se requiere rol ADMIN o SUPERUSER.\n\nContacta con un administrador para obtener permisos.')
+      warning('No tienes permisos para crear productos. Se requiere rol ADMIN o SUPERUSER. Contacta con un administrador para obtener permisos.')
       console.error('❌ Permisos insuficientes:', {
         isSuperuser: isSuperuser.value,
         userRole: userRole.value,
@@ -1585,12 +1589,12 @@ const saveProduct = async () => {
   }
   
   if (!productForm.value.name || !productForm.value.name.trim()) {
-    alert('⚠️ El nombre del producto es requerido')
+    warning('El nombre del producto es requerido')
     return
   }
   
   if (!productForm.value.price || productForm.value.price <= 0) {
-    alert('⚠️ El precio debe ser mayor a 0')
+    warning('El precio debe ser mayor a 0')
     return
   }
   
@@ -1598,7 +1602,7 @@ const saveProduct = async () => {
     const token = getAuthToken()
     if (!token) {
       console.error('❌ No hay token de autenticación')
-      alert('⚠️ Sesión expirada. Por favor, inicia sesión nuevamente.')
+      warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
       router.push('/login?redirect=/tpv')
       return
     }
@@ -1621,7 +1625,7 @@ const saveProduct = async () => {
         if (uploadResponse.status === 401) {
           console.error('❌ Token expirado (401) al subir imagen')
           authStore.resetAuthState()
-          alert('⚠️ Sesión expirada. Por favor, inicia sesión nuevamente.')
+          warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
           router.push('/login?redirect=/tpv')
           return
         }
@@ -1666,7 +1670,7 @@ const saveProduct = async () => {
     if (response.status === 401) {
       console.error('❌ Token expirado (401) al guardar producto')
       authStore.resetAuthState()
-      alert('⚠️ Sesión expirada. Por favor, inicia sesión nuevamente.')
+      warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
       router.push('/login?redirect=/tpv')
       return
     }
@@ -1683,11 +1687,11 @@ const saveProduct = async () => {
         if (index !== -1) {
           products.value[index] = savedProduct
         }
-        alert(`✅ Producto "${savedProduct.name}" actualizado correctamente`)
+        success(`Producto "${savedProduct.name}" actualizado correctamente`)
       } else {
         // STATE MANAGEMENT: push into products (sin refresh)
         products.value.push(savedProduct)
-        alert(`✅ Producto "${savedProduct.name}" creado correctamente`)
+        success(`Producto "${savedProduct.name}" creado correctamente`)
       }
       
       showProductModal.value = false
@@ -1698,7 +1702,7 @@ const saveProduct = async () => {
       const errorData = await response.json().catch(() => ({ detail: response.statusText }))
       if (response.status === 401) {
         authStore.resetAuthState()
-        alert('⚠️ Sesión expirada. Por favor, inicia sesión nuevamente.')
+        warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
         router.push('/login?redirect=/tpv')
         return
       }
@@ -1706,7 +1710,7 @@ const saveProduct = async () => {
     }
   } catch (err) {
     console.error('❌ Error guardando producto:', err)
-    alert('❌ Error al guardar producto: ' + err.message)
+    error('Error al guardar producto: ' + err.message)
   }
 }
 

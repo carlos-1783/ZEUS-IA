@@ -3,7 +3,7 @@
 Endpoints para aprobación de documentos generados por RAFAEL y JUSTICIA
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
@@ -132,23 +132,32 @@ async def approve_document(
 @router.get("/pending")
 async def get_pending_documents(
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    agent_name: Optional[str] = None  # Filtrar por agente (RAFAEL, JUSTICIA)
 ):
     """
     Obtener lista de documentos pendientes de aprobación del usuario.
+    Incluye documentos fiscales de TPV.
     """
     try:
         from app.models.document_approval import DocumentApproval
         from services.legal_fiscal_firewall import DocumentStatus
         
         # Consultar documentos pendientes del usuario
-        pending_docs = db.query(DocumentApproval).filter(
+        query = db.query(DocumentApproval).filter(
             DocumentApproval.user_id == current_user.id,
             DocumentApproval.status.in_([
                 DocumentStatus.DRAFT.value,
-                DocumentStatus.PENDING_APPROVAL.value
+                DocumentStatus.PENDING_APPROVAL.value,
+                DocumentStatus.PENDING_REVIEW.value
             ])
-        ).order_by(DocumentApproval.created_at.desc()).all()
+        )
+        
+        # Filtrar por agente si se especifica
+        if agent_name:
+            query = query.filter(DocumentApproval.agent_name == agent_name.upper())
+        
+        pending_docs = query.order_by(DocumentApproval.created_at.desc()).all()
         
         documents = [doc.to_dict() for doc in pending_docs]
         
@@ -258,5 +267,182 @@ async def toggle_document_authorization(
         raise HTTPException(
             status_code=500,
             detail=f"Error actualizando autorización: {str(e)}"
+        )
+
+
+@router.post("/{document_id}/export")
+async def export_fiscal_document(
+    document_id: int,
+    format: str = "json",  # json, xml, pdf
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Exportar documento fiscal en formato especificado (JSON, XML, PDF).
+    Actualiza estado a 'exported' después de exportar.
+    """
+    try:
+        from app.models.document_approval import DocumentApproval
+        from services.legal_fiscal_firewall import DocumentStatus
+        from datetime import datetime
+        import json
+        
+        # Buscar documento del usuario
+        doc_approval = db.query(DocumentApproval).filter(
+            DocumentApproval.id == document_id,
+            DocumentApproval.user_id == current_user.id,
+            DocumentApproval.agent_name == "RAFAEL"
+        ).first()
+        
+        if not doc_approval:
+            raise HTTPException(
+                status_code=404,
+                detail="Documento fiscal no encontrado o no tienes permisos para acceder"
+            )
+        
+        # Validar formato
+        if format not in ["json", "xml", "pdf"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Formato inválido. Usa: json, xml, pdf"
+            )
+        
+        # Obtener contenido del documento
+        document_content = doc_approval.document_payload
+        
+        # Generar export según formato
+        export_data = None
+        content_type = None
+        filename = None
+        
+        if format == "json":
+            export_data = json.dumps(document_content, ensure_ascii=False, indent=2)
+            content_type = "application/json"
+            filename = f"fiscal_document_{document_id}.json"
+        elif format == "xml":
+            # Generar XML básico (estructura simplificada)
+            from xml.etree.ElementTree import Element, tostring
+            root = Element("FiscalDocument")
+            root.set("id", str(document_id))
+            root.set("type", doc_approval.fiscal_document_type or "tpv_ticket")
+            root.set("date", doc_approval.created_at.isoformat() if doc_approval.created_at else "")
+            
+            content_elem = Element("Content")
+            for key, value in document_content.items():
+                item = Element(key)
+                if isinstance(value, dict):
+                    item.text = json.dumps(value)
+                else:
+                    item.text = str(value)
+                content_elem.append(item)
+            root.append(content_elem)
+            
+            export_data = tostring(root, encoding='unicode')
+            content_type = "application/xml"
+            filename = f"fiscal_document_{document_id}.xml"
+        elif format == "pdf":
+            # Para PDF, retornar JSON por ahora (generación PDF requiere librería adicional)
+            # En producción, usar reportlab o similar
+            export_data = json.dumps(document_content, ensure_ascii=False, indent=2)
+            content_type = "application/json"
+            filename = f"fiscal_document_{document_id}.json"
+            # TODO: Implementar generación PDF real
+        
+        # Actualizar estado a 'exported'
+        doc_approval.status = DocumentStatus.EXPORTED.value
+        doc_approval.export_format = format
+        doc_approval.exported_at = datetime.utcnow()
+        
+        # Agregar evento al log
+        audit_log = doc_approval.audit_log
+        audit_log.append({
+            "timestamp": datetime.utcnow().isoformat(),
+            "event": "document_exported",
+            "format": format,
+            "exported_by": current_user.email
+        })
+        doc_approval.audit_log = audit_log
+        
+        db.commit()
+        db.refresh(doc_approval)
+        
+        logger.info(f"📤 Documento fiscal {document_id} exportado en formato {format} por usuario {current_user.id}")
+        
+        return {
+            "success": True,
+            "document_id": document_id,
+            "format": format,
+            "filename": filename,
+            "content_type": content_type,
+            "export_data": export_data,
+            "exported_at": doc_approval.exported_at.isoformat() if doc_approval.exported_at else None,
+            "message": f"Documento exportado correctamente en formato {format}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        if db:
+            db.rollback()
+        logger.error(f"Error exportando documento fiscal: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error exportando documento: {str(e)}"
+        )
+
+
+@router.get("/{document_id}/trace")
+async def get_fiscal_document_trace(
+    document_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtener trazabilidad completa de un documento fiscal.
+    Retorna quién, cuándo, qué acción en cada paso del flujo.
+    """
+    try:
+        from app.models.document_approval import DocumentApproval
+        
+        # Buscar documento del usuario
+        doc_approval = db.query(DocumentApproval).filter(
+            DocumentApproval.id == document_id,
+            DocumentApproval.user_id == current_user.id
+        ).first()
+        
+        if not doc_approval:
+            raise HTTPException(
+                status_code=404,
+                detail="Documento no encontrado o no tienes permisos para acceder"
+            )
+        
+        # Construir trazabilidad desde audit_log
+        trace = {
+            "document_id": document_id,
+            "ticket_id": doc_approval.ticket_id,
+            "fiscal_document_type": doc_approval.fiscal_document_type,
+            "status": doc_approval.status,
+            "agent_name": doc_approval.agent_name,
+            "timeline": doc_approval.audit_log or [],
+            "created_at": doc_approval.created_at.isoformat() if doc_approval.created_at else None,
+            "approved_at": doc_approval.approved_at.isoformat() if doc_approval.approved_at else None,
+            "sent_at": doc_approval.sent_at.isoformat() if doc_approval.sent_at else None,
+            "exported_at": doc_approval.exported_at.isoformat() if doc_approval.exported_at else None,
+            "filed_external_at": doc_approval.filed_external_at.isoformat() if doc_approval.filed_external_at else None
+        }
+        
+        return {
+            "success": True,
+            "trace": trace,
+            "message": "Trazabilidad completa del documento fiscal"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error obteniendo trazabilidad: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error obteniendo trazabilidad: {str(e)}"
         )
 

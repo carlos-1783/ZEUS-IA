@@ -246,3 +246,41 @@ class Payment(Base):
     payment_date = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+
+class TPVProduct(Base):
+    """TPV Product model - Multi-tenant products for TPV module"""
+    __tablename__ = "tpv_products"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)  # Multi-tenancy
+    
+    # Product identification
+    product_id = Column(String(100), nullable=False, index=True)  # PROD_xxx format
+    name = Column(String(200), nullable=False)
+    category = Column(String(100), nullable=False, index=True)
+    
+    # Pricing
+    price = Column(Float(precision=2), nullable=False)  # Precio base sin IVA
+    price_with_iva = Column(Float(precision=2), nullable=False)  # Precio con IVA
+    iva_rate = Column(Float(precision=4), default=21.0)  # Tasa IVA (21%, 10%, 4%, 0%)
+    
+    # Inventory
+    stock = Column(Integer, nullable=True)  # Stock disponible (opcional)
+    
+    # Media
+    image = Column(String(500), nullable=True)  # URL de imagen
+    icon = Column(String(50), nullable=True)  # Icono predefinido (coffee, food, service, house, default)
+    
+    # Metadata
+    metadata_ = Column("metadata", JSON, nullable=True)  # Metadata adicional
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    
+    # Relationship
+    user = relationship("User", backref="tpv_products")
+    
+    def __repr__(self):
+        return f"<TPVProduct {self.product_id} - {self.name} (User: {self.user_id})>"

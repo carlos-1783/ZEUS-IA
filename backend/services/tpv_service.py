@@ -537,7 +537,9 @@ class TPVService:
         payment_method: PaymentMethod,
         employee_id: Optional[str] = None,
         terminal_id: Optional[str] = None,
-        customer_data: Optional[Dict[str, Any]] = None
+        customer_data: Optional[Dict[str, Any]] = None,
+        user_id: Optional[int] = None,
+        db: Optional[Any] = None
     ) -> Dict[str, Any]:
         """
         Procesar venta y generar ticket
@@ -609,11 +611,14 @@ class TPVService:
             ticket["legal_validation"] = legal_validation
         
         # Enviar datos a RAFAEL para contabilidad automática
+        # PERSISTIR AUTOMÁTICAMENTE documento fiscal en BD
         if self.rafael_integration:
-            accounting_result = self._send_to_rafael(ticket)
+            accounting_result = self._send_to_rafael(ticket, user_id=user_id, db=db)
             ticket["accounting_sent"] = accounting_result.get("success", False)
             if accounting_result.get("success"):
                 ticket["accounting_entry"] = accounting_result.get("accounting_entry")
+                ticket["fiscal_document_id"] = accounting_result.get("fiscal_document_id")
+                ticket["fiscal_document_persisted"] = accounting_result.get("fiscal_document_persisted", False)
         
         # Sincronizar con AFRODITA para empleados
         if self.afrodita_integration and employee_id:
@@ -672,8 +677,16 @@ class TPVService:
                 "error": str(e)
             }
     
-    def _send_to_rafael(self, ticket: Dict[str, Any]) -> Dict[str, Any]:
-        """Enviar datos del ticket a RAFAEL para contabilidad automática"""
+    def _send_to_rafael(
+        self, 
+        ticket: Dict[str, Any], 
+        user_id: Optional[int] = None,
+        db: Optional[Any] = None
+    ) -> Dict[str, Any]:
+        """
+        Enviar datos del ticket a RAFAEL para contabilidad automática.
+        Persiste automáticamente documento fiscal en BD si db y user_id están disponibles.
+        """
         try:
             if not self.rafael_integration:
                 return {
@@ -685,6 +698,77 @@ class TPVService:
             if hasattr(self.rafael_integration, 'process_tpv_ticket'):
                 result = self.rafael_integration.process_tpv_ticket(ticket)
                 logger.info(f"📊 Datos enviados a RAFAEL para ticket {ticket['id']}")
+                
+                # PERSISTIR AUTOMÁTICAMENTE EN FIREWALL si tenemos db y user_id
+                if result.get("success") and db and user_id:
+                    try:
+                        from services.legal_fiscal_firewall import firewall
+                        firewall.db = db
+                        
+                        # Preparar contenido del documento fiscal
+                        fiscal_content = {
+                            "ticket_id": ticket.get("id"),
+                            "fiscal_data": result.get("fiscal_data", {}),
+                            "accounting_entry": result.get("accounting_entry", {}),
+                            "libro_ingresos": result.get("libro_ingresos", {}),
+                            "resumen_diario": result.get("resumen_diario", {}),
+                            "resumen_mensual": result.get("resumen_mensual", {}),
+                            "model_303_ready": result.get("model_303_ready", False),
+                            "draft_only": result.get("draft_only", True),
+                            "legal_disclaimer": result.get("legal_disclaimer", "ZEUS no presenta impuestos automáticamente")
+                        }
+                        
+                        # Generar documento fiscal en borrador y persistirlo
+                        fiscal_doc = firewall.generate_draft_document(
+                            agent_name="RAFAEL",
+                            user_id=user_id,
+                            document_type=f"tpv_{ticket.get('type', 'ticket')}",
+                            content=fiscal_content,
+                            metadata={
+                                "ticket_id": ticket.get("id"),
+                                "business_profile": ticket.get("business_profile"),
+                                "payment_method": ticket.get("payment_method"),
+                                "total": ticket.get("totals", {}).get("total", 0)
+                            }
+                        )
+                        
+                        # Actualizar documento con campos fiscales específicos
+                        if fiscal_doc.get("document_id") and db:
+                            try:
+                                from app.models.document_approval import DocumentApproval
+                                doc_approval = db.query(DocumentApproval).filter(
+                                    DocumentApproval.id == fiscal_doc.get("document_id")
+                                ).first()
+                                
+                                if doc_approval:
+                                    doc_approval.ticket_id = ticket.get("id")
+                                    doc_approval.fiscal_document_type = f"tpv_{ticket.get('type', 'ticket')}"
+                                    
+                                    # Agregar evento al log
+                                    audit_log = doc_approval.audit_log
+                                    audit_log.append({
+                                        "timestamp": datetime.utcnow().isoformat(),
+                                        "event": "ticket_processed",
+                                        "ticket_id": ticket.get("id"),
+                                        "fiscal_document_generated": True
+                                    })
+                                    doc_approval.audit_log = audit_log
+                                    
+                                    db.commit()
+                                    logger.info(f"📊 Documento fiscal persistido para ticket {ticket['id']} - ID: {fiscal_doc.get('document_id')}")
+                            except Exception as e:
+                                logger.error(f"Error actualizando documento fiscal: {e}")
+                                if db:
+                                    db.rollback()
+                        
+                        result["fiscal_document_id"] = fiscal_doc.get("document_id")
+                        result["fiscal_document_persisted"] = True
+                        
+                    except Exception as e:
+                        logger.error(f"Error persistiendo documento fiscal: {e}")
+                        # Continuar sin persistencia si falla (modo degradado)
+                        result["fiscal_document_persisted"] = False
+                
                 return result
             
             # Fallback: Preparar datos fiscales manualmente

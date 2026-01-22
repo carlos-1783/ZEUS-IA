@@ -53,7 +53,7 @@ def create_tables():
             # Importar modelos aquí para evitar importación circular
             from app.models.user import User, RefreshToken
             from app.models.customer import Customer
-            from app.models.erp import Invoice, Product, Payment
+            from app.models.erp import Invoice, Product, Payment, TPVProduct
             from app.models.agent_activity import AgentActivity
             from app.models.document_approval import DocumentApproval
             

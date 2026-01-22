@@ -1,7 +1,33 @@
 <template>
   <div class="admin-panel">
+    <!-- Overlay móvil para cerrar sidebar -->
+    <div
+      v-if="sidebarOpen"
+      class="admin-sidebar-overlay"
+      aria-hidden="true"
+      @click="sidebarOpen = false"
+    />
+
+    <!-- Cabecera móvil: hamburguesa + título + volver -->
+    <header class="admin-mobile-header">
+      <button
+        type="button"
+        class="admin-mobile-menu-btn"
+        aria-label="Abrir menú"
+        @click="sidebarOpen = !sidebarOpen"
+      >
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+      <h1 class="admin-mobile-title">⚡ Admin</h1>
+      <button type="button" class="admin-mobile-back" @click="goToDashboard">
+        ← Volver
+      </button>
+    </header>
+
     <!-- Sidebar -->
-    <aside class="admin-sidebar">
+    <aside class="admin-sidebar" :class="{ 'open': sidebarOpen }">
       <div class="logo">
         <h1>⚡ ZEUS-IA</h1>
         <p>Panel de Administración</p>
@@ -10,25 +36,25 @@
       <nav class="admin-nav">
         <button 
           :class="{ active: currentView === 'overview' }"
-          @click="currentView = 'overview'"
+          @click="selectView('overview')"
         >
           📊 Overview
         </button>
         <button 
           :class="{ active: currentView === 'customers' }"
-          @click="currentView = 'customers'"
+          @click="selectView('customers')"
         >
           👥 Clientes
         </button>
         <button 
           :class="{ active: currentView === 'revenue' }"
-          @click="currentView = 'revenue'"
+          @click="selectView('revenue')"
         >
           💰 Ingresos
         </button>
         <button 
           :class="{ active: currentView === 'settings' }"
-          @click="currentView = 'settings'"
+          @click="selectView('settings')"
         >
           ⚙️ Configuración
         </button>
@@ -95,8 +121,8 @@
           </button>
         </div>
 
-        <div class="customers-table">
-          <table>
+        <div class="customers-table-wrapper">
+          <table class="customers-table">
             <thead>
               <tr>
                 <th>Empresa</th>
@@ -135,7 +161,6 @@
               </tr>
             </tbody>
           </table>
-
           <div v-if="customers.length === 0" class="empty-state">
             <p>No hay clientes registrados aún</p>
           </div>
@@ -233,6 +258,12 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const currentView = ref('overview')
+const sidebarOpen = ref(false)
+
+function selectView(view) {
+  currentView.value = view
+  sidebarOpen.value = false
+}
 
 // Stats
 const stats = ref({
@@ -814,6 +845,7 @@ const saveSettings = async () => {
 }
 
 const goToDashboard = () => {
+  sidebarOpen.value = false
   router.push('/dashboard')
 }
 </script>
@@ -1282,22 +1314,118 @@ td {
   transform: scale(1.02);
 }
 
-/* Responsive */
+/* Cabecera móvil (solo en viewport pequeño) */
+.admin-mobile-header {
+  display: none;
+}
+
+.admin-sidebar-overlay {
+  display: none;
+}
+
+/* Responsive: Admin Panel móvil */
 @media (max-width: 768px) {
-  .admin-panel {
+  .admin-mobile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    padding: 0 16px;
+    background: linear-gradient(180deg, #0f1419 0%, #1a1f2e 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    z-index: 1001;
+  }
+
+  .admin-mobile-menu-btn {
+    display: flex;
     flex-direction: column;
+    gap: 5px;
+    padding: 8px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: #fff;
+  }
+  .admin-mobile-menu-btn span {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: currentColor;
+    border-radius: 1px;
+  }
+
+  .admin-mobile-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .admin-mobile-back {
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .admin-sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+  }
+
+  .admin-panel {
+    flex-direction: row;
   }
 
   .admin-sidebar {
-    width: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 280px;
+    max-width: 85vw;
+    height: 100vh;
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
+  }
+
+  .admin-sidebar.open {
+    transform: translateX(0);
   }
 
   .admin-content {
-    padding: 20px;
+    padding: 72px 16px 24px;
+    min-height: 100vh;
+    width: 100%;
   }
 
   .stats-grid {
     grid-template-columns: 1fr;
+  }
+
+  .customers-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -16px;
+    padding: 0 16px;
+  }
+
+  .customers-table {
+    min-width: 640px;
   }
 
   table {
@@ -1305,7 +1433,7 @@ td {
   }
 
   th, td {
-    padding: 8px;
+    padding: 10px;
   }
 }
 </style>

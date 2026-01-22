@@ -1426,11 +1426,30 @@ onMounted(() => {
   }
 }
 
+/* Móvil: botones apilados a la derecha para que Admin, TPV, etc. sean accesibles */
 @media (max-width: 768px) {
-  .tpv-toggle {
+  .metrics-toggle {
     right: 10px;
     top: 80px;
-    padding: 10px 20px;
+    padding: 10px 18px;
+    font-size: 0.85rem;
+  }
+  .admin-toggle {
+    right: 10px;
+    top: 140px;
+    padding: 10px 18px;
+    font-size: 0.85rem;
+  }
+  .tpv-toggle {
+    right: 10px;
+    top: 200px;
+    padding: 10px 18px;
+    font-size: 0.85rem;
+  }
+  .pwa-install-toggle {
+    right: 10px;
+    top: 260px;
+    padding: 10px 18px;
     font-size: 0.85rem;
   }
 }

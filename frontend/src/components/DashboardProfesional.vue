@@ -23,6 +23,15 @@
           <span class="icon">🏛️</span>
           <span>Dashboard</span>
         </button>
+        <!-- Admin Panel segundo en móvil para acceso rápido -->
+        <button 
+          v-if="shouldShowAdmin || authStore.isAdmin || authStore.user?.is_superuser || availableModules.admin || true"
+          class="nav-item admin-btn"
+          @click="closeSidebarOnMobile(); goToAdmin()"
+        >
+          <span class="icon">🔐</span>
+          <span>Admin Panel</span>
+        </button>
         <button 
           class="nav-item"
           :class="{ active: currentView === 'analytics' }"
@@ -31,7 +40,6 @@
           <span class="icon">📊</span>
           <span>Analytics</span>
         </button>
-        <!-- TPV - Siempre visible para superusuarios -->
         <button 
           v-if="shouldShowTPV || authStore.isAdmin || authStore.user?.is_superuser || availableModules.tpv || true"
           class="nav-item tpv-nav-btn"
@@ -40,7 +48,6 @@
           <span class="icon">💳</span>
           <span>TPV</span>
         </button>
-        <!-- Control Horario - Siempre visible para superusuarios -->
         <button 
           v-if="shouldShowControlHorario || authStore.isAdmin || authStore.user?.is_superuser || availableModules.control_horario || true"
           class="nav-item control-horario-nav-btn"
@@ -56,15 +63,6 @@
         >
           <span class="icon">⚙️</span>
           <span>Settings</span>
-        </button>
-        <!-- Admin Panel - Siempre visible para superusuarios -->
-        <button 
-          v-if="shouldShowAdmin || authStore.isAdmin || authStore.user?.is_superuser || availableModules.admin || true"
-          class="nav-item admin-btn"
-          @click="goToAdmin"
-        >
-          <span class="icon">🔐</span>
-          <span>Admin Panel</span>
         </button>
       </nav>
 

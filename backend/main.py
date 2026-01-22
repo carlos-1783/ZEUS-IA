@@ -30,18 +30,12 @@ async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
     
     # Cabeceras de seguridad (relajadas para desarrollo)
+    # No forzar Access-Control-* en middleware; CORSMiddleware lo gestiona
     security_headers = {
         "X-Content-Type-Options": "nosniff",
-        "X-Frame-Options": "SAMEORIGIN",  # Relajado para desarrollo
+        "X-Frame-Options": "SAMEORIGIN",
         "X-XSS-Protection": "1; mode=block",
         "Referrer-Policy": "strict-origin-when-cross-origin",
-        "Cross-Origin-Embedder-Policy": "unsafe-none",  # Deshabilitar COEP
-        "Cross-Origin-Opener-Policy": "unsafe-none",    # Deshabilitar COOP
-        "Cross-Origin-Resource-Policy": "cross-origin", # Permitir recursos cross-origin
-        "Access-Control-Allow-Origin": "*",  # Permitir todos los orígenes
-        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, HEAD",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Origin, Accept",
-        "Access-Control-Allow-Credentials": "true"
     }
     
     # Añadir cabeceras a la respuesta
@@ -51,14 +45,17 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 
-# Configuración de CORS mejorada
-# Lista de orígenes permitidos
+# CORS seguro para producción (sin wildcard)
 origins = [
-    "http://localhost:5173",    # Frontend en desarrollo
-    "http://127.0.0.1:5173",    # Frontend en desarrollo (alternativa)
-    "http://localhost:8000",    # Backend
-    "http://127.0.0.1:8000",    # Backend (alternativa)
-    "*"  # Permitir todos los orígenes en desarrollo
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "https://zeus-ia-production-16d8.up.railway.app",
+    "https://zeus-ia.com",
+    "https://app.zeus-ia.com",
 ]
 
 # Métodos HTTP permitidos

@@ -6,6 +6,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.exc import OperationalError, DisconnectionError
 import logging
 
 from app.core.config import settings
@@ -51,8 +52,7 @@ def get_user(db: Session, email: str) -> Optional[User]:
             
         return user
     except (OperationalError, DisconnectionError) as e:
-        error_msg = str(e).lower()
-        logger.error(f"Error de conexión a base de datos al obtener usuario {email}: {str(e)}", exc_info=True)
+        logger.error(f"Error de conexión a base de datos al obtener usuario {email}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database service temporarily unavailable"

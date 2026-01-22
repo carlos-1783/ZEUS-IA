@@ -25,13 +25,14 @@ app = FastAPI(
     redoc_url="/api/redoc"
 )
 
-# CORS middleware - CONFIGURADO PARA WEBSOCKETS EN RAILWAY
+# CORS seguro para producción: orígenes desde config, métodos y cabeceras explícitos
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
+    expose_headers=["Content-Disposition", "Content-Length", "Content-Type"],
 )
 
 # Middleware específico para WebSockets en Railway

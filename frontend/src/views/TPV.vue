@@ -55,9 +55,12 @@
           <!-- Botón Añadir Producto (siempre visible, validación al guardar) -->
           <button 
             v-if="!businessProfileLoading"
-            @click="openProducts" 
+            @click.stop.prevent="openProducts" 
+            @mousedown.stop
+            @mouseup.stop
             class="add-product-card"
             title="Añadir nuevo producto"
+            type="button"
           >
             <div class="add-product-content">
               <span class="add-product-icon">➕</span>
@@ -2533,14 +2536,16 @@ onMounted(async () => {
 
 /* Modal de Producto */
 .modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(0, 0, 0, 0.8) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 99999 !important;
   animation: fadeIn 0.2s;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
 .modal-content {

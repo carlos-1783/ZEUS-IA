@@ -273,9 +273,9 @@ def _migrate_firewall_columns_legacy():
         import traceback
         traceback.print_exc()
 
+# get_db está ahora en session.py con manejo de errores mejorado
+# Mantener esta función por compatibilidad, pero usar session.py
 def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    """Función de compatibilidad - usar session.get_db() en su lugar"""
+    from app.db.session import get_db as get_db_with_retry
+    yield from get_db_with_retry()

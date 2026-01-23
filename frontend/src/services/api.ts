@@ -55,10 +55,14 @@ const request = async (
 ): Promise<any> => {
   const url = buildUrl(endpoint);
   
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-  };
+  // Si el body es FormData, NO añadir Content-Type (el navegador lo hace automáticamente)
+  const isFormData = options.body instanceof FormData;
+  const headers: HeadersInit = isFormData
+    ? { ...(options.headers || {}) }
+    : {
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      };
   
   try {
     const response = await fetch(url, {
@@ -102,7 +106,11 @@ const request = async (
   } catch (error: any) {
     // Si es error de red (CORS, conexión, etc.)
     if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      throw new Error('No se pudo conectar con el servidor. Verifica que el backend esté ejecutándose.');
+      const apiBase = API_BASE_URL || 'mismo origen';
+      const errorMsg = new Error(`No se pudo conectar con el servidor (${apiBase}). Verifica que el backend esté ejecutándose y que VITE_API_BASE_URL esté configurada correctamente.`) as any;
+      errorMsg.isConnectionError = true;
+      errorMsg.url = url;
+      throw errorMsg;
     }
     
     throw error;
@@ -166,6 +174,36 @@ export const api = {
       body: data ? JSON.stringify(data) : undefined,
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
+  },
+  
+  /**
+   * POST con FormData (para upload de archivos)
+   */
+  async postFormData(endpoint: string, formData: FormData, token?: string): Promise<any> {
+    return request(endpoint, {
+      method: 'POST',
+      body: formData,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  },
+  
+  /**
+   * GET que devuelve Blob (para descargas)
+   */
+  async getBlob(endpoint: string, token?: string): Promise<Blob> {
+    const url = buildUrl(endpoint);
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    
+    if (!response.ok) {
+      const error = new Error(`HTTP ${response.status}: ${response.statusText}`) as any;
+      error.status = response.status;
+      throw error;
+    }
+    
+    return await response.blob();
   },
   
   /**

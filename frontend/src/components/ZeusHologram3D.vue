@@ -429,22 +429,12 @@ async function executeCommand() {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 10000)
     
-    const response = await fetch('/api/v1/zeus/execute', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authStore.token}`
-      },
-      body: JSON.stringify({
-        command: currentCommand.value,
-        data: {}
-      }),
-      signal: controller.signal
-    })
+    const api = (await import('@/services/api')).default
+    const result = await api.post('/api/v1/zeus/execute', {
+      command: currentCommand.value,
+      data: {}
+    }, authStore.token)
     
-    clearTimeout(timeoutId)
-    
-    const result = await response.json()
     lastResponse.value = result
     
     // Actualizar estado del agente (no bloqueante)

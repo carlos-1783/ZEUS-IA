@@ -246,40 +246,17 @@ const checkStatus = async () => {
     }
 
     // Obtener información del sistema
-    const infoResponse = await fetch('/api/v1/control-horario', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (!infoResponse.ok) throw new Error(`HTTP ${infoResponse.status}`)
-    const infoData = await infoResponse.json()
+    const api = (await import('@/services/api')).default
+    const infoData = await api.get('/api/v1/control-horario', token)
     
     businessProfile.value = infoData.business_profile
     config.value = infoData.config || {}
     
     // Obtener estado de empleados
-    const statusResponse = await fetch('/api/v1/control-horario/status', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (!statusResponse.ok) throw new Error(`HTTP ${statusResponse.status}`)
-    const statusData = await statusResponse.json()
+    const statusData = await api.get('/api/v1/control-horario/status', token)
     
     // Obtener lista de empleados
-    const employeesResponse = await fetch('/api/v1/control-horario/employees', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (!employeesResponse.ok) throw new Error(`HTTP ${employeesResponse.status}`)
-    const employeesData = await employeesResponse.json()
+    const employeesData = await api.get('/api/v1/control-horario/employees', token)
     
     // Actualizar empleados con estado
     const employeesMap = {}
@@ -331,27 +308,15 @@ const handleCheckIn = async () => {
     const token = authStore.getToken ? authStore.getToken() : authStore.token
     if (!token) throw new Error('No hay token')
     
-    const response = await fetch('/api/v1/control-horario/check-in', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        employee_id: selectedEmployee.value,
-        method: selectedMethod.value,
-        location: currentLocation.value.latitude ? 'GPS Location' : null,
-        latitude: currentLocation.value.latitude,
-        longitude: currentLocation.value.longitude
-      })
-    })
+    const api = (await import('@/services/api')).default
+    const data = await api.post('/api/v1/control-horario/check-in', {
+      employee_id: selectedEmployee.value,
+      method: selectedMethod.value,
+      location: currentLocation.value.latitude ? 'GPS Location' : null,
+      latitude: currentLocation.value.latitude,
+      longitude: currentLocation.value.longitude
+    }, token)
     
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.detail || 'Error al registrar entrada')
-    }
-    
-    const data = await response.json()
     alert(`✅ ${data.message || 'Entrada registrada correctamente'}`)
     
     // Actualizar estado
@@ -374,27 +339,15 @@ const handleCheckOut = async () => {
     const token = authStore.getToken ? authStore.getToken() : authStore.token
     if (!token) throw new Error('No hay token')
     
-    const response = await fetch('/api/v1/control-horario/check-out', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        employee_id: selectedEmployee.value,
-        method: selectedMethod.value || 'code',
-        location: currentLocation.value.latitude ? 'GPS Location' : null,
-        latitude: currentLocation.value.latitude,
-        longitude: currentLocation.value.longitude
-      })
-    })
+    const api = (await import('@/services/api')).default
+    const data = await api.post('/api/v1/control-horario/check-out', {
+      employee_id: selectedEmployee.value,
+      method: selectedMethod.value || 'code',
+      location: currentLocation.value.latitude ? 'GPS Location' : null,
+      latitude: currentLocation.value.latitude,
+      longitude: currentLocation.value.longitude
+    }, token)
     
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.detail || 'Error al registrar salida')
-    }
-    
-    const data = await response.json()
     const hours = data.hours_worked || 0
     alert(`✅ ${data.message || 'Salida registrada correctamente'}\n⏰ Horas trabajadas: ${hours}h`)
     

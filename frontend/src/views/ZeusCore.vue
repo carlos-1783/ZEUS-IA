@@ -202,24 +202,13 @@ onUnmounted(() => {
 async function initializeZeusSystem() {
   try {
     // Activar sistema ZEUS
-    const response = await fetch('/api/v1/zeus/activate', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${authStore.token}`,
-        'Content-Type': 'application/json'
-      }
-    })
+    const api = (await import('@/services/api')).default
+    const result = await api.post('/api/v1/zeus/activate', undefined, authStore.token)
+    systemStatus.value = 'active'
+    activeAgents.value = result.data?.agents ? Object.keys(result.data.agents).length : 0
     
-    if (response.ok) {
-      const result = await response.json()
-      systemStatus.value = 'active'
-      activeAgents.value = result.data?.agents ? Object.keys(result.data.agents).length : 0
-      
-      addSystemLog('success', 'Sistema ZEUS activado correctamente')
-      showNotification('success', 'ZEUS Activado', 'Todos los agentes están operativos')
-    } else {
-      throw new Error('Error activando sistema ZEUS')
-    }
+    addSystemLog('success', 'Sistema ZEUS activado correctamente')
+    showNotification('success', 'ZEUS Activado', 'Todos los agentes están operativos')
     
   } catch (error) {
     console.error('Error inicializando ZEUS:', error)
@@ -266,25 +255,12 @@ async function updateSystemStatus() {
   
   try {
     // Performance: Timeout reducido de 5s a 3s
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 3000)
+    const api = (await import('@/services/api')).default
+    const result = await api.get('/api/v1/zeus/status', authStore.token)
+    const status = result.data || result
     
-    const response = await fetch('/api/v1/zeus/status', {
-      headers: {
-        'Authorization': `Bearer ${authStore.token}`
-      },
-      signal: controller.signal
-    })
-    
-    clearTimeout(timeoutId)
-    
-    if (response.ok) {
-      const result = await response.json()
-      const status = result.data
-      
-      systemStatus.value = status.system_status
-      activeAgents.value = status.active_agents || 0
-    }
+    systemStatus.value = status.system_status
+    activeAgents.value = status.active_agents || 0
   } catch (error) {
     if (error.name === 'AbortError') {
       console.warn('⏱️ Timeout actualizando estado del sistema')
@@ -335,30 +311,13 @@ function onCommandExecuted(result) {
 async function executeQuickCommand(command) {
   try {
     // Timeout de 10 segundos para comandos
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000)
+    const api = (await import('@/services/api')).default
+    const result = await api.post('/api/v1/zeus/execute', {
+      command: command,
+      data: {}
+    }, authStore.token)
     
-    const response = await fetch('/api/v1/zeus/execute', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${authStore.token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        command: command,
-        data: {}
-      }),
-      signal: controller.signal
-    })
-    
-    clearTimeout(timeoutId)
-    
-    if (response.ok) {
-      const result = await response.json()
-      onCommandExecuted(result)
-    } else {
-      throw new Error('Error ejecutando comando')
-    }
+    onCommandExecuted(result)
   } catch (error) {
     if (error.name === 'AbortError') {
       console.warn(`Timeout ejecutando comando: ${command}`)

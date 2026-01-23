@@ -346,9 +346,9 @@ const olymposAgents = ref([
 // Actualizar estado desde el backend (sin bloquear la UI)
 const updateAgentsFromBackend = async () => {
   try {
-    const response = await fetch('/api/v1/agents/status')
-    if (response.ok) {
-      const data = await response.json()
+    const api = (await import('@/services/api')).default
+    const data = await api.get('/api/v1/agents/status')
+    if (data) {
       console.log('✅ Backend respondió:', data)
       
       // Actualizar solo el estado si el backend responde

@@ -345,21 +345,8 @@ const loadStats = async () => {
       throw new Error('No hay token de autenticación')
     }
 
-    const response = await fetch('/api/v1/admin/stats', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-
-    if (!response.ok) {
-      if (response.status === 403) {
-        throw new Error('Acceso denegado. Solo superusuarios pueden acceder al panel de admin.')
-      }
-      throw new Error(`Error ${response.status}: ${response.statusText}`)
-    }
-
-    const data = await response.json()
+    const api = (await import('@/services/api')).default
+    const data = await api.get('/api/v1/admin/stats', token)
     
     if (data.success) {
       stats.value = {
@@ -388,21 +375,8 @@ const loadCustomers = async () => {
       return
     }
 
-    const response = await fetch('/api/v1/admin/customers', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-
-    if (!response.ok) {
-      if (response.status === 403) {
-        return // Silenciar error 403, solo mostrar si es necesario
-      }
-      throw new Error(`Error ${response.status}: ${response.statusText}`)
-    }
-
-    const data = await response.json()
+    const api = (await import('@/services/api')).default
+    const data = await api.get('/api/v1/admin/customers', token)
     
     if (data.success) {
       customers.value = data.customers || []
@@ -421,18 +395,8 @@ const loadIntegrationStatus = async () => {
       return
     }
 
-    const response = await fetch('/api/v1/integrations/status', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-
-    if (!response.ok) {
-      return
-    }
-
-    const data = await response.json()
+    const api = (await import('@/services/api')).default
+    const data = await api.get('/api/v1/integrations/status', token)
     
     integrationStatus.value = {
       stripe: data.stripe?.configured || false,
@@ -457,29 +421,9 @@ const loadChartData = async () => {
     }
 
     console.log('[Chart] Haciendo petición a /api/v1/admin/revenue-chart...')
-    const response = await fetch('/api/v1/admin/revenue-chart?months=12', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-
-    console.log('[Chart] Respuesta recibida:', response.status, response.statusText)
-
-    if (!response.ok) {
-      if (response.status === 403) {
-        console.warn('[Chart] Acceso denegado - solo superusuarios')
-        error.value = 'Acceso denegado. Solo superusuarios pueden ver el gráfico.'
-        // Renderizar gráfico vacío con mensaje
-        renderEmptyChart('Acceso denegado')
-        return
-      }
-      const errorText = await response.text()
-      console.error('[Chart] Error en respuesta:', errorText)
-      throw new Error(`Error ${response.status}: ${response.statusText}`)
-    }
-
-    const data = await response.json()
+    const api = (await import('@/services/api')).default
+    const data = await api.get('/api/v1/admin/revenue-chart?months=12', token)
+    console.log('[Chart] Datos recibidos:', data)
     console.log('[Chart] Datos recibidos:', data)
     
     if (data.success && data.chart_data) {
@@ -815,27 +759,15 @@ const saveSettings = async () => {
       return
     }
     
-    const response = await fetch('/api/v1/admin/settings', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        notifications: {
-          email_on_new_customer: settings.value.emailOnNewCustomer,
-          email_on_payment_failed: settings.value.emailOnPaymentFailed
-        }
-      })
-    })
+    const api = (await import('@/services/api')).default
+    await api.post('/api/v1/admin/settings', {
+      notifications: {
+        email_on_new_customer: settings.value.emailOnNewCustomer,
+        email_on_payment_failed: settings.value.emailOnPaymentFailed
+      }
+    }, token)
     
-    if (response.ok) {
-      alert('✅ Configuración guardada correctamente')
-    } else {
-      // Si no existe endpoint, guardar en localStorage temporalmente
-      localStorage.setItem('zeus_admin_settings', JSON.stringify(settings.value))
-      alert('✅ Configuración guardada localmente. Endpoint no disponible aún.')
-    }
+    alert('✅ Configuración guardada correctamente')
   } catch (error) {
     console.error('Error guardando configuración:', error)
     // Fallback a localStorage

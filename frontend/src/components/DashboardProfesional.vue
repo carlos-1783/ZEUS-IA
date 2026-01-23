@@ -378,20 +378,9 @@ const handleEnable2FA = async () => {
       return
     }
     
-    const response = await fetch('/api/v1/user/2fa/enable', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (response.ok) {
-      const data = await response.json()
-      alert(`✅ Autenticación de dos factores habilitada\n\nCódigo QR:\n${data.qr_code || 'Disponible en configuración'}`)
-    } else {
-      alert('⚠️ Función disponible próximamente')
-    }
+    const api = (await import('@/services/api')).default
+    const data = await api.post('/api/v1/user/2fa/enable', undefined, token)
+    alert(`✅ Autenticación de dos factores habilitada\n\nCódigo QR:\n${data.qr_code || 'Disponible en configuración'}`)
   } catch (error) {
     console.error('Error habilitando 2FA:', error)
     alert('⚠️ Función disponible próximamente')
@@ -406,21 +395,12 @@ const handleGenerateApiKey = async () => {
       return
     }
     
-    const response = await fetch('/api/v1/api-keys', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (response.ok) {
-      const data = await response.json()
-      const apiKey = data.api_key || data.key
-      if (apiKey) {
-        await navigator.clipboard.writeText(apiKey)
-        alert(`✅ Clave API generada y copiada al portapapeles\n\nClave: ${apiKey}\n\n⚠️ Guarda esta clave en un lugar seguro. No se mostrará de nuevo.`)
-      }
+    const api = (await import('@/services/api')).default
+    const data = await api.post('/api/v1/api-keys', undefined, token)
+    const apiKey = data.api_key || data.key
+    if (apiKey) {
+      await navigator.clipboard.writeText(apiKey)
+      alert(`✅ Clave API generada y copiada al portapapeles\n\nClave: ${apiKey}\n\n⚠️ Guarda esta clave en un lugar seguro. No se mostrará de nuevo.`)
     } else {
       alert('⚠️ Función disponible próximamente')
     }
@@ -438,8 +418,10 @@ const handleExportData = async () => {
       return
     }
     
-    const response = await fetch('/api/v1/user/export', {
-      method: 'GET',
+    // Para export, necesitamos usar request directamente para obtener blob
+    const api = (await import('@/services/api')).default
+    const url = api.baseURL ? `${api.baseURL}/api/v1/user/export` : '/api/v1/user/export'
+    const response = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -447,9 +429,9 @@ const handleExportData = async () => {
     
     if (response.ok) {
       const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
+      const blobUrl = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.href = url
+      a.href = blobUrl
       a.download = `zeus-export-${new Date().toISOString().split('T')[0]}.json`
       document.body.appendChild(a)
       a.click()
@@ -605,18 +587,8 @@ const loadDashboardMetrics = async () => {
     }
 
     // Usar endpoint unificado /summary en lugar de /dashboard
-    const response = await fetch('/api/v1/metrics/summary?days=30', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-    }
-
-    const data = await response.json()
+    const api = (await import('@/services/api')).default
+    const data = await api.get('/api/v1/metrics/summary?days=30', token)
     
     if (data.success && data.metrics) {
       // Actualizar métricas

@@ -466,6 +466,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
 import { useNotifications } from '@/composables/useNotifications'
+import { jwtDecode } from 'jwt-decode'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -761,30 +762,22 @@ const checkStatus = async () => {
       if (!isSuperuser.value && userRole.value !== 'ADMIN') {
         console.log('⚠️ Permisos no claros, verificando con backend...')
         try {
-          const userResponse = await fetch('/api/v1/user/me', {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          })
+          const api = (await import('@/services/api')).default
+          const userData = await api.get('/api/v1/user/me', token)
+          console.log('👤 Datos del usuario desde backend:', userData)
           
-          if (userResponse.ok) {
-            const userData = await userResponse.json()
-            console.log('👤 Datos del usuario desde backend:', userData)
-            
-            if (userData.is_superuser || userData.isSuperuser) {
-              isSuperuser.value = true
-              userRole.value = 'SUPERUSER'
-            } else if (userData.role) {
-              userRole.value = userData.role
-            }
-            
-            console.log('✅ Permisos actualizados:', { 
-              isSuperuser: isSuperuser.value, 
-              role: userRole.value,
-              canEditProducts: canEditProducts.value
-            })
+          if (userData.is_superuser || userData.isSuperuser) {
+            isSuperuser.value = true
+            userRole.value = 'SUPERUSER'
+          } else if (userData.role) {
+            userRole.value = userData.role
           }
+          
+          console.log('✅ Permisos actualizados:', { 
+            isSuperuser: isSuperuser.value, 
+            role: userRole.value,
+            canEditProducts: canEditProducts.value
+          })
         } catch (err) {
           console.warn('⚠️ No se pudieron obtener permisos del backend:', err)
         }
@@ -1529,25 +1522,17 @@ const saveProduct = async () => {
     try {
       const token = await getAuthToken()
       if (token) {
-        const userResponse = await fetch('/api/v1/user/me', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        })
+        const api = (await import('@/services/api')).default
+        const userData = await api.get('/api/v1/user/me', token)
+        console.log('👤 Verificación de permisos desde backend:', userData)
         
-        if (userResponse.ok) {
-          const userData = await userResponse.json()
-          console.log('👤 Verificación de permisos desde backend:', userData)
-          
-          if (userData.is_superuser || userData.isSuperuser) {
-            isSuperuser.value = true
-            userRole.value = 'SUPERUSER'
-            console.log('✅ Permisos actualizados: SUPERUSER')
-          } else if (userData.role === 'ADMIN') {
-            userRole.value = 'ADMIN'
-            console.log('✅ Permisos actualizados: ADMIN')
-          }
+        if (userData.is_superuser || userData.isSuperuser) {
+          isSuperuser.value = true
+          userRole.value = 'SUPERUSER'
+          console.log('✅ Permisos actualizados: SUPERUSER')
+        } else if (userData.role === 'ADMIN') {
+          userRole.value = 'ADMIN'
+          console.log('✅ Permisos actualizados: ADMIN')
         }
       }
     } catch (err) {
@@ -1592,33 +1577,20 @@ const saveProduct = async () => {
         const formData = new FormData()
         formData.append('image', imageFile.value)
         
-        const uploadResponse = await fetch('/api/v1/tpv/products/upload-image', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          },
-          body: formData
-        })
-        
-        if (uploadResponse.status === 401) {
+        const api = (await import('@/services/api')).default
+        const uploadResult = await api.postFormData('/api/v1/tpv/products/upload-image', formData, token)
+        imageUrl = uploadResult.url || uploadResult.image_url || uploadResult.public_url
+        console.log('✅ Imagen subida:', imageUrl)
+      } catch (uploadError) {
+        // Si es 401, manejar autenticación
+        if (uploadError?.status === 401) {
           console.error('❌ Token expirado (401) al subir imagen')
           authStore.resetAuthState()
           warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
           router.push('/login?redirect=/tpv')
           return
         }
-        
-        if (uploadResponse.ok) {
-          const uploadResult = await uploadResponse.json()
-          imageUrl = uploadResult.url || uploadResult.image_url || uploadResult.public_url
-          console.log('✅ Imagen subida:', imageUrl)
-        } else {
-          const errorData = await uploadResponse.json().catch(() => ({ detail: uploadResponse.statusText }))
-          console.warn('⚠️ Error al subir imagen:', errorData)
-          // Continuar sin imagen si falla la subida
-        }
-      } catch (uploadError) {
-        console.error('❌ Error al subir imagen:', uploadError)
+        console.warn('⚠️ Error al subir imagen:', uploadError)
         // Continuar sin imagen si falla la subida
       }
     }

@@ -15,7 +15,7 @@ if errorlevel 1 (
 
 REM Verificar que el backend está ejecutándose
 echo Verificando conexión con backend...
-curl -s http://localhost:8000/api/v1/system/status >nul 2>&1
+python -c "import requests; requests.get('http://localhost:8000/api/v1/system/status', timeout=5)" >nul 2>&1
 if errorlevel 1 (
     echo ADVERTENCIA: No se pudo conectar con el backend en http://localhost:8000
     echo Asegúrate de que el backend esté ejecutándose antes de continuar
@@ -24,6 +24,8 @@ if errorlevel 1 (
     if /i not "%continue%"=="S" (
         exit /b 1
     )
+) else (
+    echo Backend conectado correctamente.
 )
 
 echo.

@@ -492,6 +492,9 @@ const selectedTable = ref(null)
 const tables = ref([])
 const tpvState = ref(TPV_STATES.CART) // Estado actual del TPV
 const paymentNote = ref('') // Nota adicional para el pago
+const cartFeedback = ref(null) // Feedback visual del carrito
+const cartFeedbackTimeout = ref(null) // Timeout para ocultar feedback
+const lastSaleTicketId = ref(null) // ID del último ticket vendido
 
 // TPV Configuration from backend
 const businessProfile = ref(null)
@@ -1230,7 +1233,7 @@ const processPayment = async () => {
     tpvState.value = TPV_STATES.CLOSED
     
     // Mostrar confirmación usando ticket_id del resultado
-    success(`Pago procesado exitosamente. Ticket #${ticketId || 'N/A'}. Total: €${formatPrice(total.value)}. Esta venta se ha registrado automáticamente con RAFAEL.`)
+    success(`Pago procesado exitosamente. Ticket #${ticketId || 'N/A'}. Total: EUR ${formatPrice(total.value)}. Esta venta se ha registrado automáticamente con RAFAEL.`)
     
     console.log('✅ Venta procesada exitosamente:', result)
   } catch (err) {
@@ -1655,6 +1658,7 @@ const saveProduct = async () => {
     console.error('❌ Error general guardando producto:', err)
     error('Error al guardar producto: ' + (err.message || 'Error desconocido'))
   }
+}
 
 // Cargar al montar
 onMounted(async () => {

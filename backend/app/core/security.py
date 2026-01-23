@@ -78,12 +78,13 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     # Create a copy of the data dictionary
     to_encode = data.copy()
     
-    # Calculate expiration time
-    now = datetime.utcnow()
+    # Calculate expiration time - USE TIMEZONE-AWARE UTC
+    from datetime import timezone
+    now = datetime.now(timezone.utc)
     if expires_delta:
         expire = now + expires_delta
     else:
-        # Default to 30 days if not specified
+        # Default to configured expiration time
         expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     
     # Add standard JWT claims with proper integer timestamps
@@ -140,7 +141,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
                 secret_key_str,
                 algorithms=[settings.ALGORITHM],
                 audience=to_encode.get("aud"),
-                issuer=to_encode.get("iss")
+                issuer=to_encode.get("iss"),
+                options={"leeway": 30}  # 30 segundos de tolerancia
             )
             logger.debug("[JWT] Token generado y verificado exitosamente")
             return encoded_jwt
@@ -279,7 +281,8 @@ def get_current_user(db: Session, token: str) -> User:
                     "verify_iss": True,
                     "verify_exp": True,
                     "verify_nbf": True,
-                    "verify_iat": True
+                    "verify_iat": True,
+                    "leeway": 30  # 30 segundos de tolerancia
                 }
             )
             logger.info("Token verificado exitosamente")
@@ -510,6 +513,7 @@ def get_current_user(db: Session, token: str) -> User:
                 "verify_iat": True,
                 "verify_exp": True,
                 "verify_nbf": False,
+                "leeway": 30  # 30 segundos de tolerancia
             },
             issuer=settings.JWT_ISSUER if settings.JWT_ISSUER else None
         )

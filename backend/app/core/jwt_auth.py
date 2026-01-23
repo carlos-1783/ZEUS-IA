@@ -37,11 +37,13 @@ def create_jwt_token(
     try:
         to_encode = data.copy()
         
-        now = datetime.utcnow()
+        # USE TIMEZONE-AWARE UTC
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
         if expires_delta:
             expire = now + expires_delta
         else:
-            expire = now + timedelta(minutes=15)
+            expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
             
         # Añadir claims estándar - JWT requiere timestamps en formato entero Unix
         to_encode.update({
@@ -136,7 +138,8 @@ def decode_jwt_token(
                     "verify_iss": True,
                     "verify_exp": True,
                     "verify_nbf": True,
-                    "verify_iat": True
+                    "verify_iat": True,
+                    "leeway": 30  # 30 segundos de tolerancia
                 }
             )
             logger.debug("Token decoded successfully")

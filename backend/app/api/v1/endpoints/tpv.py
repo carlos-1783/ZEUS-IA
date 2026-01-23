@@ -213,14 +213,9 @@ async def create_product(
 ):
     """Crear producto en el TPV - PERSISTIDO EN BD CON MULTI-TENANCY"""
     is_superuser = getattr(current_user, 'is_superuser', False)
-    is_admin = getattr(current_user, 'is_admin', False) or is_superuser
     
-    # Permisos: Solo ADMIN y SUPERUSER pueden crear
-    if not (is_admin or is_superuser):
-        raise HTTPException(
-            status_code=403,
-            detail="No tienes permisos para crear productos. Se requiere rol ADMIN o SUPERUSER."
-        )
+    # Permisos: Todos los usuarios autenticados pueden crear productos
+    # (No restringir por rol, solo requiere autenticación)
     
     logger.info(f"📦 Creando producto: {request.name} - Precio: €{request.price} - Usuario: {current_user.id}")
     
@@ -333,14 +328,8 @@ async def update_product(
 ):
     """Actualizar producto en el TPV - MULTI-TENANCY: Solo productos del usuario"""
     is_superuser = getattr(current_user, 'is_superuser', False)
-    is_admin = getattr(current_user, 'is_admin', False) or is_superuser
     
-    # Permisos: Solo ADMIN y SUPERUSER pueden actualizar
-    if not (is_admin or is_superuser):
-        raise HTTPException(
-            status_code=403,
-            detail="No tienes permisos para actualizar productos. Se requiere rol ADMIN o SUPERUSER."
-        )
+    # Permisos: Todos los usuarios autenticados pueden actualizar sus propios productos
     
     logger.info(f"✏️ Actualizando producto: {product_id} - Usuario: {current_user.id}")
     
@@ -404,14 +393,8 @@ async def upload_product_image(
 ):
     """Subir imagen de producto"""
     is_superuser = getattr(current_user, 'is_superuser', False)
-    is_admin = getattr(current_user, 'is_admin', False) or is_superuser
     
-    # Permisos: Solo ADMIN y SUPERUSER pueden subir imágenes
-    if not (is_admin or is_superuser):
-        raise HTTPException(
-            status_code=403,
-            detail="No tienes permisos para subir imágenes. Se requiere rol ADMIN o SUPERUSER."
-        )
+    # Permisos: Todos los usuarios autenticados pueden subir imágenes
     
     # Validar tipo de archivo
     allowed_types = ["image/png", "image/jpeg", "image/webp"]

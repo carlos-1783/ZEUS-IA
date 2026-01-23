@@ -266,7 +266,7 @@ async def get_current_user(
         if isinstance(token, str) and token.startswith('Bearer '):
             token = token[7:].strip()
             
-        # Decodificar el token
+        # Decodificar el token con leeway para tolerar diferencias de reloj
         try:
             payload = jwt.decode(
                 token,
@@ -276,6 +276,7 @@ async def get_current_user(
                     "verify_aud": False,  # Deshabilitar verificación de audiencia si no se usa
                     "verify_iat": True,
                     "verify_exp": True,
+                    "leeway": 30,  # 30 segundos de tolerancia para diferencias de reloj
                 }
             )
         except jwt.ExpiredSignatureError:

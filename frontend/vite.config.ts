@@ -198,6 +198,10 @@ export default defineConfig(({ command, mode }: ConfigEnv): UserConfig => {
       'import.meta.env.DEV': isDev,
       'import.meta.env.PROD': !isDev,
       'import.meta.env.SSR': false,
+      // API Base URL para Railway (producción)
+      'import.meta.env.VITE_API_BASE_URL': JSON.stringify(
+        env.VITE_API_BASE_URL || (isDev ? '' : '')
+      ),
     },
     plugins,
     server,

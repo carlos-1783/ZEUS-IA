@@ -1,11 +1,13 @@
 <template>
   <div id="app">
+    <BackendError />
     <RouterView />
     <ToastNotification />
   </div>
 </template>
 
 <script setup lang="ts">
+import BackendError from '@/components/BackendError.vue'
 import ToastNotification from '@/components/ToastNotification.vue'
 
 // Performance: NO inicializar auth aquí - el router lo maneja

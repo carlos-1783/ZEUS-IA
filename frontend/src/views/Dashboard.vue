@@ -448,18 +448,11 @@ const loadUnifiedDashboardData = async () => {
       return;
     }
 
-    const response = await fetch('/api/v1/metrics/summary?days=30', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    // Usar servicio API centralizado
+    const api = (await import('@/services/api')).default;
+    const data = await api.get('/api/v1/metrics/summary?days=30', token);
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    const data = await response.json();
+    // Data ya viene parseada del servicio API
 
     if (data.success && data.metrics) {
       // Actualizar métricas del dashboard con datos normalizados

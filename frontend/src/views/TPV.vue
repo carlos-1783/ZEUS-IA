@@ -793,29 +793,12 @@ const checkStatus = async () => {
       console.warn('⚠️ No se pudieron cargar permisos:', err)
     }
     
-    // Cargar productos
-    const productsResponse = await fetch('/api/v1/tpv/products', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-
-    if (productsResponse.status === 401) {
-      // Token expirado o inválido
-      console.error('❌ Token expirado o inválido (401)')
-      errorMessage.value = 'Sesión expirada. Por favor, inicia sesión nuevamente.'
-      // Limpiar token y redirigir
-      authStore.resetAuthState()
-      setTimeout(() => {
-        router.push('/login?redirect=/tpv')
-      }, 2000)
-      return
-    }
-
-    if (productsResponse.ok) {
-      const productsData = await productsResponse.json()
-      if (productsData.success) {
+    // Cargar productos usando servicio API centralizado
+    try {
+      const api = (await import('@/services/api')).default
+      const productsData = await api.get('/api/v1/tpv/products', token)
+      
+      if (productsData && productsData.success && productsData.products) {
         const loadedProducts = productsData.products || []
         products.value = loadedProducts
         console.log('✅ Productos cargados:', loadedProducts.length)
@@ -829,15 +812,20 @@ const checkStatus = async () => {
         console.error('❌ Error en respuesta de productos:', productsData)
         products.value = []
       }
-    } else {
-      console.error('❌ Error cargando productos:', productsResponse.status, productsResponse.statusText)
-      if (productsResponse.status === 401) {
-        errorMessage.value = 'Sesión expirada. Redirigiendo al login...'
+    } catch (err) {
+      // Manejar errores de API
+      if (err.status === 401) {
+        console.error('❌ Token expirado o inválido (401)')
+        errorMessage.value = 'Sesión expirada. Por favor, inicia sesión nuevamente.'
         authStore.resetAuthState()
         setTimeout(() => {
           router.push('/login?redirect=/tpv')
         }, 2000)
+        return
       }
+      
+      console.error('Error cargando productos:', err)
+      errorMessage.value = err.message || 'Error al cargar productos. Verifica la conexión con el servidor.'
       products.value = []
     }
     
@@ -870,40 +858,17 @@ const loadTPVConfig = async () => {
       return
     }
     
-    const response = await fetch('/api/v1/tpv', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
+    // Usar servicio API centralizado
+    const api = (await import('@/services/api')).default
+    const data = await api.get('/api/v1/tpv', token)
     
-    if (response.status === 401) {
-      // Token expirado o inválido
-      console.error('❌ Token expirado o inválido (401) al cargar configuración')
-      authStore.resetAuthState()
-      errorMessage.value = 'Sesión expirada. Redirigiendo al login...'
-      setTimeout(() => {
-        router.push('/login?redirect=/tpv')
-      }, 2000)
-      return
-    }
+    businessProfile.value = data.business_profile
+    tpvConfig.value = data.config || {}
+    console.log('✅ Configuración TPV cargada:', businessProfile.value, tpvConfig.value)
     
-    if (response.ok) {
-      const data = await response.json()
-      businessProfile.value = data.business_profile
-      tpvConfig.value = data.config || {}
-      console.log('✅ Configuración TPV cargada:', businessProfile.value, tpvConfig.value)
-      
-      // Si no hay business_profile, mostrar configuración inicial
-      if (!businessProfile.value) {
-        errorMessage.value = 'Por favor, configura el tipo de negocio antes de usar el TPV'
-      }
-    } else if (response.status === 401) {
-      errorMessage.value = 'Sesión expirada. Redirigiendo al login...'
-      authStore.resetAuthState()
-      setTimeout(() => {
-        router.push('/login?redirect=/tpv')
-      }, 2000)
+    // Si no hay business_profile, mostrar configuración inicial
+    if (!businessProfile.value) {
+      errorMessage.value = 'Por favor, configura el tipo de negocio antes de usar el TPV'
     }
   } catch (err) {
     console.error('Error cargando configuración TPV:', err)
@@ -1260,22 +1225,9 @@ const processPayment = async () => {
       }))
     }
     
-    // Procesar pago en backend
-    const response = await fetch('/api/v1/tpv/sale', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(saleData)
-    })
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ detail: response.statusText }))
-      throw new Error(errorData.detail || `Error ${response.status}: ${response.statusText}`)
-    }
-    
-    const result = await response.json()
+    // Procesar pago en backend usando servicio API centralizado
+    const api = (await import('@/services/api')).default
+    const result = await api.post('/api/v1/tpv/sale', saleData, token)
     
     // Guardar ticket_id para facturación posterior
     const ticketId = result.ticket_id || result.ticket?.id || null
@@ -1543,40 +1495,16 @@ const deleteProduct = async (product) => {
       return
     }
     
-    const response = await fetch(`/api/v1/tpv/products/${product.id}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
+    // Usar servicio API centralizado
+    const api = (await import('@/services/api')).default
+    const result = await api.delete(`/api/v1/tpv/products/${product.id}`, token)
     
-    if (response.status === 401) {
-      console.error('❌ Token expirado (401) al eliminar producto')
-      authStore.resetAuthState()
-      warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
-      router.push('/login?redirect=/tpv')
-      return
-    }
+    console.log('✅ Producto eliminado:', result)
     
-    if (response.ok) {
-      const result = await response.json()
-      console.log('✅ Producto eliminado:', result)
-      
-      // STATE MANAGEMENT: filter by id (sin refresh)
-      products.value = products.value.filter(p => p.id !== product.id)
-      
-      success(`Producto "${product.name}" eliminado correctamente`)
-    } else {
-      const errorData = await response.json().catch(() => ({ detail: response.statusText }))
-      if (response.status === 401) {
-        authStore.resetAuthState()
-        warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
-        router.push('/login?redirect=/tpv')
-        return
-      }
-      throw new Error(errorData.detail || 'Error al eliminar producto')
-    }
+    // STATE MANAGEMENT: filter by id (sin refresh)
+    products.value = products.value.filter(p => p.id !== product.id)
+    
+    success(`Producto "${product.name}" eliminado correctamente`)
   } catch (err) {
     console.error('❌ Error eliminando producto:', err)
     error('Error al eliminar producto: ' + err.message)
@@ -1696,37 +1624,26 @@ const saveProduct = async () => {
     }
     
     const isEditing = editingProduct.value !== null
-    const url = isEditing 
+    // Usar servicio API centralizado
+    const api = (await import('@/services/api')).default
+    const endpoint = isEditing 
       ? `/api/v1/tpv/products/${editingProduct.value.id}`
       : '/api/v1/tpv/products'
     
-    const response = await fetch(url, {
-      method: isEditing ? 'PUT' : 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        name: productForm.value.name.trim(),
-        price: parseFloat(productForm.value.price),
-        category: productForm.value.category || 'General',
-        iva_rate: parseFloat(productForm.value.iva_rate) || 21.0,
-        stock: productForm.value.stock ? parseInt(productForm.value.stock) : null,
-        image: imageUrl,
-        icon: productForm.value.icon || null
-      })
-    })
-    
-    if (response.status === 401) {
-      console.error('❌ Token expirado (401) al guardar producto')
-      authStore.resetAuthState()
-      warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
-      router.push('/login?redirect=/tpv')
-      return
+    const productData = {
+      name: productForm.value.name.trim(),
+      price: parseFloat(productForm.value.price),
+      category: productForm.value.category || 'General',
+      iva_rate: parseFloat(productForm.value.iva_rate) || 21.0,
+      stock: productForm.value.stock ? parseInt(productForm.value.stock) : null,
+      image: imageUrl,
+      icon: productForm.value.icon || null
     }
     
-    if (response.ok) {
-      const result = await response.json()
+    try {
+      const result = isEditing
+        ? await api.put(endpoint, productData, token)
+        : await api.post(endpoint, productData, token)
       console.log('✅ Producto guardado:', result)
       
       const savedProduct = result.product || result
@@ -1748,21 +1665,24 @@ const saveProduct = async () => {
       editingProduct.value = null
       imageFile.value = null
       imagePreview.value = null
-    } else {
-      const errorData = await response.json().catch(() => ({ detail: response.statusText }))
-      if (response.status === 401) {
+    } catch (err) {
+      // Manejar errores de API
+      if (err.status === 401) {
+        console.error('❌ Token expirado (401) al guardar producto')
         authStore.resetAuthState()
         warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
         router.push('/login?redirect=/tpv')
         return
       }
-      throw new Error(errorData.detail || 'Error al guardar producto')
+      
+      console.error('❌ Error guardando producto:', err)
+      const errorMsg = err.message || 'Error al guardar producto'
+      error(errorMsg)
     }
   } catch (err) {
-    console.error('❌ Error guardando producto:', err)
-    error('Error al guardar producto: ' + err.message)
+    console.error('❌ Error general guardando producto:', err)
+    error('Error al guardar producto: ' + (err.message || 'Error desconocido'))
   }
-}
 
 // Cargar al montar
 onMounted(async () => {

@@ -86,28 +86,32 @@ class BaseAgent(ABC):
     
     def make_decision(self, user_message: str, additional_context: Optional[Dict] = None) -> Dict[str, Any]:
         """
-        Tomar decisión usando OpenAI
-        
-        Args:
-            user_message: Mensaje del usuario
-            additional_context: Contexto adicional opcional
-        
-        Returns:
-            Dict con decisión y metadata
+        Tomar decisión usando OpenAI.
+        Usa conversation_history / _memory.short_term si existe (unified runtime).
         """
         self.total_requests += 1
         self.last_request_time = datetime.now()
-        
-        # Construir mensajes
-        messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": user_message}
-        ]
-        
-        # Agregar contexto adicional si existe
+
+        messages = [{"role": "system", "content": self.system_prompt}]
+        history = []
         if additional_context:
-            context_str = f"\n\nContexto adicional:\n{json.dumps(additional_context, indent=2, ensure_ascii=False)}"
-            messages[-1]["content"] += context_str
+            hist = additional_context.get("conversation_history")
+            if hist is None and isinstance(additional_context.get("_memory"), dict):
+                hist = additional_context["_memory"].get("short_term")
+            if isinstance(hist, list) and hist:
+                for m in hist:
+                    if isinstance(m, dict) and m.get("role") in ("user", "assistant") and m.get("content"):
+                        history.append({"role": m["role"], "content": m["content"]})
+        if history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": user_message})
+
+        if additional_context:
+            skip = {"conversation_history", "_memory", "user_message"}
+            extra = {k: v for k, v in additional_context.items() if k not in skip and not k.startswith("_")}
+            if extra:
+                context_str = f"\n\nContexto adicional:\n{json.dumps(extra, indent=2, ensure_ascii=False)}"
+                messages[-1]["content"] = messages[-1]["content"] + context_str
         
         # Llamar a OpenAI
         response = chat_completion(

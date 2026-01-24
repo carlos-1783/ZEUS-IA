@@ -56,6 +56,7 @@ def create_tables():
             from app.models.erp import Invoice, Product, Payment, TPVProduct
             from app.models.agent_activity import AgentActivity
             from app.models.document_approval import DocumentApproval
+            from app.models.agent_memory import AgentOperationalState, AgentDecisionLog, AgentShortTermBuffer
             
             Base.metadata.create_all(bind=engine)
             print("[DATABASE] [OK] Tablas creadas correctamente")

@@ -14,7 +14,6 @@ from app.db.session import SessionLocal
 from app.models.agent_activity import AgentActivity
 from services.activity_logger import ActivityLogger
 
-from .handlers import resolve_handler
 from .utils import merge_dict
 
 
@@ -80,18 +79,10 @@ class AgentAutomationExecutor:
             session.close()
 
     def _handle_activity(self, session, activity: AgentActivity) -> None:
+        from services.unified_agent_runtime import run_workspace_task
+
+        result = run_workspace_task(activity)
         agent = (activity.agent_name or "").upper()
-        action = activity.action_type or ""
-        handler = resolve_handler(agent, action)
-
-        if handler is None:
-            result = {
-                "status": "completed",
-                "notes": f"Actividad '{activity.action_description}' completada automáticamente.",
-            }
-        else:
-            result = handler(activity)
-
         status = result.get("status", "completed")
 
         activity.status = status

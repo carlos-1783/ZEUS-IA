@@ -104,6 +104,7 @@ AGENTS = {
 class ChatRequest(BaseModel):
     message: str
     context: Optional[dict] = None
+    thread_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     agent: str
@@ -155,40 +156,44 @@ async def chat_with_agent(agent_name: str, request: ChatRequest):
         )
     
     try:
-        # Procesar solicitud
+        from services.unified_agent_runtime import run_chat
+
         context = request.context or {}
         context["user_message"] = request.message
-        
-        # Obtener respuesta del agente
-        result = agent.process_request(context)
-        
-        # Extraer respuesta
+        thread_id = request.thread_id or context.get("thread_id") or "main"
+        company_id = context.get("company_id") or context.get("user_email")
+
+        result = run_chat(
+            agent_name=agent_name,
+            thread_id=thread_id,
+            message=request.message,
+            company_id=company_id,
+            context=context,
+        )
+
         if result.get("success"):
             return ChatResponse(
                 agent=agent_name,
-                message=result.get("content", result.get("response", "Sin respuesta")),
+                message=result.get("message", "Sin respuesta"),
                 success=True,
                 confidence=result.get("confidence"),
-                hitl_required=result.get("human_approval_required", False)
+                hitl_required=result.get("hitl_required", False),
             )
-        else:
-            return ChatResponse(
-                agent=agent_name,
-                message=f"Error: {result.get('error', 'Error desconocido')}",
-                success=False,
-                error=result.get("error")
-            )
-            
+        return ChatResponse(
+            agent=agent_name,
+            message=result.get("message", f"Error: {result.get('error', 'Error desconocido')}"),
+            success=False,
+            error=result.get("error"),
+        )
     except Exception as e:
         print(f"❌ Error en chat con {agent_name}: {e}")
         import traceback
         traceback.print_exc()
-        
         return ChatResponse(
             agent=agent_name,
             message=f"Error interno: {str(e)}",
             success=False,
-            error=str(e)
+            error=str(e),
         )
 
 @router.post("/agents/communicate")

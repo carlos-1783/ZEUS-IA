@@ -1,50 +1,55 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError, DisconnectionError
+from fastapi import HTTPException
 from app.db.base import SessionLocal
 import logging
 import time
 
 logger = logging.getLogger(__name__)
 
+
 def get_db():
     """Obtener sesión de base de datos con reintentos automáticos"""
     max_retries = 3
     retry_delay = 1
-    
+
     for attempt in range(max_retries):
         try:
             db: Session = SessionLocal()
-            # Verificar que la conexión funciona con una query simple
             try:
                 from sqlalchemy import text
                 db.execute(text("SELECT 1"))
             except Exception as verify_error:
-                # Si falla la verificación, cerrar y reintentar
                 db.close()
                 error_msg = str(verify_error).lower()
-                if any(keyword in error_msg for keyword in ["connection", "conexión", "timeout"]):
-                    raise  # Re-lanzar para que se maneje en el retry
-                raise  # Re-lanzar otros errores
+                if any(k in error_msg for k in ["connection", "conexión", "timeout"]):
+                    raise
+                raise
             try:
                 yield db
             finally:
                 db.close()
-            return  # Éxito, salir
-            
+            return
+
         except (OperationalError, DisconnectionError) as e:
             error_msg = str(e).lower()
-            if attempt < max_retries - 1 and any(keyword in error_msg for keyword in [
-                "connection", "conexión", "timeout", "refused", "reset", "operationalerror"
-            ]):
-                logger.warning(f"Error de conexión a BD (intento {attempt + 1}/{max_retries}), reintentando...")
+            if attempt < max_retries - 1 and any(
+                k in error_msg for k in [
+                    "connection", "conexión", "timeout", "refused", "reset", "operationalerror"
+                ]
+            ):
+                logger.warning(
+                    "Error de conexión a BD (intento %d/%d), reintentando...",
+                    attempt + 1, max_retries,
+                )
                 time.sleep(retry_delay)
                 retry_delay *= 2
                 continue
-            else:
-                logger.error(f"Error crítico de conexión a BD después de {max_retries} intentos: {e}")
-                # Lanzar el error para que FastAPI lo maneje
-                raise
+            logger.error("Error crítico de conexión a BD después de %d intentos: %s", max_retries, e)
+            raise
+        except HTTPException:
+            # 401 Token expirado, 403, etc.: no son errores de BD, propagar sin logear como get_db
+            raise
         except Exception as e:
-            # Otros errores, lanzar directamente
-            logger.error(f"Error inesperado en get_db: {e}")
+            logger.error("Error inesperado en get_db: %s", e)
             raise

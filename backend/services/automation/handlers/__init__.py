@@ -19,10 +19,19 @@ from .thalos import (
     handle_thalos_alerts,
     handle_thalos_backup,
 )
+from .generic_internal import handle_generic_internal, GENERIC_INTERNAL_HANDLER_NAME
 
 
 HandlerType = Callable[[AgentActivity], Dict[str, object]]
 
+# Action types that use GENERIC_INTERNAL_HANDLER (persist payload, no simulation)
+GENERIC_INTERNAL_ACTION_TYPES = frozenset({
+    "autonomo_paperwork_prepare",
+    "pricing_review",
+    "stripe_readiness_check",
+    "daily_internal_log",
+    "system_friction_detected",
+})
 
 HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
     "PERSEO": {
@@ -42,6 +51,11 @@ HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
     "ZEUS": {
         "coordination": handle_zeus_task,
         "task_delegated": handle_zeus_task,
+        "autonomo_paperwork_prepare": handle_generic_internal,
+        "pricing_review": handle_generic_internal,
+        "stripe_readiness_check": handle_generic_internal,
+        "daily_internal_log": handle_generic_internal,
+        "system_friction_detected": handle_generic_internal,
     },
     "THALOS": {
         "security_scan": handle_thalos_security_scan,
@@ -53,7 +67,9 @@ HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
 
 def resolve_handler(agent: str, action_type: str) -> Optional[HandlerType]:
     agent_handlers = HANDLER_MAP.get(agent.upper())
-    if not agent_handlers:
-        return None
-    return agent_handlers.get(action_type)
+    if agent_handlers and action_type in agent_handlers:
+        return agent_handlers.get(action_type)
+    if action_type in GENERIC_INTERNAL_ACTION_TYPES:
+        return handle_generic_internal
+    return None
 

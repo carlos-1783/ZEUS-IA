@@ -1,6 +1,7 @@
 from fastapi import APIRouter, WebSocket
 
 from app.api.v1.endpoints import (
+    actions,
     auth,
     commands,
     health,
@@ -84,6 +85,7 @@ api_router.include_router(automation_outputs.router, prefix="/automation", tags=
 api_router.include_router(system_status.router, prefix="/system", tags=["system-status"])
 api_router.include_router(perseo_images.router, tags=["perseo-images"])
 api_router.include_router(teamflow.router, tags=["teamflow"])
+api_router.include_router(actions.router, tags=["actions"])
 api_router.include_router(workspaces.router, tags=["workspaces"])
 
 # WebSocket endpoint - CORREGIDO para Railway

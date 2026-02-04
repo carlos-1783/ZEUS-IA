@@ -103,11 +103,14 @@ def run_workspace_task(activity) -> Dict[str, Any]:
 
     if handler is None:
         result = {
-            "status": "completed",
-            "notes": f"Actividad '{activity.action_description}' completada automáticamente.",
+            "status": "blocked_missing_handler",
+            "notes": f"No handler for ({agent_name}, {activity.action_type}). Execution blocked.",
+            "executed_handler": None,
         }
     else:
         result = handler(activity)
+        if "executed_handler" not in result:
+            result["executed_handler"] = getattr(handler, "__name__", None)
 
     status = result.get("status", "completed")
     artifacts = result.get("details_update", {}).get("automation", {}).get("deliverables") or result.get("details_update") or {}

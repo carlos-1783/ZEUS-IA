@@ -86,8 +86,10 @@ class AgentAutomationExecutor:
         status = result.get("status", "completed")
 
         activity.status = status
-        if status == "completed":
+        if status in ("completed", "executed_internal", "failed"):
             activity.completed_at = datetime.utcnow()
+        elif status == "blocked_missing_handler":
+            activity.completed_at = None
 
         if "details_update" in result:
             activity.details = merge_dict(activity.details, result["details_update"])
@@ -95,24 +97,43 @@ class AgentAutomationExecutor:
         if "metrics_update" in result:
             activity.metrics = merge_dict(activity.metrics, result["metrics_update"])
 
-        note = result.get("notes")
+        executed_handler = result.get("executed_handler")
+        if executed_handler is not None:
+            activity.metrics = merge_dict(activity.metrics or {}, {"executed_handler": executed_handler})
 
+        note = result.get("notes")
         session.add(activity)
         session.commit()
 
-        ActivityLogger.log_activity(
-            agent_name=agent,
-            action_type="automation_update",
-            action_description=f"Tarea '{activity.action_description}' atendida automáticamente.",
-            details={
-                "original_activity_id": activity.id,
-                "automation_status": status,
-                "note": note,
-            },
-            metrics=result.get("metrics_update"),
-            status=status,
-            priority=activity.priority,
-        )
+        if status == "blocked_missing_handler":
+            ActivityLogger.log_activity(
+                agent_name=agent,
+                action_type="automation_blocked",
+                action_description=f"Actividad bloqueada: sin handler para ({agent}, {activity.action_type}).",
+                details={
+                    "original_activity_id": activity.id,
+                    "automation_status": status,
+                    "note": note,
+                },
+                metrics=result.get("metrics_update"),
+                status=status,
+                priority=activity.priority,
+            )
+        else:
+            ActivityLogger.log_activity(
+                agent_name=agent,
+                action_type="automation_update",
+                action_description=f"Tarea '{activity.action_description}' atendida.",
+                details={
+                    "original_activity_id": activity.id,
+                    "automation_status": status,
+                    "executed_handler": executed_handler,
+                    "note": note,
+                },
+                metrics=result.get("metrics_update"),
+                status=status,
+                priority=activity.priority,
+            )
 
 
 _executor = AgentAutomationExecutor()

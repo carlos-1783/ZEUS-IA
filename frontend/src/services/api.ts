@@ -1,7 +1,10 @@
 /**
  * Servicio API Centralizado
  * Usa VITE_API_BASE_URL para compatibilidad LOCAL + Railway
+ * Incluye refresh de token en 401: reintento automático tras refresh.
  */
+
+import { useAuthStore } from '@/stores/auth';
 
 // Obtener URL base del backend desde variable de entorno
 // En desarrollo: usa proxy de Vite o localhost:8000
@@ -29,93 +32,131 @@ const API_BASE_URL = getApiBaseUrl();
  * Construir URL completa del endpoint
  */
 const buildUrl = (endpoint: string): string => {
-  // Si ya es URL completa, usar directamente
   if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
     return endpoint;
   }
-  
-  // Asegurar que endpoint empiece con /
   const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  
-  // Si hay API_BASE_URL, concatenar
   if (API_BASE_URL) {
     return `${API_BASE_URL}${normalizedEndpoint}`;
   }
-  
-  // Sin API_BASE_URL: ruta relativa (funciona cuando backend sirve frontend)
   return normalizedEndpoint;
 };
 
+/** Endpoints donde no se debe intentar refresh en 401 (login, refresh, etc.) */
+const SKIP_REFRESH_PATHS = ['/auth/login', '/auth/refresh', '/auth/register', '/health'];
+
+function shouldSkipRefresh(endpoint: string): boolean {
+  return SKIP_REFRESH_PATHS.some((p) => endpoint.includes(p));
+}
+
+function hadAuthHeader(headers?: HeadersInit): boolean {
+  if (!headers || typeof headers !== 'object') return false;
+  const h = headers as Record<string, string>;
+  return !!(h.Authorization ?? h.authorization);
+}
+
+type RequestOptions = RequestInit & { _retry?: boolean };
+
 /**
- * Realizar petición HTTP
+ * Realizar petición HTTP. En 401 con token enviado: intenta refresh y reintenta una vez.
  */
-const request = async (
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<any> => {
+const request = async (endpoint: string, options: RequestOptions = {}): Promise<any> => {
   const url = buildUrl(endpoint);
-  
-  // Si el body es FormData, NO añadir Content-Type (el navegador lo hace automáticamente)
   const isFormData = options.body instanceof FormData;
   const headers: HeadersInit = isFormData
     ? { ...(options.headers || {}) }
-    : {
-        'Content-Type': 'application/json',
-        ...(options.headers || {}),
-      };
-  
+    : { 'Content-Type': 'application/json', ...(options.headers || {}) };
+
+  let response: Response;
   try {
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
-    
-    // Si no hay respuesta, lanzar error
-    if (!response.ok) {
-      // Si es 401, es problema de autenticación
-      if (response.status === 401) {
-        const error = new Error('Unauthorized') as any;
-        error.status = 401;
-        error.response = response;
-        throw error;
-      }
-      
-      // Intentar parsear error del servidor
-      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.detail || errorData.message || errorMessage;
-      } catch {
-        // Si no se puede parsear, usar mensaje por defecto
-      }
-      
-      const error = new Error(errorMessage) as any;
-      error.status = response.status;
-      error.response = response;
-      throw error;
-    }
-    
-    // Parsear respuesta JSON
-    const contentType = response.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      return await response.json();
-    }
-    
-    // Si no es JSON, devolver texto
-    return await response.text();
-  } catch (error: any) {
-    // Si es error de red (CORS, conexión, etc.)
-    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+    const { _retry, ...fetchInit } = options;
+    response = await fetch(url, { ...fetchInit, headers });
+  } catch (err: any) {
+    if (err?.name === 'TypeError' && err?.message?.includes('fetch')) {
       const apiBase = API_BASE_URL || 'mismo origen';
-      const errorMsg = new Error(`No se pudo conectar con el servidor (${apiBase}). Verifica que el backend esté ejecutándose y que VITE_API_BASE_URL esté configurada correctamente.`) as any;
-      errorMsg.isConnectionError = true;
-      errorMsg.url = url;
-      throw errorMsg;
+      const e = new Error(`No se pudo conectar con el servidor (${apiBase}). Verifica que el backend esté ejecutándose y que VITE_API_BASE_URL esté configurada correctamente.`) as any;
+      e.isConnectionError = true;
+      e.url = url;
+      throw e;
     }
-    
+    throw err;
+  }
+
+  if (!response.ok && response.status === 401) {
+    const canRetry =
+      hadAuthHeader(options.headers) &&
+      !shouldSkipRefresh(endpoint) &&
+      !options._retry;
+
+    if (canRetry) {
+      try {
+        const authStore = useAuthStore();
+        const ok = await authStore.refreshAccessToken();
+        if (ok) {
+          const newToken = authStore.getToken?.() ?? authStore.token;
+          if (newToken) {
+            const newHeaders = { ...(headers as Record<string, string>), Authorization: `Bearer ${newToken}` };
+            return request(endpoint, { ...options, headers: newHeaders, _retry: true });
+          }
+        }
+      } catch (e) {
+        console.warn('[api] Refresh en 401 falló:', e);
+      }
+    }
+
+    const err = new Error('Unauthorized') as any;
+    err.status = 401;
+    err.response = response;
+    throw err;
+  }
+
+  if (!response.ok) {
+    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.detail ?? errorData.message ?? errorMessage;
+    } catch {
+      /* ignore */
+    }
+    const error = new Error(errorMessage) as any;
+    error.status = response.status;
+    error.response = response;
     throw error;
   }
+
+  const contentType = response.headers.get('content-type');
+  if (contentType?.includes('application/json')) {
+    return response.json();
+  }
+  return response.text();
 };
+
+async function getBlobInternal(endpoint: string, token?: string, _retry = false): Promise<Blob> {
+  const url = buildUrl(endpoint);
+  const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+  let response = await fetch(url, { method: 'GET', headers });
+
+  if (!response.ok && response.status === 401 && token && !shouldSkipRefresh(endpoint) && !_retry) {
+    try {
+      const authStore = useAuthStore();
+      const ok = await authStore.refreshAccessToken();
+      if (ok) {
+        const newToken = authStore.getToken?.() ?? authStore.token;
+        if (newToken) return getBlobInternal(endpoint, newToken, true);
+      }
+    } catch (e) {
+      console.warn('[api] Refresh en 401 (getBlob) falló:', e);
+    }
+  }
+
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status}: ${response.statusText}`) as any;
+    error.status = response.status;
+    error.response = response;
+    throw error;
+  }
+  return response.blob();
+}
 
 /**
  * API Service
@@ -188,22 +229,10 @@ export const api = {
   },
   
   /**
-   * GET que devuelve Blob (para descargas)
+   * GET que devuelve Blob (para descargas). Refresh en 401 y reintento único.
    */
   async getBlob(endpoint: string, token?: string): Promise<Blob> {
-    const url = buildUrl(endpoint);
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    
-    if (!response.ok) {
-      const error = new Error(`HTTP ${response.status}: ${response.statusText}`) as any;
-      error.status = response.status;
-      throw error;
-    }
-    
-    return await response.blob();
+    return getBlobInternal(endpoint, token);
   },
   
   /**

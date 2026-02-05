@@ -44,6 +44,21 @@ async def stripe_webhook_health():
     }
 
 
+@router.get("/twilio")
+async def twilio_webhook_health():
+    """
+    Health check endpoint for Twilio webhook.
+    Returns 200 OK if endpoint is accessible.
+    """
+    return {
+        "status": "ok",
+        "endpoint": "/api/v1/webhooks/twilio",
+        "method": "POST",
+        "events": ["message.received", "message.sent"],
+        "description": "Twilio WhatsApp webhook handler"
+    }
+
+
 def generate_random_password(length: int = 16) -> str:
     """Generate secure random password"""
     import secrets

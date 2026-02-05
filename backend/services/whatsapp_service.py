@@ -12,7 +12,7 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 try:
-    from twilio.rest import Client
+    from twilio.rest import Client  # type: ignore[reportMissingImports]
     TWILIO_AVAILABLE = True
 except ImportError:
     TWILIO_AVAILABLE = False

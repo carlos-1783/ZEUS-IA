@@ -25,12 +25,24 @@ from .generic_internal import handle_generic_internal, GENERIC_INTERNAL_HANDLER_
 HandlerType = Callable[[AgentActivity], Dict[str, object]]
 
 # Action types that use GENERIC_INTERNAL_HANDLER (persist payload, no simulation)
+# These are internal actions that need persistence but don't require external execution
 GENERIC_INTERNAL_ACTION_TYPES = frozenset({
+    # ZEUS internal
     "autonomo_paperwork_prepare",
     "pricing_review",
     "stripe_readiness_check",
     "daily_internal_log",
     "system_friction_detected",
+    # RAFAEL critical (fiscal workflows)
+    "invoice_sent",  # Invoice generation - requires real handler in future
+    # JUSTICIA critical (legal workflows)
+    "contract_generator",  # Contract generation - requires real handler in future
+    "document_signed",  # Document signing - requires real handler in future
+    # AFRODITA critical (HR workflows)
+    "contract_creator_rrhh",  # HR contract creation - requires real handler in future
+    # PERSEO critical (marketing workflows)
+    "image_analyzer",  # Image analysis - requires real handler in future
+    "ads_campaign_builder",  # Campaign builder - requires real handler in future
 })
 
 HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
@@ -57,6 +69,8 @@ HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
         "daily_internal_log": handle_generic_internal,
         "system_friction_detected": handle_generic_internal,
     },
+    # Critical action types mapped to generic handler (will be blocked if not in GENERIC_INTERNAL_ACTION_TYPES)
+    # These will use GENERIC_INTERNAL_HANDLER via resolve_handler fallback
     "THALOS": {
         "security_scan": handle_thalos_security_scan,
         "task_assigned": handle_thalos_alerts,

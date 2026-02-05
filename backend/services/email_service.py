@@ -88,18 +88,61 @@ class EmailService:
             # Enviar
             response = self.client.send(message)
             
-            return {
+            result = {
                 "success": True,
                 "status_code": response.status_code,
                 "to": to_email,
                 "subject": subject
             }
             
+            # ✅ REGISTRAR ACTIVIDAD: Email enviado directamente
+            try:
+                from services.activity_logger import ActivityLogger
+                ActivityLogger.log_activity(
+                    agent_name="ZEUS",
+                    action_type="email_sent",
+                    action_description=f"Email enviado a {to_email}: {subject}",
+                    details={
+                        "to": to_email,
+                        "subject": subject,
+                        "status_code": response.status_code,
+                        "content_type": content_type,
+                    },
+                    metrics={"status_code": response.status_code},
+                    status="completed",
+                    priority="normal"
+                )
+            except Exception as log_error:
+                # No fallar si el logging falla, pero registrar en consola
+                print(f"[EMAIL] Error registrando actividad: {log_error}")
+            
+            return result
+            
         except Exception as e:
-            return {
+            error_result = {
                 "success": False,
                 "error": str(e)
             }
+            
+            # ✅ REGISTRAR ERROR: Email fallido
+            try:
+                from services.activity_logger import ActivityLogger
+                ActivityLogger.log_activity(
+                    agent_name="ZEUS",
+                    action_type="email_error",
+                    action_description=f"Error enviando email a {to_email}: {str(e)}",
+                    details={
+                        "to": to_email,
+                        "subject": subject,
+                        "error": str(e),
+                    },
+                    status="failed",
+                    priority="high"
+                )
+            except Exception:
+                pass
+            
+            return error_result
     
     async def process_incoming_email(
         self,

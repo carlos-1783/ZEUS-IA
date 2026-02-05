@@ -75,21 +75,88 @@ class WhatsAppService:
             if media_url:
                 message_params["media_url"] = [media_url]
             
+            # Verificar si está en sandbox (número por defecto)
+            is_sandbox = "14155238886" in self.whatsapp_number or "sandbox" in self.whatsapp_number.lower()
+            
+            if is_sandbox:
+                # ✅ BLOQUEAR EN PRODUCCIÓN: Sandbox solo para pruebas
+                from services.activity_logger import ActivityLogger
+                ActivityLogger.log_activity(
+                    agent_name="ZEUS",
+                    action_type="whatsapp_blocked",
+                    action_description=f"Envio WhatsApp bloqueado: modo sandbox activo",
+                    details={
+                        "to": to_number,
+                        "whatsapp_number": self.whatsapp_number,
+                        "reason": "sandbox_mode",
+                        "message_preview": message[:50] if message else None,
+                    },
+                    status="blocked",
+                    priority="high"
+                )
+                return {
+                    "success": False,
+                    "error": "WhatsApp en modo sandbox. Configura TWILIO_WHATSAPP_NUMBER con número productivo.",
+                    "blocked": True,
+                    "reason": "sandbox_mode"
+                }
+            
             # Enviar mensaje
             twilio_message = self.client.messages.create(**message_params)
             
-            return {
+            result = {
                 "success": True,
                 "message_sid": twilio_message.sid,
                 "status": twilio_message.status,
                 "to": to_number
             }
             
+            # ✅ REGISTRAR ACTIVIDAD: WhatsApp enviado directamente
+            try:
+                from services.activity_logger import ActivityLogger
+                ActivityLogger.log_activity(
+                    agent_name="ZEUS",
+                    action_type="whatsapp_sent",
+                    action_description=f"WhatsApp enviado a {to_number}",
+                    details={
+                        "to": to_number,
+                        "message_sid": twilio_message.sid,
+                        "status": twilio_message.status,
+                        "message_preview": message[:50] if message else None,
+                    },
+                    metrics={"status": twilio_message.status},
+                    status="completed",
+                    priority="high"
+                )
+            except Exception as log_error:
+                print(f"[WHATSAPP] Error registrando actividad: {log_error}")
+            
+            return result
+            
         except Exception as e:
-            return {
+            error_result = {
                 "success": False,
                 "error": str(e)
             }
+            
+            # ✅ REGISTRAR ERROR: WhatsApp fallido
+            try:
+                from services.activity_logger import ActivityLogger
+                ActivityLogger.log_activity(
+                    agent_name="ZEUS",
+                    action_type="whatsapp_error",
+                    action_description=f"Error enviando WhatsApp a {to_number}: {str(e)}",
+                    details={
+                        "to": to_number,
+                        "error": str(e),
+                    },
+                    status="failed",
+                    priority="high"
+                )
+            except Exception:
+                pass
+            
+            return error_result
     
     async def process_incoming_message(
         self, 

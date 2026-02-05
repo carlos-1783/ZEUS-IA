@@ -26,6 +26,7 @@ from app.api.v1.endpoints import (
     tpv,
     admin,
     control_horario,
+    webhooks,
 )
 from app.api.v1.endpoints.websocket import websocket_endpoint
 
@@ -87,6 +88,7 @@ api_router.include_router(perseo_images.router, tags=["perseo-images"])
 api_router.include_router(teamflow.router, tags=["teamflow"])
 api_router.include_router(actions.router, tags=["actions"])
 api_router.include_router(workspaces.router, tags=["workspaces"])
+api_router.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 
 # WebSocket endpoint - CORREGIDO para Railway
 @api_router.websocket("/ws/{client_id}")

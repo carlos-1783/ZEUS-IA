@@ -25,6 +25,10 @@ class User(Base):
     employees = Column(Integer, nullable=True)
     plan = Column(String, nullable=True)  # startup, growth, business, enterprise
     
+    # Stripe integration
+    stripe_customer_id = Column(String, nullable=True, index=True)
+    stripe_subscription_id = Column(String, nullable=True)
+    
     # TPV Universal - Business Profile
     tpv_business_profile = Column(String, nullable=True, index=True)  # restaurante, bar, tienda_minorista, etc.
     tpv_config = Column(Text, nullable=True)  # JSON config: {"tables_enabled": true, "services_enabled": false, etc.}

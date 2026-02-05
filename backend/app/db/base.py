@@ -120,7 +120,9 @@ def _migrate_user_columns():
             "tpv_business_profile": "VARCHAR(100)" if is_postgres else "TEXT",
             "tpv_config": "TEXT",  # JSON config
             "control_horario_business_profile": "VARCHAR(100)" if is_postgres else "TEXT",
-            "control_horario_config": "TEXT"  # JSON config
+            "control_horario_config": "TEXT",  # JSON config
+            "stripe_customer_id": "VARCHAR(255)" if is_postgres else "TEXT",
+            "stripe_subscription_id": "VARCHAR(255)" if is_postgres else "TEXT"
         }
         
         added_columns = []

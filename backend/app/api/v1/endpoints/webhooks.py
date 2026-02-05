@@ -19,6 +19,7 @@ from app.models.user import User
 from services.activity_logger import ActivityLogger
 from services.email_service import email_service
 from services.stripe_service import stripe_service
+from services.whatsapp_service import whatsapp_service
 
 
 router = APIRouter(tags=["webhooks"])
@@ -281,10 +282,12 @@ async def stripe_webhook_handler(
                 "is_new_user": is_new_user,
                 "user_id": user.id,
                 "email_sent": email_sent,
+                "executed_handler": "STRIPE_WEBHOOK_HANDLER",
             },
             metrics={
                 "amount": amount,
                 "currency": currency,
+                "executed_handler": "STRIPE_WEBHOOK_HANDLER",
             },
             user_email=customer_email,
             status="completed",
@@ -319,3 +322,118 @@ async def stripe_webhook_handler(
         )
     finally:
         db.close()
+
+
+@router.post("/twilio")
+async def twilio_webhook_handler(request: Request):
+    """
+    Twilio webhook handler: receives WhatsApp messages, persists and processes.
+    Endpoint: POST /api/v1/webhooks/twilio
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[WEBHOOK] Twilio webhook recibido - Method: {request.method}")
+    
+    try:
+        form_data = await request.form()
+        
+        from_number = form_data.get("From", "").replace("whatsapp:", "")
+        to_number = form_data.get("To", "").replace("whatsapp:", "")
+        message_body = form_data.get("Body", "")
+        message_sid = form_data.get("MessageSid", "")
+        account_sid = form_data.get("AccountSid", "")
+        num_media = form_data.get("NumMedia", "0")
+        
+        if not from_number or not message_body:
+            ActivityLogger.log_activity(
+                agent_name="ZEUS",
+                action_type="whatsapp_webhook_error",
+                action_description="Twilio webhook sin from_number o message_body",
+                details={"form_data_keys": list(form_data.keys())},
+                status="failed",
+                priority="high"
+            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing From or Body")
+        
+        # Verificar si Twilio está en sandbox
+        is_sandbox = "14155238886" in to_number or "sandbox" in to_number.lower()
+        
+        # Registrar mensaje recibido
+        ActivityLogger.log_activity(
+            agent_name="ZEUS",
+            action_type="whatsapp_received",
+            action_description=f"WhatsApp recibido de {from_number}",
+            details={
+                "from": from_number,
+                "to": to_number,
+                "body": message_body[:200],  # Primeros 200 caracteres
+                "message_sid": message_sid,
+                "account_sid": account_sid,
+                "num_media": num_media,
+                "is_sandbox": is_sandbox,
+                "executed_handler": "TWILIO_WEBHOOK_HANDLER",
+            },
+            metrics={
+                "executed_handler": "TWILIO_WEBHOOK_HANDLER",
+                "is_sandbox": is_sandbox,
+            },
+            status="completed",
+            priority="high"
+        )
+        
+        # Procesar mensaje con agente (si no está en sandbox o si se permite procesar sandbox)
+        if is_sandbox:
+            logger.warning(f"[WEBHOOK] Mensaje recibido en sandbox de {from_number}")
+        
+        result = await whatsapp_service.process_incoming_message(
+            from_number=from_number,
+            message_body=message_body,
+            agent_name="ZEUS CORE"
+        )
+        
+        # Registrar respuesta enviada si fue exitosa
+        if result.get("success") and result.get("whatsapp_status", {}).get("success"):
+            ActivityLogger.log_activity(
+                agent_name="ZEUS",
+                action_type="whatsapp_sent",
+                action_description=f"WhatsApp enviado a {from_number} (respuesta automática)",
+                details={
+                    "to": from_number,
+                    "from": to_number,
+                    "response_preview": result.get("response", "")[:100],
+                    "message_sid": result.get("whatsapp_status", {}).get("message_sid"),
+                    "executed_handler": "TWILIO_WEBHOOK_HANDLER",
+                },
+                metrics={
+                    "executed_handler": "TWILIO_WEBHOOK_HANDLER",
+                },
+                status="completed",
+                priority="high"
+            )
+        
+        return {
+            "received": True,
+            "processed": True,
+            "from": from_number,
+            "message_sid": message_sid,
+            "agent_response": result.get("success", False),
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[WEBHOOK] Error procesando webhook de Twilio: {e}")
+        ActivityLogger.log_activity(
+            agent_name="ZEUS",
+            action_type="whatsapp_webhook_error",
+            action_description=f"Error procesando webhook de Twilio: {str(e)}",
+            details={
+                "error": str(e),
+            },
+            status="failed",
+            priority="critical"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing Twilio webhook: {str(e)}"
+        )

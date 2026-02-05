@@ -158,81 +158,94 @@ async function getBlobInternal(endpoint: string, token?: string, _retry = false)
   return response.blob();
 }
 
+/** Obtener token actual del store cuando no se pasa explícitamente (evita 401 por token faltante). */
+function authToken(passed?: string | null): string | null {
+  if (passed) return passed;
+  const store = useAuthStore();
+  return store.getToken?.() ?? store.token ?? null;
+}
+
 /**
  * API Service
  */
 export const api = {
   baseURL: API_BASE_URL,
-  
+
   /**
-   * GET request
+   * GET request. Si no se pasa token, se usa el del auth store (evita 401 en /metrics/summary etc).
    */
-  async get(endpoint: string, token?: string): Promise<any> {
+  async get(endpoint: string, token?: string | null): Promise<any> {
+    const t = authToken(token);
     return request(endpoint, {
       method: 'GET',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: t ? { Authorization: `Bearer ${t}` } : {},
     });
   },
-  
+
   /**
    * POST request
    */
-  async post(endpoint: string, data?: any, token?: string): Promise<any> {
+  async post(endpoint: string, data?: any, token?: string | null): Promise<any> {
+    const t = authToken(token);
     return request(endpoint, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: t ? { Authorization: `Bearer ${t}` } : {},
     });
   },
-  
+
   /**
    * PUT request
    */
-  async put(endpoint: string, data?: any, token?: string): Promise<any> {
+  async put(endpoint: string, data?: any, token?: string | null): Promise<any> {
+    const t = authToken(token);
     return request(endpoint, {
       method: 'PUT',
       body: data ? JSON.stringify(data) : undefined,
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: t ? { Authorization: `Bearer ${t}` } : {},
     });
   },
-  
+
   /**
    * DELETE request
    */
-  async delete(endpoint: string, token?: string): Promise<any> {
+  async delete(endpoint: string, token?: string | null): Promise<any> {
+    const t = authToken(token);
     return request(endpoint, {
       method: 'DELETE',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: t ? { Authorization: `Bearer ${t}` } : {},
     });
   },
-  
+
   /**
    * PATCH request
    */
-  async patch(endpoint: string, data?: any, token?: string): Promise<any> {
+  async patch(endpoint: string, data?: any, token?: string | null): Promise<any> {
+    const t = authToken(token);
     return request(endpoint, {
       method: 'PATCH',
       body: data ? JSON.stringify(data) : undefined,
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: t ? { Authorization: `Bearer ${t}` } : {},
     });
   },
-  
+
   /**
    * POST con FormData (para upload de archivos)
    */
-  async postFormData(endpoint: string, formData: FormData, token?: string): Promise<any> {
+  async postFormData(endpoint: string, formData: FormData, token?: string | null): Promise<any> {
+    const t = authToken(token);
     return request(endpoint, {
       method: 'POST',
       body: formData,
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: t ? { Authorization: `Bearer ${t}` } : {},
     });
   },
-  
+
   /**
    * GET que devuelve Blob (para descargas). Refresh en 401 y reintento único.
    */
-  async getBlob(endpoint: string, token?: string): Promise<Blob> {
-    return getBlobInternal(endpoint, token);
+  async getBlob(endpoint: string, token?: string | null): Promise<Blob> {
+    return getBlobInternal(endpoint, authToken(token) ?? undefined);
   },
   
   /**

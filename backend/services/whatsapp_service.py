@@ -1,13 +1,12 @@
 """
 🔷 WhatsApp Service - Twilio Integration
-Automatiza respuestas a clientes por WhatsApp.
-Fuente de verdad: ENV VARS (WHATSAPP_SANDBOX_MODE, ENVIRONMENT).
-Si WHATSAPP_SANDBOX_MODE=false y ENVIRONMENT=production → enviar SIEMPRE.
+Envío depende ÚNICAMENTE de credenciales Twilio válidas.
+SI existen TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN y TWILIO_WHATSAPP_NUMBER (o TWILIO_WHATSAPP_FROM) → enviar.
+Sin candados ni flags adicionales.
 """
 import os
 import logging
 from typing import Optional, Dict, Any
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -19,33 +18,18 @@ except ImportError:
     Client = None
 
 
-def _whatsapp_sandbox_mode() -> bool:
-    """Única fuente de verdad: env var WHATSAPP_SANDBOX_MODE."""
-    return os.getenv("WHATSAPP_SANDBOX_MODE", "false").strip().lower() in ("true", "1", "yes")
-
-
-def _environment_is_production() -> bool:
-    """Entorno de producción."""
-    env = os.getenv("ENVIRONMENT", os.getenv("RAILWAY_ENVIRONMENT", "")).strip().lower()
-    return env == "production"
-
-
-def _send_allowed() -> bool:
-    """Si WHATSAPP_SANDBOX_MODE=false y ENVIRONMENT=production → enviar SIEMPRE."""
-    if _whatsapp_sandbox_mode():
-        return False
-    if _environment_is_production():
-        return True
-    return True  # Permitir en no-production si sandbox_mode no está forzado
-
-
 class WhatsAppService:
     """Servicio para automatización de WhatsApp vía Twilio"""
     
     def __init__(self):
         self.account_sid = os.getenv("TWILIO_ACCOUNT_SID")
         self.auth_token = os.getenv("TWILIO_AUTH_TOKEN")
-        self.whatsapp_number = os.getenv("TWILIO_WHATSAPP_NUMBER", "whatsapp:+14155238886")
+        # TWILIO_WHATSAPP_FROM o TWILIO_WHATSAPP_NUMBER (número productivo o sandbox)
+        self.whatsapp_number = (
+            os.getenv("TWILIO_WHATSAPP_FROM")
+            or os.getenv("TWILIO_WHATSAPP_NUMBER")
+            or "whatsapp:+14155238886"
+        )
         
         self.client = None
         if not TWILIO_AVAILABLE:
@@ -83,64 +67,22 @@ class WhatsAppService:
         if not self.is_configured():
             return {
                 "success": False,
-                "error": "WhatsApp service not configured. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN"
+                "error": "WhatsApp service not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_WHATSAPP_NUMBER (or TWILIO_WHATSAPP_FROM)"
             }
         
         try:
-            # Formatear número para WhatsApp
             if not to_number.startswith("whatsapp:"):
                 to_number = f"whatsapp:{to_number}"
             
-            # Preparar parámetros
             message_params = {
                 "from_": self.whatsapp_number,
                 "to": to_number,
                 "body": message
             }
-            
             if media_url:
                 message_params["media_url"] = [media_url]
             
-            # Única fuente de verdad: ENV VARS (no hardcode)
-            send_allowed = _send_allowed()
-            sandbox_mode = _whatsapp_sandbox_mode()
-            env_production = _environment_is_production()
-            
-            if not send_allowed:
-                cause = "WHATSAPP_SANDBOX_MODE=true (env)" if sandbox_mode else "ENVIRONMENT no es production"
-                from services.activity_logger import ActivityLogger
-                ActivityLogger.log_activity(
-                    agent_name="ZEUS",
-                    action_type="whatsapp_blocked",
-                    action_description=f"Envio WhatsApp bloqueado: {cause}",
-                    details={
-                        "to": to_number,
-                        "whatsapp_number": self.whatsapp_number,
-                        "reason": "env_block",
-                        "WHATSAPP_SANDBOX_MODE": os.getenv("WHATSAPP_SANDBOX_MODE"),
-                        "ENVIRONMENT": os.getenv("ENVIRONMENT"),
-                        "message_preview": message[:50] if message else None,
-                    },
-                    status="blocked",
-                    priority="high"
-                )
-                logger.warning("[WHATSAPP] Bloqueado por env: %s", cause)
-                return {
-                    "success": False,
-                    "error": f"WhatsApp bloqueado: {cause}. Para producción: WHATSAPP_SANDBOX_MODE=false y ENVIRONMENT=production.",
-                    "blocked": True,
-                    "reason": "env_block",
-                    "cause": cause,
-                }
-            
-            logger.info(
-                "[WHATSAPP] WHATSAPP_SEND_ALLOWED=true | mode=%s | env=%s | to=%s",
-                "sandbox" if sandbox_mode else "production",
-                "production" if env_production else os.getenv("ENVIRONMENT", "NOT_SET"),
-                to_number,
-            )
-            
-            # Enviar mensaje
+            # Envío real: solo depende de credenciales (is_configured). Sin candados.
             twilio_message = self.client.messages.create(**message_params)
             
             result = {
@@ -150,7 +92,6 @@ class WhatsAppService:
                 "to": to_number
             }
             
-            # ✅ REGISTRAR ACTIVIDAD: WhatsApp enviado directamente
             try:
                 from services.activity_logger import ActivityLogger
                 ActivityLogger.log_activity(
@@ -159,16 +100,17 @@ class WhatsAppService:
                     action_description=f"WhatsApp enviado a {to_number}",
                     details={
                         "to": to_number,
+                        "from": self.whatsapp_number,
                         "message_sid": twilio_message.sid,
                         "status": twilio_message.status,
-                        "message_preview": message[:50] if message else None,
+                        "body_preview": (message[:100] if message else None),
                     },
                     metrics={"status": twilio_message.status},
                     status="completed",
                     priority="high"
                 )
             except Exception as log_error:
-                print(f"[WHATSAPP] Error registrando actividad: {log_error}")
+                logger.warning("[WHATSAPP] Error registrando actividad: %s", log_error)
             
             return result
             
@@ -177,16 +119,15 @@ class WhatsAppService:
                 "success": False,
                 "error": str(e)
             }
-            
-            # ✅ REGISTRAR ERROR: WhatsApp fallido
             try:
                 from services.activity_logger import ActivityLogger
                 ActivityLogger.log_activity(
                     agent_name="ZEUS",
-                    action_type="whatsapp_error",
+                    action_type="whatsapp_send_error",
                     action_description=f"Error enviando WhatsApp a {to_number}: {str(e)}",
                     details={
                         "to": to_number,
+                        "from": self.whatsapp_number,
                         "error": str(e),
                     },
                     status="failed",
@@ -194,7 +135,6 @@ class WhatsAppService:
                 )
             except Exception:
                 pass
-            
             return error_result
     
     async def process_incoming_message(
@@ -318,15 +258,11 @@ class WhatsAppService:
             }
     
     def get_status(self) -> Dict[str, Any]:
-        """Obtener estado del servicio. sandbox_mode y send_allowed desde ENV VARS."""
+        """Estado del servicio. Envío permitido si configured=True (credenciales válidas)."""
         return {
             "configured": self.is_configured(),
             "provider": "Twilio",
             "whatsapp_number": self.whatsapp_number if self.is_configured() else None,
-            "sandbox_mode": _whatsapp_sandbox_mode(),
-            "send_allowed": _send_allowed(),
-            "WHATSAPP_SANDBOX_MODE": os.getenv("WHATSAPP_SANDBOX_MODE"),
-            "ENVIRONMENT": os.getenv("ENVIRONMENT", os.getenv("RAILWAY_ENVIRONMENT")),
         }
 
 

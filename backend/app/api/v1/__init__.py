@@ -89,6 +89,10 @@ api_router.include_router(teamflow.router, tags=["teamflow"])
 api_router.include_router(actions.router, tags=["actions"])
 api_router.include_router(workspaces.router, tags=["workspaces"])
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
+# Log webhooks router registration
+import logging
+logger = logging.getLogger(__name__)
+logger.info(f"[API] Webhooks router registrado: {webhooks.router.prefix if hasattr(webhooks.router, 'prefix') else 'sin prefix'}, rutas: {[r.path for r in webhooks.router.routes]}")
 
 # WebSocket endpoint - CORREGIDO para Railway
 @api_router.websocket("/ws/{client_id}")

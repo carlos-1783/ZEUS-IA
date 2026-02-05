@@ -23,6 +23,25 @@ from services.stripe_service import stripe_service
 
 router = APIRouter(tags=["webhooks"])
 
+# Log router registration
+import logging
+logger = logging.getLogger(__name__)
+logger.info("[WEBHOOKS] Router webhooks inicializado")
+
+
+@router.get("/stripe")
+async def stripe_webhook_health():
+    """
+    Health check endpoint for Stripe webhook.
+    Returns 200 OK if endpoint is accessible.
+    """
+    return {
+        "status": "ok",
+        "endpoint": "/api/v1/webhooks/stripe",
+        "method": "POST",
+        "event": "payment_intent.succeeded"
+    }
+
 
 def generate_random_password(length: int = 16) -> str:
     """Generate secure random password"""
@@ -150,7 +169,13 @@ async def stripe_webhook_handler(
     """
     Stripe webhook handler: persists payment, activates user, triggers onboarding.
     Verifies signature using STRIPE_WEBHOOK_SECRET.
+    
+    Endpoint: POST /api/v1/webhooks/stripe
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[WEBHOOK] Stripe webhook recibido - Method: {request.method}")
+    
     payload = await request.body()
     
     if not stripe_signature:

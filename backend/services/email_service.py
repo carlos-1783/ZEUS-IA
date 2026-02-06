@@ -85,19 +85,26 @@ class EmailService:
                 for bcc_email in bcc:
                     message.add_bcc(bcc_email)
             
-            # Enviar
+            # Enviar email real (sin candados, solo depende de credenciales)
             response = self.client.send(message)
+            
+            # Extraer message_id de headers de SendGrid si está disponible
+            message_id = None
+            if hasattr(response, 'headers') and response.headers:
+                message_id = response.headers.get('X-Message-Id') or response.headers.get('x-message-id')
             
             result = {
                 "success": True,
                 "status_code": response.status_code,
                 "to": to_email,
-                "subject": subject
+                "subject": subject,
+                "message_id": message_id
             }
             
-            # ✅ REGISTRAR ACTIVIDAD: Email enviado directamente
+            # ✅ REGISTRAR ACTIVIDAD: Email enviado directamente con auditoría completa
             try:
                 from services.activity_logger import ActivityLogger
+                from datetime import datetime
                 ActivityLogger.log_activity(
                     agent_name="ZEUS",
                     action_type="email_sent",
@@ -105,10 +112,17 @@ class EmailService:
                     details={
                         "to": to_email,
                         "subject": subject,
+                        "provider": "sendgrid",
                         "status_code": response.status_code,
                         "content_type": content_type,
+                        "message_id": message_id,
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "executed_handler": "SENDGRID_HANDLER",
                     },
-                    metrics={"status_code": response.status_code},
+                    metrics={
+                        "status_code": response.status_code,
+                        "executed_handler": "SENDGRID_HANDLER",
+                    },
                     status="completed",
                     priority="normal"
                 )

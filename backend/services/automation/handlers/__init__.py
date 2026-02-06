@@ -14,6 +14,7 @@ from .rafael import handle_rafael_task
 from .justicia import handle_justicia_task
 from .afrodita import handle_afrodita_task
 from .zeus import handle_zeus_task
+from .zeus_launch import handle_zeus_launch_started
 from .thalos import (
     handle_thalos_security_scan,
     handle_thalos_alerts,
@@ -63,6 +64,7 @@ HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
     "ZEUS": {
         "coordination": handle_zeus_task,
         "task_delegated": handle_zeus_task,
+        "zeus_launch_started": handle_zeus_launch_started,
         "autonomo_paperwork_prepare": handle_generic_internal,
         "pricing_review": handle_generic_internal,
         "stripe_readiness_check": handle_generic_internal,

@@ -158,11 +158,11 @@ async function getBlobInternal(endpoint: string, token?: string, _retry = false)
   return response.blob();
 }
 
-/** Obtener token actual del store cuando no se pasa explícitamente (evita 401 por token faltante). */
+/** Obtener token actual. Siempre prioriza el store (fresco) para evitar 401 por token obsoleto. */
 function authToken(passed?: string | null): string | null {
-  if (passed) return passed;
   const store = useAuthStore();
-  return store.getToken?.() ?? store.token ?? null;
+  const storeToken = store.getToken?.() ?? store.token ?? null;
+  return storeToken ?? passed ?? null;
 }
 
 /**

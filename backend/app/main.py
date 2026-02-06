@@ -15,6 +15,14 @@ from app.api.v1 import api_router
 from app.db.base import create_tables
 from services.automation import start_agent_automation, stop_agent_automation
 from app.db.initial_superuser import ensure_initial_superuser
+from app.db.session import SessionLocal
+from app.models.user import User
+from app.models.agent_activity import AgentActivity
+from services.activity_logger import ActivityLogger
+from services.automation.handlers import resolve_handler
+from services.automation.utils import merge_dict
+from services.unified_agent_runtime import run_workspace_task
+from datetime import datetime
 
 # Create FastAPI app
 app = FastAPI(
@@ -55,12 +63,82 @@ app.include_router(api_router, prefix="/api/v1")
 logger = logging.getLogger("zeus.startup")
 
 
+def _execute_zeus_launch_started():
+    """
+    Ejecuta acción zeus_launch_started al arranque: crea AgentActivity y envía WhatsApp.
+    """
+    session = SessionLocal()
+    try:
+        # Obtener superusuario
+        superuser = session.query(User).filter(User.is_superuser == True).first()
+        if not superuser:
+            logger.warning("No superuser found. Skipping zeus_launch_started action.")
+            return
+        
+        # Crear actividad
+        activity = ActivityLogger.log_activity(
+            agent_name="ZEUS",
+            action_type="zeus_launch_started",
+            action_description="ZEUS launch started - sistema iniciado",
+            details={
+                "trigger": "startup",
+                "requested_by": "system",
+                "superuser_email": superuser.email,
+            },
+            user_email=superuser.email,
+            status="pending",
+            priority="high",
+            visible_to_client=True,
+        )
+        if not activity:
+            logger.error("Failed to create zeus_launch_started activity.")
+            return
+        
+        # Ejecutar handler
+        activity = session.query(AgentActivity).filter(AgentActivity.id == activity.id).first()
+        if not activity:
+            logger.error("Activity not found after creation.")
+            return
+        
+        handler = resolve_handler(activity.agent_name, activity.action_type or "")
+        if handler is None:
+            logger.warning(f"No handler found for ZEUS:zeus_launch_started. Status: blocked_missing_handler")
+            activity.status = "blocked_missing_handler"
+            session.add(activity)
+            session.commit()
+            return
+        
+        result = run_workspace_task(activity)
+        status_val = result.get("status", "completed")
+        
+        activity.status = status_val
+        if "details_update" in result:
+            activity.details = merge_dict(activity.details, result["details_update"])
+        if "metrics_update" in result:
+            activity.metrics = merge_dict(activity.metrics, result["metrics_update"])
+        if result.get("executed_handler") is not None:
+            activity.metrics = merge_dict(activity.metrics or {}, {"executed_handler": result["executed_handler"]})
+        if status_val in ("completed", "executed_internal", "failed"):
+            activity.completed_at = datetime.utcnow()
+        
+        session.add(activity)
+        session.commit()
+        
+        logger.info(f"ZEUS launch started action executed. Status: {status_val}, Handler: {result.get('executed_handler')}")
+    except Exception as e:
+        logger.error(f"Error executing zeus_launch_started: {e}", exc_info=True)
+    finally:
+        session.close()
+
+
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting ZEUS-IA backend")
     create_tables()
     ensure_initial_superuser()
     await start_agent_automation()
+    # Ejecutar acción de lanzamiento
+    _execute_zeus_launch_started()
     logger.info("ZEUS-IA backend ready")
 
 

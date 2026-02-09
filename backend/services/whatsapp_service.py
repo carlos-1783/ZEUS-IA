@@ -29,8 +29,7 @@ class WhatsAppService:
             os.getenv("TWILIO_WHATSAPP_FROM")
             or os.getenv("TWILIO_WHATSAPP_NUMBER")
             or "whatsapp:+14155238886"
-        )
-        
+        )        
         self.client = None
         if not TWILIO_AVAILABLE:
             print("⚠️ WhatsApp Service: Twilio library not installed (pip install twilio)")

@@ -17,6 +17,7 @@ class User(Base):
     
     # Legal-Fiscal Firewall fields
     email_gestor_fiscal = Column(String, nullable=True)
+    email_gestor_laboral = Column(String, nullable=True)
     email_asesor_legal = Column(String, nullable=True)
     autoriza_envio_documentos_a_asesores = Column(Boolean(), default=False)
     

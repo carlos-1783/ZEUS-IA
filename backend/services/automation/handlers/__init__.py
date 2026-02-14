@@ -15,6 +15,8 @@ from .justicia import handle_justicia_task
 from .afrodita import handle_afrodita_task
 from .zeus import handle_zeus_task
 from .zeus_launch import handle_zeus_launch_started
+from .zeus_automation_readiness import handle_automation_readiness_evaluate
+from .zeus_payroll_draft import handle_payroll_draft_generate
 from .thalos import (
     handle_thalos_security_scan,
     handle_thalos_alerts,
@@ -65,6 +67,8 @@ HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
         "coordination": handle_zeus_task,
         "task_delegated": handle_zeus_task,
         "zeus_launch_started": handle_zeus_launch_started,
+        "automation_readiness_evaluate": handle_automation_readiness_evaluate,
+        "payroll_draft_generate": handle_payroll_draft_generate,
         "autonomo_paperwork_prepare": handle_generic_internal,
         "pricing_review": handle_generic_internal,
         "stripe_readiness_check": handle_generic_internal,

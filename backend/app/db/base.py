@@ -57,7 +57,9 @@ def create_tables():
             from app.models.agent_activity import AgentActivity
             from app.models.document_approval import DocumentApproval
             from app.models.agent_memory import AgentOperationalState, AgentDecisionLog, AgentShortTermBuffer
-            
+            from app.models.automation_readiness import AutomationReadiness
+            from app.models.payroll_draft import PayrollDraft
+
             Base.metadata.create_all(bind=engine)
             print("[DATABASE] [OK] Tablas creadas correctamente")
             
@@ -112,6 +114,7 @@ def _migrate_user_columns():
         # Columnas a agregar con sus tipos según la base de datos
         columns_to_add = {
             "email_gestor_fiscal": "VARCHAR(255)" if is_postgres else "TEXT",
+            "email_gestor_laboral": "VARCHAR(255)" if is_postgres else "TEXT",
             "email_asesor_legal": "VARCHAR(255)" if is_postgres else "TEXT",
             "autoriza_envio_documentos_a_asesores": "BOOLEAN" if is_postgres else "BOOLEAN DEFAULT 0",
             "company_name": "VARCHAR(255)" if is_postgres else "TEXT",

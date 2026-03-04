@@ -34,7 +34,8 @@
     >
       <div class="flex flex-col h-full bg-indigo-700 w-64 shadow-lg">
         <!-- Logo -->
-        <div class="flex items-center justify-center h-16 px-4 bg-indigo-800">
+        <div class="flex items-center justify-center gap-2 h-16 px-4 bg-indigo-800">
+          <img src="/images/logo-zeus.png" alt="ZEUS" class="h-8 w-8 object-contain" />
           <h1 class="text-white text-xl font-bold">ZEUS-IA</h1>
         </div>
 

@@ -3,7 +3,7 @@
     <!-- Header holográfico -->
     <header class="zeus-header">
       <div class="zeus-logo">
-        <div class="logo-icon">⚡</div>
+        <img src="/images/logo-zeus.png" alt="ZEUS" class="logo-icon" />
         <h1>NÚCLEO ZEUS-IA</h1>
         <div class="status-indicator" :class="systemStatus">
           {{ systemStatus.toUpperCase() }}
@@ -422,10 +422,10 @@ function logout() {
 }
 
 .logo-icon {
-  font-size: 32px;
-  color: #ff6b00;
-  text-shadow: 0 0 20px currentColor;
-  animation: pulse 2s ease-in-out infinite;
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 @keyframes pulse {

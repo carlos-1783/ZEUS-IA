@@ -10,7 +10,8 @@
     <!-- Sidebar Oscura -->
     <aside class="sidebar-dark" :class="{ open: sidebarOpen }">
       <div class="logo-section">
-        <h1>⚡ ZEUS-IA</h1>
+        <img src="/images/logo-zeus.png" alt="ZEUS" class="logo-zeus-img" />
+        <h1>ZEUS-IA</h1>
         <p class="subtitle">Enterprise AI Platform</p>
       </div>
 
@@ -931,6 +932,16 @@ const chatWith = (agent) => {
 
 .logo-section {
   margin-bottom: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.logo-section .logo-zeus-img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
 }
 
 .logo-section h1 {

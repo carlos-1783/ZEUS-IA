@@ -1879,13 +1879,14 @@ onMounted(async () => {
   overflow: hidden;
 }
 
+/* Solo la zona de productos tiene scroll; carrito sin cambios */
 .tpv-left-panel {
   min-height: 0;
   background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   padding: 16px;
-  overflow: hidden;
+  overflow-y: auto;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 

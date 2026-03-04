@@ -122,12 +122,12 @@ const router = createRouter({
     return result;
   },
   routes: [
-    // Ruta raíz - Redirecciona según estado de auth
+    // Ruta raíz - Redirecciona según estado de auth (login si no hay sesión; dashboard si sí)
     {
       path: '/',
       redirect: () => {
         const authStore = useAuthStore()
-        return authStore.isAuthenticated ? '/dashboard' : '/pricing'
+        return authStore.isAuthenticated ? '/dashboard' : { name: 'AuthLogin' }
       }
     },
     

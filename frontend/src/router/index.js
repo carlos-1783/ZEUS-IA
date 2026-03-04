@@ -37,6 +37,7 @@ const Pricing = () => import('../views/Pricing.vue')
 const Checkout = () => import('../views/Checkout.vue')
 const AdminPanel = () => import('../views/AdminPanel.vue')
 const TPV = () => import('../views/TPV.vue')
+const PayrollDrafts = () => import('../views/PayrollDrafts.vue')
 
 // Routes that don't require authentication
 const publicRoutes = [
@@ -193,6 +194,17 @@ const router = createRouter({
       component: () => import('../views/ControlHorario.vue'),
       meta: { 
         title: 'Control Horario Universal - ZEUS-IA',
+        requiresAuth: true
+      }
+    },
+    
+    // Nóminas (borradores)
+    {
+      path: '/payroll',
+      name: 'PayrollDrafts',
+      component: PayrollDrafts,
+      meta: { 
+        title: 'Nóminas - ZEUS-IA',
         requiresAuth: true
       }
     },

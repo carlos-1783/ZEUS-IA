@@ -1,0 +1,140 @@
+{
+  "audit_metadata": {
+    "audit_type": "ROCE_END_TO_END_REAL_COMPANY",
+    "auditor": "CURSO",
+    "authority_level": "MAXIMUM",
+    "company": {
+      "name": "Empresa Ficticia Global S.L.",
+      "business_type": "Servicios profesionales con múltiples sucursales",
+      "countries": [
+        "España",
+        "México",
+        "Colombia"
+      ],
+      "employees": 12
+    },
+    "started_at": "2026-01-23T05:23:52.758957",
+    "completed_at": "2026-01-23T05:23:52.760980"
+  },
+  "summary": {
+    "total_tests": 7,
+    "passed": 0,
+    "failed": 7,
+    "warnings": 0,
+    "skipped": 0,
+    "score": 0.0
+  },
+  "agent_by_agent": {},
+  "failures_detected": [
+    {
+      "step": 1,
+      "action": "Verificar Backend",
+      "message": "Backend no disponible",
+      "details": {}
+    },
+    {
+      "step": 2,
+      "action": "Verificar Autenticación",
+      "message": "No hay token de superusuario",
+      "details": {}
+    },
+    {
+      "step": 3,
+      "action": "Verificar Autenticación",
+      "message": "No hay token de superusuario",
+      "details": {}
+    },
+    {
+      "step": 4,
+      "action": "Verificar Autenticación",
+      "message": "No hay token de superusuario",
+      "details": {}
+    },
+    {
+      "step": 5,
+      "action": "Verificar Autenticación",
+      "message": "No hay token de superusuario",
+      "details": {}
+    },
+    {
+      "step": 6,
+      "action": "Verificar Autenticación",
+      "message": "No hay token de superusuario",
+      "details": {}
+    },
+    {
+      "step": 7,
+      "action": "Verificar Autenticación",
+      "message": "No hay token de superusuario",
+      "details": {}
+    }
+  ],
+  "business_readiness_score": 0.0,
+  "risk_analysis": {
+    "legal_risk": "BAJO",
+    "technical_risk": "ALTO",
+    "commercial_risk": "BAJO"
+  },
+  "final_verdict": {
+    "verdict": "NO_GO",
+    "reasoning": "Sistema NO está listo para producción. Score: 0.0%. 7 tests fallaron de 7. Se requieren correcciones críticas antes de considerar producción."
+  },
+  "detailed_results": [
+    {
+      "step": 1,
+      "name": "Inicialización",
+      "action": "Verificar Backend",
+      "status": "FAIL",
+      "message": "Backend no disponible",
+      "timestamp": "2026-01-23T05:23:52.758957"
+    },
+    {
+      "step": 2,
+      "name": "TPV",
+      "action": "Verificar Autenticación",
+      "status": "FAIL",
+      "message": "No hay token de superusuario",
+      "timestamp": "2026-01-23T05:23:52.758957"
+    },
+    {
+      "step": 3,
+      "name": "Control Horario",
+      "action": "Verificar Autenticación",
+      "status": "FAIL",
+      "message": "No hay token de superusuario",
+      "timestamp": "2026-01-23T05:23:52.760980"
+    },
+    {
+      "step": 4,
+      "name": "Flujo Fiscal",
+      "action": "Verificar Autenticación",
+      "status": "FAIL",
+      "message": "No hay token de superusuario",
+      "timestamp": "2026-01-23T05:23:52.760980"
+    },
+    {
+      "step": 5,
+      "name": "Marketing",
+      "action": "Verificar Autenticación",
+      "status": "FAIL",
+      "message": "No hay token de superusuario",
+      "timestamp": "2026-01-23T05:23:52.760980"
+    },
+    {
+      "step": 6,
+      "name": "Seguridad",
+      "action": "Verificar Autenticación",
+      "status": "FAIL",
+      "message": "No hay token de superusuario",
+      "timestamp": "2026-01-23T05:23:52.760980"
+    },
+    {
+      "step": 7,
+      "name": "Dashboard",
+      "action": "Verificar Autenticación",
+      "status": "FAIL",
+      "message": "No hay token de superusuario",
+      "timestamp": "2026-01-23T05:23:52.760980"
+    }
+  ]
+}

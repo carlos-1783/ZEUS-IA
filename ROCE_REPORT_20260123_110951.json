@@ -1,0 +1,374 @@
+{
+  "audit_date": "2026-01-23T11:09:29.608890",
+  "auditor": "CURSO",
+  "company_name": "Empresa Ficticia Global S.L.",
+  "steps": [
+    {
+      "step": "1.1",
+      "action": "Crear superusuario",
+      "status": "INFO",
+      "details": "Verificando si existe superusuario...",
+      "timestamp": "2026-01-23T11:09:29.608890",
+      "critical": false
+    },
+    {
+      "step": "1.1",
+      "action": "Crear superusuario",
+      "status": "SUCCESS",
+      "details": "Superusuario creado",
+      "timestamp": "2026-01-23T11:09:37.338779",
+      "critical": false
+    },
+    {
+      "step": "1.2",
+      "action": "Crear empresa",
+      "status": "INFO",
+      "details": "Creando empresa desde panel...",
+      "timestamp": "2026-01-23T11:09:37.338779",
+      "critical": false
+    },
+    {
+      "step": "1.2",
+      "action": "Crear empresa",
+      "status": "FAIL",
+      "details": "HTTP 405: {\"detail\":\"Method Not Allowed\"}",
+      "timestamp": "2026-01-23T11:09:39.440211",
+      "critical": true
+    },
+    {
+      "step": "2.0",
+      "action": "TPV Setup",
+      "status": "FAIL",
+      "details": "No hay token de admin",
+      "timestamp": "2026-01-23T11:09:39.440211",
+      "critical": true
+    },
+    {
+      "step": "3.0",
+      "action": "Control Horario Setup",
+      "status": "FAIL",
+      "details": "No hay token de empleado",
+      "timestamp": "2026-01-23T11:09:39.440211",
+      "critical": true
+    },
+    {
+      "step": "4.0",
+      "action": "Flujo Fiscal Setup",
+      "status": "FAIL",
+      "details": "No hay token de admin",
+      "timestamp": "2026-01-23T11:09:39.440211",
+      "critical": true
+    },
+    {
+      "step": "5.0",
+      "action": "Marketing Setup",
+      "status": "FAIL",
+      "details": "No hay token de admin",
+      "timestamp": "2026-01-23T11:09:39.440211",
+      "critical": true
+    },
+    {
+      "step": "6.1",
+      "action": "THALOS valida permisos",
+      "status": "INFO",
+      "details": "Verificando validación de permisos...",
+      "timestamp": "2026-01-23T11:09:39.440211",
+      "critical": false
+    },
+    {
+      "step": "7.0",
+      "action": "Dashboard Setup",
+      "status": "FAIL",
+      "details": "No hay token de admin",
+      "timestamp": "2026-01-23T11:09:39.440211",
+      "critical": true
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar ZEUS_CORE",
+      "status": "INFO",
+      "details": "Verificando estado de ZEUS_CORE...",
+      "timestamp": "2026-01-23T11:09:39.440211",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar ZEUS_CORE",
+      "status": "WARN",
+      "details": "HTTP 404: {\"error\":\"API endpoint not found\",\"path\":\"/api/v1/zeus/agent/zeus_core/status\",\"message\":\"The requested API endpoint does not exist. Check /api/docs for available endpoints.\"}",
+      "timestamp": "2026-01-23T11:09:41.516061",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar RAFAEL",
+      "status": "INFO",
+      "details": "Verificando estado de RAFAEL...",
+      "timestamp": "2026-01-23T11:09:41.516061",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar RAFAEL",
+      "status": "WARN",
+      "details": "HTTP 404: {\"error\":\"API endpoint not found\",\"path\":\"/api/v1/zeus/agent/rafael/status\",\"message\":\"The requested API endpoint does not exist. Check /api/docs for available endpoints.\"}",
+      "timestamp": "2026-01-23T11:09:43.615073",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar PERSEO",
+      "status": "INFO",
+      "details": "Verificando estado de PERSEO...",
+      "timestamp": "2026-01-23T11:09:43.615073",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar PERSEO",
+      "status": "WARN",
+      "details": "HTTP 404: {\"error\":\"API endpoint not found\",\"path\":\"/api/v1/zeus/agent/perseo/status\",\"message\":\"The requested API endpoint does not exist. Check /api/docs for available endpoints.\"}",
+      "timestamp": "2026-01-23T11:09:45.662842",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar JUSTICIA",
+      "status": "INFO",
+      "details": "Verificando estado de JUSTICIA...",
+      "timestamp": "2026-01-23T11:09:45.662842",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar JUSTICIA",
+      "status": "WARN",
+      "details": "HTTP 404: {\"error\":\"API endpoint not found\",\"path\":\"/api/v1/zeus/agent/justicia/status\",\"message\":\"The requested API endpoint does not exist. Check /api/docs for available endpoints.\"}",
+      "timestamp": "2026-01-23T11:09:47.695521",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar THALOS",
+      "status": "INFO",
+      "details": "Verificando estado de THALOS...",
+      "timestamp": "2026-01-23T11:09:47.695521",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar THALOS",
+      "status": "WARN",
+      "details": "HTTP 404: {\"error\":\"API endpoint not found\",\"path\":\"/api/v1/zeus/agent/thalos/status\",\"message\":\"The requested API endpoint does not exist. Check /api/docs for available endpoints.\"}",
+      "timestamp": "2026-01-23T11:09:49.745863",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar AFRODITA",
+      "status": "INFO",
+      "details": "Verificando estado de AFRODITA...",
+      "timestamp": "2026-01-23T11:09:49.745863",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar AFRODITA",
+      "status": "WARN",
+      "details": "HTTP 404: {\"error\":\"API endpoint not found\",\"path\":\"/api/v1/zeus/agent/afrodita/status\",\"message\":\"The requested API endpoint does not exist. Check /api/docs for available endpoints.\"}",
+      "timestamp": "2026-01-23T11:09:51.779094",
+      "critical": false
+    }
+  ],
+  "agents_status": {
+    "ZEUS_CORE": "unknown",
+    "RAFAEL": "unknown",
+    "PERSEO": "unknown",
+    "JUSTICIA": "unknown",
+    "THALOS": "unknown",
+    "AFRODITA": "unknown"
+  },
+  "critical_failures": [
+    {
+      "step": "1.2",
+      "action": "Crear empresa",
+      "status": "FAIL",
+      "details": "HTTP 405: {\"detail\":\"Method Not Allowed\"}",
+      "timestamp": "2026-01-23T11:09:39.440211",
+      "critical": true
+    },
+    {
+      "step": "2.0",
+      "action": "TPV Setup",
+      "status": "FAIL",
+      "details": "No hay token de admin",
+      "timestamp": "2026-01-23T11:09:39.440211",
+      "critical": true
+    },
+    {
+      "step": "3.0",
+      "action": "Control Horario Setup",
+      "status": "FAIL",
+      "details": "No hay token de empleado",
+      "timestamp": "2026-01-23T11:09:39.440211",
+      "critical": true
+    },
+    {
+      "step": "4.0",
+      "action": "Flujo Fiscal Setup",
+      "status": "FAIL",
+      "details": "No hay token de admin",
+      "timestamp": "2026-01-23T11:09:39.440211",
+      "critical": true
+    },
+    {
+      "step": "5.0",
+      "action": "Marketing Setup",
+      "status": "FAIL",
+      "details": "No hay token de admin",
+      "timestamp": "2026-01-23T11:09:39.440211",
+      "critical": true
+    },
+    {
+      "step": "7.0",
+      "action": "Dashboard Setup",
+      "status": "FAIL",
+      "details": "No hay token de admin",
+      "timestamp": "2026-01-23T11:09:39.440211",
+      "critical": true
+    }
+  ],
+  "warnings": [
+    {
+      "step": "AGENTS",
+      "action": "Verificar ZEUS_CORE",
+      "status": "WARN",
+      "details": "HTTP 404: {\"error\":\"API endpoint not found\",\"path\":\"/api/v1/zeus/agent/zeus_core/status\",\"message\":\"The requested API endpoint does not exist. Check /api/docs for available endpoints.\"}",
+      "timestamp": "2026-01-23T11:09:41.516061",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar RAFAEL",
+      "status": "WARN",
+      "details": "HTTP 404: {\"error\":\"API endpoint not found\",\"path\":\"/api/v1/zeus/agent/rafael/status\",\"message\":\"The requested API endpoint does not exist. Check /api/docs for available endpoints.\"}",
+      "timestamp": "2026-01-23T11:09:43.615073",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar PERSEO",
+      "status": "WARN",
+      "details": "HTTP 404: {\"error\":\"API endpoint not found\",\"path\":\"/api/v1/zeus/agent/perseo/status\",\"message\":\"The requested API endpoint does not exist. Check /api/docs for available endpoints.\"}",
+      "timestamp": "2026-01-23T11:09:45.662842",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar JUSTICIA",
+      "status": "WARN",
+      "details": "HTTP 404: {\"error\":\"API endpoint not found\",\"path\":\"/api/v1/zeus/agent/justicia/status\",\"message\":\"The requested API endpoint does not exist. Check /api/docs for available endpoints.\"}",
+      "timestamp": "2026-01-23T11:09:47.695521",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar THALOS",
+      "status": "WARN",
+      "details": "HTTP 404: {\"error\":\"API endpoint not found\",\"path\":\"/api/v1/zeus/agent/thalos/status\",\"message\":\"The requested API endpoint does not exist. Check /api/docs for available endpoints.\"}",
+      "timestamp": "2026-01-23T11:09:49.745863",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar AFRODITA",
+      "status": "WARN",
+      "details": "HTTP 404: {\"error\":\"API endpoint not found\",\"path\":\"/api/v1/zeus/agent/afrodita/status\",\"message\":\"The requested API endpoint does not exist. Check /api/docs for available endpoints.\"}",
+      "timestamp": "2026-01-23T11:09:51.779094",
+      "critical": false
+    }
+  ],
+  "successes": [
+    {
+      "step": "1.1",
+      "action": "Crear superusuario",
+      "status": "SUCCESS",
+      "details": "Superusuario creado",
+      "timestamp": "2026-01-23T11:09:37.338779",
+      "critical": false
+    }
+  ],
+  "final_report": {
+    "summary": {
+      "total_steps": 10,
+      "successful_steps": 1,
+      "success_rate": "10.0%",
+      "critical_failures": 6,
+      "warnings": 6
+    },
+    "agent_by_agent": {
+      "ZEUS_CORE": "unknown",
+      "RAFAEL": "unknown",
+      "PERSEO": "unknown",
+      "JUSTICIA": "unknown",
+      "THALOS": "unknown",
+      "AFRODITA": "unknown"
+    },
+    "failures_detected": [
+      {
+        "step": "1.2",
+        "action": "Crear empresa",
+        "status": "FAIL",
+        "details": "HTTP 405: {\"detail\":\"Method Not Allowed\"}",
+        "timestamp": "2026-01-23T11:09:39.440211",
+        "critical": true
+      },
+      {
+        "step": "2.0",
+        "action": "TPV Setup",
+        "status": "FAIL",
+        "details": "No hay token de admin",
+        "timestamp": "2026-01-23T11:09:39.440211",
+        "critical": true
+      },
+      {
+        "step": "3.0",
+        "action": "Control Horario Setup",
+        "status": "FAIL",
+        "details": "No hay token de empleado",
+        "timestamp": "2026-01-23T11:09:39.440211",
+        "critical": true
+      },
+      {
+        "step": "4.0",
+        "action": "Flujo Fiscal Setup",
+        "status": "FAIL",
+        "details": "No hay token de admin",
+        "timestamp": "2026-01-23T11:09:39.440211",
+        "critical": true
+      },
+      {
+        "step": "5.0",
+        "action": "Marketing Setup",
+        "status": "FAIL",
+        "details": "No hay token de admin",
+        "timestamp": "2026-01-23T11:09:39.440211",
+        "critical": true
+      },
+      {
+        "step": "7.0",
+        "action": "Dashboard Setup",
+        "status": "FAIL",
+        "details": "No hay token de admin",
+        "timestamp": "2026-01-23T11:09:39.440211",
+        "critical": true
+      }
+    ],
+    "business_readiness_score": 10.0,
+    "legal_risk": "HIGH",
+    "technical_risk": "HIGH",
+    "commercial_risk": "HIGH",
+    "veredicto": "NO_GO",
+    "reasoning": "Sistema no está listo para producción. 6 fallos críticos detectados."
+  }
+}

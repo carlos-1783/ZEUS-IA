@@ -28,6 +28,16 @@ requestAnimationFrame(() => {
   console.log('✅ ZEUS IA iniciado')
 })
 
+// Redirigir a login cuando refresh falla (401) o sesión expirada
+window.addEventListener('unauthorized', async () => {
+  const { useAuthStore } = await import('@/stores/auth')
+  const authStore = useAuthStore()
+  authStore.resetAuthState?.()
+  if (!window.location.pathname.startsWith('/login')) {
+    window.location.href = '/login'
+  }
+})
+
 // Registrar Service Worker para PWA
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

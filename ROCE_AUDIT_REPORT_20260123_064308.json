@@ -1,0 +1,179 @@
+{
+  "audit_metadata": {
+    "methodology": "ROCE",
+    "mode": "INVESTIGATE_AND_FIX",
+    "auditor": "CURSO",
+    "timestamp": "2026-01-23T05:43:08.535810",
+    "project": "ZEUS CORE"
+  },
+  "summary": {
+    "total_issues": 4,
+    "critical": 1,
+    "high": 2,
+    "medium": 1,
+    "low": 0,
+    "by_type": {
+      "BUG": 1,
+      "DISEÑO": 2,
+      "DOCUMENTACIÓN": 1,
+      "ENTORNO": 0
+    }
+  },
+  "evidence": {
+    "backend_static_exists": true,
+    "backend_static_has_index": true,
+    "backend_serves_static": true,
+    "railway_separate_frontend": true,
+    "frontend_uses_env": false,
+    "env_vars_used": [],
+    "vite_defines_api_url": false
+  },
+  "issues": [
+    {
+      "id": "R1",
+      "type": "DISEÑO",
+      "severity": "HIGH",
+      "title": "Incoherencia: Backend sirve frontend Y Railway tiene servicio separado",
+      "description": "El backend puede servir el frontend desde static/, pero Railway tiene un servicio frontend separado. Esto genera confusión sobre qué servicio sirve qué.",
+      "environment": [
+        "RAILWAY",
+        "LOCAL"
+      ],
+      "evidence": {
+        "backend_serves_static": true,
+        "railway_separate_frontend": true,
+        "static_dir_exists": true
+      },
+      "fix_required": true,
+      "fix_description": "Documentar claramente: En LOCAL el backend sirve el frontend. En Railway son servicios separados.",
+      "fix_files": [
+        "README.md",
+        "DEPLOYMENT.md"
+      ]
+    },
+    {
+      "id": "R2",
+      "type": "BUG",
+      "severity": "CRITICAL",
+      "title": "Frontend usa rutas relativas /api/ que NO funcionan en Railway con servicios separados",
+      "description": "El frontend compilado usa rutas relativas como '/api/v1/...' que funcionan cuando el backend sirve el frontend, pero NO funcionan cuando frontend y backend son servicios separados en Railway.",
+      "environment": [
+        "RAILWAY"
+      ],
+      "evidence": {
+        "uses_relative_api": true,
+        "railway_separate_frontend": true,
+        "sample_from_index": "<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>ZEUS IA - Tu Negocio Autónomo Inteligente</title>\n    \n    <!-- Favicon -->\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"/favicon.svg\">\n    <link rel=\"alternate icon\" type=\"image/png\" href=\"/favicon.svg\">\n    <link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"/favicon.svg\">\n    <link rel=\"mask-icon\" href=\"/safari-pinned-tab.svg\" color=\"#0f172"
+      },
+      "fix_required": true,
+      "fix_description": "Configurar VITE_API_BASE_URL en build y usar variable de entorno en código del frontend",
+      "fix_files": [
+        "frontend/vite.config.ts",
+        "frontend/src/services/api.ts",
+        "railway.toml"
+      ]
+    },
+    {
+      "id": "O1",
+      "type": "DISEÑO",
+      "severity": "HIGH",
+      "title": "Frontend no muestra mensaje claro cuando backend no está disponible",
+      "description": "El frontend intenta conectarse al backend inmediatamente pero no muestra un mensaje claro si falla, dejando al usuario confundido.",
+      "environment": [
+        "LOCAL",
+        "RAILWAY"
+      ],
+      "evidence": {
+        "has_immediate_api_call": true,
+        "has_error_handling": false
+      },
+      "fix_required": true,
+      "fix_description": "Agregar componente de error que detecte cuando el backend no responde y muestre mensaje claro al usuario",
+      "fix_files": [
+        "frontend/src/components/BackendError.vue",
+        "frontend/src/App.vue"
+      ]
+    },
+    {
+      "id": "C1",
+      "type": "DOCUMENTACIÓN",
+      "severity": "MEDIUM",
+      "title": "Documentación no explica arquitectura Railway con servicios separados",
+      "description": "Railway tiene servicios separados para frontend y backend, pero la documentación no lo explica claramente.",
+      "environment": [
+        "RAILWAY"
+      ],
+      "evidence": {
+        "has_separate_services": true,
+        "docs_mention": false
+      },
+      "fix_required": true,
+      "fix_description": "Agregar sección en README explicando que en Railway son servicios separados y cómo configurar variables de entorno",
+      "fix_files": [
+        "README.md",
+        "DEPLOYMENT.md"
+      ]
+    }
+  ],
+  "fixes": [
+    {
+      "issue_id": "R1",
+      "title": "Incoherencia: Backend sirve frontend Y Railway tiene servicio separado",
+      "type": "DISEÑO",
+      "severity": "HIGH",
+      "fix_description": "Documentar claramente: En LOCAL el backend sirve el frontend. En Railway son servicios separados.",
+      "files_to_modify": [
+        "README.md",
+        "DEPLOYMENT.md"
+      ],
+      "code_changes": null
+    },
+    {
+      "issue_id": "R2",
+      "title": "Frontend usa rutas relativas /api/ que NO funcionan en Railway con servicios separados",
+      "type": "BUG",
+      "severity": "CRITICAL",
+      "fix_description": "Configurar VITE_API_BASE_URL en build y usar variable de entorno en código del frontend",
+      "files_to_modify": [
+        "frontend/vite.config.ts",
+        "frontend/src/services/api.ts",
+        "railway.toml"
+      ],
+      "code_changes": null
+    },
+    {
+      "issue_id": "O1",
+      "title": "Frontend no muestra mensaje claro cuando backend no está disponible",
+      "type": "DISEÑO",
+      "severity": "HIGH",
+      "fix_description": "Agregar componente de error que detecte cuando el backend no responde y muestre mensaje claro al usuario",
+      "files_to_modify": [
+        "frontend/src/components/BackendError.vue",
+        "frontend/src/App.vue"
+      ],
+      "code_changes": null
+    },
+    {
+      "issue_id": "C1",
+      "title": "Documentación no explica arquitectura Railway con servicios separados",
+      "type": "DOCUMENTACIÓN",
+      "severity": "MEDIUM",
+      "fix_description": "Agregar sección en README explicando que en Railway son servicios separados y cómo configurar variables de entorno",
+      "files_to_modify": [
+        "README.md",
+        "DEPLOYMENT.md"
+      ],
+      "code_changes": null
+    }
+  ],
+  "final_verdict": {
+    "verdict": "NO_GO",
+    "reasoning": "1 problemas críticos detectados que impiden funcionamiento correcto en Railway",
+    "questions_answered": {
+      "que_estaba_ocurriendo": "Frontend usa rutas relativas /api/ que funcionan cuando backend sirve frontend, pero NO funcionan en Railway con servicios separados",
+      "por_que_confusion": "No hay documentación clara sobre diferencias entre LOCAL (backend sirve frontend) y Railway (servicios separados). Variables de entorno documentadas pero no usadas.",
+      "que_se_ha_cambiado": "Se han detectado problemas y generado fixes concretos. Ver sección 'fixes' del reporte.",
+      "puede_cliente_usar_sin_soporte": "NO completamente. Problemas críticos impiden funcionamiento en Railway sin configuración técnica."
+    }
+  }
+}

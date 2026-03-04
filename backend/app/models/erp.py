@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Enum, Text, JSON
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Enum, Text, JSON, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -284,3 +284,76 @@ class TPVProduct(Base):
     
     def __repr__(self):
         return f"<TPVProduct {self.product_id} - {self.name} (User: {self.user_id})>"
+
+
+# ----- ZEUS_TPV_FULL_FISCAL_INFRASTRUCTURE_ES_003 -----
+
+class TaxRate(Base):
+    """Tasas de IVA por usuario (multi-IVA, recargo equivalencia, consumo local/para llevar)"""
+    __tablename__ = "tax_rates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(50), nullable=False)
+    rate = Column(Numeric(5, 4), nullable=False)  # 0.2100 = 21%
+    applies_to = Column(String(20), nullable=False)  # product, service, takeaway, onsite
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    user = relationship("User", backref="tax_rates")
+
+
+class FiscalProfile(Base):
+    """Perfil fiscal por usuario: régimen IVA y recargo de equivalencia"""
+    __tablename__ = "fiscal_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    vat_regime = Column(String(30), nullable=False)  # general, recargo_equivalencia, exento
+    apply_recargo_equivalencia = Column(Boolean, nullable=False, default=False)
+    recargo_rate = Column(Numeric(5, 4), nullable=True)  # 0.0520 = 5.2%
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    user = relationship("User", backref="fiscal_profiles")
+
+
+class TPVSale(Base):
+    """Venta TPV registrada (snapshot fiscal inmutable, preparado inspección AEAT)"""
+    __tablename__ = "tpv_sales"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    ticket_id = Column(String(100), nullable=False, unique=True, index=True)
+    document_type = Column(String(20), nullable=False)  # ticket, factura
+    sale_date = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    payment_method = Column(String(30), nullable=False)
+    consumption_type = Column(String(20), nullable=True)  # onsite, takeaway
+    subtotal = Column(Numeric(12, 2), nullable=False)
+    tax_amount = Column(Numeric(12, 2), nullable=False)
+    recargo_amount = Column(Numeric(12, 2), nullable=True, default=0)
+    total = Column(Numeric(12, 2), nullable=False)
+    customer_data = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    user = relationship("User", backref="tpv_sales")
+    items = relationship("TPVSaleItem", back_populates="sale", cascade="all, delete-orphan")
+
+
+class TPVSaleItem(Base):
+    """Línea de venta TPV con snapshot fiscal por línea (inmutable)"""
+    __tablename__ = "tpv_sale_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tpv_sale_id = Column(Integer, ForeignKey("tpv_sales.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(String(100), nullable=False)
+    product_name = Column(String(200), nullable=False)
+    quantity = Column(Numeric(10, 2), nullable=False)
+    unit_price = Column(Numeric(10, 2), nullable=False)
+    tax_rate_snapshot = Column(Numeric(5, 4), nullable=False)
+    tax_amount = Column(Numeric(12, 2), nullable=False)
+    base_amount = Column(Numeric(12, 2), nullable=False)
+    recargo_rate_snapshot = Column(Numeric(5, 4), nullable=True)
+    recargo_amount = Column(Numeric(12, 2), nullable=True, default=0)
+    consumption_type = Column(String(20), nullable=True)  # onsite, takeaway
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    sale = relationship("TPVSale", back_populates="items")

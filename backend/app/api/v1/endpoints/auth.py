@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Form, Body, Header
+from fastapi.responses import Response
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 
 from app.core.auth import get_current_active_user, resolve_user_scopes
@@ -78,6 +79,13 @@ async def create_tokens(db: Session, user: User) -> Dict[str, Any]:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating authentication tokens: {str(e)}"
         )
+
+# ZEUS_LOCAL_CORS_FIX_001: Preflight OPTIONS sin autenticación para que CORS pase en local
+@router.options("/login", include_in_schema=False)
+async def login_preflight() -> Response:
+    """Responde 200 a OPTIONS para preflight CORS (no ejecuta auth)."""
+    return Response(status_code=200)
+
 
 @router.post(
     "/login",

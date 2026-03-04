@@ -33,14 +33,16 @@ app = FastAPI(
     redoc_url="/api/redoc"
 )
 
-# CORS seguro para producción: orígenes desde config, métodos y cabeceras explícitos
+# CORS: orígenes desde config. OPTIONS (preflight) responde 200 desde el middleware.
+# ZEUS_LOCAL_CORS_FIX_001: allow_headers y max_age desde config para compatibilidad local.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
-    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
-    expose_headers=["Content-Disposition", "Content-Length", "Content-Type"],
+    allow_methods=getattr(settings, "CORS_ALLOW_METHODS", ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"]),
+    allow_headers=getattr(settings, "CORS_ALLOW_HEADERS", ["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"]),
+    expose_headers=getattr(settings, "CORS_EXPOSE_HEADERS", ["Content-Disposition", "Content-Length", "Content-Type"]),
+    max_age=getattr(settings, "CORS_MAX_AGE", 600),
 )
 
 # Middleware específico para WebSockets en Railway

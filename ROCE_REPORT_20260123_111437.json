@@ -1,0 +1,309 @@
+{
+  "audit_date": "2026-01-23T11:14:31.166054",
+  "auditor": "CURSO",
+  "company_name": "Empresa Ficticia Global S.L.",
+  "steps": [
+    {
+      "step": "1.1",
+      "action": "Crear superusuario",
+      "status": "INFO",
+      "details": "Verificando si existe superusuario...",
+      "timestamp": "2026-01-23T11:14:31.166054",
+      "critical": false
+    },
+    {
+      "step": "1.1",
+      "action": "Crear/Login superusuario",
+      "status": "FAIL",
+      "details": "HTTP 422: {\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"username\"],\"msg\":\"Field required\",\"input\":null},{\"type\":\"missing\",\"loc\":[\"body\",\"password\"],\"msg\":\"Field required\",\"input\":null}]}",
+      "timestamp": "2026-01-23T11:14:35.321344",
+      "critical": true
+    },
+    {
+      "step": "2.0",
+      "action": "TPV Setup",
+      "status": "FAIL",
+      "details": "No hay token de admin",
+      "timestamp": "2026-01-23T11:14:35.321344",
+      "critical": true
+    },
+    {
+      "step": "3.0",
+      "action": "Control Horario Setup",
+      "status": "FAIL",
+      "details": "No hay token de empleado",
+      "timestamp": "2026-01-23T11:14:35.321344",
+      "critical": true
+    },
+    {
+      "step": "4.0",
+      "action": "Flujo Fiscal Setup",
+      "status": "FAIL",
+      "details": "No hay token de admin",
+      "timestamp": "2026-01-23T11:14:35.321344",
+      "critical": true
+    },
+    {
+      "step": "5.0",
+      "action": "Marketing Setup",
+      "status": "FAIL",
+      "details": "No hay token de admin",
+      "timestamp": "2026-01-23T11:14:35.321344",
+      "critical": true
+    },
+    {
+      "step": "6.1",
+      "action": "THALOS valida permisos",
+      "status": "INFO",
+      "details": "Verificando validación de permisos...",
+      "timestamp": "2026-01-23T11:14:35.321344",
+      "critical": false
+    },
+    {
+      "step": "7.0",
+      "action": "Dashboard Setup",
+      "status": "FAIL",
+      "details": "No hay token de admin",
+      "timestamp": "2026-01-23T11:14:35.321344",
+      "critical": true
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar todos los agentes",
+      "status": "INFO",
+      "details": "Obteniendo estado de todos los agentes...",
+      "timestamp": "2026-01-23T11:14:35.321344",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar ZEUS CORE",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:14:37.391061",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar PERSEO",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:14:37.391061",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar RAFAEL",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:14:37.391061",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar THALOS",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:14:37.391061",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar JUSTICIA",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:14:37.391061",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar AFRODITA",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:14:37.391061",
+      "critical": false
+    }
+  ],
+  "agents_status": {
+    "ZEUS CORE": "online",
+    "PERSEO": "online",
+    "RAFAEL": "online",
+    "THALOS": "online",
+    "JUSTICIA": "online",
+    "AFRODITA": "online"
+  },
+  "critical_failures": [
+    {
+      "step": "1.1",
+      "action": "Crear/Login superusuario",
+      "status": "FAIL",
+      "details": "HTTP 422: {\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"username\"],\"msg\":\"Field required\",\"input\":null},{\"type\":\"missing\",\"loc\":[\"body\",\"password\"],\"msg\":\"Field required\",\"input\":null}]}",
+      "timestamp": "2026-01-23T11:14:35.321344",
+      "critical": true
+    },
+    {
+      "step": "2.0",
+      "action": "TPV Setup",
+      "status": "FAIL",
+      "details": "No hay token de admin",
+      "timestamp": "2026-01-23T11:14:35.321344",
+      "critical": true
+    },
+    {
+      "step": "3.0",
+      "action": "Control Horario Setup",
+      "status": "FAIL",
+      "details": "No hay token de empleado",
+      "timestamp": "2026-01-23T11:14:35.321344",
+      "critical": true
+    },
+    {
+      "step": "4.0",
+      "action": "Flujo Fiscal Setup",
+      "status": "FAIL",
+      "details": "No hay token de admin",
+      "timestamp": "2026-01-23T11:14:35.321344",
+      "critical": true
+    },
+    {
+      "step": "5.0",
+      "action": "Marketing Setup",
+      "status": "FAIL",
+      "details": "No hay token de admin",
+      "timestamp": "2026-01-23T11:14:35.321344",
+      "critical": true
+    },
+    {
+      "step": "7.0",
+      "action": "Dashboard Setup",
+      "status": "FAIL",
+      "details": "No hay token de admin",
+      "timestamp": "2026-01-23T11:14:35.321344",
+      "critical": true
+    }
+  ],
+  "warnings": [],
+  "successes": [
+    {
+      "step": "AGENTS",
+      "action": "Verificar ZEUS CORE",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:14:37.391061",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar PERSEO",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:14:37.391061",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar RAFAEL",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:14:37.391061",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar THALOS",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:14:37.391061",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar JUSTICIA",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:14:37.391061",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar AFRODITA",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:14:37.391061",
+      "critical": false
+    }
+  ],
+  "final_report": {
+    "summary": {
+      "total_steps": 8,
+      "successful_steps": 0,
+      "success_rate": "0.0%",
+      "critical_failures": 6,
+      "warnings": 0
+    },
+    "agent_by_agent": {
+      "ZEUS CORE": "online",
+      "PERSEO": "online",
+      "RAFAEL": "online",
+      "THALOS": "online",
+      "JUSTICIA": "online",
+      "AFRODITA": "online"
+    },
+    "failures_detected": [
+      {
+        "step": "1.1",
+        "action": "Crear/Login superusuario",
+        "status": "FAIL",
+        "details": "HTTP 422: {\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"username\"],\"msg\":\"Field required\",\"input\":null},{\"type\":\"missing\",\"loc\":[\"body\",\"password\"],\"msg\":\"Field required\",\"input\":null}]}",
+        "timestamp": "2026-01-23T11:14:35.321344",
+        "critical": true
+      },
+      {
+        "step": "2.0",
+        "action": "TPV Setup",
+        "status": "FAIL",
+        "details": "No hay token de admin",
+        "timestamp": "2026-01-23T11:14:35.321344",
+        "critical": true
+      },
+      {
+        "step": "3.0",
+        "action": "Control Horario Setup",
+        "status": "FAIL",
+        "details": "No hay token de empleado",
+        "timestamp": "2026-01-23T11:14:35.321344",
+        "critical": true
+      },
+      {
+        "step": "4.0",
+        "action": "Flujo Fiscal Setup",
+        "status": "FAIL",
+        "details": "No hay token de admin",
+        "timestamp": "2026-01-23T11:14:35.321344",
+        "critical": true
+      },
+      {
+        "step": "5.0",
+        "action": "Marketing Setup",
+        "status": "FAIL",
+        "details": "No hay token de admin",
+        "timestamp": "2026-01-23T11:14:35.321344",
+        "critical": true
+      },
+      {
+        "step": "7.0",
+        "action": "Dashboard Setup",
+        "status": "FAIL",
+        "details": "No hay token de admin",
+        "timestamp": "2026-01-23T11:14:35.321344",
+        "critical": true
+      }
+    ],
+    "business_readiness_score": 0.0,
+    "legal_risk": "HIGH",
+    "technical_risk": "LOW",
+    "commercial_risk": "HIGH",
+    "veredicto": "NO_GO",
+    "reasoning": "Sistema no está listo para producción. 6 fallos críticos detectados."
+  }
+}

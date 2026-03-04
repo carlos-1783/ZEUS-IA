@@ -58,6 +58,13 @@
         </button>
         <button 
           class="nav-item"
+          @click="closeSidebarOnMobile(); goToPayroll()"
+        >
+          <span class="icon">📋</span>
+          <span>Nóminas</span>
+        </button>
+        <button 
+          class="nav-item"
           :class="{ active: currentView === 'settings' }"
           @click="currentView = 'settings'; closeSidebarOnMobile()"
         >
@@ -359,6 +366,11 @@ const goToTPV = () => {
 // Navegar a Control Horario
 const goToControlHorario = () => {
   router.push('/control-horario')
+}
+
+// Navegar a Nóminas
+const goToPayroll = () => {
+  router.push('/payroll')
 }
 
 // Instalar PWA

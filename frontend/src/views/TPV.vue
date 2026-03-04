@@ -169,9 +169,9 @@
         <!-- Resumen del Carrito -->
         <div class="cart-panel">
           <div class="cart-header">
-            <h2>🛒 Carrito <span v-if="cart.length > 0" class="cart-count-badge">({{ cart.length }})</span></h2>
+            <h2><span class="tpv-icon tpv-icon-ui">🛒</span> Carrito <span v-if="cart.length > 0" class="cart-count-badge">({{ cart.length }})</span></h2>
             <button @click="clearCart" class="clear-cart-btn" v-if="cart.length > 0">
-              🗑️ Limpiar
+              <span class="tpv-icon tpv-icon-ui">🗑️</span> Limpiar
             </button>
           </div>
 
@@ -185,7 +185,8 @@
             </div>
           </transition>
 
-          <!-- Lista de productos en el carrito -->
+          <!-- Bloque 1: Lista productos -->
+          <div class="cart-block cart-block-list">
           <div class="cart-items">
             <div 
               v-for="(item, index) in cart" 
@@ -194,9 +195,9 @@
             >
               <div class="cart-item-info">
                 <span class="cart-item-name">{{ item.name || item.product?.name || 'Producto' }}</span>
-                <span class="cart-item-price">€{{ formatPrice(item.total || item.subtotal || 0) }}</span>
+                <span class="cart-item-price">€{{ formatPrice(item.total ?? item.subtotal_with_iva ?? item.subtotal ?? 0) }}</span>
                 <span class="cart-item-unit-price" v-if="item.quantity > 1">
-                  €{{ formatPrice(item.price || item.product?.price_with_iva || item.product?.price || 0) }} / unidad
+                  €{{ formatPrice(item.unit_price_with_iva || item.product?.price_with_iva || 0) }} / unidad
                 </span>
               </div>
               <!-- Controles de edición (solo en estado CART) -->
@@ -237,8 +238,10 @@
               <p class="empty-cart-hint">💡 Haz clic en cualquier producto para añadirlo al carrito</p>
             </div>
           </div>
+          </div>
 
-          <!-- Totales -->
+          <!-- Bloque 2: Resumen -->
+          <div class="cart-block cart-block-summary">
           <div class="cart-totals" v-if="cart.length > 0">
             <div class="total-line">
               <span>Subtotal:</span>
@@ -252,6 +255,7 @@
               <span>TOTAL:</span>
               <span>€{{ formatPrice(total) }}</span>
             </div>
+          </div>
           </div>
 
           <!-- Teclado Numérico -->
@@ -273,7 +277,8 @@
             </div>
           </div>
 
-          <!-- Botones de acción según estado -->
+          <!-- Bloque 3: Acciones -->
+          <div class="cart-block cart-block-actions">
           <div class="action-buttons">
             <!-- Estado CART: Mostrar botón para revisar y pagar -->
             <template v-if="tpvState === TPV_STATES.CART">
@@ -283,7 +288,7 @@
                 :disabled="!Array.isArray(cart) || cart.length === 0"
                 :title="(!Array.isArray(cart) || cart.length === 0) ? 'Añade productos al carrito para continuar' : 'Revisar y proceder al pago'"
               >
-                💳 REVISAR Y PAGAR €{{ formatPrice(total) }}
+                <span class="tpv-icon tpv-icon-primary">💳</span> REVISAR Y PAGAR €{{ formatPrice(total) }}
               </button>
               <button 
                 v-if="tpvConfig.supports_tickets !== false"
@@ -292,7 +297,7 @@
                 :disabled="cart.length === 0"
                 :title="cart.length === 0 ? 'Añade productos al carrito para generar ticket' : 'Generar e imprimir ticket'"
               >
-                🖨️ {{ tpvConfig.supports_invoices && cart.length > 0 ? 'Generar Ticket/Factura' : 'Imprimir Ticket' }}
+                <span class="tpv-icon tpv-icon-ui">🖨️</span> {{ tpvConfig.supports_invoices && cart.length > 0 ? 'Generar Ticket/Factura' : 'Imprimir Ticket' }}
               </button>
               <button 
                 @click="openDiscount" 
@@ -300,7 +305,7 @@
                 :disabled="cart.length === 0"
                 :title="cart.length === 0 ? 'Añade productos al carrito para aplicar descuento' : 'Aplicar descuento al carrito'"
               >
-                🏷️ Descuento
+                <span class="tpv-icon tpv-icon-ui">🏷️</span> Descuento
               </button>
             </template>
             
@@ -311,21 +316,21 @@
                 class="action-btn pay-btn"
                 :title="'Confirmar y proceder al pago de €' + formatPrice(total)"
               >
-                💳 CONFIRMAR PAGO €{{ formatPrice(total) }}
+                <span class="tpv-icon tpv-icon-primary">💳</span> CONFIRMAR PAGO €{{ formatPrice(total) }}
               </button>
               <button 
                 @click="backToCart" 
                 class="action-btn secondary-btn"
                 title="Volver al carrito para editar productos (no se pierde el estado)"
               >
-                ← Volver al Carrito
+                <span class="tpv-icon tpv-icon-ui">←</span> Volver al Carrito
               </button>
               <button 
                 @click="openDiscount" 
                 class="action-btn secondary-btn"
                 title="Aplicar descuento al carrito"
               >
-                🏷️ Descuento
+                <span class="tpv-icon tpv-icon-ui">🏷️</span> Descuento
               </button>
             </template>
             
@@ -336,14 +341,14 @@
                 class="action-btn pay-btn"
                 :title="'Finalizar pago de €' + formatPrice(total) + ' - La venta se registrará automáticamente'"
               >
-                ✅ FINALIZAR PAGO €{{ formatPrice(total) }}
+                <span class="tpv-icon tpv-icon-primary">✅</span> FINALIZAR PAGO €{{ formatPrice(total) }}
               </button>
               <button 
                 @click="cancelPayment" 
                 class="action-btn secondary-btn"
                 title="Cancelar pago y volver a revisión (no se pierde el carrito)"
               >
-                ← Cancelar
+                <span class="tpv-icon tpv-icon-ui">←</span> Cancelar
               </button>
             </template>
             
@@ -354,7 +359,7 @@
                 class="action-btn pay-btn"
                 title="Iniciar una nueva venta (se limpiará el carrito)"
               >
-                🆕 NUEVA VENTA
+                <span class="tpv-icon tpv-icon-primary">🆕</span> NUEVA VENTA
               </button>
               <button 
                 v-if="tpvConfig.supports_invoices"
@@ -362,9 +367,10 @@
                 class="action-btn secondary-btn"
                 :title="lastSaleTicketId ? 'Generar factura para el ticket #' + lastSaleTicketId : 'Generar factura para el último ticket'"
               >
-                🧾 Generar Factura
+                <span class="tpv-icon tpv-icon-ui">🧾</span> Generar Factura
               </button>
             </template>
+          </div>
           </div>
           
           <!-- Nota de pago (visible en PRE_PAYMENT) -->
@@ -547,37 +553,51 @@ const filteredProducts = computed(() => {
   return products.value.filter(p => p.category === selectedCategory.value)
 })
 
-// REQUIRED FUNCTION: calculateTotal - sum subtotals
-const subtotal = computed(() => {
-  if (!Array.isArray(cart.value) || cart.value.length === 0) {
-    return 0
+const safeNumber = (value) => {
+  const n = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+const getItemIvaRate = (item) => {
+  const fallback = tpvConfig.value?.default_iva_rate ?? 21
+  return safeNumber(item?.product?.iva_rate ?? item?.iva_rate ?? fallback)
+}
+
+const calcItemSubtotalNet = (item) => {
+  if (item?.subtotal !== undefined && item?.subtotal !== null) return safeNumber(item.subtotal)
+  const unitNet = item?.unit_price ?? item?.price ?? item?.product?.price ?? 0
+  return safeNumber(unitNet) * safeNumber(item?.quantity ?? 1)
+}
+
+const calcItemIva = (item) => {
+  if (item?.iva !== undefined && item?.iva !== null) return safeNumber(item.iva)
+  if (item?.subtotal_with_iva !== undefined && item?.subtotal_with_iva !== null && item?.subtotal !== undefined && item?.subtotal !== null) {
+    return safeNumber(item.subtotal_with_iva) - safeNumber(item.subtotal)
   }
-  
-  return cart.value.reduce((sum, item) => {
-    // Usar subtotal si existe, sino calcular
-    if (item.subtotal !== undefined) {
-      return sum + item.subtotal
-    }
-    const price = item.price || item.product?.price || 0
-    return sum + (price * (item.quantity || 1))
-  }, 0)
+  const net = calcItemSubtotalNet(item)
+  return net * (getItemIvaRate(item) / 100)
+}
+
+const calcItemTotal = (item) => {
+  if (item?.total !== undefined && item?.total !== null) return safeNumber(item.total)
+  if (item?.subtotal_with_iva !== undefined && item?.subtotal_with_iva !== null) return safeNumber(item.subtotal_with_iva)
+  return calcItemSubtotalNet(item) + calcItemIva(item)
+}
+
+// Totales del carrito (fuente de verdad: neto + IVA; si backend ya entrega totales por línea, se respetan)
+const subtotal = computed(() => {
+  if (!Array.isArray(cart.value) || cart.value.length === 0) return 0
+  return cart.value.reduce((sum, item) => sum + calcItemSubtotalNet(item), 0)
 })
 
 const ivaTotal = computed(() => {
-  if (!Array.isArray(cart.value) || cart.value.length === 0) {
-    return 0
-  }
-  
-  return cart.value.reduce((sum, item) => {
-    const price = item.price || item.product?.price || 0
-    const ivaRate = item.product?.iva_rate || item.iva_rate || 21
-    const quantity = item.quantity || 1
-    return sum + (price * quantity * ivaRate / 100)
-  }, 0)
+  if (!Array.isArray(cart.value) || cart.value.length === 0) return 0
+  return cart.value.reduce((sum, item) => sum + calcItemIva(item), 0)
 })
 
 const total = computed(() => {
-  return subtotal.value + ivaTotal.value
+  if (!Array.isArray(cart.value) || cart.value.length === 0) return 0
+  return cart.value.reduce((sum, item) => sum + calcItemTotal(item), 0)
 })
 
 // Métodos
@@ -880,6 +900,57 @@ const validateQuantity = (quantity) => {
   return Math.max(1, Math.min(999, quantity))
 }
 
+// Protección anti-doble IVA: normaliza cálculos por línea (neto + IVA) y evita sumar IVA dos veces.
+const recalcCartItem = (item) => {
+  if (!item) return
+
+  const quantity = validateQuantity(item.quantity || 1)
+  const ivaRate = getItemIvaRate(item)
+  const discountPercent = safeNumber(item.discount_percent ?? 0)
+  const discountMultiplier = 1 - Math.min(100, Math.max(0, discountPercent)) / 100
+
+  // Unit price NETO (sin IVA). Fuente: item.unit_price -> product.price -> item.price (compat)
+  let unitNet = safeNumber(item.unit_price ?? item.product?.price ?? item.price ?? 0)
+
+  // Si solo tenemos precio con IVA, derivar neto (evita doble cálculo).
+  const unitGrossFromProduct = safeNumber(item.product?.price_with_iva ?? item.price_with_iva ?? 0)
+  if (!unitNet && unitGrossFromProduct && ivaRate >= 0) {
+    unitNet = unitGrossFromProduct / (1 + ivaRate / 100)
+  }
+
+  const subtotalNet = unitNet * quantity * discountMultiplier
+  const ivaAmount = subtotalNet * (ivaRate / 100)
+  const totalGross = subtotalNet + ivaAmount
+  const unitGross = quantity > 0 ? (totalGross / quantity) : 0
+
+  // Guardar campos normalizados
+  item.quantity = quantity
+  item.unit_price = unitNet
+  item.unit_price_with_iva = unitGross
+  item.subtotal = subtotalNet
+  item.iva_rate = ivaRate
+  item.iva = ivaAmount
+  item.subtotal_with_iva = totalGross
+  item.total = totalGross
+  item.internal_vat_calculated = true
+
+  // Warning si detectamos una posible doble imposición (típico cuando unit_price ya venía con IVA)
+  if (import.meta.env.DEV && unitGrossFromProduct && unitNet) {
+    const expectedUnitGross = unitNet * (1 + ivaRate / 100)
+    const delta = Math.abs(expectedUnitGross - unitGrossFromProduct)
+    if (delta > 0.05 && !item._warned_vat_mismatch) {
+      item._warned_vat_mismatch = true
+      console.warn('[TPV] Posible desajuste IVA: el producto trae price_with_iva que no coincide con neto+IVA. Se usa neto+IVA como fuente de verdad.', {
+        product_id: item.id || item.product?.id,
+        unitNet,
+        ivaRate,
+        expectedUnitGross,
+        productUnitGross: unitGrossFromProduct
+      })
+    }
+  }
+}
+
 // REQUIRED FUNCTION: addProduct - push product into cart array
 const addProductToCart = (product) => {
   // Validar producto
@@ -907,19 +978,27 @@ const addProductToCart = (product) => {
   if (existingItem) {
     // Si existe, incrementar cantidad
     existingItem.quantity = validateQuantity(existingItem.quantity + 1)
-    existingItem.subtotal = (existingItem.product?.price_with_iva || existingItem.product?.price || existingItem.price || 0) * existingItem.quantity
-    existingItem.total = existingItem.subtotal
+    recalcCartItem(existingItem)
   } else {
     // Si no existe, crear nueva entrada en el array
-    const price = product.price_with_iva || product.price || 0
-    cart.value.push({
+    const ivaRate = safeNumber(product.iva_rate ?? tpvConfig.value?.default_iva_rate ?? 21)
+    const unitNet = safeNumber(product.price ?? 0) || (safeNumber(product.price_with_iva ?? 0) / (1 + ivaRate / 100)) || 0
+    const newItem = {
       id: product.id,
       name: product.name,
-      price: price,
+      unit_price: unitNet, // NETO (sin IVA)
+      unit_price_with_iva: safeNumber(product.price_with_iva ?? (unitNet * (1 + ivaRate / 100))),
+      iva_rate: ivaRate,
+      discount_percent: 0,
       quantity: 1,
-      subtotal: price,
+      subtotal: unitNet,
+      subtotal_with_iva: safeNumber(product.price_with_iva ?? (unitNet * (1 + ivaRate / 100))),
+      iva: 0,
+      total: 0,
       product: product // Mantener referencia completa del producto
-    })
+    }
+    recalcCartItem(newItem)
+    cart.value.push(newItem)
   }
   
   console.log('✅ Producto añadido. Carrito tiene', cart.value.length, 'items')
@@ -981,10 +1060,8 @@ const increaseQuantity = (index) => {
     return
   }
   
-  const price = item.price || item.product?.price_with_iva || item.product?.price || 0
   item.quantity = validateQuantity(item.quantity + 1)
-  item.subtotal = price * item.quantity
-  item.total = item.subtotal
+  recalcCartItem(item)
   
   const itemName = item.name || item.product?.name || 'Producto'
   console.log('➕ Cantidad incrementada:', itemName, '→', item.quantity)
@@ -1016,10 +1093,8 @@ const decreaseQuantity = (index) => {
   }
   
   if (item.quantity > 1) {
-    const price = item.price || item.product?.price_with_iva || item.product?.price || 0
     item.quantity--
-    item.subtotal = price * item.quantity
-    item.total = item.subtotal
+    recalcCartItem(item)
     
     const itemName = item.name || item.product?.name || 'Producto'
     console.log('➖ Cantidad decrementada:', itemName, '→', item.quantity)
@@ -1216,8 +1291,9 @@ const processPayment = async () => {
       cart_items: cart.value.map(item => ({
         product_id: item.id || item.product?.id || 'UNKNOWN',
         quantity: item.quantity || 1,
-        unit_price: item.price || item.product?.price || 0,
-        iva_rate: item.product?.iva_rate || item.iva_rate || 21.0
+        // Enviar SIEMPRE precio NETO (sin IVA). El backend calcula price_with_iva y totales.
+        unit_price: item.unit_price ?? item.product?.price ?? item.price ?? 0,
+        iva_rate: item.iva_rate ?? item.product?.iva_rate ?? 21.0
       }))
     }
     
@@ -1233,7 +1309,9 @@ const processPayment = async () => {
     tpvState.value = TPV_STATES.CLOSED
     
     // Mostrar confirmación usando ticket_id del resultado
-    success(`Pago procesado exitosamente. Ticket #${ticketId || 'N/A'}. Total: EUR ${formatPrice(total.value)}. Esta venta se ha registrado automáticamente con RAFAEL.`)
+    const backendTotal = result?.ticket?.totals?.total ?? result?.totals?.total ?? null
+    const totalToShow = backendTotal !== null ? backendTotal : total.value
+    success(`Pago procesado exitosamente. Ticket #${ticketId || 'N/A'}. Total: EUR ${formatPrice(totalToShow)}. Esta venta se ha registrado automáticamente con RAFAEL.`)
     
     console.log('✅ Venta procesada exitosamente:', result)
   } catch (err) {
@@ -1272,7 +1350,7 @@ TICKET DE VENTA
 ${new Date().toLocaleString('es-ES')}
 
 ${cart.value.map(item => 
-  `${item.product.name} x${item.quantity} - €${formatPrice(item.total)}`
+  `${item.name || item.product?.name || 'Producto'} x${item.quantity || 1} - €${formatPrice(item.total || item.subtotal_with_iva || 0)}`
 ).join('\n')}
 
 ---
@@ -1317,9 +1395,9 @@ const openDiscount = () => {
   }
   
   // Aplicar descuento al carrito
-  const discountMultiplier = 1 - (discount / 100)
   cart.value.forEach(item => {
-    item.total = (item.product.price_with_iva * item.quantity * discountMultiplier)
+    item.discount_percent = discount
+    recalcCartItem(item)
   })
   
   console.log(`✅ Descuento del ${discount}% aplicado`)
@@ -1700,12 +1778,22 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* Pantalla completa real: fija al viewport, sin espacio blanco alrededor */
 .tpv-container {
-  min-height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: linear-gradient(180deg, #0f1419 0%, #1a1f2e 100%);
   color: #fff;
-  padding: 20px;
-  position: relative;
+  padding: 12px;
+  box-sizing: border-box;
 }
 
 .back-to-dashboard-btn.fixed-top-left {
@@ -1732,14 +1820,15 @@ onMounted(async () => {
 }
 
 .tpv-header {
+  flex-shrink: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 30px;
+  padding: 12px 16px;
   background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 15px;
-  margin: 80px 20px 20px 20px;
+  border-radius: 12px;
+  margin: 52px 0 8px 0;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
@@ -1779,20 +1868,24 @@ onMounted(async () => {
   border-color: rgba(59, 130, 246, 0.6);
 }
 
+/* ZEUS_TPV_CART_ULTRA_MINIMAL_003: 4fr 1fr, terminal bancaria */
 .tpv-main-interface {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 20px;
-  margin: 20px;
-  height: calc(100vh - 200px);
+  grid-template-columns: 4fr minmax(0, 300px);
+  gap: 6px;
+  margin: 0;
+  overflow: hidden;
 }
 
 .tpv-left-panel {
+  min-height: 0;
   background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 15px;
-  padding: 20px;
-  overflow-y: auto;
+  border-radius: 8px;
+  padding: 16px;
+  overflow: hidden;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
@@ -1830,7 +1923,7 @@ onMounted(async () => {
 .product-card {
   background: rgba(255, 255, 255, 0.05);
   border: 2px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 15px;
   transition: all 0.3s;
   text-align: center;
@@ -1883,17 +1976,17 @@ onMounted(async () => {
 }
 
 .product-icon {
-  font-size: 3rem;
+  font-size: 2rem; /* tamaño lógico similar a iconos del carrito */
   display: block;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .product-image-file {
   width: 100%;
-  height: 150px;
+  height: 120px;
   object-fit: cover;
   border-radius: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .image-preview {
@@ -2000,72 +2093,127 @@ onMounted(async () => {
   margin-top: 5px;
 }
 
+/* ZEUS_TPV_CART_ULTRA_MINIMAL_003: carrito máx 300px, gap 6px */
 .tpv-right-panel {
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  max-width: 300px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 6px;
+  overflow: hidden;
 }
 
+/* ZEUS_TPV_CART_ULTRA_MINIMAL_003: padding 10px, gap 6px, radius 8px */
 .cart-panel {
+  flex: 1;
+  min-height: 0;
+  max-height: 100%;
   background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 15px;
-  padding: 20px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  height: 100%;
+  justify-content: flex-start;
+  gap: 6px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+/* ZEUS_TPV_CART_ULTRA_MINIMAL_003: iconos máx 16px */
+.tpv-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  line-height: 1;
+}
+.tpv-icon-ui,
+.tpv-icon-primary {
+  font-size: 16px;
+}
+.secondary-btn .tpv-icon {
+  opacity: 0.9;
+}
+.action-btn .tpv-icon {
+  font-size: 14px;
+}
+
+/* Bloques del carrito: ultra compactos, márgenes ≤8px */
+.cart-block {
+  flex-shrink: 0;
+}
+.cart-block + .cart-block {
+  margin-top: 6px;
+}
+.cart-block-list {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.cart-block-summary,
+.cart-block-actions {
+  flex: 0 0 auto;
 }
 
 .cart-header {
+  flex: 0 0 auto;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 4px;
 }
 
 .cart-header h2 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 14px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
 }
 
 .cart-count-badge {
-  font-size: 0.9rem;
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.6);
   font-weight: 400;
 }
 
 .clear-cart-btn {
-  padding: 6px 12px;
+  padding: 4px 8px;
   background: rgba(239, 68, 68, 0.2);
   border: 1px solid rgba(239, 68, 68, 0.3);
   border-radius: 6px;
   color: #fca5a5;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 12px;
 }
 
 .cart-items {
-  flex: 1;
+  flex: 0 1 auto;
+  min-height: 0;
   overflow-y: auto;
-  margin-bottom: 20px;
+  margin-bottom: 0;
 }
 
 .cart-item {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 12px;
+  align-items: flex-start;
+  padding: 6px 0;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .cart-item-info {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .cart-item-name {
@@ -2094,7 +2242,7 @@ onMounted(async () => {
 .cart-item-readonly {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .cart-item-qty-readonly {
@@ -2105,7 +2253,9 @@ onMounted(async () => {
 .cart-item-controls {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .qty-btn {
@@ -2178,88 +2328,100 @@ onMounted(async () => {
 
 .empty-cart {
   text-align: center;
-  padding: 60px 20px;
+  padding: 12px 8px;
   color: rgba(255, 255, 255, 0.5);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 200px;
 }
 
 .empty-cart-icon {
-  font-size: 4rem;
-  margin-bottom: 15px;
-  opacity: 0.5;
+  font-size: 1.75rem;
+  margin-bottom: 6px;
+  opacity: 0.6;
 }
 
 .empty-cart-message {
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.6);
 }
 
 .empty-cart-hint {
-  font-size: 0.85rem;
-  margin-top: 10px;
+  font-size: 0.8rem;
+  margin-top: 6px;
   color: rgba(255, 255, 255, 0.4);
 }
 
 .cart-totals {
-  border-top: 2px solid rgba(255, 255, 255, 0.1);
-  padding-top: 15px;
-  margin-bottom: 20px;
+  flex: 0 0 auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding-top: 6px;
+  margin-bottom: 0;
 }
 
 .total-line {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 10px;
-  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 2px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .total-final {
-  font-size: 1.3rem;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 600;
   color: #fff;
   border-top: 2px solid rgba(255, 255, 255, 0.2);
-  padding-top: 10px;
-  margin-top: 10px;
+  padding-top: 4px;
+  margin-top: 4px;
+  margin-bottom: 0;
 }
 
+/* ZEUS_TPV_CART_ULTRA_MINIMAL_003: teclado 34px, 13px, gap 4px */
 .numeric-keyboard {
+  flex: 0 0 auto;
   display: grid;
   grid-template-rows: repeat(4, 1fr);
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: 4px;
+  margin-bottom: 0;
 }
 
 .keyboard-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: 4px;
 }
 
 .keyboard-key {
-  padding: 20px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
+  aspect-ratio: 1 / 1;
+  max-height: 34px;
+  padding: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
   color: #fff;
-  font-size: 1.5rem;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
 .keyboard-key:hover {
-  background: rgba(59, 130, 246, 0.3);
+  background: rgba(59, 130, 246, 0.25);
   border-color: rgba(59, 130, 246, 0.5);
-  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
 }
 
 .keyboard-key:active {
-  transform: scale(0.95);
+  background: rgba(59, 130, 246, 0.4);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .key-action {
@@ -2275,17 +2437,22 @@ onMounted(async () => {
 .action-buttons {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
 }
 
 .action-btn {
-  padding: 15px;
+  width: 100%;
+  padding: 4px 8px;
   border: none;
-  border-radius: 10px;
-  font-weight: 700;
-  font-size: 1rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.75rem;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 
 .action-btn:disabled {
@@ -2293,26 +2460,32 @@ onMounted(async () => {
   cursor: not-allowed;
 }
 
+/* ZEUS_TPV_CART_ULTRA_MINIMAL_003: principal 38px, 14px */
 .pay-btn {
+  height: 38px;
   background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: #fff;
-  font-size: 1.2rem;
-  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
 }
 
 .pay-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.6);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.5);
+  filter: brightness(1.05);
 }
 
 .secondary-btn {
-  background: rgba(59, 130, 246, 0.3);
-  border: 1px solid rgba(59, 130, 246, 0.5);
-  color: #fff;
+  height: 30px;
+  background: rgba(59, 130, 246, 0.25);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 12px;
 }
 
 .secondary-btn:hover:not(:disabled) {
-  background: rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.4);
+  border-color: rgba(59, 130, 246, 0.6);
 }
 
 .payment-note-section {
@@ -2470,8 +2643,8 @@ onMounted(async () => {
 }
 
 .add-product-icon {
-  font-size: 3rem;
-  opacity: 0.8;
+  font-size: 2.2rem;
+  opacity: 0.85;
 }
 
 .add-product-label {
@@ -2517,15 +2690,46 @@ onMounted(async () => {
   font-weight: 600;
 }
 
-/* Responsive */
+/* Responsive: 1366x768 y 1920x1080 sin scroll (layout base). Tablet/móvil: columna única */
 @media (max-width: 1024px) {
+  .tpv-container {
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
+  }
+
   .tpv-main-interface {
     grid-template-columns: 1fr;
+    flex: none;
     height: auto;
+    min-height: 400px;
   }
-  
+
   .tpv-right-panel {
     order: -1;
+    min-height: 0;
+  }
+}
+
+/* Pantalla baja: teclado y acciones más compactos sin romper proporción */
+@media (max-height: 800px) {
+  .keyboard-key {
+    max-height: 52px;
+    padding: 4px;
+    font-size: 16px;
+  }
+
+  .numeric-keyboard {
+    gap: 6px;
+  }
+
+  .pay-btn {
+    height: 48px;
+    font-size: 16px;
+  }
+
+  .secondary-btn {
+    height: 40px;
   }
 }
 
@@ -2885,7 +3089,8 @@ onMounted(async () => {
 }
 
 .feedback-icon {
-  font-size: 1.2rem;
+  font-size: 18px;
+  vertical-align: middle;
 }
 
 .feedback-message {

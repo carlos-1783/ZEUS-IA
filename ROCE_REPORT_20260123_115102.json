@@ -1,0 +1,652 @@
+{
+  "audit_date": "2026-01-23T11:49:51.517511",
+  "auditor": "CURSO",
+  "company_name": "Empresa Ficticia Global S.L.",
+  "steps": [
+    {
+      "step": "1.1",
+      "action": "Crear superusuario",
+      "status": "INFO",
+      "details": "Verificando si existe superusuario...",
+      "timestamp": "2026-01-23T11:49:51.517511",
+      "critical": false
+    },
+    {
+      "step": "1.1",
+      "action": "Login superusuario",
+      "status": "SUCCESS",
+      "details": "Superusuario ya existía, autenticado",
+      "timestamp": "2026-01-23T11:49:56.859538",
+      "critical": false
+    },
+    {
+      "step": "1.2",
+      "action": "Configurar business profile",
+      "status": "INFO",
+      "details": "Configurando perfil de negocio...",
+      "timestamp": "2026-01-23T11:49:56.859538",
+      "critical": false
+    },
+    {
+      "step": "1.2",
+      "action": "Configurar business profile",
+      "status": "SUCCESS",
+      "details": "Business profile configurado: otros",
+      "timestamp": "2026-01-23T11:49:59.061049",
+      "critical": false
+    },
+    {
+      "step": "1.3",
+      "action": "Crear usuario ADMIN",
+      "status": "INFO",
+      "details": "Creando admin@empresaglobal.com...",
+      "timestamp": "2026-01-23T11:49:59.061049",
+      "critical": false
+    },
+    {
+      "step": "1.3",
+      "action": "Usuario ADMIN ya existe",
+      "status": "WARN",
+      "details": "Usuario ya registrado: None",
+      "timestamp": "2026-01-23T11:50:06.103362",
+      "critical": false
+    },
+    {
+      "step": "1.3",
+      "action": "Crear usuario EMPLOYEE",
+      "status": "INFO",
+      "details": "Creando empleado1@empresaglobal.com...",
+      "timestamp": "2026-01-23T11:50:06.103362",
+      "critical": false
+    },
+    {
+      "step": "1.3",
+      "action": "Usuario EMPLOYEE ya existe",
+      "status": "WARN",
+      "details": "Usuario ya registrado: None",
+      "timestamp": "2026-01-23T11:50:13.056254",
+      "critical": false
+    },
+    {
+      "step": "1.3",
+      "action": "Crear usuario EMPLOYEE",
+      "status": "INFO",
+      "details": "Creando empleado2@empresaglobal.com...",
+      "timestamp": "2026-01-23T11:50:13.056254",
+      "critical": false
+    },
+    {
+      "step": "1.3",
+      "action": "Usuario EMPLOYEE ya existe",
+      "status": "WARN",
+      "details": "Usuario ya registrado: None",
+      "timestamp": "2026-01-23T11:50:19.972280",
+      "critical": false
+    },
+    {
+      "step": "1.4",
+      "action": "Login ADMIN",
+      "status": "INFO",
+      "details": "Validando login para admin@empresaglobal.com...",
+      "timestamp": "2026-01-23T11:50:19.972280",
+      "critical": false
+    },
+    {
+      "step": "1.4",
+      "action": "Login ADMIN",
+      "status": "SUCCESS",
+      "details": "Login exitoso",
+      "timestamp": "2026-01-23T11:50:22.755153",
+      "critical": false
+    },
+    {
+      "step": "1.4",
+      "action": "Login EMPLOYEE",
+      "status": "INFO",
+      "details": "Validando login para empleado1@empresaglobal.com...",
+      "timestamp": "2026-01-23T11:50:22.755153",
+      "critical": false
+    },
+    {
+      "step": "1.4",
+      "action": "Login EMPLOYEE",
+      "status": "SUCCESS",
+      "details": "Login exitoso",
+      "timestamp": "2026-01-23T11:50:25.485108",
+      "critical": false
+    },
+    {
+      "step": "1.4",
+      "action": "Login EMPLOYEE",
+      "status": "INFO",
+      "details": "Validando login para empleado2@empresaglobal.com...",
+      "timestamp": "2026-01-23T11:50:25.486153",
+      "critical": false
+    },
+    {
+      "step": "1.4",
+      "action": "Login EMPLOYEE",
+      "status": "SUCCESS",
+      "details": "Login exitoso",
+      "timestamp": "2026-01-23T11:50:28.632163",
+      "critical": false
+    },
+    {
+      "step": "2.1",
+      "action": "Crear producto",
+      "status": "INFO",
+      "details": "Creando Consultoría Estratégica...",
+      "timestamp": "2026-01-23T11:50:28.632163",
+      "critical": false
+    },
+    {
+      "step": "2.1",
+      "action": "Crear producto",
+      "status": "SUCCESS",
+      "details": "Producto creado: PROD_1769165430703_0016",
+      "timestamp": "2026-01-23T11:50:30.778272",
+      "critical": false
+    },
+    {
+      "step": "2.1",
+      "action": "Crear producto",
+      "status": "INFO",
+      "details": "Creando Desarrollo Web...",
+      "timestamp": "2026-01-23T11:50:30.778272",
+      "critical": false
+    },
+    {
+      "step": "2.1",
+      "action": "Crear producto",
+      "status": "SUCCESS",
+      "details": "Producto creado: PROD_1769165432844_0017",
+      "timestamp": "2026-01-23T11:50:32.902274",
+      "critical": false
+    },
+    {
+      "step": "2.1",
+      "action": "Crear producto",
+      "status": "INFO",
+      "details": "Creando Mantenimiento Mensual...",
+      "timestamp": "2026-01-23T11:50:32.902274",
+      "critical": false
+    },
+    {
+      "step": "2.1",
+      "action": "Crear producto",
+      "status": "SUCCESS",
+      "details": "Producto creado: PROD_1769165434966_0018",
+      "timestamp": "2026-01-23T11:50:35.034729",
+      "critical": false
+    },
+    {
+      "step": "2.1",
+      "action": "Crear producto",
+      "status": "INFO",
+      "details": "Creando Auditoría Técnica...",
+      "timestamp": "2026-01-23T11:50:35.034729",
+      "critical": false
+    },
+    {
+      "step": "2.1",
+      "action": "Crear producto",
+      "status": "SUCCESS",
+      "details": "Producto creado: PROD_1769165437087_0019",
+      "timestamp": "2026-01-23T11:50:37.149868",
+      "critical": false
+    },
+    {
+      "step": "2.2",
+      "action": "Modificar producto",
+      "status": "INFO",
+      "details": "Modificando producto PROD_1769165430703_0016...",
+      "timestamp": "2026-01-23T11:50:37.149868",
+      "critical": false
+    },
+    {
+      "step": "2.2",
+      "action": "Modificar producto",
+      "status": "SUCCESS",
+      "details": "Producto modificado",
+      "timestamp": "2026-01-23T11:50:41.359446",
+      "critical": false
+    },
+    {
+      "step": "2.3",
+      "action": "Eliminar producto",
+      "status": "INFO",
+      "details": "Eliminando producto PROD_1769165437087_0019...",
+      "timestamp": "2026-01-23T11:50:41.359446",
+      "critical": false
+    },
+    {
+      "step": "2.3",
+      "action": "Eliminar producto",
+      "status": "WARN",
+      "details": "HTTP 403: {\"detail\":\"No tienes permisos para eliminar productos. Se requiere rol SUPERUSER.\"}",
+      "timestamp": "2026-01-23T11:50:43.450513",
+      "critical": false
+    },
+    {
+      "step": "2.4",
+      "action": "Configurar business profile",
+      "status": "INFO",
+      "details": "Configurando business profile para venta...",
+      "timestamp": "2026-01-23T11:50:43.450513",
+      "critical": false
+    },
+    {
+      "step": "2.4",
+      "action": "Registrar venta",
+      "status": "INFO",
+      "details": "Registrando venta con múltiples productos...",
+      "timestamp": "2026-01-23T11:50:45.531445",
+      "critical": false
+    },
+    {
+      "step": "2.4",
+      "action": "Registrar venta",
+      "status": "SUCCESS",
+      "details": "Venta registrada: Ticket #TICKET_20260123105047",
+      "timestamp": "2026-01-23T11:50:47.620653",
+      "critical": false
+    },
+    {
+      "step": "2.5",
+      "action": "Verificar persistencia",
+      "status": "INFO",
+      "details": "Verificando persistencia de productos...",
+      "timestamp": "2026-01-23T11:50:47.620653",
+      "critical": false
+    },
+    {
+      "step": "2.5",
+      "action": "Verificar persistencia",
+      "status": "SUCCESS",
+      "details": "20 productos encontrados",
+      "timestamp": "2026-01-23T11:50:49.707909",
+      "critical": false
+    },
+    {
+      "step": "3.1",
+      "action": "Check-in empleado",
+      "status": "WARN",
+      "details": "No se pudo obtener ID del empleado",
+      "timestamp": "2026-01-23T11:50:51.787583",
+      "critical": false
+    },
+    {
+      "step": "4.1",
+      "action": "Generar factura",
+      "status": "INFO",
+      "details": "Generando factura desde TPV...",
+      "timestamp": "2026-01-23T11:50:51.787583",
+      "critical": false
+    },
+    {
+      "step": "4.1",
+      "action": "Generar factura",
+      "status": "WARN",
+      "details": "HTTP 405: {\"detail\":\"Method Not Allowed\"}",
+      "timestamp": "2026-01-23T11:50:53.840354",
+      "critical": false
+    },
+    {
+      "step": "5.1",
+      "action": "PERSEO analiza mercado",
+      "status": "INFO",
+      "details": "Solicitando análisis de mercado...",
+      "timestamp": "2026-01-23T11:50:53.840354",
+      "critical": false
+    },
+    {
+      "step": "5.1",
+      "action": "PERSEO analiza mercado",
+      "status": "WARN",
+      "details": "HTTP 405: {\"detail\":\"Method Not Allowed\"}",
+      "timestamp": "2026-01-23T11:50:55.861052",
+      "critical": false
+    },
+    {
+      "step": "6.1",
+      "action": "THALOS valida permisos",
+      "status": "INFO",
+      "details": "Verificando validación de permisos...",
+      "timestamp": "2026-01-23T11:50:55.861052",
+      "critical": false
+    },
+    {
+      "step": "6.1",
+      "action": "THALOS valida permisos",
+      "status": "SUCCESS",
+      "details": "Permisos correctamente validados (403 esperado)",
+      "timestamp": "2026-01-23T11:50:57.909927",
+      "critical": false
+    },
+    {
+      "step": "7.1",
+      "action": "Verificar métricas",
+      "status": "INFO",
+      "details": "Obteniendo métricas del dashboard...",
+      "timestamp": "2026-01-23T11:50:57.909927",
+      "critical": false
+    },
+    {
+      "step": "7.1",
+      "action": "Verificar métricas",
+      "status": "SUCCESS",
+      "details": "Métricas obtenidas: ['total_interactions', 'avg_response_time', 'cost_savings', 'success_rate', 'interactions_trend', 'response_trend', 'savings_trend', 'success_trend']",
+      "timestamp": "2026-01-23T11:51:00.627601",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar todos los agentes",
+      "status": "INFO",
+      "details": "Obteniendo estado de todos los agentes...",
+      "timestamp": "2026-01-23T11:51:00.627601",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar ZEUS CORE",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:51:02.673141",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar PERSEO",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:51:02.673141",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar RAFAEL",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:51:02.673141",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar THALOS",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:51:02.673141",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar JUSTICIA",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:51:02.673141",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar AFRODITA",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:51:02.673141",
+      "critical": false
+    }
+  ],
+  "agents_status": {
+    "ZEUS CORE": "online",
+    "PERSEO": "online",
+    "RAFAEL": "online",
+    "THALOS": "online",
+    "JUSTICIA": "online",
+    "AFRODITA": "online"
+  },
+  "critical_failures": [],
+  "warnings": [
+    {
+      "step": "1.3",
+      "action": "Usuario ADMIN ya existe",
+      "status": "WARN",
+      "details": "Usuario ya registrado: None",
+      "timestamp": "2026-01-23T11:50:06.103362",
+      "critical": false
+    },
+    {
+      "step": "1.3",
+      "action": "Usuario EMPLOYEE ya existe",
+      "status": "WARN",
+      "details": "Usuario ya registrado: None",
+      "timestamp": "2026-01-23T11:50:13.056254",
+      "critical": false
+    },
+    {
+      "step": "1.3",
+      "action": "Usuario EMPLOYEE ya existe",
+      "status": "WARN",
+      "details": "Usuario ya registrado: None",
+      "timestamp": "2026-01-23T11:50:19.972280",
+      "critical": false
+    },
+    {
+      "step": "2.3",
+      "action": "Eliminar producto",
+      "status": "WARN",
+      "details": "HTTP 403: {\"detail\":\"No tienes permisos para eliminar productos. Se requiere rol SUPERUSER.\"}",
+      "timestamp": "2026-01-23T11:50:43.450513",
+      "critical": false
+    },
+    {
+      "step": "3.1",
+      "action": "Check-in empleado",
+      "status": "WARN",
+      "details": "No se pudo obtener ID del empleado",
+      "timestamp": "2026-01-23T11:50:51.787583",
+      "critical": false
+    },
+    {
+      "step": "4.1",
+      "action": "Generar factura",
+      "status": "WARN",
+      "details": "HTTP 405: {\"detail\":\"Method Not Allowed\"}",
+      "timestamp": "2026-01-23T11:50:53.840354",
+      "critical": false
+    },
+    {
+      "step": "5.1",
+      "action": "PERSEO analiza mercado",
+      "status": "WARN",
+      "details": "HTTP 405: {\"detail\":\"Method Not Allowed\"}",
+      "timestamp": "2026-01-23T11:50:55.861052",
+      "critical": false
+    }
+  ],
+  "successes": [
+    {
+      "step": "1.1",
+      "action": "Login superusuario",
+      "status": "SUCCESS",
+      "details": "Superusuario ya existía, autenticado",
+      "timestamp": "2026-01-23T11:49:56.859538",
+      "critical": false
+    },
+    {
+      "step": "1.2",
+      "action": "Configurar business profile",
+      "status": "SUCCESS",
+      "details": "Business profile configurado: otros",
+      "timestamp": "2026-01-23T11:49:59.061049",
+      "critical": false
+    },
+    {
+      "step": "1.4",
+      "action": "Login ADMIN",
+      "status": "SUCCESS",
+      "details": "Login exitoso",
+      "timestamp": "2026-01-23T11:50:22.755153",
+      "critical": false
+    },
+    {
+      "step": "1.4",
+      "action": "Login EMPLOYEE",
+      "status": "SUCCESS",
+      "details": "Login exitoso",
+      "timestamp": "2026-01-23T11:50:25.485108",
+      "critical": false
+    },
+    {
+      "step": "1.4",
+      "action": "Login EMPLOYEE",
+      "status": "SUCCESS",
+      "details": "Login exitoso",
+      "timestamp": "2026-01-23T11:50:28.632163",
+      "critical": false
+    },
+    {
+      "step": "2.1",
+      "action": "Crear producto",
+      "status": "SUCCESS",
+      "details": "Producto creado: PROD_1769165430703_0016",
+      "timestamp": "2026-01-23T11:50:30.778272",
+      "critical": false
+    },
+    {
+      "step": "2.1",
+      "action": "Crear producto",
+      "status": "SUCCESS",
+      "details": "Producto creado: PROD_1769165432844_0017",
+      "timestamp": "2026-01-23T11:50:32.902274",
+      "critical": false
+    },
+    {
+      "step": "2.1",
+      "action": "Crear producto",
+      "status": "SUCCESS",
+      "details": "Producto creado: PROD_1769165434966_0018",
+      "timestamp": "2026-01-23T11:50:35.034729",
+      "critical": false
+    },
+    {
+      "step": "2.1",
+      "action": "Crear producto",
+      "status": "SUCCESS",
+      "details": "Producto creado: PROD_1769165437087_0019",
+      "timestamp": "2026-01-23T11:50:37.149868",
+      "critical": false
+    },
+    {
+      "step": "2.2",
+      "action": "Modificar producto",
+      "status": "SUCCESS",
+      "details": "Producto modificado",
+      "timestamp": "2026-01-23T11:50:41.359446",
+      "critical": false
+    },
+    {
+      "step": "2.4",
+      "action": "Registrar venta",
+      "status": "SUCCESS",
+      "details": "Venta registrada: Ticket #TICKET_20260123105047",
+      "timestamp": "2026-01-23T11:50:47.620653",
+      "critical": false
+    },
+    {
+      "step": "2.5",
+      "action": "Verificar persistencia",
+      "status": "SUCCESS",
+      "details": "20 productos encontrados",
+      "timestamp": "2026-01-23T11:50:49.707909",
+      "critical": false
+    },
+    {
+      "step": "6.1",
+      "action": "THALOS valida permisos",
+      "status": "SUCCESS",
+      "details": "Permisos correctamente validados (403 esperado)",
+      "timestamp": "2026-01-23T11:50:57.909927",
+      "critical": false
+    },
+    {
+      "step": "7.1",
+      "action": "Verificar métricas",
+      "status": "SUCCESS",
+      "details": "Métricas obtenidas: ['total_interactions', 'avg_response_time', 'cost_savings', 'success_rate', 'interactions_trend', 'response_trend', 'savings_trend', 'success_trend']",
+      "timestamp": "2026-01-23T11:51:00.627601",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar ZEUS CORE",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:51:02.673141",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar PERSEO",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:51:02.673141",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar RAFAEL",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:51:02.673141",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar THALOS",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:51:02.673141",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar JUSTICIA",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:51:02.673141",
+      "critical": false
+    },
+    {
+      "step": "AGENTS",
+      "action": "Verificar AFRODITA",
+      "status": "SUCCESS",
+      "details": "Estado: online",
+      "timestamp": "2026-01-23T11:51:02.673141",
+      "critical": false
+    }
+  ],
+  "final_report": {
+    "summary": {
+      "total_steps": 42,
+      "successful_steps": 14,
+      "success_rate": "33.3%",
+      "critical_failures": 0,
+      "warnings": 7
+    },
+    "agent_by_agent": {
+      "ZEUS CORE": "online",
+      "PERSEO": "online",
+      "RAFAEL": "online",
+      "THALOS": "online",
+      "JUSTICIA": "online",
+      "AFRODITA": "online"
+    },
+    "failures_detected": [],
+    "business_readiness_score": 33.33333333333333,
+    "legal_risk": "LOW",
+    "technical_risk": "HIGH",
+    "commercial_risk": "MEDIUM",
+    "veredicto": "NO_GO",
+    "reasoning": "Sistema no está listo para producción. 0 fallos críticos detectados."
+  }
+}

@@ -217,6 +217,23 @@ if extra_cors:
     extras = [origin.strip() for origin in extra_cors.split(",") if origin.strip()]
     settings.BACKEND_CORS_ORIGINS = list(dict.fromkeys(settings.BACKEND_CORS_ORIGINS + extras))
 
+# ZEUS_LOCAL_CORS_FIX_001: En desarrollo local, garantizar orígenes localhost para preflight
+# Solo aplica cuando NO estamos en Railway (evita tocar producción)
+_is_railway = bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_SERVICE_NAME"))
+_env_dev = (os.getenv("ENVIRONMENT", "").lower() == "development" or os.getenv("DEBUG", "").lower() in ("true", "1", "t"))
+if _env_dev and not _is_railway:
+    _local_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ]
+    _combined = list(dict.fromkeys(_local_origins + list(settings.BACKEND_CORS_ORIGINS)))
+    settings.BACKEND_CORS_ORIGINS = _combined
+    logger.info("[CORS] Modo desarrollo local: orígenes localhost garantizados para preflight (sin afectar Railway)")
+
 # Validar y asegurar el formato de la clave secreta
 try:
     settings.SECRET_KEY = ensure_secret_key_format(settings.SECRET_KEY)

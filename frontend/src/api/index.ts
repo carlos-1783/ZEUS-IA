@@ -344,6 +344,9 @@ const scheduleTokenRefresh = (expiresIn: number): void => {
   }, refreshTime);
 };
 
+// Mutex: evita múltiples refreshes concurrentes (race donde el segundo usa un token ya invalidado)
+let refreshInProgress: Promise<AuthTokens | null> | null = null;
+
 const refreshToken = async (refreshTokenValue: string): Promise<AuthTokens> => {
   if (!refreshTokenValue) {
     throw new Error('No refresh token provided');
@@ -382,9 +385,28 @@ const refreshToken = async (refreshTokenValue: string): Promise<AuthTokens> => {
     if (isAxiosError(error) && error.response?.status === 401) {
       tokenService.removeTokens();
       window.dispatchEvent(new Event('unauthorized'));
+      if (import.meta.env.DEV) {
+        console.warn('[API] Refresh falló (401): token inválido o expirado. Si usabas Railway y ahora local, haz login de nuevo.');
+      }
     }
     throw error;
   }
+};
+
+const refreshTokenWithMutex = (): Promise<AuthTokens | null> => {
+  if (refreshInProgress) return refreshInProgress;
+  const rt = tokenService.getRefreshToken();
+  if (!rt) {
+    tokenService.removeTokens();
+    return Promise.resolve(null);
+  }
+  refreshInProgress = refreshToken(rt)
+    .then((t) => t)
+    .catch(() => null)
+    .finally(() => {
+      refreshInProgress = null;
+    });
+  return refreshInProgress;
 };
 
 // ====================
@@ -461,39 +483,14 @@ axiosInstance.interceptors.response.use(
       
       // Mark request as retried to prevent infinite loops
       originalRequest._retry = true;
-      
-      try {
-        // Try to refresh the token
-        const refreshTokenValue = tokenService.getRefreshToken();
-        if (!refreshTokenValue) {
-          console.error('[API] No refresh token available');
-          tokenService.removeTokens();
-          window.dispatchEvent(new Event('unauthorized'));
-          return Promise.reject(createErrorResponse('no_refresh_token', 'Session expired', error));
-        }
-        
-        console.log('[API] Attempting to refresh token...');
-        try {
-          const newTokens = await refreshToken(refreshTokenValue);
-          
-          // Update the auth header with the new token
-          if (newTokens.access_token) {
-            originalRequest.headers = originalRequest.headers || {};
-            originalRequest.headers.Authorization = `${TOKEN_PREFIX}${newTokens.access_token}`;
-            return axiosInstance(originalRequest);
-          }
-        } catch (refreshError) {
-          console.error('[API] Token refresh failed:', refreshError);
-          tokenService.removeTokens();
-          window.dispatchEvent(new Event('unauthorized'));
-          return Promise.reject(createErrorResponse('token_refresh_failed', 'Session refresh failed', refreshError));
-        }
-      } catch (refreshError) {
-        console.error('[API] Token refresh failed:', refreshError);
-        tokenService.removeTokens();
-        window.dispatchEvent(new Event('unauthorized'));
-        return Promise.reject(createErrorResponse('token_refresh_failed', 'Session refresh failed', refreshError));
+
+      const newTokens = await refreshTokenWithMutex();
+      if (newTokens?.access_token) {
+        originalRequest.headers = originalRequest.headers || {};
+        originalRequest.headers.Authorization = `${TOKEN_PREFIX}${newTokens.access_token}`;
+        return axiosInstance(originalRequest);
       }
+      return Promise.reject(createErrorResponse('token_refresh_failed', 'Session expired or invalid', error));
     }
     
     // Handle other error statuses
@@ -577,7 +574,11 @@ const api: ApiClient = {
     }
   },
   
-  refreshToken,
+  refreshToken: async (_refreshTokenValue?: string): Promise<AuthTokens> => {
+    const result = await refreshTokenWithMutex();
+    if (result) return result;
+    throw new Error('Failed to refresh token');
+  },
   
   // User methods
   getCurrentUser: async (): Promise<UserProfile> => {

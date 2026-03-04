@@ -539,7 +539,8 @@ class TPVService:
         terminal_id: Optional[str] = None,
         customer_data: Optional[Dict[str, Any]] = None,
         user_id: Optional[int] = None,
-        db: Optional[Any] = None
+        db: Optional[Any] = None,
+        consumption_type: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Procesar venta y generar ticket
@@ -604,6 +605,38 @@ class TPVService:
             "business_profile": self.business_profile.value,
             "config": self.config
         }
+        
+        # ZEUS_TPV_FULL_FISCAL_INFRASTRUCTURE_ES_003: persistir snapshot fiscal por línea (backend = fuente de verdad)
+        if db and user_id:
+            try:
+                from services.fiscal_engine import (
+                    get_fiscal_profile,
+                    build_fiscal_items_from_cart,
+                    persist_fiscal_sale,
+                )
+                profile = get_fiscal_profile(db, user_id)
+                apply_recargo = getattr(profile, "apply_recargo_equivalencia", False) if profile else False
+                recargo_rate = getattr(profile, "recargo_rate", None)
+                consumption_type = consumption_type or "onsite"
+                fiscal_items = build_fiscal_items_from_cart(
+                    self.current_cart,
+                    apply_recargo=apply_recargo,
+                    recargo_rate=recargo_rate,
+                    consumption_type=consumption_type,
+                )
+                tpv_sale_id = persist_fiscal_sale(
+                    db,
+                    user_id=user_id,
+                    ticket_id=doc_id,
+                    document_type=document_type.value,
+                    payment_method=payment_method.value,
+                    fiscal_items=fiscal_items,
+                    consumption_type=consumption_type,
+                )
+                if tpv_sale_id is not None:
+                    ticket["fiscal_snapshot_id"] = tpv_sale_id
+            except Exception as e:
+                logger.warning(f"Fiscal snapshot persistence skipped: {e}")
         
         # Validar legalidad con JUSTICIA si está integrado
         if self.justicia_integration:

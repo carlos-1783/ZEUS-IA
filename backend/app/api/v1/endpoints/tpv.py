@@ -15,7 +15,7 @@ from app.db.session import get_db
 from app.core.auth import get_current_active_user, get_current_active_superuser
 from app.core.config import settings
 from app.models.user import User
-from app.models.erp import TPVProduct
+from app.models.erp import TPVProduct, FiscalProfile, TPVSale, TPVSaleItem
 from services.tpv_service import tpv_service, BusinessProfile, PaymentMethod
 
 router = APIRouter()
@@ -49,7 +49,8 @@ class ProcessSaleRequest(BaseModel):
     employee_id: Optional[str] = None
     terminal_id: Optional[str] = None
     customer_data: Optional[Dict[str, Any]] = None
-    cart_items: Optional[List[Dict[str, Any]]] = None  # Carrito del frontend (opcional, si no se envía usa el del servicio)
+    cart_items: Optional[List[Dict[str, Any]]] = None  # Carrito del frontend (opcional)
+    consumption_type: Optional[str] = None  # onsite | takeaway (ZEUS_TPV_FULL_FISCAL_INFRASTRUCTURE_ES_003)
 
 
 class GenerateInvoiceRequest(BaseModel):
@@ -66,6 +67,13 @@ class CloseRegisterRequest(BaseModel):
 
 class SetBusinessProfileRequest(BaseModel):
     business_profile: str
+
+
+class FiscalProfileCreate(BaseModel):
+    """ZEUS_TPV_FULL_FISCAL_INFRASTRUCTURE_ES_003"""
+    vat_regime: str = "general"  # general | recargo_equivalencia | exento
+    apply_recargo_equivalencia: bool = False
+    recargo_rate: Optional[float] = None  # e.g. 5.2 for 5.2%
 
 
 async def _get_tpv_info(current_user: User):
@@ -599,8 +607,9 @@ async def process_sale(
         employee_id=request.employee_id,
         terminal_id=request.terminal_id,
         customer_data=request.customer_data,
-        user_id=current_user.id,  # Pasar user_id para persistencia fiscal
-        db=db  # Pasar db para persistencia fiscal
+        user_id=current_user.id,
+        db=db,
+        consumption_type=request.consumption_type,
     )
     
     if not result.get("success"):
@@ -637,6 +646,125 @@ async def close_register(
     )
     
     return result
+
+
+# ----- ZEUS_TPV_FULL_FISCAL_INFRASTRUCTURE_ES_003: perfil fiscal y exportación modelo 303 -----
+
+@router.get("/fiscal-profile")
+async def get_fiscal_profile(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Obtener perfil fiscal del usuario (régimen IVA, recargo equivalencia)."""
+    profile = db.query(FiscalProfile).filter(FiscalProfile.user_id == current_user.id).first()
+    if not profile:
+        return {"profile": None}
+    return {
+        "profile": {
+            "id": profile.id,
+            "vat_regime": profile.vat_regime,
+            "apply_recargo_equivalencia": profile.apply_recargo_equivalencia,
+            "recargo_rate": float(profile.recargo_rate) if profile.recargo_rate is not None else None,
+        }
+    }
+
+
+@router.post("/fiscal-profile")
+async def set_fiscal_profile(
+    request: FiscalProfileCreate,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Crear o actualizar perfil fiscal (régimen IVA y recargo de equivalencia)."""
+    profile = db.query(FiscalProfile).filter(FiscalProfile.user_id == current_user.id).first()
+    recargo = request.recargo_rate
+    if request.apply_recargo_equivalencia and recargo is None:
+        recargo = 5.2  # 5.2% típico recargo equivalencia
+    if profile:
+        profile.vat_regime = request.vat_regime
+        profile.apply_recargo_equivalencia = request.apply_recargo_equivalencia
+        profile.recargo_rate = recargo
+    else:
+        profile = FiscalProfile(
+            user_id=current_user.id,
+            vat_regime=request.vat_regime,
+            apply_recargo_equivalencia=request.apply_recargo_equivalencia,
+            recargo_rate=recargo,
+        )
+        db.add(profile)
+    db.commit()
+    db.refresh(profile)
+    return {
+        "success": True,
+        "profile": {
+            "id": profile.id,
+            "vat_regime": profile.vat_regime,
+            "apply_recargo_equivalencia": profile.apply_recargo_equivalencia,
+            "recargo_rate": float(profile.recargo_rate) if profile.recargo_rate is not None else None,
+        },
+    }
+
+
+@router.get("/fiscal/quarterly-vat")
+async def get_quarterly_vat(
+    year: int,
+    quarter: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Exportación trimestral para modelo 303 (AEAT).
+    Agrupa por tipo de IVA (4%, 10%, 21%) y recargo. Ventas históricas protegidas (solo lectura).
+    """
+    from datetime import date, datetime as dt
+    start_month = (quarter - 1) * 3 + 1
+    end_month = quarter * 3
+    start_d = date(year, start_month, 1)
+    if end_month == 12:
+        end_d = date(year + 1, 1, 1)
+    else:
+        end_d = date(year, end_month + 1, 1)
+    # Comparar con inicio/fin de día para DateTime(timezone=True)
+    start_ts = dt.combine(start_d, dt.min.time())
+    end_ts = dt.combine(end_d, dt.min.time())
+    sales = (
+        db.query(TPVSale)
+        .filter(
+            TPVSale.user_id == current_user.id,
+            TPVSale.sale_date >= start_ts,
+            TPVSale.sale_date < end_ts,
+        )
+        .all()
+    )
+    base_4 = base_10 = base_21 = iva_4 = iva_10 = iva_21 = recargo_total = grand_total = 0.0
+    for s in sales:
+        for item in s.items:
+            rate_pct = float(item.tax_rate_snapshot or 0) * 100
+            base = float(item.base_amount or 0)
+            iva = float(item.tax_amount or 0)
+            if rate_pct <= 5:
+                base_4 += base
+                iva_4 += iva
+            elif rate_pct <= 15:
+                base_10 += base
+                iva_10 += iva
+            else:
+                base_21 += base
+                iva_21 += iva
+            recargo_total += float(item.recargo_amount or 0)
+        grand_total += float(s.total or 0)
+    return {
+        "period": f"{year}-Q{quarter}",
+        "base_4": round(base_4, 2),
+        "iva_4": round(iva_4, 2),
+        "base_10": round(base_10, 2),
+        "iva_10": round(iva_10, 2),
+        "base_21": round(base_21, 2),
+        "iva_21": round(iva_21, 2),
+        "recargo_total": round(recargo_total, 2),
+        "grand_total": round(grand_total, 2),
+        "modelo_303_ready": True,
+    }
 
 
 @router.post("/set-business-profile")

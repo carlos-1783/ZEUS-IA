@@ -192,6 +192,8 @@
               v-for="(item, index) in cart" 
               :key="`cart-item-${item.id || item.product?.id || index}-${index}`"
               class="cart-item"
+              :class="{ 'cart-item--active': index === activeCartIndex }"
+              @click="setActiveCartIndex(index)"
             >
               <div class="cart-item-info">
                 <span class="cart-item-name">{{ item.name || item.product?.name || 'Producto' }}</span>
@@ -492,6 +494,8 @@ const loading = ref(false)
 const errorMessage = ref(null)
 const products = ref([])
 const cart = ref([])
+const activeCartIndex = ref(-1) // Índice del ítem activo en el carrito (para teclado numérico)
+const quantityInputBuffer = ref('') // Buffer de entrada numérica (para cantidades 1-999)
 const selectedCategory = ref('all')
 const tablesMode = ref(false)
 const selectedTable = ref(null)
@@ -1167,15 +1171,54 @@ const resetTPV = () => {
   selectedTable.value = null
   lastSaleTicketId.value = null
   cartFeedback.value = null
+  activeCartIndex.value = -1
+  quantityInputBuffer.value = ''
+}
+
+const setActiveCartIndex = (index) => {
+  if (!Array.isArray(cart.value) || index < 0 || index >= cart.value.length) {
+    activeCartIndex.value = -1
+    quantityInputBuffer.value = ''
+    return
+  }
+  activeCartIndex.value = index
+  quantityInputBuffer.value = ''
+}
+
+const applyQuantityBufferToActiveItem = () => {
+  if (!Array.isArray(cart.value) || cart.value.length === 0) return
+
+  if (activeCartIndex.value < 0 || activeCartIndex.value >= cart.value.length) {
+    activeCartIndex.value = cart.value.length - 1
+  }
+
+  const item = cart.value[activeCartIndex.value]
+  if (!item) return
+
+  const itemName = item.name || item.product?.name || 'Producto'
+  const raw = quantityInputBuffer.value || '1'
+  const parsed = parseInt(raw, 10)
+  const quantity = validateQuantity(isNaN(parsed) ? 1 : parsed)
+
+  item.quantity = quantity
+  recalcCartItem(item)
+  showCartFeedback(`${itemName}: ${item.quantity} unidades`, 'updated')
 }
 
 const handleKeyPress = (key) => {
   if (key === 'C') {
-    // Limpiar carrito
-    clearCart()
+    // Limpiar solo el buffer numérico y restaurar cantidad a 1 en el ítem activo
+    if (quantityInputBuffer.value) {
+      quantityInputBuffer.value = ''
+      applyQuantityBufferToActiveItem()
+    }
   } else if (key === '⌫') {
-    // Borrar último producto del carrito si hay items
-    if (cart.value.length > 0 && tpvState.value === TPV_STATES.CART) {
+    // Borrar último dígito del buffer; si queda vacío, volver a cantidad 1
+    if (quantityInputBuffer.value) {
+      quantityInputBuffer.value = quantityInputBuffer.value.slice(0, -1)
+      applyQuantityBufferToActiveItem()
+    } else if (cart.value.length > 0 && tpvState.value === TPV_STATES.CART) {
+      // Si no hay buffer, mantener atajo para eliminar último producto
       const lastIndex = cart.value.length - 1
       removeFromCart(lastIndex)
     }
@@ -1189,10 +1232,24 @@ const handleKeyPress = (key) => {
       goToPrePayment()
     }
   } else if (!isNaN(parseInt(key))) {
-    // Tecla numérica: búsqueda rápida por número de producto (futuro)
-    // Por ahora, mostrar feedback
-    console.log('Búsqueda rápida:', key)
-    // TODO: Implementar búsqueda rápida de productos
+    // Tecla numérica: edición profesional de cantidad sobre ítem activo
+    if (!Array.isArray(cart.value) || cart.value.length === 0) {
+      warning('Añade productos al carrito antes de usar el teclado numérico')
+      return
+    }
+
+    // Si no hay ítem activo, usar el último del carrito
+    if (activeCartIndex.value < 0 || activeCartIndex.value >= cart.value.length) {
+      activeCartIndex.value = cart.value.length - 1
+    }
+
+    // Limitar cantidad a 3 dígitos (1-999)
+    if (quantityInputBuffer.value.length >= 3) {
+      return
+    }
+
+    quantityInputBuffer.value = `${quantityInputBuffer.value}${key}`
+    applyQuantityBufferToActiveItem()
   }
 }
 
@@ -2151,7 +2208,8 @@ onMounted(async () => {
   margin-top: 6px;
 }
 .cart-block-list {
-  flex: 0 1 auto;
+  /* El bloque de lista ocupa todo el espacio disponible para que se vean varios productos */
+  flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
 }
@@ -2193,7 +2251,8 @@ onMounted(async () => {
 }
 
 .cart-items {
-  flex: 0 1 auto;
+  /* Área de scroll del carrito: ocupa todo el alto disponible dentro del bloque */
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   margin-bottom: 0;
@@ -2207,6 +2266,12 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.05);
   border-radius: 8px;
   margin-bottom: 6px;
+}
+
+.cart-item--active {
+  outline: 1px solid rgba(59, 130, 246, 0.8);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.5);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(16, 185, 129, 0.12));
 }
 
 .cart-item-info {

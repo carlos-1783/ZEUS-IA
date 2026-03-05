@@ -883,3 +883,27 @@ async def get_tpv_status(
     
     return status
 
+
+# ----- ZEUS_TPV_GLOBAL_AUDIT_001 -----
+
+@router.get("/audit")
+async def get_tpv_global_audit(
+    current_user: User = Depends(get_current_active_superuser),
+    db: Session = Depends(get_db),
+    save_file: bool = False,
+):
+    """
+    Ejecuta la auditoría global TPV (ROCE ZEUS_TPV_GLOBAL_AUDIT_001).
+    Solo superusuarios. Modo ANALYZE_FIRST: no modifica datos, solo genera informe.
+    """
+    from services.tpv_global_audit import run_tpv_global_audit, save_audit_report_to_file
+
+    report = run_tpv_global_audit(db)
+    if save_file:
+        try:
+            path = save_audit_report_to_file(report)
+            report["_report_file"] = str(path)
+        except Exception as e:
+            logger.warning("No se pudo guardar informe de auditoría en archivo: %s", e)
+    return report
+

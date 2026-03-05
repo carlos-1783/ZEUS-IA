@@ -2208,10 +2208,13 @@ onMounted(async () => {
   margin-top: 6px;
 }
 .cart-block-list {
-  /* El bloque de lista ocupa todo el espacio disponible para que se vean varios productos */
+  /* El bloque de lista ocupa espacio y muestra siempre el listado de productos */
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 80px;
 }
 .cart-block-summary,
 .cart-block-actions {
@@ -2251,21 +2254,25 @@ onMounted(async () => {
 }
 
 .cart-items {
-  /* Área de scroll del carrito: ocupa todo el alto disponible dentro del bloque */
+  /* Listado visible de productos: scroll solo aquí si hay muchos ítems */
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   margin-bottom: 0;
+  -webkit-overflow-scrolling: touch;
 }
 
 .cart-item {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 6px 0;
+  padding: 6px 8px;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 8px;
   margin-bottom: 6px;
+  flex-shrink: 0;
+  min-height: 44px;
 }
 
 .cart-item--active {
@@ -2285,7 +2292,11 @@ onMounted(async () => {
 .cart-item-name {
   display: block;
   font-weight: 600;
-  margin-bottom: 5px;
+  margin-bottom: 2px;
+  font-size: 13px;
+  color: #fff;
+  word-break: break-word;
+  min-height: 1.2em;
 }
 
 .cart-item-price {

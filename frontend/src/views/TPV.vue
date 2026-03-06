@@ -2208,16 +2208,19 @@ onMounted(async () => {
   margin-top: 6px;
 }
 .cart-block-list {
-  /* Listado de productos siempre visible: altura mínima fija y scroll interno */
-  flex: 1 1 auto;
-  min-height: 140px;
-  max-height: 45vh;
+  /* Listado siempre visible: prioridad de espacio y scroll solo aquí */
+  flex: 1 1 0;
+  min-height: 120px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 .cart-block-summary,
 .cart-block-actions {
+  flex: 0 0 auto;
+}
+/* Teclado no crece: altura fija para que no robe espacio a la lista */
+.cart-panel .numeric-keyboard {
   flex: 0 0 auto;
 }
 
@@ -2458,34 +2461,38 @@ onMounted(async () => {
   margin-bottom: 0;
 }
 
-/* ZEUS_TPV_CART_ULTRA_MINIMAL_003: teclado 34px, 13px, gap 4px */
+/* Botonera/teclado numérico: altura fija para que no se rompa el layout */
 .numeric-keyboard {
   flex: 0 0 auto;
   display: grid;
-  grid-template-rows: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 32px);
   gap: 4px;
   margin-bottom: 0;
-  max-height: 180px;
+  height: calc(4 * 32px + 3 * 4px); /* 4 filas + 3 gaps */
+  min-height: 140px;
+  max-height: 140px;
 }
 
 .keyboard-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 4px;
+  min-height: 32px;
 }
 
 .keyboard-key {
-  aspect-ratio: 1 / 1;
-  max-height: 34px;
-  padding: 3px;
+  min-height: 28px;
+  height: 100%;
+  min-width: 0;
+  padding: 2px 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 6px;
   color: #fff;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
@@ -2789,16 +2796,21 @@ onMounted(async () => {
   }
 }
 
-/* Pantalla baja: teclado y acciones más compactos sin romper proporción */
+/* Pantalla baja: teclado mantiene altura fija, botones de pago más compactos */
 @media (max-height: 800px) {
-  .keyboard-key {
-    max-height: 52px;
-    padding: 4px;
-    font-size: 16px;
+  .numeric-keyboard {
+    grid-template-rows: repeat(4, 28px);
+    height: calc(4 * 28px + 3 * 4px);
+    min-height: 124px;
+    max-height: 124px;
   }
 
-  .numeric-keyboard {
-    gap: 6px;
+  .keyboard-row {
+    min-height: 28px;
+  }
+
+  .keyboard-key {
+    font-size: 13px;
   }
 
   .pay-btn {

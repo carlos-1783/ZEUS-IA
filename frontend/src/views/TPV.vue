@@ -2208,13 +2208,13 @@ onMounted(async () => {
   margin-top: 6px;
 }
 .cart-block-list {
-  /* El bloque de lista ocupa espacio y muestra siempre el listado de productos */
+  /* Listado de productos siempre visible: altura mínima fija y scroll interno */
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 140px;
+  max-height: 45vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-height: 80px;
 }
 .cart-block-summary,
 .cart-block-actions {
@@ -2465,6 +2465,7 @@ onMounted(async () => {
   grid-template-rows: repeat(4, 1fr);
   gap: 4px;
   margin-bottom: 0;
+  max-height: 180px;
 }
 
 .keyboard-row {

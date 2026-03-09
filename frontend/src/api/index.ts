@@ -524,13 +524,13 @@ axiosInstance.interceptors.response.use(
 const api: ApiClient = {
   // Auth methods
   login: async (credentials: { username: string; password: string }): Promise<AuthTokens> => {
-    // Crear FormData para el login
-    const formData = new FormData();
-    formData.append('username', credentials.username);
-    formData.append('password', credentials.password);
-    formData.append('grant_type', 'password');
+    // Body application/x-www-form-urlencoded (FormData con ese Content-Type no se serializa bien)
+    const params = new URLSearchParams();
+    params.append('username', credentials.username);
+    params.append('password', credentials.password);
+    params.append('grant_type', 'password');
 
-    const response = await axiosInstance.post('auth/login', formData, {
+    const response = await axiosInstance.post('auth/login', params.toString(), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },

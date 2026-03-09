@@ -52,6 +52,7 @@ def create_tables():
             
             # Importar modelos aquí para evitar importación circular
             from app.models.user import User, RefreshToken
+            from app.models.company import Company, UserCompany
             from app.models.customer import Customer
             from app.models.erp import Invoice, Product, Payment, TPVProduct, TaxRate, FiscalProfile, TPVSale, TPVSaleItem
             from app.models.agent_activity import AgentActivity
@@ -125,7 +126,8 @@ def _migrate_user_columns():
             "control_horario_business_profile": "VARCHAR(100)" if is_postgres else "TEXT",
             "control_horario_config": "TEXT",  # JSON config
             "stripe_customer_id": "VARCHAR(255)" if is_postgres else "TEXT",
-            "stripe_subscription_id": "VARCHAR(255)" if is_postgres else "TEXT"
+            "stripe_subscription_id": "VARCHAR(255)" if is_postgres else "TEXT",
+            "role": "VARCHAR(20)" if is_postgres else "TEXT"
         }
         
         added_columns = []
@@ -142,6 +144,8 @@ def _migrate_user_columns():
                                 sql += " DEFAULT FALSE"
                             elif column_type == "INTEGER":
                                 sql += " DEFAULT 0"
+                            elif column_name == "role":
+                                sql += " DEFAULT 'owner'"
                         else:
                             # SQLite syntax
                             sql = f"ALTER TABLE users ADD COLUMN {column_name} {column_type}"

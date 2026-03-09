@@ -96,13 +96,13 @@ def scan_all_tpv(db: Session) -> Dict[str, Any]:
             is_tpv = bool(profile or products_count > 0)
             if is_tpv:
                 result["tpv_list"].append({
-                    "user_id": u.id,
+                "user_id": u.id,
                     "email": getattr(u, "email", None),
-                    "company_name": getattr(u, "company_name", None),
+                "company_name": getattr(u, "company_name", None),
                     "tpv_business_profile": profile,
                     "tpv_config": config,
                     "products_count": products_count,
-                })
+            })
     except Exception as e:
         logger.exception("SCAN_ALL_TPV error")
         result["errors"].append(str(e))

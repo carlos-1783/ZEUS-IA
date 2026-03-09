@@ -9,13 +9,14 @@ echo.
 
 :: Iniciar Backend
 echo [1/2] Iniciando Backend...
-start "ZEUS Backend" cmd /c "cd backend && python -m uvicorn app.main:app --reload --port 8000"
+cd /d "%~dp0"
+start "ZEUS Backend" cmd /k "cd backend && python -m uvicorn app.main:app --reload --port 8000"
 timeout /t 5 >nul
 echo OK: Backend iniciado
 
 :: Iniciar Frontend
 echo [2/2] Iniciando Frontend...
-start "ZEUS Frontend" cmd /c "cd frontend && npm run dev"
+start "ZEUS Frontend" cmd /k "cd frontend && npm run dev"
 timeout /t 5 >nul
 echo OK: Frontend iniciado
 

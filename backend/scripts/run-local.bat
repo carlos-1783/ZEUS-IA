@@ -206,9 +206,9 @@ echo %BLUE%Logs:%RESET%         %LOG_DIR%\
 echo.
 
 echo %YELLOW%[TIPS]%RESET%
-echo - Si el navegador no se abre automáticamente, copia y pega las URLs anteriores.
-echo - Para detener la aplicación, cierra las ventanas de consola del backend y frontend.
-echo - Los logs detallados están disponibles en el directorio de logs.
+echo - Si el navegador no se abre autom?ticamente, copia y pega las URLs anteriores.
+echo - Para detener la aplicaci?n, cierra las ventanas de consola del backend y frontend.
+echo - Los logs detallados est?n disponibles en el directorio de logs.
 echo.
 
 :: Wait for servers to start

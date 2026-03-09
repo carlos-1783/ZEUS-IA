@@ -2,13 +2,16 @@ import { AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 
 export interface UserProfile {
   id: string;
-  username: string;
+  username?: string;
   email: string;
+  full_name?: string;
   is_active: boolean;
   is_superuser: boolean;
-  is_verified: boolean;
-  created_at: string;
-  updated_at: string;
+  is_verified?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  /** owner | employee - employee solo TPV + control horario */
+  role?: string;
 }
 
 export interface AuthTokens {

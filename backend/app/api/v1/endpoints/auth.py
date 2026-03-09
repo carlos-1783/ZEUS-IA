@@ -394,6 +394,9 @@ async def read_current_user(
                 detail="No autenticado",
             )
         
+        # role: owner = due?o (n?minas, todo); employee = solo TPV + control horario
+        role = getattr(current_user, "role", None) or "owner"
+
         # Devolver en el formato esperado por el frontend
         return {
             "status": "success",
@@ -403,6 +406,7 @@ async def read_current_user(
                 "full_name": current_user.full_name,
                 "is_active": current_user.is_active,
                 "is_superuser": current_user.is_superuser,
+                "role": role,
                 "created_at": current_user.created_at.isoformat() if current_user.created_at else None
             }
         }

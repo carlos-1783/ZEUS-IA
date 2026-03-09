@@ -229,3 +229,46 @@ async def get_revenue_chart_data(
             detail=f"Error obteniendo datos del gráfico: {str(e)}"
         )
 
+
+@router.patch("/users/{user_id}/role")
+async def set_user_role(
+    user_id: int,
+    body: Dict[str, str],
+    current_user: User = Depends(get_current_active_superuser),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Asignar rol a un usuario: owner (dueño, acceso completo) o employee (solo TPV + control horario).
+    Solo superusuario.
+    """
+    role = (body.get("role") or "").strip().lower()
+    if role not in ("owner", "employee"):
+        raise HTTPException(status_code=400, detail="role debe ser 'owner' o 'employee'")
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    target.role = role
+    db.commit()
+    db.refresh(target)
+    return {"success": True, "user_id": user_id, "role": target.role}
+
+
+@router.post("/bootstrap-internal-company")
+async def bootstrap_internal_company(
+    current_user: User = Depends(get_current_active_superuser),
+) -> Dict[str, Any]:
+    """
+    ZEUS_INTERNAL_COMPANY_BOOTSTRAP_002: Crea empresa ZEUS INTERNAL (NORMAL),
+    vincula superusuario, inicializa contexto, persiste AgentActivity y envía WhatsApp.
+    Solo superusuario. Idempotente.
+    """
+    try:
+        from services.internal_company_bootstrap import run_bootstrap
+        result = run_bootstrap()
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Bootstrap error: {str(e)}",
+        )
+

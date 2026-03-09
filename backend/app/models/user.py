@@ -12,6 +12,8 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean(), default=True)
     is_superuser = Column(Boolean(), default=False)
+    # Rol: owner = dueño (acceso completo, nóminas); employee = empleado (solo TPV + control horario)
+    role = Column(String(20), default="owner", nullable=False)  # owner | employee
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
@@ -37,6 +39,14 @@ class User(Base):
     # Control Horario - Business Profile
     control_horario_business_profile = Column(String, nullable=True, index=True)  # oficina, restaurante, tienda, externo, etc.
     control_horario_config = Column(Text, nullable=True)  # JSON config: {"strict_check_in": true, "gps_required": false, etc.}
+
+    # Relación con empresas (UserCompany) - ZEUS_INTERNAL_COMPANY_BOOTSTRAP_002
+    user_companies = relationship(
+        "UserCompany",
+        back_populates="user",
+        foreign_keys="UserCompany.user_id",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self):
         return f"<User {self.email}>"

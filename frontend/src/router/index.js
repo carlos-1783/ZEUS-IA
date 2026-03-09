@@ -153,14 +153,15 @@ const router = createRouter({
       }
     },
     
-    // Admin Panel (requiere autenticación y ser superuser)
+    // Admin Panel (solo superusuario)
     {
       path: '/admin',
       name: 'AdminPanel',
       component: AdminPanel,
       meta: { 
         title: 'Panel de Admin - ZEUS-IA',
-        requiresAuth: true
+        requiresAuth: true,
+        requiresSuperuser: true
       }
     },
     
@@ -348,7 +349,21 @@ router.beforeEach((to, from, next) => {
     next({ name: 'AuthLogin', query: { redirect: to.fullPath } })
     return
   }
-  
+
+  // Empleado: solo TPV y control horario; nóminas solo para dueño
+  if (requiresAuth && authStore.isAuthenticated && authStore.isEmployee) {
+    if (to.name === 'PayrollDrafts' || to.name === 'AdminPanel') {
+      next('/tpv')
+      return
+    }
+  }
+
+  // Admin Panel: solo superusuario (el resto de empresas no puede acceder)
+  if (to.meta.requiresSuperuser && !authStore.isAdmin) {
+    next('/dashboard')
+    return
+  }
+
   // Redirigir a dashboard si ya está autenticado e intenta acceder a páginas públicas
   if (authStore.isAuthenticated && publicRoutes.includes(to.name)) {
     const redirectTo = to.query.redirect || '/dashboard'

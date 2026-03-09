@@ -18,12 +18,22 @@ router = APIRouter(prefix="/payroll", tags=["payroll"])
 PAYROLL_OUTPUT_DIR = Path(os.getenv("PAYROLL_OUTPUT_DIR", "storage/outputs/payroll_drafts"))
 
 
+def _require_owner_or_superuser(current_user: User) -> None:
+    """Nóminas solo para dueño de empresa o superuser; empleados sin acceso."""
+    if getattr(current_user, "is_superuser", False):
+        return
+    role = getattr(current_user, "role", "owner") or "owner"
+    if role == "employee":
+        raise HTTPException(status_code=403, detail="Solo el dueño de la empresa puede acceder a Nóminas")
+
+
 @router.get("/drafts")
 async def list_payroll_drafts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Lista borradores de nómina del usuario/empresa."""
+    """Lista borradores de nómina del usuario/empresa. Solo owner o superuser."""
+    _require_owner_or_superuser(current_user)
     drafts = (
         db.query(PayrollDraft)
         .filter(PayrollDraft.company_id == current_user.id)
@@ -54,7 +64,8 @@ async def download_payroll_draft(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Descarga el PDF/TXT del borrador de nómina."""
+    """Descarga el PDF/TXT del borrador de nómina. Solo owner o superuser."""
+    _require_owner_or_superuser(current_user)
     draft = db.query(PayrollDraft).filter(PayrollDraft.id == draft_id).first()
     if not draft:
         raise HTTPException(status_code=404, detail="Borrador no encontrado")

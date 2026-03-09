@@ -24,9 +24,9 @@
           <span class="icon">🏛️</span>
           <span>Dashboard</span>
         </button>
-        <!-- Admin Panel segundo en móvil para acceso rápido -->
+        <!-- Admin Panel: solo superusuario (el resto de empresas no lo ve en producción) -->
         <button 
-          v-if="shouldShowAdmin || authStore.isAdmin || authStore.user?.is_superuser || availableModules.admin || true"
+          v-if="!isEmployee && (authStore.isAdmin || authStore.user?.is_superuser)"
           class="nav-item admin-btn"
           @click="closeSidebarOnMobile(); goToAdmin()"
         >
@@ -34,6 +34,7 @@
           <span>Admin Panel</span>
         </button>
         <button 
+          v-if="!isEmployee"
           class="nav-item"
           :class="{ active: currentView === 'analytics' }"
           @click="currentView = 'analytics'; closeSidebarOnMobile()"
@@ -57,7 +58,9 @@
           <span class="icon">⏰</span>
           <span>Control Horario</span>
         </button>
+        <!-- Nóminas: solo dueño de empresa (empleado no ve) -->
         <button 
+          v-if="!isEmployee"
           class="nav-item"
           @click="closeSidebarOnMobile(); goToPayroll()"
         >
@@ -65,6 +68,7 @@
           <span>Nóminas</span>
         </button>
         <button 
+          v-if="!isEmployee"
           class="nav-item"
           :class="{ active: currentView === 'settings' }"
           @click="currentView = 'settings'; closeSidebarOnMobile()"
@@ -546,20 +550,16 @@ const availableModules = ref({
 
 // Computed para verificar si el usuario es admin (reactivo) - múltiples formas de verificación
 const isAdmin = computed(() => {
-  // Verificar de múltiples formas para asegurar que detectamos al superusuario
   const isAdmin1 = authStore.isAdmin || false
   const isAdmin2 = authStore.user?.is_superuser || false
-  
-  const result = isAdmin1 || isAdmin2
-  console.log('🔍 Verificación isAdmin computed:', {
-    isAdmin1,
-    isAdmin2,
-    user: authStore.user,
-    authStoreIsAdmin: authStore.isAdmin,
-    result
-  })
-  return result
+  return isAdmin1 || isAdmin2
 })
+
+  // Empleado: solo TPV + control horario; sin nóminas ni admin
+  const isEmployee = computed(() => {
+    const u = authStore.user
+    return u && typeof u === 'object' && 'role' in u && u.role === 'employee'
+  })
 
 // Computed para módulos visibles - SIEMPRE mostrar si es admin o si availableModules lo permite
 // Por defecto, los botones están visibles (availableModules inicializado en true)
@@ -745,7 +745,12 @@ onMounted(async () => {
     console.log('🔄 Inicializando authStore...')
     await authStore.initialize()
   }
-  
+  // Empleado: ir directo al TPV (comandero)
+  if (isEmployee.value) {
+    router.push('/tpv')
+    return
+  }
+
   // Debug: Verificar estado de authStore
   console.log('🔍 Estado inicial de authStore:', {
     isAdmin: authStore.isAdmin,

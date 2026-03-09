@@ -21,6 +21,13 @@
         >
           🪑 {{ tablesMode ? $t('tpv.viewProducts') : $t('tpv.tablesMode') }}
         </button>
+        <button 
+          @click="copyComanderoLink" 
+          class="header-btn"
+          title="Copiar enlace del TPV para compartir con empleados (comandero digital)"
+        >
+          🔗 {{ $t('tpv.shareComandero') || 'Compartir comandero' }}
+        </button>
         <button @click="checkStatus" class="header-btn">
           🔄 {{ $t('tpv.refresh') }}
         </button>
@@ -34,8 +41,15 @@
     <div class="tpv-main-interface" v-if="!loading && !errorMessage">
       <!-- Panel Izquierdo: Productos o Mesas -->
       <div class="tpv-left-panel">
-        <!-- Selector de categorías -->
-        <div class="categories-bar" v-if="!tablesMode">
+        <!-- Con mesa seleccionada: barra "Mesa X" + volver a mesas -->
+        <div v-if="tablesMode && tpvConfig.tables_enabled && selectedTable" class="tables-selected-bar">
+          <button type="button" @click="backToTablesList" class="back-to-tables-btn" title="Volver a mesas">
+            ← {{ $t('tpv.tablesMode') || 'Mesas' }}
+          </button>
+          <span class="tables-selected-label">Añadir productos a Mesa {{ selectedTable?.number }}</span>
+        </div>
+        <!-- Selector de categorías (productos o cuando hay mesa seleccionada para anotar) -->
+        <div class="categories-bar" v-if="!tablesMode || selectedTable">
           <button 
             v-for="category in categories" 
             :key="category"
@@ -50,8 +64,8 @@
           </button>
         </div>
 
-        <!-- Grid de Productos -->
-        <div class="products-grid" v-if="!tablesMode">
+        <!-- Grid de Productos (visible también con mesa seleccionada para anotar en la mesa) -->
+        <div class="products-grid" v-if="!tablesMode || selectedTable">
           <!-- Botón Añadir Producto (siempre visible, validación al guardar) -->
           <button 
             v-if="!businessProfileLoading"
@@ -137,24 +151,24 @@
           </div>
         </div>
 
-        <!-- Vista de Mesas (Solo si está habilitado en config) -->
-        <div class="tables-grid" v-if="tablesMode && tpvConfig.tables_enabled">
+        <!-- Vista de Mesas (cuando modo mesas y no hay mesa seleccionada) -->
+        <div class="tables-grid" v-if="tablesMode && tpvConfig.tables_enabled && !selectedTable">
           <div 
             v-for="table in tables" 
             :key="table.id"
             @click="selectTable(table)"
             class="table-card"
             :class="{ 
-              occupied: table.status === 'occupied', 
+              occupied: getTableOrderTotal(table.id) > 0, 
               selected: selectedTable?.id === table.id 
             }"
           >
             <div class="table-number">Mesa {{ table.number }}</div>
-            <div class="table-status" :class="table.status">
-              {{ table.status === 'occupied' ? '🟢 Ocupada' : '⚪ Libre' }}
+            <div class="table-status" :class="getTableOrderTotal(table.id) > 0 ? 'occupied' : 'free'">
+              {{ getTableOrderTotal(table.id) > 0 ? '🟢 Ocupada' : '⚪ Libre' }}
             </div>
-            <div v-if="table.order_total" class="table-total">
-              €{{ formatPrice(table.order_total) }}
+            <div v-if="getTableOrderTotal(table.id) > 0" class="table-total">
+              €{{ formatPrice(getTableOrderTotal(table.id)) }}
             </div>
           </div>
           
@@ -500,6 +514,8 @@ const selectedCategory = ref('all')
 const tablesMode = ref(false)
 const selectedTable = ref(null)
 const tables = ref([])
+/** Carrito por mesa: cada mesa es independiente (id de mesa -> array de ítems) */
+const tableCarts = ref({})
 const tpvState = ref(TPV_STATES.CART) // Estado actual del TPV
 const paymentNote = ref('') // Nota adicional para el pago
 const cartFeedback = ref(null) // Feedback visual del carrito
@@ -603,6 +619,13 @@ const total = computed(() => {
   if (!Array.isArray(cart.value) || cart.value.length === 0) return 0
   return cart.value.reduce((sum, item) => sum + calcItemTotal(item), 0)
 })
+
+/** Total del carrito de una mesa (para mostrar en la tarjeta de la mesa). */
+const getTableOrderTotal = (tableId) => {
+  const items = tableCarts.value[tableId]
+  if (!Array.isArray(items) || items.length === 0) return 0
+  return items.reduce((sum, item) => sum + calcItemTotal(item), 0)
+}
 
 // Métodos
 const goToDashboard = () => {
@@ -1007,6 +1030,7 @@ const addProductToCart = (product) => {
   
   console.log('✅ Producto añadido. Carrito tiene', cart.value.length, 'items')
   showCartFeedback(product.name || 'Producto', 'added')
+  saveCartToCurrentTable()
 }
 
 // REQUIRED FUNCTION: removeProduct - remove product by index or id
@@ -1038,6 +1062,7 @@ const removeFromCart = (index) => {
   
   console.log('✅ Producto eliminado. Carrito tiene', cart.value.length, 'items')
   showCartFeedback(`${itemName} eliminado`, 'removed')
+  saveCartToCurrentTable()
 }
 
 // REQUIRED FUNCTION: updateQuantity - recalculate subtotal
@@ -1070,6 +1095,7 @@ const increaseQuantity = (index) => {
   const itemName = item.name || item.product?.name || 'Producto'
   console.log('➕ Cantidad incrementada:', itemName, '→', item.quantity)
   showCartFeedback(`${itemName}: ${item.quantity} unidades`, 'updated')
+  saveCartToCurrentTable()
 }
 
 // REQUIRED FUNCTION: updateQuantity - recalculate subtotal (decrease)
@@ -1103,6 +1129,7 @@ const decreaseQuantity = (index) => {
     const itemName = item.name || item.product?.name || 'Producto'
     console.log('➖ Cantidad decrementada:', itemName, '→', item.quantity)
     showCartFeedback(`${itemName}: ${item.quantity} unidades`, 'updated')
+    saveCartToCurrentTable()
   } else {
     // Si la cantidad llega a 1, eliminar del carrito
     removeFromCart(index)
@@ -1119,9 +1146,12 @@ const clearCart = () => {
     return
   }
   
-  // Usar confirm nativo solo para confirmaciones críticas (limpiar carrito)
-  if (window.confirm(`¿Estás seguro de limpiar todo el carrito? Se eliminarán ${cart.value.length} producto(s).`)) {
+  // Usar confirm nativo solo para confirmaciones críticas (limpiar carrito de esta mesa)
+  if (window.confirm(`¿Estás seguro de limpiar el carrito de esta mesa? Se eliminarán ${cart.value.length} producto(s).`)) {
     cart.value = []
+    if (selectedTable.value?.id != null) {
+      tableCarts.value[selectedTable.value.id] = []
+    }
     showCartFeedback('Carrito vaciado', 'cleared')
     success('Carrito vaciado correctamente')
   }
@@ -1261,25 +1291,22 @@ const toggleTablesMode = () => {
   tablesMode.value = !tablesMode.value
 }
 
+/** Guarda el carrito actual en la mesa seleccionada (cada mesa es independiente). */
+const saveCartToCurrentTable = () => {
+  if (selectedTable.value?.id != null && Array.isArray(cart.value)) {
+    tableCarts.value[selectedTable.value.id] = cart.value.map(item => ({ ...item }))
+  }
+}
+
 const selectTable = (table) => {
-  // Si hay productos en el carrito y se cambia de mesa, preguntar
-  if (cart.value.length > 0 && selectedTable.value?.id !== table.id) {
-    if (!confirm(`¿Deseas limpiar el carrito actual y comenzar una nueva venta para la Mesa ${table.number}?`)) {
-      return
-    }
+  // Guardar carrito de la mesa actual antes de cambiar
+  if (selectedTable.value?.id != null) {
+    tableCarts.value[selectedTable.value.id] = [...(cart.value || [])]
   }
-  
   selectedTable.value = table
-  if (table.status === 'occupied') {
-    // Cargar pedido existente de la mesa
-    info(`Cargando pedido de Mesa ${table.number}`)
-    // TODO: Implementar carga de pedido existente
-  } else {
-    // Nueva venta para esta mesa - solo limpiar si se confirmó
-    if (cart.value.length > 0) {
-      cart.value = []
-    }
-  }
+  // Cargar el carrito de esta mesa (cada mesa es independiente)
+  cart.value = [...(tableCarts.value[table.id] || [])]
+  info(`Mesa ${table.number} – carrito independiente`)
 }
 
 const addTable = () => {
@@ -1290,6 +1317,21 @@ const addTable = () => {
     status: 'free',
     order_total: 0
   })
+}
+
+const backToTablesList = () => {
+  saveCartToCurrentTable()
+  selectedTable.value = null
+}
+
+const copyComanderoLink = async () => {
+  const url = `${window.location.origin}${import.meta.env.BASE_URL}tpv`.replace(/([^/])\/+$/g, '$1')
+  try {
+    await navigator.clipboard.writeText(url)
+    success(t('tpv.comanderoLinkCopied') || 'Enlace del comandero copiado. Compártelo con tus empleados para que abran el TPV.')
+  } catch {
+    warning(t('tpv.comanderoLinkCopyFailed') || 'No se pudo copiar. Comparte manualmente: ' + url)
+  }
 }
 
 const processPayment = async () => {
@@ -1364,6 +1406,11 @@ const processPayment = async () => {
     
     // Cambiar estado a CLOSED después del pago exitoso
     tpvState.value = TPV_STATES.CLOSED
+    // Vaciar carrito de esta mesa (cada mesa es independiente; la venta ya se cobró)
+    if (selectedTable.value?.id != null) {
+      tableCarts.value[selectedTable.value.id] = []
+      cart.value = []
+    }
     
     // Mostrar confirmación usando ticket_id del resultado
     const backendTotal = result?.ticket?.totals?.total ?? result?.totals?.total ?? null
@@ -2608,6 +2655,34 @@ onMounted(async () => {
 
 .payment-note-input::placeholder {
   color: rgba(255, 255, 255, 0.4);
+}
+
+/* Barra "Mesa X" cuando hay mesa seleccionada para anotar */
+.tables-selected-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
+}
+.back-to-tables-btn {
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.back-to-tables-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+.tables-selected-label {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
 }
 
 /* Mesas */

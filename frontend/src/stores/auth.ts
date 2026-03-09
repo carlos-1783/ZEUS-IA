@@ -87,6 +87,8 @@ export const useAuthStore = defineStore('auth', () => {
   // Getters
   const isAuthenticated = computed<boolean>(() => !!token.value);
   const isAdmin = computed<boolean>(() => !!user.value?.is_superuser);
+  /** Empleado: solo TPV + control horario; sin nóminas ni admin */
+  const isEmployee = computed<boolean>(() => (user.value as any)?.role === 'employee');
 
   // Token management
   function getToken(): string | null {
@@ -160,13 +162,14 @@ export const useAuthStore = defineStore('auth', () => {
         iat: decoded.iat ? new Date(decoded.iat * 1000).toISOString() : 'No issued at'
       });
 
-      // Update user data
+      // Update user data (role puede venir en token o luego vía getCurrentUser)
       user.value = {
         id: decoded.sub,
         email: decoded.email || '',
         name: decoded.name || 'User',
         is_active: decoded.is_active || false,
-        is_superuser: decoded.is_superuser || false
+        is_superuser: decoded.is_superuser || false,
+        role: (decoded as any).role || 'owner'
       };
 
       console.log('[AuthStore] User data updated from token');
@@ -294,7 +297,22 @@ export const useAuthStore = defineStore('auth', () => {
         if (!updateUserFromToken(tokens.access_token)) {
           console.warn('[AuthStore] Could not update user info from token');
         }
-        
+        // Refrescar usuario desde /me para tener role (owner | employee)
+        try {
+          const profile = await api.getCurrentUser();
+          const data = profile as any;
+          user.value = {
+            id: String(data.id),
+            email: data.email,
+            name: data.full_name || data.email,
+            is_active: data.is_active,
+            is_superuser: data.is_superuser,
+            role: data.role || 'owner'
+          };
+        } catch (_) {
+          // mantener user desde token
+        }
+
         // Verify tokens were saved correctly
         const storedToken = localStorage.getItem(TOKEN_KEY);
         if (!storedToken) {
@@ -480,12 +498,24 @@ export const useAuthStore = defineStore('auth', () => {
       // Update user data from token (non-blocking)
       try {
         updateUserFromToken(currentToken);
+        // Refrescar /me para tener role (owner | employee)
+        try {
+          const profile = await api.getCurrentUser();
+          const data = profile as any;
+          user.value = {
+            id: String(data.id),
+            email: data.email,
+            name: data.full_name || data.email,
+            is_active: data.is_active,
+            is_superuser: data.is_superuser,
+            role: data.role || 'owner'
+          };
+        } catch (_) { /* mantener user desde token */ }
         console.log('[AuthStore] Initialization successful');
         hasInitialized = true;
         return true;
       } catch (userError) {
         console.warn('[AuthStore] Could not update user from token:', userError);
-        // Don't reset auth state, just continue
         hasInitialized = true;
         return true;
       }
@@ -511,6 +541,7 @@ export const useAuthStore = defineStore('auth', () => {
     // Getters
     isAuthenticated,
     isAdmin,
+    isEmployee,
     
     // Actions
     login,

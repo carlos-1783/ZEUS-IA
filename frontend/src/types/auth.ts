@@ -19,4 +19,6 @@ export interface UserProfile {
   roles: string[];
   company_id?: string;
   company_name?: string;
+  /** owner = dueño (acceso completo); employee = solo TPV + control horario */
+  role?: string;
 }

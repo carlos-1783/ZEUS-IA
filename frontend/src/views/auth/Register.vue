@@ -189,6 +189,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import api from '@/api';
 
 const router = useRouter();
 const route = useRoute();
@@ -287,25 +288,20 @@ const handleSubmit = async () => {
   error.value = '';
   
   try {
-    // TODO: Implement actual registration logic with your API
-    // const response = await authStore.register({
-    //   name: `${form.first_name} ${form.last_name}`,
-    //   email: form.email,
-    //   password: form.password,
-    //   password_confirmation: form.password_confirmation
-    // });
-    
-    // For now, just simulate a successful registration
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Redirect to login with the registered email
+    await api.register({
+      email: form.email.trim(),
+      password: form.password,
+      full_name: [form.first_name, form.last_name].filter(Boolean).join(' ').trim() || undefined,
+    });
     router.push({
-      name: 'Login',
+      name: 'AuthLogin',
       query: { email: form.email, registered: 'true' }
     });
   } catch (err) {
     console.error('Registration error:', err);
-    error.value = err.response?.data?.message || 'Ocurrió un error al registrar la cuenta. Por favor, inténtalo de nuevo.';
+    const detail = err.response?.data?.detail;
+    const msg = typeof detail === 'string' ? detail : err.response?.data?.message || err.message;
+    error.value = msg || 'Ocurrió un error al registrar la cuenta. Por favor, inténtalo de nuevo.';
   } finally {
     isLoading.value = false;
   }

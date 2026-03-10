@@ -70,13 +70,19 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Para requests de API, usar network-first
+  // API: network-first
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(networkFirstStrategy(request));
     return;
   }
 
-  // Para recursos estáticos, usar cache-first
+  // Rutas de auth: network-first para no servir HTML/JS viejos tras un deploy
+  if (request.mode === 'navigate' && (url.pathname.startsWith('/auth/') || url.pathname === '/login' || url.pathname === '/register')) {
+    event.respondWith(networkFirstStrategy(request));
+    return;
+  }
+
+  // Resto: cache-first
   event.respondWith(cacheFirstStrategy(request));
 });
 

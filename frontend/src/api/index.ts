@@ -557,6 +557,15 @@ const api: ApiClient = {
     
     throw new Error(response.data?.detail || 'Login failed');
   },
+
+  register: async (payload: { email: string; password: string; full_name?: string }) => {
+    const response = await axiosInstance.post('auth/register', {
+      email: payload.email.trim().toLowerCase(),
+      password: payload.password,
+      full_name: (payload.full_name || '').trim() || undefined,
+    });
+    return response.data;
+  },
   
   logout: async (): Promise<void> => {
     try {

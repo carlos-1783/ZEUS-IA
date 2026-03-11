@@ -188,6 +188,17 @@
             </select>
             <label>Empleados</label>
             <input v-model.number="editForm.employees" type="number" min="0" placeholder="0">
+            <div class="admin-modal-web-public">
+              <label class="checkbox-label">
+                <input v-model="editForm.public_site_enabled" type="checkbox">
+                Web pública (landing + reservas)
+              </label>
+              <template v-if="editForm.public_site_enabled">
+                <label>Slug (URL)</label>
+                <input v-model="editForm.public_site_slug" type="text" placeholder="mi-restaurante" class="slug-input">
+                <p class="admin-modal-hint">Los clientes verán: /p/{{ (editForm.public_site_slug || '').toLowerCase() || 'slug' }}</p>
+              </template>
+            </div>
           </div>
           <div class="admin-modal-actions">
             <button type="button" class="btn-action" @click="closeEditCustomer">Cancelar</button>
@@ -754,7 +765,9 @@ const openEditCustomer = (customer) => {
   editForm.value = {
     company_name: customer.company_name && customer.company_name !== 'N/A' ? customer.company_name : '',
     plan: customer.plan && customer.plan !== 'none' ? customer.plan : '',
-    employees: customer.employees ?? ''
+    employees: customer.employees ?? '',
+    public_site_enabled: !!customer.public_site_enabled,
+    public_site_slug: customer.public_site_slug || ''
   }
 }
 
@@ -782,7 +795,9 @@ const saveEditCustomer = async () => {
       body: JSON.stringify({
         company_name: editForm.value.company_name || null,
         plan: editForm.value.plan || null,
-        employees: editForm.value.employees === '' ? null : Number(editForm.value.employees)
+        employees: editForm.value.employees === '' ? null : Number(editForm.value.employees),
+        public_site_enabled: editForm.value.public_site_enabled,
+        public_site_slug: editForm.value.public_site_slug ? String(editForm.value.public_site_slug).trim() : null
       })
     })
     if (!response.ok) {
@@ -1377,6 +1392,10 @@ td {
   color: #fff;
   font-size: 1rem;
 }
+.admin-modal-web-public { margin-top: 12px; }
+.admin-modal-web-public .checkbox-label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.admin-modal-web-public .slug-input { margin-top: 6px; }
+.admin-modal-hint { margin: 4px 0 0 0; font-size: 0.8rem; color: rgba(255, 255, 255, 0.5); }
 .admin-modal-actions {
   display: flex;
   gap: 12px;

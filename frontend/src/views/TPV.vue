@@ -151,6 +151,35 @@
           </div>
         </div>
 
+        <!-- Reservas del día (cuando modo mesas, para abrir como mesa) -->
+        <div v-if="tablesMode && tpvConfig.tables_enabled && !selectedTable" class="reservations-day-block">
+          <div class="reservations-day-header">
+            <span>📅 Reservas del día</span>
+            <input v-model="reservationsDate" type="date" @focus="openReservationsDate" class="reservations-date-input">
+            <button type="button" class="reservations-load-btn" :disabled="loadingReservations" @click="fetchReservations">
+              {{ loadingReservations ? 'Cargando…' : 'Cargar' }}
+            </button>
+          </div>
+          <ul v-if="reservationsList.length" class="reservations-list">
+            <li v-for="r in reservationsList" :key="r.id" class="reservation-item" :class="r.status">
+              <span class="reservation-guest">{{ r.guest_name }}</span>
+              <span class="reservation-time">{{ r.reservation_time }}</span>
+              <span class="reservation-guests">{{ r.num_guests }} com.</span>
+              <span v-if="r.status === 'seated'" class="reservation-seated">En mesa</span>
+              <template v-else>
+                <button type="button" class="reservation-seat-btn" @click="seatReservationId = seatReservationId === r.id ? null : r.id">Abrir como mesa</button>
+                <div v-if="seatReservationId === r.id" class="reservation-table-picker">
+                  <button v-for="t in tables" :key="t.id" type="button" class="table-pick-btn" @click="seatReservation(r.id, t)">
+                    Mesa {{ t.number }}
+                  </button>
+                  <button type="button" class="table-pick-cancel" @click="seatReservationId = null">Cancelar</button>
+                </div>
+              </template>
+            </li>
+          </ul>
+          <p v-else-if="!loadingReservations && reservationsDate" class="reservations-empty">Sin reservas para esta fecha. Haz clic en Cargar.</p>
+        </div>
+
         <!-- Vista de Mesas (cuando modo mesas y no hay mesa seleccionada) -->
         <div class="tables-grid" v-if="tablesMode && tpvConfig.tables_enabled && !selectedTable">
           <div 
@@ -526,6 +555,12 @@ const lastSaleTicketId = ref(null) // ID del último ticket vendido
 const businessProfile = ref(null)
 const tpvConfig = ref({})
 const businessProfileLoading = ref(true)
+
+// Reservas del día (web pública)
+const reservationsList = ref([])
+const reservationsDate = ref('')
+const loadingReservations = ref(false)
+const seatReservationId = ref(null)
 
 // Permisos de usuario
 const userRole = ref(null)
@@ -920,6 +955,41 @@ const loadTPVConfig = async () => {
 
 const getBusinessProfileLabel = (profile) => {
   return t(`tpv.businessProfiles.${profile}`, profile)
+}
+
+// Reservas del día: cargar y abrir como mesa
+const fetchReservations = async () => {
+  const token = await getAuthToken()
+  if (!token) return
+  loadingReservations.value = true
+  try {
+    const api = (await import('@/services/api')).default
+    const dateStr = reservationsDate.value || new Date().toISOString().slice(0, 10)
+    const data = await api.get(`/api/v1/tpv/reservations?date_param=${dateStr}`, token)
+    reservationsList.value = data.reservations || []
+  } catch (err) {
+    console.error('Error cargando reservas:', err)
+    reservationsList.value = []
+  } finally {
+    loadingReservations.value = false
+  }
+}
+
+const seatReservation = async (reservationId, table) => {
+  const token = await getAuthToken()
+  if (!token) return
+  try {
+    const api = (await import('@/services/api')).default
+    await api.patch(`/api/v1/tpv/reservations/${reservationId}/seat`, { table_id: String(table.id), table_name: `Mesa ${table.number}` }, token)
+    seatReservationId.value = null
+    await fetchReservations()
+  } catch (err) {
+    console.error('Error sentando reserva:', err)
+  }
+}
+
+const openReservationsDate = () => {
+  if (!reservationsDate.value) reservationsDate.value = new Date().toISOString().slice(0, 10)
 }
 
 // Validar cantidad según reglas (min: 1, max: 999)
@@ -2683,6 +2753,91 @@ onMounted(async () => {
 .tables-selected-label {
   font-weight: 600;
   color: rgba(255, 255, 255, 0.95);
+}
+
+/* Reservas del día */
+.reservations-day-block {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+}
+.reservations-day-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.reservations-date-input {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.reservations-load-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.6);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+}
+.reservations-load-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.reservations-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.reservation-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.9rem;
+}
+.reservation-item.seated {
+  opacity: 0.7;
+}
+.reservation-guest { font-weight: 600; min-width: 100px; }
+.reservation-time { color: rgba(255,255,255,0.8); }
+.reservation-guests { color: rgba(255,255,255,0.7); }
+.reservation-seated { font-style: italic; color: #10b981; }
+.reservation-seat-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.5);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.reservation-table-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  width: 100%;
+}
+.table-pick-btn, .table-pick-cancel {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.table-pick-btn { background: rgba(16, 185, 129, 0.6); color: #fff; }
+.table-pick-cancel { background: rgba(255,255,255,0.2); color: #fff; }
+.reservations-empty {
+  margin: 0;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 /* Mesas */

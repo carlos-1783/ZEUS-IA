@@ -41,6 +41,7 @@ const PayrollDrafts = () => import('../views/PayrollDrafts.vue')
 const Terminos = () => import('../views/legal/Terminos.vue')
 const Privacidad = () => import('../views/legal/Privacidad.vue')
 const LandingPage = () => import('../views/LandingPage.vue')
+const PublicStore = () => import('../views/public/PublicStore.vue')
 
 // Routes that don't require authentication
 const publicRoutes = [
@@ -55,7 +56,8 @@ const publicRoutes = [
   'Checkout',  // Checkout público
   'Terminos',
   'Privacidad',
-  'Landing'
+  'Landing',
+  'PublicStore'
 ]
 
 // Navigation guard to check authentication
@@ -146,6 +148,13 @@ const router = createRouter({
         title: 'ZEUS-IA - Plataforma de automatización con agentes',
         requiresAuth: false
       }
+    },
+    // Web pública por cliente: /p/{slug} (reservas + info negocio)
+    {
+      path: '/p/:slug',
+      name: 'PublicStore',
+      component: PublicStore,
+      meta: { title: 'Reservas', requiresAuth: false }
     },
     
     // Pricing page (pública)

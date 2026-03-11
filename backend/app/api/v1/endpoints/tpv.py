@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
 import logging
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, date
 import secrets
 
 from app.db.session import get_db
@@ -16,6 +16,7 @@ from app.core.auth import get_current_active_user, get_current_active_superuser
 from app.core.config import settings
 from app.models.user import User
 from app.models.erp import TPVProduct, FiscalProfile, TPVSale, TPVSaleItem
+from app.models.reservation import Reservation
 from services.tpv_service import tpv_service, BusinessProfile, PaymentMethod
 
 router = APIRouter()
@@ -882,6 +883,79 @@ async def get_tpv_status(
         }
     
     return status
+
+
+# ----- Reservas del día + Abrir como mesa -----
+
+@router.get("/reservations")
+async def get_reservations(
+    date_param: Optional[str] = None,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Lista reservas del día (o de la fecha indicada) para el negocio del usuario."""
+    if date_param:
+        try:
+            day = date.fromisoformat(date_param)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Formato de fecha inválido (YYYY-MM-DD)")
+    else:
+        day = date.today()
+    rows = (
+        db.query(Reservation)
+        .filter(Reservation.user_id == current_user.id, Reservation.reservation_date == day)
+        .order_by(Reservation.reservation_time, Reservation.id)
+        .all()
+    )
+    return {
+        "date": day.isoformat(),
+        "reservations": [
+            {
+                "id": r.id,
+                "guest_name": r.guest_name,
+                "guest_phone": r.guest_phone,
+                "guest_email": r.guest_email,
+                "reservation_time": r.reservation_time,
+                "num_guests": r.num_guests,
+                "notes": r.notes,
+                "status": r.status,
+                "table_id": r.table_id,
+                "table_name": r.table_name,
+                "source": r.source,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ],
+    }
+
+
+class SeatReservationRequest(BaseModel):
+    table_id: Optional[str] = None
+    table_name: Optional[str] = None
+
+
+@router.patch("/reservations/{reservation_id}/seat")
+async def seat_reservation(
+    reservation_id: int,
+    body: SeatReservationRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Marca la reserva como sentada y asigna mesa (abrir como mesa en TPV)."""
+    r = db.query(Reservation).filter(
+        Reservation.id == reservation_id,
+        Reservation.user_id == current_user.id,
+    ).first()
+    if not r:
+        raise HTTPException(status_code=404, detail="Reserva no encontrada")
+    r.status = "seated"
+    if body.table_id is not None:
+        r.table_id = body.table_id
+    if body.table_name is not None:
+        r.table_name = body.table_name
+    db.commit()
+    db.refresh(r)
+    return {"success": True, "reservation": {"id": r.id, "status": r.status, "table_id": r.table_id, "table_name": r.table_name}}
 
 
 # ----- ZEUS_TPV_GLOBAL_AUDIT_001 -----

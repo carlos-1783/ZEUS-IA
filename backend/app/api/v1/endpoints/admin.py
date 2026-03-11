@@ -135,7 +135,9 @@ async def get_admin_customers(
                 "created_at": user.created_at.isoformat() if user.created_at else None,
                 "next_payment": next_payment.isoformat() if next_payment else None,
                 "monthly_price": plan_info["monthly_price"],
-                "setup_price": plan_info["setup_price"]
+                "setup_price": plan_info["setup_price"],
+                "public_site_enabled": getattr(user, "public_site_enabled", False),
+                "public_site_slug": getattr(user, "public_site_slug", None) or "",
             })
         
         return {
@@ -176,6 +178,18 @@ async def update_admin_customer(
             user.employees = int(body["employees"]) if body["employees"] != "" else None
         except (TypeError, ValueError):
             pass
+    # Web pública por cliente (opción B para todos; si no la necesita, desactivar)
+    if "public_site_enabled" in body and body["public_site_enabled"] is not None:
+        user.public_site_enabled = bool(body["public_site_enabled"])
+    if "public_site_slug" in body and body["public_site_slug"] is not None:
+        slug = str(body["public_site_slug"]).strip().lower() if body["public_site_slug"] else None
+        if slug:
+            existing = db.query(User).filter(User.public_site_slug == slug, User.id != user.id).first()
+            if existing:
+                raise HTTPException(status_code=400, detail="Ese slug ya está usado por otro cliente")
+        user.public_site_slug = slug if slug else None
+        if getattr(user, "public_site_enabled", False) and not user.public_site_slug:
+            user.public_site_enabled = False  # slug obligatorio si web pública activa
     db.commit()
     db.refresh(user)
     plan = (user.plan or "").lower()
@@ -195,6 +209,8 @@ async def update_admin_customer(
             "next_payment": next_payment.isoformat() if next_payment else None,
             "monthly_price": plan_info["monthly_price"],
             "setup_price": plan_info["setup_price"],
+            "public_site_enabled": getattr(user, "public_site_enabled", False),
+            "public_site_slug": getattr(user, "public_site_slug", None) or "",
         },
     }
 

@@ -28,6 +28,7 @@ from app.api.v1.endpoints import (
     control_horario,
     webhooks,
     payroll,
+    public as public_site,
 )
 from app.api.v1.endpoints.websocket import websocket_endpoint
 
@@ -74,6 +75,9 @@ api_router.include_router(document_approval.router, prefix="/documents", tags=["
 
 # TPV Universal Enterprise
 api_router.include_router(tpv.router, prefix="/tpv", tags=["tpv"])
+
+# Web pública por cliente (/p/{slug}/info, /p/{slug}/reservations)
+api_router.include_router(public_site.router, prefix="/p", tags=["public-site"])
 
 # Control Horario Universal Enterprise
 api_router.include_router(control_horario.router, prefix="/control-horario", tags=["control-horario"])

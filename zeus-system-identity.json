@@ -1,4 +1,5 @@
 {
+  
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Identidad y descripción completa del sistema ZEUS-IA para que la IA (Z.IA) sepa qué es ZEUS: SaaS de automatización empresarial desde el núcleo.",
   "version": "1.0.0",
@@ -84,7 +85,8 @@
     "marketing": "/api/v1/marketing (Google Ads, Meta Ads, Analytics)",
     "onboarding": "/api/v1/onboarding",
     "documents": "/api/v1/documents (aprobación RAFAEL/JUSTICIA)",
-    "tpv": "/api/v1/tpv (productos, ventas, mesas, perfil negocio)",
+    "tpv": "/api/v1/tpv (productos, ventas, mesas, reservas del día, abrir como mesa)",
+    "public_site": "/api/v1/p (GET /p/{slug}/info, POST /api/v1/p/{slug}/reservations — web pública por cliente)",
     "control_horario": "/api/v1/control-horario",
     "admin": "/api/v1/admin (stats, customers, PATCH customers/:id, revenue-chart, settings) — solo superuser",
     "activities": "/api/v1/activities",
@@ -105,7 +107,8 @@
       "/auth/forgot-password",
       "/auth/reset-password/:token",
       "/pricing",
-      "/checkout"
+      "/checkout",
+      "/p/:slug (web pública por cliente: landing + reservas)"
     ],
     "protected": [
       "/dashboard",

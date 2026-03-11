@@ -40,6 +40,10 @@ class User(Base):
     control_horario_business_profile = Column(String, nullable=True, index=True)  # oficina, restaurante, tienda, externo, etc.
     control_horario_config = Column(Text, nullable=True)  # JSON config: {"strict_check_in": true, "gps_required": false, etc.}
 
+    # Web pública por cliente (Opción B para todos; si no la necesita, public_site_enabled=False)
+    public_site_enabled = Column(Boolean(), default=False, nullable=False)
+    public_site_slug = Column(String(100), unique=True, nullable=True, index=True)  # URL: /p/{slug}
+
     # Relación con empresas (UserCompany) - ZEUS_INTERNAL_COMPANY_BOOTSTRAP_002
     user_companies = relationship(
         "UserCompany",

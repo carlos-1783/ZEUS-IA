@@ -60,6 +60,7 @@ def create_tables():
             from app.models.agent_memory import AgentOperationalState, AgentDecisionLog, AgentShortTermBuffer
             from app.models.automation_readiness import AutomationReadiness
             from app.models.payroll_draft import PayrollDraft
+            from app.models.reservation import Reservation
 
             Base.metadata.create_all(bind=engine)
             print("[DATABASE] [OK] Tablas creadas correctamente")

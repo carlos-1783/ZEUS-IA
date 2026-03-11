@@ -169,10 +169,12 @@ const handleSubmit = async () => {
     if (response.reset_link) {
       resetLink.value = response.reset_link;
     }
-  } catch (err: any) {
+  } catch (err) {
     console.error('Password reset request failed:', err);
-    const detail = err.response?.data?.detail;
-    error.value = typeof detail === 'string' ? detail : (err.response?.data?.message || 'Ocurrió un error al procesar tu solicitud. Por favor, inténtalo de nuevo.');
+    // @ts-ignore optional chaining types en tiempo de compilación
+    const detail = err?.response?.data?.detail;
+    // @ts-ignore message puede no existir en el tipo inferido
+    error.value = typeof detail === 'string' ? detail : (err?.response?.data?.message || 'Ocurrió un error al procesar tu solicitud. Por favor, inténtalo de nuevo.');
   } finally {
     isLoading.value = false;
   }

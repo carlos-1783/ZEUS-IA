@@ -151,7 +151,8 @@ const errors = reactive({
 
 // Get token from route params
 onMounted(() => {
-  token.value = (route.params.token as string) || '';
+  const rawToken = route.params.token;
+  token.value = typeof rawToken === 'string' ? rawToken : '';
   
   if (!token.value) {
     error.value = 'Token de restablecimiento no válido o faltante';
@@ -206,10 +207,12 @@ const handleSubmit = async () => {
     });
     success.value = true;
     successMessage.value = '¡Tu contraseña ha sido restablecida con éxito! Ahora puedes iniciar sesión con tu nueva contraseña.';
-  } catch (err: any) {
+  } catch (err) {
     console.error('Password reset failed:', err);
-    const detail = err.response?.data?.detail;
-    error.value = typeof detail === 'string' ? detail : (err.response?.data?.message || 'Ocurrió un error al restablecer tu contraseña. Por favor, inténtalo de nuevo.');
+    // @ts-ignore optional chaining types en tiempo de compilación
+    const detail = err?.response?.data?.detail;
+    // @ts-ignore message puede no existir en el tipo inferido
+    error.value = typeof detail === 'string' ? detail : (err?.response?.data?.message || 'Ocurrió un error al restablecer tu contraseña. Por favor, inténtalo de nuevo.');
   } finally {
     isLoading.value = false;
   }

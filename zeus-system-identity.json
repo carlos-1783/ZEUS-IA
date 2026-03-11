@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Identidad y descripción completa del sistema ZEUS-IA para que la IA (Z.IA) sepa qué es ZEUS: SaaS de automatización empresarial desde el núcleo.",
+  "version": "1.0.0",
+  "generated_at": "2026-03-10",
+
+  "identity": {
+    "name": "ZEUS-IA",
+    "full_name": "ZEUS Intelligent Assistant",
+    "tagline": "Enterprise AI Platform",
+    "type": "saas",
+    "domain": "automatización empresarial",
+    "description": "SaaS de automatización desde el núcleo: plataforma multi-tenant que orquesta agentes de IA, TPV universal, control horario, nóminas, fiscalidad y aprobación de documentos para empresas. El núcleo es un runtime de agentes y workflows; los módulos (TPV, control horario, nóminas, etc.) son capacidades que se activan por perfil de negocio y plan.",
+    "project_name": "ZEUS-IA",
+    "api_title": "ZEUS-IA API",
+    "api_description": "Intelligent Assistant API",
+    "app_version": "1.0.6",
+    "jwt_issuer": "zeus-ia-backend",
+    "jwt_audiences": ["zeus-ia:auth", "zeus-ia:access", "zeus-ia:websocket"]
+  },
+
+  "architecture": {
+    "stack": {
+      "backend": "FastAPI (Python 3.10+)",
+      "frontend": "Vue 3, Vite, Pinia, Vue Router, TypeScript",
+      "database": "SQLite (desarrollo) / PostgreSQL (producción, ej. Neon, Railway)",
+      "auth": "JWT (access + refresh), OAuth2-compatible",
+      "realtime": "WebSocket (/api/v1/ws/{client_id})",
+      "deployment": "Railway (backend + frontend), monorepo"
+    },
+    "api_base": "/api/v1",
+    "docs": {
+      "swagger": "/api/docs",
+      "redoc": "/api/redoc"
+    },
+    "multi_tenant": true,
+    "data_isolation": "Por user_id en recursos (TPV productos, ventas, control horario, nóminas). Empresas (Company) y vinculación UserCompany para contexto por empresa."
+  },
+
+  "users_and_roles": {
+    "roles": [
+      {
+        "id": "owner",
+        "description": "Dueño de empresa: acceso completo (nóminas, TPV, control horario, configuración). Por defecto en registro."
+      },
+      {
+        "id": "employee",
+        "description": "Empleado: solo TPV (comandero) y control horario. No ve nóminas ni Admin Panel."
+      }
+    ],
+    "superuser": {
+      "description": "Usuario global (is_superuser=true). Acceso a Admin Panel, estadísticas, lista de clientes, edición de clientes. Solo visible para superusuarios."
+    },
+    "auth_flows": {
+      "login": "POST /api/v1/auth/login (form: username=email, password, grant_type=password)",
+      "register": "POST /api/v1/auth/register (body: email, password, full_name)",
+      "refresh": "POST /api/v1/auth/refresh (body: refresh_token)",
+      "me": "GET /api/v1/auth/me (Bearer token)"
+    }
+  },
+
+  "plans_and_pricing": {
+    "plans": {
+      "startup": { "monthly_price": 197, "setup_price": 197 },
+      "growth": { "monthly_price": 497, "setup_price": 497 },
+      "business": { "monthly_price": 897, "setup_price": 897 },
+      "enterprise": { "monthly_price": 1797, "setup_price": 1797 }
+    },
+    "field_on_user": "plan (string nullable). Asignable desde Admin Panel (Editar cliente)."
+  },
+
+  "api_modules": {
+    "health": "/api/v1/health",
+    "auth": "/api/v1/auth (login, register, refresh, logout, me, token, reset-password, new-password, debug/verify-token)",
+    "commands": "/api/v1/commands",
+    "system": "/api/v1/system",
+    "customers": "/api/v1/customers",
+    "zeus_core": "/api/v1/zeus (núcleo ZEUS)",
+    "agents": "/api/v1/agents",
+    "metrics": "/api/v1/metrics",
+    "chat": "/api/v1/chat (chat con agentes: ZEUS CORE, PERSEO, RAFAEL, THALOS, JUSTICIA)",
+    "integrations": "/api/v1/integrations (WhatsApp, Email, Hacienda, Stripe)",
+    "google": "/api/v1/google (Calendar, Gmail, Drive, Sheets)",
+    "marketing": "/api/v1/marketing (Google Ads, Meta Ads, Analytics)",
+    "onboarding": "/api/v1/onboarding",
+    "documents": "/api/v1/documents (aprobación RAFAEL/JUSTICIA)",
+    "tpv": "/api/v1/tpv (productos, ventas, mesas, perfil negocio)",
+    "control_horario": "/api/v1/control-horario",
+    "admin": "/api/v1/admin (stats, customers, PATCH customers/:id, revenue-chart, settings) — solo superuser",
+    "activities": "/api/v1/activities",
+    "automation": "/api/v1/automation",
+    "system_status": "/api/v1/system (status)",
+    "perseo_images": "/api/v1 (perseo imágenes)",
+    "teamflow": "/api/v1/teamflow",
+    "actions": "/api/v1/actions",
+    "workspaces": "/api/v1/workspaces",
+    "webhooks": "/api/v1/webhooks",
+    "payroll": "/api/v1/payroll"
+  },
+
+  "frontend_routes": {
+    "public": [
+      "/auth/login",
+      "/auth/register",
+      "/auth/forgot-password",
+      "/auth/reset-password/:token",
+      "/pricing",
+      "/checkout"
+    ],
+    "protected": [
+      "/dashboard",
+      "/zeus-core",
+      "/tpv",
+      "/control-horario",
+      "/payroll",
+      "/admin (solo superuser)",
+      "/zeus-core (núcleo agente)"
+    ],
+    "main_navigation": ["Dashboard", "Admin Panel (superuser)", "Analytics", "TPV", "Control Horario", "Nóminas (owner)", "Settings"]
+  },
+
+  "tpv": {
+    "name": "TPV Universal Enterprise",
+    "description": "Punto de venta adaptable por tipo de negocio. Mesas independientes por mesa (carrito por mesa), productos multi-tenant por usuario.",
+    "business_profiles": [
+      "restaurante",
+      "bar",
+      "cafetería",
+      "tienda_minorista",
+      "peluquería",
+      "centro_estético",
+      "taller",
+      "clínica",
+      "discoteca",
+      "farmacia",
+      "logística",
+      "otros"
+    ],
+    "config_per_profile": "tables_enabled, services_enabled, appointments_enabled, inventory_enabled, default_categories, default_iva_rate, supports_tickets, supports_invoices, requires_employee, requires_customer_data",
+    "payment_methods": ["efectivo", "tarjeta", "bizum", "transferencia"],
+    "document_types": ["ticket", "factura"],
+    "comandero": "Vista TPV compartible por enlace para empleados (Compartir comandero)."
+  },
+
+  "control_horario": {
+    "name": "Control Horario Universal Enterprise",
+    "description": "Sistema de fichajes y asistencia por tipo de negocio.",
+    "business_profiles": [
+      "oficina",
+      "restaurante",
+      "tienda",
+      "externo",
+      "remoto",
+      "turnos",
+      "logística",
+      "producción",
+      "comercial",
+      "servicios",
+      "otros"
+    ],
+    "check_in_methods": ["face", "qr", "code", "location", "on_site", "remote"]
+  },
+
+  "agents": {
+    "zeus_core": "Núcleo orquestador y asistente principal.",
+    "perseo": "Campañas, imágenes, marketing (PERSEO Images).",
+    "rafael": "Fiscal, facturación, documentos (aprobación).",
+    "justicia": "Legal, documentos (aprobación).",
+    "thalos": "Automatización THALOS (handlers).",
+    "afrodita": "Recursos humanos / nóminas (payroll draft).",
+    "activity_log": "AgentActivity: agent_name (ZEUS, PERSEO, RAFAEL, etc.), action_type, details, status, visible_to_client."
+  },
+
+  "core_automation": {
+    "runtime": "unified_agent_runtime (run_workspace_task), activity_logger, automation handlers por agente y acción.",
+    "memory": "agent_memory_service (company_id, agent_id, thread_id): short-term buffer, operational state, decision log.",
+    "automation_readiness": "Evaluación por empresa (company_id).",
+    "payroll_draft": "Borradores de nómina por company_id y employee_id."
+  },
+
+  "entities": {
+    "User": "id, email, full_name, hashed_password, is_active, is_superuser, role (owner|employee), company_name, employees, plan, tpv_business_profile, control_horario_business_profile, tpv_config, control_horario_config, stripe_*, user_companies (relación).",
+    "Company": "id, company_name, slug, pilot_company, status, sector, country, currency, metadata_.",
+    "UserCompany": "user_id, company_id, role (company_admin, member).",
+    "TPVProduct": "user_id, product_id, name, category, price, price_with_iva, iva_rate, stock, image, icon (multi-tenant por user_id).",
+    "AgentActivity": "agent_name, action_type, details, metrics, status, user_email, visible_to_client."
+  },
+
+  "admin_panel": {
+    "access": "Solo superusuario (is_superuser). Ruta /admin protegida por requiresSuperuser.",
+    "sections": ["Overview", "Clientes", "Ingresos", "Configuración"],
+    "clientes": "Lista de usuarios como clientes: empresa (company_name), email, plan, empleados, estado, próximo pago. Acciones: Ver, Editar (empresa, plan, empleados), Activar/Desactivar.",
+    "stats": "total_customers, monthly_revenue, total_revenue, active_subscriptions, total_setup_fees, revenue_by_plan."
+  },
+
+  "empresa_piloto": {
+    "concept": "Primera empresa real que usa el sistema en producción (no demo).",
+    "onboarding": "Usuario se registra (Crear cuenta); en Admin Panel el superusuario puede Editar ese cliente para asignar Empresa (company_name) y Plan. Cada empresa/usuario tiene datos aislados (multi-tenant)."
+  },
+
+  "deployment": {
+    "railway": "Backend y frontend desplegables en Railway. Backend: uvicorn app.main:app. Frontend: build Vite, serve dist.",
+    "env": "ENVIRONMENT, DEBUG, DATABASE_URL, SECRET_KEY, RAILWAY_*, VITE_API_BASE_URL (frontend).",
+    "no_production": "seed_demo_empresas.py y usuarios demo (bar@demo.local, zapateria@demo.local) son solo para uso local; no se despliegan ni ejecutan en producción."
+  },
+
+  "glosario": {
+    "ZEUS": "Sistema y marca del SaaS de automatización empresarial.",
+    "Z.IA": "IA o agente que consume esta identidad para saber qué es ZEUS.",
+    "TPV": "Terminal Punto de Venta (módulo de ventas y mesas).",
+    "Comandero": "Vista TPV para anotar pedidos; enlace compartible con empleados.",
+    "Núcleo": "Runtime de agentes y automatizaciones (ZEUS CORE, workflows, AgentActivity).",
+    "Multi-tenant": "Datos separados por usuario/empresa; cada cliente solo ve lo suyo.",
+    "Pilot company": "Empresa piloto: primera empresa real en producción (company_name y plan asignados desde Admin)."
+  }
+}

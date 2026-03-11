@@ -151,6 +151,54 @@ async def get_admin_customers(
         )
 
 
+@router.patch("/customers/{customer_id}")
+async def update_admin_customer(
+    customer_id: int,
+    body: Dict[str, Any],
+    current_user: User = Depends(get_current_active_superuser),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Actualizar datos de un cliente (empresa, plan, empleados). Solo superuser.
+    """
+    user = db.query(User).filter(User.id == customer_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    if user.is_superuser and user.id != current_user.id:
+        raise HTTPException(status_code=400, detail="No se puede editar a otro superusuario")
+    if "company_name" in body and body["company_name"] is not None:
+        user.company_name = str(body["company_name"]).strip() or None
+    if "plan" in body and body["plan"] is not None:
+        plan = str(body["plan"]).strip().lower()
+        user.plan = plan if plan in PRICING_PLANS else None
+    if "employees" in body and body["employees"] is not None:
+        try:
+            user.employees = int(body["employees"]) if body["employees"] != "" else None
+        except (TypeError, ValueError):
+            pass
+    db.commit()
+    db.refresh(user)
+    plan = (user.plan or "").lower()
+    plan_info = PRICING_PLANS.get(plan, {"monthly_price": 0, "setup_price": 0})
+    next_payment_date = user.updated_at or user.created_at
+    next_payment = (next_payment_date + timedelta(days=30)) if next_payment_date else None
+    return {
+        "success": True,
+        "customer": {
+            "id": user.id,
+            "email": user.email,
+            "company_name": getattr(user, "company_name", None) or "N/A",
+            "full_name": user.full_name or user.email,
+            "plan": plan or "none",
+            "employees": getattr(user, "employees", 0) or 0,
+            "status": "active" if user.is_active else "inactive",
+            "next_payment": next_payment.isoformat() if next_payment else None,
+            "monthly_price": plan_info["monthly_price"],
+            "setup_price": plan_info["setup_price"],
+        },
+    }
+
+
 @router.get("/revenue-chart")
 async def get_revenue_chart_data(
     months: int = 12,

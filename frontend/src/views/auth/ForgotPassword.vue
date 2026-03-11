@@ -11,6 +11,9 @@
           <p class="text-sm text-green-700">
             {{ successMessage }}
           </p>
+          <p v-if="resetLink" class="mt-2 text-sm">
+            <a :href="resetLink" class="font-medium text-indigo-600 hover:text-indigo-500">Haz clic aquí para restablecer tu contraseña</a>
+          </p>
         </div>
       </div>
     </div>
@@ -102,14 +105,15 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
+import { useRoute } from 'vue-router';
+import api from '@/api';
 
-const router = useRouter();
 const route = useRoute();
 
 const isLoading = ref(false);
 const error = ref('');
 const successMessage = ref('');
+const resetLink = ref('');
 const form = reactive({
   email: ''
 });
@@ -157,19 +161,18 @@ const handleSubmit = async () => {
   
   isLoading.value = true;
   error.value = '';
+  resetLink.value = '';
   
   try {
-    // TODO: Implement actual password reset request
-    // const response = await api.forgotPassword(form.email);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Show success message
-    successMessage.value = 'Hemos enviado un correo electrónico con instrucciones para restablecer tu contraseña. Por favor, revisa tu bandeja de entrada.';
-  } catch (err) {
+    const response = await api.forgotPassword(form.email);
+    successMessage.value = response.msg || 'Si tu correo está registrado, recibirás un enlace para restablecer la contraseña. Revisa tu bandeja de entrada.';
+    if (response.reset_link) {
+      resetLink.value = response.reset_link;
+    }
+  } catch (err: any) {
     console.error('Password reset request failed:', err);
-    error.value = err.response?.data?.message || 'Ocurrió un error al procesar tu solicitud. Por favor, inténtalo de nuevo.';
+    const detail = err.response?.data?.detail;
+    error.value = typeof detail === 'string' ? detail : (err.response?.data?.message || 'Ocurrió un error al procesar tu solicitud. Por favor, inténtalo de nuevo.');
   } finally {
     isLoading.value = false;
   }

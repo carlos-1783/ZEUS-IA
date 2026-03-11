@@ -566,6 +566,21 @@ const api: ApiClient = {
     });
     return response.data;
   },
+
+  forgotPassword: async (email: string) => {
+    const response = await axiosInstance.post<{ msg: string; reset_link?: string }>('auth/reset-password', {
+      email: email.trim().toLowerCase(),
+    });
+    return response.data;
+  },
+
+  setNewPassword: async (payload: { token: string; new_password: string }) => {
+    const response = await axiosInstance.post<{ msg: string }>('auth/new-password', {
+      token: payload.token,
+      new_password: payload.new_password,
+    });
+    return response.data;
+  },
   
   logout: async (): Promise<void> => {
     try {

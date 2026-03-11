@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'zeus.db')}")
     
+    # Frontend URL (para enlaces en emails, p. ej. reset password)
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+
     # CORS Configuration - SIMPLIFICADO PARA DESARROLLO
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:3000",

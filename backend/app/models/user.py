@@ -70,6 +70,20 @@ class RefreshToken(Base):
         return f"<RefreshToken {self.token}>"
 
 
+class PasswordResetToken(Base):
+    """Token de un solo uso para restablecer contraseña. Caduca en 1 hora."""
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, nullable=False, index=True)
+    token = Column(String, nullable=False, unique=True, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<PasswordResetToken {self.email}>"
+
+
 # Add relationships to User model
 User.refresh_tokens = relationship("RefreshToken", order_by=RefreshToken.id, back_populates="user")
 # Document approvals relationship (lazy import to avoid circular dependency)

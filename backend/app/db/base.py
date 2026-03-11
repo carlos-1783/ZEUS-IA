@@ -51,7 +51,7 @@ def create_tables():
             _migrate_user_columns()
             
             # Importar modelos aquí para evitar importación circular
-            from app.models.user import User, RefreshToken
+            from app.models.user import User, RefreshToken, PasswordResetToken
             from app.models.company import Company, UserCompany
             from app.models.customer import Customer
             from app.models.erp import Invoice, Product, Payment, TPVProduct, TaxRate, FiscalProfile, TPVSale, TPVSaleItem

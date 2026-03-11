@@ -38,6 +38,8 @@ const Checkout = () => import('../views/Checkout.vue')
 const AdminPanel = () => import('../views/AdminPanel.vue')
 const TPV = () => import('../views/TPV.vue')
 const PayrollDrafts = () => import('../views/PayrollDrafts.vue')
+const Terminos = () => import('../views/legal/Terminos.vue')
+const Privacidad = () => import('../views/legal/Privacidad.vue')
 
 // Routes that don't require authentication
 const publicRoutes = [
@@ -49,7 +51,9 @@ const publicRoutes = [
   'AuthTest',  // Temporarily public for testing
   'WebSocketTest',  // Temporarily public for testing
   'Pricing',  // Landing page pública
-  'Checkout'  // Checkout público
+  'Checkout',  // Checkout público
+  'Terminos',
+  'Privacidad'
 ]
 
 // Navigation guard to check authentication
@@ -151,6 +155,19 @@ const router = createRouter({
         title: 'Checkout - ZEUS-IA',
         requiresAuth: false
       }
+    },
+    // Legal (públicas)
+    {
+      path: '/terminos',
+      name: 'Terminos',
+      component: Terminos,
+      meta: { title: 'Términos de servicio - ZEUS-IA', requiresAuth: false }
+    },
+    {
+      path: '/privacidad',
+      name: 'Privacidad',
+      component: Privacidad,
+      meta: { title: 'Política de privacidad - ZEUS-IA', requiresAuth: false }
     },
     
     // Admin Panel (solo superusuario)

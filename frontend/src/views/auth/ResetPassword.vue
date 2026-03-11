@@ -128,9 +128,9 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
+import { useRoute } from 'vue-router';
+import api from '@/api';
 
-const router = useRouter();
 const route = useRoute();
 
 const isLoading = ref(false);
@@ -151,7 +151,7 @@ const errors = reactive({
 
 // Get token from route params
 onMounted(() => {
-  token.value = route.params.token;
+  token.value = (route.params.token as string) || '';
   
   if (!token.value) {
     error.value = 'Token de restablecimiento no válido o faltante';
@@ -166,7 +166,7 @@ const validateForm = () => {
   errors.password = '';
   errors.password_confirmation = '';
   
-  // Password validation
+  // Password validation (matching backend: 8+ chars, upper, lower, number, special)
   if (!form.password) {
     errors.password = 'La contraseña es obligatoria';
     isValid = false;
@@ -175,6 +175,9 @@ const validateForm = () => {
     isValid = false;
   } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(form.password)) {
     errors.password = 'La contraseña debe contener al menos una letra mayúscula, una minúscula y un número';
+    isValid = false;
+  } else if (!/[^A-Za-z0-9]/.test(form.password)) {
+    errors.password = 'La contraseña debe contener al menos un carácter especial';
     isValid = false;
   }
   
@@ -197,22 +200,16 @@ const handleSubmit = async () => {
   error.value = '';
   
   try {
-    // TODO: Implement actual password reset
-    // const response = await api.resetPassword({
-    //   token: token.value,
-    //   password: form.password,
-    //   password_confirmation: form.password_confirmation
-    // });
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Show success message
+    await api.setNewPassword({
+      token: token.value,
+      new_password: form.password,
+    });
     success.value = true;
     successMessage.value = '¡Tu contraseña ha sido restablecida con éxito! Ahora puedes iniciar sesión con tu nueva contraseña.';
-  } catch (err) {
+  } catch (err: any) {
     console.error('Password reset failed:', err);
-    error.value = err.response?.data?.message || 'Ocurrió un error al restablecer tu contraseña. Por favor, inténtalo de nuevo.';
+    const detail = err.response?.data?.detail;
+    error.value = typeof detail === 'string' ? detail : (err.response?.data?.message || 'Ocurrió un error al restablecer tu contraseña. Por favor, inténtalo de nuevo.');
   } finally {
     isLoading.value = false;
   }

@@ -113,21 +113,62 @@
       </div>
     </section>
 
+    <!-- Los 6 agentes -->
+    <section id="agentes" class="py-16 bg-gray-800">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center mb-12">
+          <h2 class="text-base text-indigo-400 font-semibold tracking-wide uppercase">Agentes de IA</h2>
+          <p class="mt-2 text-3xl font-extrabold text-white sm:text-4xl">
+            Seis agentes especializados para tu negocio
+          </p>
+          <p class="mt-3 max-w-2xl mx-auto text-gray-300">
+            Cada agente cubre un área clave: orquestación, marketing, fiscal, legal, automatización y nóminas.
+          </p>
+        </div>
+        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div class="bg-gray-900/80 rounded-lg p-6 border border-gray-700 hover:border-indigo-500/50 transition-colors">
+            <h3 class="text-lg font-semibold text-indigo-400">ZEUS CORE</h3>
+            <p class="mt-2 text-gray-300 text-sm">Núcleo orquestador y asistente principal.</p>
+          </div>
+          <div class="bg-gray-900/80 rounded-lg p-6 border border-gray-700 hover:border-indigo-500/50 transition-colors">
+            <h3 class="text-lg font-semibold text-indigo-400">PERSEO</h3>
+            <p class="mt-2 text-gray-300 text-sm">Campañas, imágenes y marketing (PERSEO Images).</p>
+          </div>
+          <div class="bg-gray-900/80 rounded-lg p-6 border border-gray-700 hover:border-indigo-500/50 transition-colors">
+            <h3 class="text-lg font-semibold text-indigo-400">RAFAEL</h3>
+            <p class="mt-2 text-gray-300 text-sm">Fiscal, facturación y documentos (aprobación).</p>
+          </div>
+          <div class="bg-gray-900/80 rounded-lg p-6 border border-gray-700 hover:border-indigo-500/50 transition-colors">
+            <h3 class="text-lg font-semibold text-indigo-400">JUSTICIA</h3>
+            <p class="mt-2 text-gray-300 text-sm">Legal y documentos (aprobación).</p>
+          </div>
+          <div class="bg-gray-900/80 rounded-lg p-6 border border-gray-700 hover:border-indigo-500/50 transition-colors">
+            <h3 class="text-lg font-semibold text-indigo-400">THALOS</h3>
+            <p class="mt-2 text-gray-300 text-sm">Automatización y handlers.</p>
+          </div>
+          <div class="bg-gray-900/80 rounded-lg p-6 border border-gray-700 hover:border-indigo-500/50 transition-colors">
+            <h3 class="text-lg font-semibold text-indigo-400">AFRODITA</h3>
+            <p class="mt-2 text-gray-300 text-sm">Recursos humanos y nóminas (payroll draft).</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- CTA Section -->
     <section class="bg-indigo-700">
       <div class="max-w-2xl mx-auto text-center py-16 px-4 sm:py-20 sm:px-6 lg:px-8">
         <h2 class="text-3xl font-extrabold text-white sm:text-4xl">
           <span class="block">¿Listo para comenzar?</span>
-          <span class="block">Crea tu cuenta gratuita hoy mismo.</span>
+          <span class="block">Elige tu plan</span>
         </h2>
         <p class="mt-4 text-lg leading-6 text-indigo-200">
-          Únete a miles de negocios que ya están creciendo con ZEUS IA.
+          Únete a negocios que ya automatizan con ZEUS IA.
         </p>
         <router-link 
-          to="/register" 
+          to="/pricing" 
           class="mt-8 w-full inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-indigo-50 sm:w-auto"
         >
-          Regístrate gratis
+          Ver planes
         </router-link>
       </div>
     </section>
@@ -137,28 +178,23 @@
       <div class="max-w-7xl mx-auto py-12 px-4 overflow-hidden sm:px-6 lg:px-8">
         <nav class="-mx-5 -my-2 flex flex-wrap justify-center" aria-label="Footer">
           <div class="px-5 py-2">
-            <a href="#" class="text-base text-gray-300 hover:text-white">
-              Acerca de
-            </a>
+            <router-link to="/#features" class="text-base text-gray-300 hover:text-white">Características</router-link>
           </div>
           <div class="px-5 py-2">
-            <a href="#" class="text-base text-gray-300 hover:text-white">
-              Características
-            </a>
+            <router-link to="/#agentes" class="text-base text-gray-300 hover:text-white">Agentes</router-link>
           </div>
           <div class="px-5 py-2">
-            <a href="#" class="text-base text-gray-300 hover:text-white">
-              Precios
-            </a>
+            <router-link to="/pricing" class="text-base text-gray-300 hover:text-white">Precios</router-link>
           </div>
           <div class="px-5 py-2">
-            <a href="#" class="text-base text-gray-300 hover:text-white">
-              Contacto
-            </a>
+            <router-link to="/terminos" class="text-base text-gray-300 hover:text-white">Términos</router-link>
+          </div>
+          <div class="px-5 py-2">
+            <router-link to="/privacidad" class="text-base text-gray-300 hover:text-white">Privacidad</router-link>
           </div>
         </nav>
         <p class="mt-8 text-center text-base text-gray-400">
-          &copy; 2023 ZEUS IA. Todos los derechos reservados.
+          &copy; {{ new Date().getFullYear() }} ZEUS IA. Todos los derechos reservados.
         </p>
       </div>
     </footer>

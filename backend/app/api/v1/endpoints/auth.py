@@ -1,4 +1,5 @@
-from datetime import datetime, timedelta
+import secrets
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 import logging
 
@@ -16,7 +17,7 @@ from app.core.auth import authenticate_user, get_user_by_email
 from app.core.security import get_password_hash, verify_password
 from app.core.config import settings
 from app.db.session import get_db
-from app.models.user import User, RefreshToken
+from app.models.user import User, RefreshToken, PasswordResetToken
 from app.schemas.token import Token, TokenRefresh, LoginRequest, RegisterRequest, ResetPasswordRequest, NewPasswordRequest
 from app.schemas.user import User as UserSchema
 
@@ -80,7 +81,7 @@ async def create_tokens(db: Session, user: User) -> Dict[str, Any]:
             detail=f"Error creating authentication tokens: {str(e)}"
         )
 
-# ZEUS_LOCAL_CORS_FIX_001: Preflight OPTIONS sin autenticación para que CORS pase en local
+# ZEUS_LOCAL_CORS_FIX_001: Preflight OPTIONS sin autenticaci?n para que CORS pase en local
 @router.options("/login", include_in_schema=False)
 async def login_preflight() -> Response:
     """Responde 200 a OPTIONS para preflight CORS (no ejecuta auth)."""
@@ -117,7 +118,7 @@ async def login(
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
-        # Verificar si el usuario está activo
+        # Verificar si el usuario est? activo
         if not user.is_active:
             logger.warning(f"Intento de login de usuario inactivo: {username}")
             raise HTTPException(
@@ -127,7 +128,7 @@ async def login(
         
         logger.info(f"Login exitoso para usuario: {username}")
         
-        # Crear tokens de acceso y actualización
+        # Crear tokens de acceso y actualizaci?n
         return await create_tokens(db, user)
     except HTTPException:
         # Re-raise HTTP exceptions as-is
@@ -135,12 +136,12 @@ async def login(
     except Exception as e:
         error_msg = str(e).lower()
         is_db_error = any(keyword in error_msg for keyword in [
-            "connection", "conexión", "timeout", "operationalerror", 
+            "connection", "conexi?n", "timeout", "operationalerror", 
             "database", "base de datos", "connection timeout"
         ])
         
         if is_db_error:
-            logger.error(f"Error de conexión a base de datos durante login para {username}: {str(e)}", exc_info=True)
+            logger.error(f"Error de conexi?n a base de datos durante login para {username}: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Database service temporarily unavailable. Please try again in a few moments."
@@ -167,8 +168,8 @@ async def login_for_access_token(
     """
     OAuth2 compatible token login.
     
-    Este endpoint es compatible con el estándar OAuth2 y se puede utilizar con clientes
-    que esperan el flujo de contraseña de OAuth2.
+    Este endpoint es compatible con el est?ndar OAuth2 y se puede utilizar con clientes
+    que esperan el flujo de contrase?a de OAuth2.
     """
     # Autenticar al usuario
     user = authenticate_user(db, form_data.username, form_data.password)
@@ -179,14 +180,14 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Verificar si el usuario está activo
+    # Verificar si el usuario est? activo
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Inactive user"
         )
     
-    # Usar la misma función create_tokens que en el endpoint /login
+    # Usar la misma funci?n create_tokens que en el endpoint /login
     return await create_tokens(db, user)
 
 @router.post(
@@ -251,6 +252,10 @@ async def register_user(
             detail=str(e)
         )
 
+# Tiempo de validez del token de reset (1 hora)
+RESET_TOKEN_EXPIRE_MINUTES = 60
+
+
 @router.post(
     "/reset-password",
     operation_id="auth_reset_password_api_v1",
@@ -259,14 +264,32 @@ async def register_user(
 )
 async def reset_password(
     reset_data: ResetPasswordRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """Request password reset"""
+    """Request password reset: genera token, lo guarda y opcionalmente env?a email. Si no hay email configurado, devuelve reset_link."""
     user = db.query(User).filter(User.email == reset_data.email).first()
-    if user:
-        # In a real app, send an email with a reset token
-        pass
-    return {"msg": "If your email is registered, you will receive a password reset link"}
+    if not user:
+        # No revelar si el email existe o no
+        return {"msg": "Si tu correo est? registrado, recibir?s un enlace para restablecer la contrase?a."}
+
+    # Invalidar tokens previos para este email
+    db.query(PasswordResetToken).filter(PasswordResetToken.email == reset_data.email).delete()
+
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES)
+    db.add(PasswordResetToken(email=reset_data.email, token=token, expires_at=expires_at))
+    db.commit()
+
+    reset_link = f"{settings.FRONTEND_URL}/auth/reset-password/{token}"
+
+    # TODO: Si tienes email configurado (SMTP), enviar correo con reset_link aqu?.
+    # if settings.SMTP_HOST: send_reset_email(reset_data.email, reset_link)
+
+    return {
+        "msg": "Si tu correo est? registrado, recibir?s un enlace para restablecer la contrase?a.",
+        "reset_link": reset_link,  # Para desarrollo / cuando no hay email; en producci?n puede omitirse
+    }
+
 
 @router.post(
     "/new-password",
@@ -278,17 +301,30 @@ async def set_new_password(
     new_password_data: NewPasswordRequest,
     db: Session = Depends(get_db)
 ):
-    """Set new password with reset token"""
-    # In a real app, validate the reset token
-    # For now, just update the password if user exists
-    user = db.query(User).filter(User.email == new_password_data.email).first()
+    """Set new password with reset token. Valida token, actualiza contrase?a y borra el token."""
+    now = datetime.now(timezone.utc)
+    row = (
+        db.query(PasswordResetToken)
+        .filter(
+            PasswordResetToken.token == new_password_data.token,
+            PasswordResetToken.expires_at > now,
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token inv?lido o expirado. Solicita de nuevo el restablecimiento de contrase?a.",
+        )
+
+    user = db.query(User).filter(User.email == row.email).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    hashed_password = security.get_password_hash(new_password_data.new_password)
-    user.hashed_password = hashed_password
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+
+    user.hashed_password = security.get_password_hash(new_password_data.new_password)
+    db.delete(row)
     db.commit()
-    return {"msg": "Password updated successfully"}
+    return {"msg": "Contrase?a actualizada correctamente."}
 
 @router.post(
     "/refresh", 
@@ -377,15 +413,15 @@ async def logout(
     operation_id="auth_me_api_v1",
     summary="Get Current User",
     description="Get the currently authenticated user's information",
-    response_description="Devuelve la información del usuario autenticado"
+    response_description="Devuelve la informaci?n del usuario autenticado"
 )
 async def read_current_user(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
-    Obtiene la información del usuario actualmente autenticado.
-    Requiere un token de acceso válido en el encabezado de autorización.
+    Obtiene la informaci?n del usuario actualmente autenticado.
+    Requiere un token de acceso v?lido en el encabezado de autorizaci?n.
     """
     try:
         if not current_user:

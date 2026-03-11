@@ -154,6 +154,9 @@
                   <button class="btn-action" @click="viewCustomer(customer)">
                     👁️ Ver
                   </button>
+                  <button class="btn-action" @click="openEditCustomer(customer)">
+                    ✏️ Editar
+                  </button>
                   <button class="btn-action danger" @click="toggleCustomerStatus(customer)">
                     {{ customer.status === 'active' ? '⏸️' : '▶️' }}
                   </button>
@@ -166,6 +169,32 @@
           </div>
         </div>
       </section>
+
+      <!-- Modal Editar Cliente (empresa piloto: asignar Empresa y Plan) -->
+      <div v-if="editingCustomer" class="admin-modal-overlay" @click.self="closeEditCustomer">
+        <div class="admin-modal">
+          <h3>Editar cliente</h3>
+          <p class="admin-modal-email">{{ editingCustomer.email }}</p>
+          <div class="admin-modal-form">
+            <label>Empresa</label>
+            <input v-model="editForm.company_name" type="text" placeholder="Nombre de la empresa">
+            <label>Plan</label>
+            <select v-model="editForm.plan">
+              <option value="">— Sin plan —</option>
+              <option value="startup">Startup</option>
+              <option value="growth">Growth</option>
+              <option value="business">Business</option>
+              <option value="enterprise">Enterprise</option>
+            </select>
+            <label>Empleados</label>
+            <input v-model.number="editForm.employees" type="number" min="0" placeholder="0">
+          </div>
+          <div class="admin-modal-actions">
+            <button type="button" class="btn-action" @click="closeEditCustomer">Cancelar</button>
+            <button type="button" class="btn-action primary" :disabled="savingEdit" @click="saveEditCustomer">{{ savingEdit ? 'Guardando…' : 'Guardar' }}</button>
+          </div>
+        </div>
+      </div>
 
       <!-- Revenue -->
       <section v-if="currentView === 'revenue'" class="revenue">
@@ -278,6 +307,10 @@ const stats = ref({
 const customers = ref([])
 const loading = ref(false)
 const error = ref(null)
+// Editar cliente (empresa piloto: asignar empresa y plan)
+const editingCustomer = ref(null)
+const editForm = ref({ company_name: '', plan: '', employees: '' })
+const savingEdit = ref(false)
 
 // Revenue by plan
 const revenueByPlan = ref([])
@@ -713,6 +746,57 @@ const viewCustomer = async (customer) => {
     console.error('Error cargando detalles del cliente:', error)
     // Fallback a datos disponibles
     alert(`📋 Detalles del Cliente\n\nEmpresa: ${customer.company_name}\nEmail: ${customer.email}\nPlan: ${customer.plan}\nEmpleados: ${customer.employees}\nEstado: ${customer.status}`)
+  }
+}
+
+const openEditCustomer = (customer) => {
+  editingCustomer.value = customer
+  editForm.value = {
+    company_name: customer.company_name && customer.company_name !== 'N/A' ? customer.company_name : '',
+    plan: customer.plan && customer.plan !== 'none' ? customer.plan : '',
+    employees: customer.employees ?? ''
+  }
+}
+
+const closeEditCustomer = () => {
+  editingCustomer.value = null
+}
+
+const saveEditCustomer = async () => {
+  if (!editingCustomer.value) return
+  savingEdit.value = true
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) {
+      alert('Error: No hay token de autenticación')
+      return
+    }
+    const base = import.meta.env.VITE_API_BASE_URL || ''
+    const url = `${base}/api/v1/admin/customers/${editingCustomer.value.id}`.replace(/([^:/])\/\/+/, '$1/')
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        company_name: editForm.value.company_name || null,
+        plan: editForm.value.plan || null,
+        employees: editForm.value.employees === '' ? null : Number(editForm.value.employees)
+      })
+    })
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}))
+      throw new Error(err.detail || response.statusText)
+    }
+    await loadCustomers()
+    closeEditCustomer()
+    alert('✅ Cliente actualizado. Empresa y plan guardados.')
+  } catch (e) {
+    console.error('Error guardando cliente:', e)
+    alert('❌ ' + (e.message || 'No se pudo guardar'))
+  } finally {
+    savingEdit.value = false
   }
 }
 
@@ -1244,6 +1328,64 @@ td {
 
 .btn-save:hover {
   transform: scale(1.02);
+}
+
+/* Modal Editar Cliente */
+.admin-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+.admin-modal {
+  background: #1a1f2e;
+  border-radius: 12px;
+  padding: 24px;
+  min-width: 320px;
+  max-width: 90vw;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+.admin-modal h3 {
+  margin: 0 0 8px 0;
+  color: #fff;
+  font-size: 1.25rem;
+}
+.admin-modal-email {
+  margin: 0 0 16px 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.9rem;
+}
+.admin-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.admin-modal-form label {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.875rem;
+}
+.admin-modal-form input,
+.admin-modal-form select {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 1rem;
+}
+.admin-modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+.admin-modal-actions .btn-action.primary {
+  background: #3b82f6;
+  color: #fff;
+  border-color: #3b82f6;
 }
 
 /* Cabecera móvil (solo en viewport pequeño) */

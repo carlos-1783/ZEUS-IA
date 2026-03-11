@@ -137,7 +137,7 @@
             </div>
             <div class="ml-3 text-sm">
               <label for="terms" class="font-medium text-gray-700">
-                Acepto los <a href="#" class="text-indigo-600 hover:text-indigo-500">Términos de servicio</a> y la <a href="#" class="text-indigo-600 hover:text-indigo-500">Política de privacidad</a>
+                Acepto los <router-link to="/terminos" class="text-indigo-600 hover:text-indigo-500">Términos de servicio</router-link> y la <router-link to="/privacidad" class="text-indigo-600 hover:text-indigo-500">Política de privacidad</router-link>
               </label>
               <p v-if="errors.terms" class="mt-2 text-sm text-red-600">
                 {{ errors.terms }}

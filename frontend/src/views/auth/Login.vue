@@ -63,9 +63,12 @@
           </div>
 
           <div class="text-sm">
-            <a href="#" class="font-medium text-indigo-600 hover:text-indigo-500">
+            <router-link
+              to="/auth/forgot-password"
+              class="font-medium text-indigo-600 hover:text-indigo-500"
+            >
               {{ t('auth.login.forgotPassword') }}
-            </a>
+            </router-link>
           </div>
         </div>
 

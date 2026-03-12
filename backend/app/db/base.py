@@ -114,11 +114,14 @@ def _migrate_user_columns():
         is_sqlite = "sqlite" in settings.DATABASE_URL.lower()
         
         # Columnas a agregar con sus tipos según la base de datos
+        # IMPORTANTE: para PostgreSQL no incluir DEFAULT en column_type aquí.
+        # Si lo incluimos y además lo añadimos luego, acabamos generando SQL inválido
+        # (p. ej. "BOOLEAN DEFAULT FALSE DEFAULT FALSE"), lo que deja la BD sin migrar.
         columns_to_add = {
             "email_gestor_fiscal": "VARCHAR(255)" if is_postgres else "TEXT",
             "email_gestor_laboral": "VARCHAR(255)" if is_postgres else "TEXT",
             "email_asesor_legal": "VARCHAR(255)" if is_postgres else "TEXT",
-            "autoriza_envio_documentos_a_asesores": "BOOLEAN" if is_postgres else "BOOLEAN DEFAULT 0",
+            "autoriza_envio_documentos_a_asesores": "BOOLEAN" if is_postgres else "BOOLEAN",
             "company_name": "VARCHAR(255)" if is_postgres else "TEXT",
             "employees": "INTEGER",
             "plan": "VARCHAR(50)" if is_postgres else "TEXT",
@@ -129,7 +132,7 @@ def _migrate_user_columns():
             "stripe_customer_id": "VARCHAR(255)" if is_postgres else "TEXT",
             "stripe_subscription_id": "VARCHAR(255)" if is_postgres else "TEXT",
             "role": "VARCHAR(20)" if is_postgres else "TEXT",
-            "public_site_enabled": "BOOLEAN DEFAULT FALSE" if is_postgres else "BOOLEAN DEFAULT 0",
+            "public_site_enabled": "BOOLEAN" if is_postgres else "BOOLEAN",
             "public_site_slug": "VARCHAR(100)" if is_postgres else "TEXT",
         }
         
@@ -143,19 +146,22 @@ def _migrate_user_columns():
                         if is_postgres:
                             # PostgreSQL syntax
                             sql = f'ALTER TABLE users ADD COLUMN "{column_name}" {column_type}'
-                            if "BOOLEAN" in column_type:
+                            # Defaults (solo cuando procede)
+                            if column_name in ("autoriza_envio_documentos_a_asesores", "public_site_enabled"):
                                 sql += " DEFAULT FALSE"
-                            elif column_type == "INTEGER":
+                            elif column_name == "employees":
                                 sql += " DEFAULT 0"
                             elif column_name == "role":
                                 sql += " DEFAULT 'owner'"
-                            elif column_name == "public_site_enabled":
-                                sql += " DEFAULT FALSE"
                         else:
                             # SQLite syntax
                             sql = f"ALTER TABLE users ADD COLUMN {column_name} {column_type}"
-                            if column_name == "public_site_enabled":
+                            if column_name in ("autoriza_envio_documentos_a_asesores", "public_site_enabled"):
                                 sql += " DEFAULT 0"
+                            elif column_name == "employees":
+                                sql += " DEFAULT 0"
+                            elif column_name == "role":
+                                sql += " DEFAULT 'owner'"
                         conn.execute(text(sql))
                         added_columns.append(column_name)
                         print(f"[MIGRATION] [OK] Columna '{column_name}' agregada")

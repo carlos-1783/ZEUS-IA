@@ -6,7 +6,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from sqlalchemy.exc import OperationalError, DisconnectionError
+from sqlalchemy.exc import OperationalError, DisconnectionError, ProgrammingError
 import logging
 
 from app.core.config import settings
@@ -51,13 +51,20 @@ def get_user(db: Session, email: str) -> Optional[User]:
             user = db.query(User).filter(User.email == email.strip()).first()
             
         return user
-    except (OperationalError, DisconnectionError) as e:
-        logger.error(f"Error de conexión a base de datos al obtener usuario {email}: {e}", exc_info=True)
+    except (OperationalError, DisconnectionError, ProgrammingError) as e:
+        logger.error(f"Error de base de datos al obtener usuario {email}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database service temporarily unavailable"
         )
     except Exception as e:
+        error_msg = str(e).lower()
+        if any(k in error_msg for k in ("column", "does not exist", "undefined", "relation", "operational", "programming")):
+            logger.error(f"Error de esquema/BD al obtener usuario {email}: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database schema temporarily unavailable"
+            )
         logger.error(f"Error fetching user {email}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -141,8 +148,7 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
             ])
             if is_connection_error:
                 logger.error(f"Error de conexión a base de datos al autenticar usuario {email_normalized}: {db_error}")
-                # Re-lanzar como HTTPException para que el endpoint lo maneje
-                from fastapi import HTTPException
+                # Re-lanzar como HTTPException para que el endpoint lo maneje (usar el import del módulo, no local)
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail="Database service temporarily unavailable"

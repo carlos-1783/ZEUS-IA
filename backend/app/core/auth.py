@@ -5,7 +5,6 @@ from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from sqlalchemy.exc import OperationalError, DisconnectionError, ProgrammingError
 import logging
 
@@ -37,19 +36,14 @@ def get_user(db: Session, email: str) -> Optional[User]:
     if not email:
         return None
         
-    # Normalize email: trim and convert to lowercase for comparison
+    # Normalize email: trim and lowercase (evitar func.lower() en query por compatibilidad Railway/Postgres)
     email_normalized = email.strip().lower()
     
     try:
-        # Try exact match first (case-insensitive comparison)
-        user = db.query(User).filter(
-            func.lower(User.email) == email_normalized
-        ).first()
-        
-        # Fallback: try direct comparison (for databases that are case-sensitive)
+        # Igualdad directa con email normalizado (sin func.lower en BD para evitar f405/adapt en Railway)
+        user = db.query(User).filter(User.email == email_normalized).first()
         if not user:
             user = db.query(User).filter(User.email == email.strip()).first()
-            
         return user
     except (OperationalError, DisconnectionError, ProgrammingError) as e:
         logger.error(f"Error de base de datos al obtener usuario {email}: {e}", exc_info=True)

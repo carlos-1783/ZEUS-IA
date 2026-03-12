@@ -128,7 +128,9 @@ def _migrate_user_columns():
             "control_horario_config": "TEXT",  # JSON config
             "stripe_customer_id": "VARCHAR(255)" if is_postgres else "TEXT",
             "stripe_subscription_id": "VARCHAR(255)" if is_postgres else "TEXT",
-            "role": "VARCHAR(20)" if is_postgres else "TEXT"
+            "role": "VARCHAR(20)" if is_postgres else "TEXT",
+            "public_site_enabled": "BOOLEAN DEFAULT FALSE" if is_postgres else "BOOLEAN DEFAULT 0",
+            "public_site_slug": "VARCHAR(100)" if is_postgres else "TEXT",
         }
         
         added_columns = []
@@ -147,10 +149,13 @@ def _migrate_user_columns():
                                 sql += " DEFAULT 0"
                             elif column_name == "role":
                                 sql += " DEFAULT 'owner'"
+                            elif column_name == "public_site_enabled":
+                                sql += " DEFAULT FALSE"
                         else:
                             # SQLite syntax
                             sql = f"ALTER TABLE users ADD COLUMN {column_name} {column_type}"
-                        
+                            if column_name == "public_site_enabled":
+                                sql += " DEFAULT 0"
                         conn.execute(text(sql))
                         added_columns.append(column_name)
                         print(f"[MIGRATION] [OK] Columna '{column_name}' agregada")

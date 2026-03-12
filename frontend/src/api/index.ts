@@ -275,10 +275,12 @@ axiosInstance.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     
-    // Handle network errors
+    // Handle network errors (no response = backend inalcanzable, CORS o URL incorrecta)
     if (!error.response) {
-      console.error('[API] Network error:', error.message);
-      return Promise.reject(createErrorResponse('network_error', 'Error de red', error));
+      const base = API_BASE_URL || 'no configurada';
+      const msg = `No se pudo conectar con el servidor (${base}). Comprueba que el backend esté en ejecución y, en desarrollo, que uses la misma URL (ej. VITE_API_BASE_URL=http://localhost:8000/api/v1).`;
+      console.error('[API] Network error:', error.message, '| baseURL:', base);
+      return Promise.reject(createErrorResponse('network_error', msg, error));
     }
     
     // If error is not 401 or it's a retry request, reject
@@ -455,10 +457,12 @@ axiosInstance.interceptors.response.use(
   async (error: AxiosError<ApiErrorResponse>) => {
     const originalRequest = error.config as RetryConfig;
     
-    // Handle network errors
+    // Handle network errors (mismo mensaje que en el otro interceptor para consistencia)
     if (!error.response) {
-      console.error('[API] Network error:', error.message);
-      return Promise.reject(createErrorResponse('network_error', 'Network error', error));
+      const base = API_BASE_URL || 'no configurada';
+      const msg = `No se pudo conectar con el servidor (${base}). Comprueba que el backend esté en ejecución y, en desarrollo, que uses la misma URL (ej. VITE_API_BASE_URL=http://localhost:8000/api/v1).`;
+      console.error('[API] Network error:', error.message, '| baseURL:', base);
+      return Promise.reject(createErrorResponse('network_error', msg, error));
     }
     
     const { status, data } = error.response;

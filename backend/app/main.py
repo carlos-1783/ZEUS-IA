@@ -194,8 +194,6 @@ if os.path.exists("static"):
         if os.path.exists(index_path):
             return FileResponse(index_path)
         return {"error": "Frontend not built", "path": full_path}
-else:
-    print("[ERROR] Static directory not found!")
 
 # Health check
 @app.get("/health")

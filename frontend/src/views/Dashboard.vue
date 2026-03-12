@@ -6,8 +6,8 @@
         <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
         <p class="mt-4 text-gray-700">Cargando datos del dashboard...</p>
       </div>
-    </div>
-    
+      </div>
+      
     <!-- Mensaje de error -->
     <div v-else-if="error" class="fixed inset-0 bg-white flex items-center justify-center z-50">
       <div class="text-center p-6 max-w-md mx-auto">
@@ -78,9 +78,9 @@
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
+                </div>
+              </div>
+            </div>
     </header>
 
     <!-- Contenido principal -->
@@ -123,8 +123,8 @@
           <div class="h-64">
             <canvas ref="salesChart"></canvas>
           </div>
-        </div>
-
+            </div>
+            
         <!-- Experiencia 3D -->
         <div class="bg-white rounded-lg shadow overflow-hidden">
           <div class="p-6">
@@ -134,8 +134,8 @@
             </div>
           </div>
         </div>
-      </div>
-
+            </div>
+            
       <!-- Tabla de actividad reciente -->
       <div class="bg-white shadow overflow-hidden sm:rounded-lg">
         <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
@@ -209,9 +209,9 @@
               </tr>
             </tbody>
           </table>
-        </div>
-      </div>
-
+            </div>
+          </div>
+          
       <!-- Entregables automáticos -->
       <div class="bg-white shadow overflow-hidden sm:rounded-lg mt-8">
         <div class="px-4 py-5 sm:px-6 border-b border-gray-200 flex items-center justify-between">
@@ -227,8 +227,8 @@
             class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <i class="fas fa-sync-alt mr-2"></i> {{ isLoadingOutputs ? 'Actualizando...' : 'Actualizar' }}
-          </button>
-        </div>
+            </button>
+          </div>
         <div class="overflow-x-auto">
           <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
@@ -445,8 +445,8 @@ const loadUnifiedDashboardData = async () => {
     const token = authStore.getToken ? authStore.getToken() : authStore.token;
     if (!token) {
       console.warn('⚠️ No hay token, no se pueden cargar datos del dashboard');
-      return;
-    }
+    return;
+  }
 
     // Usar servicio API centralizado
     const api = (await import('@/services/api')).default;

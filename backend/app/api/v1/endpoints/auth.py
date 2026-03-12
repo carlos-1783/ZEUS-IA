@@ -35,14 +35,16 @@ async def create_tokens(db: Session, user: User) -> Dict[str, Any]:
         access_token_expires = timedelta(minutes=float(settings.ACCESS_TOKEN_EXPIRE_MINUTES))
         refresh_token_expires = timedelta(days=float(settings.REFRESH_TOKEN_EXPIRE_DAYS))
         
-        # Create access token using the new JWT module
+        # Create access token using the new JWT module (getattr por si el modelo tiene columnas no migradas en BD)
         user_scopes = resolve_user_scopes(user)
+        is_active = getattr(user, "is_active", True)
+        is_superuser = getattr(user, "is_superuser", False)
 
         access_token = create_access_token(
             user_id=str(user.id),
             email=user.email,
-            is_active=user.is_active,
-            is_superuser=user.is_superuser,
+            is_active=is_active,
+            is_superuser=is_superuser,
             expires_delta=access_token_expires,
             scopes=user_scopes,
         )
@@ -68,9 +70,9 @@ async def create_tokens(db: Session, user: User) -> Dict[str, Any]:
             "expires_in": int(access_token_expires.total_seconds()),
             "user_id": user.id,
             "email": user.email,
-            "full_name": user.full_name,
-            "is_active": user.is_active,
-            "is_superuser": user.is_superuser,
+            "full_name": getattr(user, "full_name", None),
+            "is_active": is_active,
+            "is_superuser": is_superuser,
             "scopes": user_scopes,
         }
     except Exception as e:
@@ -135,22 +137,27 @@ async def login(
         raise
     except Exception as e:
         error_msg = str(e).lower()
+        # Incluir errores de esquema (columnas faltantes) típicos en Railway/Postgres
         is_db_error = any(keyword in error_msg for keyword in [
-            "connection", "conexi?n", "timeout", "operationalerror", 
-            "database", "base de datos", "connection timeout"
+            "connection", "conexi", "timeout", "operationalerror", "programmingerror",
+            "database", "base de datos", "connection timeout",
+            "column", "does not exist", "undefined column", "relation", "no existe"
         ])
         
         if is_db_error:
-            logger.error(f"Error de conexi?n a base de datos durante login para {username}: {str(e)}", exc_info=True)
+            logger.error(f"Error DB durante login para {username}: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Database service temporarily unavailable. Please try again in a few moments."
+                detail="Database temporarily unavailable or schema outdated. Try again or contact support."
             )
         else:
-            logger.error(f"Error in login endpoint for user {username}: {str(e)}", exc_info=True)
+            logger.error(f"Error in login endpoint for user {username}: {type(e).__name__}: {str(e)}", exc_info=True)
+            detail = "Internal server error during login"
+            if getattr(settings, "DEBUG", False):
+                detail = f"{detail}: {type(e).__name__}: {str(e)}"
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Internal server error during login"
+                detail=detail
             )
 
 # Mantener compatibilidad con OAuth2

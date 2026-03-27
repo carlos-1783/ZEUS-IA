@@ -268,12 +268,17 @@ class ApiClient {
   // Generic request method
   public async request<T = any>(config: AxiosRequestConfig): Promise<T> {
     const response = await this.instance.request<ApiResponse<T>>(config);
-    
-    if (response.data.status === 'success') {
-      return response.data.data as T;
+    const payload: any = response.data;
+
+    // Compatibilidad con endpoints que devuelven payload directo
+    if (payload?.status === 'success') {
+      return payload.data as T;
     }
-    
-    throw new Error(response.data.error || 'API request failed');
+    if (payload && payload.status === undefined) {
+      return payload as T;
+    }
+
+    throw new Error(payload?.error || payload?.message || 'API request failed');
   }
 }
 

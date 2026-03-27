@@ -3,20 +3,22 @@ Middleware de seguridad para ZEUS-IA
 """
 import time
 from typing import Dict, List
-from fastapi import Request, Response, HTTPException, status
+from fastapi import Request, status
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 import logging
 
 logger = logging.getLogger(__name__)
 
-class SecurityMiddleware:
+class SecurityMiddleware(BaseHTTPMiddleware):
     """Middleware para aplicar medidas de seguridad"""
     
-    def __init__(self):
+    def __init__(self, app):
+        super().__init__(app)
         self.rate_limit_store: Dict[str, List[float]] = {}
         self.blocked_ips: Dict[str, float] = {}
         
-    async def __call__(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next):
         """Aplicar middleware de seguridad"""
         
         # 1. Verificar IP bloqueada

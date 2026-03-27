@@ -404,7 +404,20 @@ router.beforeEach((to, from, next) => {
   }
 
   // Redirigir a dashboard si ya está autenticado e intenta acceder a páginas públicas
-  if (authStore.isAuthenticated && publicRoutes.includes(to.name)) {
+  // (excepto web pública / landing / legal / checkout: deben seguir visibles con sesión)
+  const publicRoutesOkWhenAuthenticated = [
+    'PublicStore',
+    'Landing',
+    'Pricing',
+    'Checkout',
+    'Terminos',
+    'Privacidad'
+  ]
+  if (
+    authStore.isAuthenticated &&
+    publicRoutes.includes(to.name) &&
+    !publicRoutesOkWhenAuthenticated.includes(to.name)
+  ) {
     const redirectTo = to.query.redirect || '/dashboard'
     console.log('✅ Usuario autenticado, redirigiendo a:', redirectTo)
     next(redirectTo)

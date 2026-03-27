@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.models.agent_activity import AgentActivity
+from app.core.auth import get_current_active_user
+from app.models.user import User
 from services.activity_logger import ActivityLogger, ensure_tables_initialized, tables_ready
 
 router = APIRouter()
@@ -50,7 +52,8 @@ async def get_agent_activities(
     agent_name: str,
     user_email: Optional[str] = None,
     limit: int = 50,
-    days: int = 7
+    days: int = 7,
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Obtener actividades recientes de un agente
@@ -65,9 +68,11 @@ async def get_agent_activities(
         Lista de actividades
     """
     try:
+        # Aislamiento multiempresa: usuario normal solo ve su propio email.
+        effective_user_email = user_email if getattr(current_user, "is_superuser", False) else current_user.email
         activities = ActivityLogger.get_agent_activities(
             agent_name=agent_name.upper(),
-            user_email=user_email,
+            user_email=effective_user_email,
             limit=limit,
             days=days
         )
@@ -102,7 +107,8 @@ async def get_agent_activities(
 async def get_agent_metrics(
     agent_name: str,
     user_email: Optional[str] = None,
-    days: int = 30
+    days: int = 30,
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Obtener métricas agregadas de un agente
@@ -118,10 +124,11 @@ async def get_agent_metrics(
     try:
         if not tables_ready():
             ensure_tables_initialized()
+        effective_user_email = user_email if getattr(current_user, "is_superuser", False) else current_user.email
 
         metrics = ActivityLogger.get_agent_metrics(
             agent_name=agent_name.upper(),
-            user_email=user_email,
+            user_email=effective_user_email,
             days=days
         )
         
@@ -182,7 +189,8 @@ async def log_activity(activity: ActivityCreate):
 @router.get("/all/summary")
 async def get_all_agents_summary(
     user_email: Optional[str] = None,
-    days: int = 7
+    days: int = 7,
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Obtener resumen de actividades de todos los agentes
@@ -196,13 +204,14 @@ async def get_all_agents_summary(
     """
     try:
         agents = ["ZEUS", "PERSEO", "RAFAEL", "THALOS", "JUSTICIA", "AFRODITA"]
+        effective_user_email = user_email if getattr(current_user, "is_superuser", False) else current_user.email
         
         summary = {}
         
         for agent in agents:
             metrics = ActivityLogger.get_agent_metrics(
                 agent_name=agent,
-                user_email=user_email,
+                user_email=effective_user_email,
                 days=days
             )
             summary[agent] = metrics

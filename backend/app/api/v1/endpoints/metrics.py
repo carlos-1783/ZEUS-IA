@@ -136,17 +136,11 @@ async def get_dashboard_summary(
             AgentActivity.created_at <= end_date
         )
         
-        # Si no es superusuario, filtrar por usuario u organización
+        # Si no es superusuario, filtrar por email de usuario (AgentActivity usa user_email)
         if not is_superuser:
-            # Filtrar por usuario si existe organización o user_id en las actividades
-            if hasattr(AgentActivity, 'user_id'):
-                activities_query = activities_query.filter(
-                    AgentActivity.user_id == current_user.id
-                )
-            elif hasattr(AgentActivity, 'organization_id') and hasattr(current_user, 'organization_id'):
-                activities_query = activities_query.filter(
-                    AgentActivity.organization_id == current_user.organization_id
-                )
+            activities_query = activities_query.filter(
+                AgentActivity.user_email == current_user.email
+            )
         
         activities = activities_query.all()
         
@@ -177,14 +171,9 @@ async def get_dashboard_summary(
         )
         
         if not is_superuser:
-            if hasattr(AgentActivity, 'user_id'):
-                prev_activities_query = prev_activities_query.filter(
-                    AgentActivity.user_id == current_user.id
-                )
-            elif hasattr(AgentActivity, 'organization_id') and hasattr(current_user, 'organization_id'):
-                prev_activities_query = prev_activities_query.filter(
-                    AgentActivity.organization_id == current_user.organization_id
-                )
+            prev_activities_query = prev_activities_query.filter(
+                AgentActivity.user_email == current_user.email
+            )
         
         prev_activities = prev_activities_query.count()
         

@@ -90,12 +90,16 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         """Verificar rate limiting"""
         current_time = time.time()
         window = 60  # 1 minuto
+
+        # No limitar health/static/service-worker para evitar falsos positivos
+        if path in ("/health", "/api/v1/health", "/service-worker.js") or path.startswith("/assets/"):
+            return True
         
         # Límites por endpoint
         limits = {
-            "/api/v1/auth/login": 5,  # 5 intentos por minuto
-            "/api/v1/auth/register": 3,  # 3 registros por minuto
-            "/api/": 100,  # 100 requests por minuto para API
+            "/api/v1/auth/login": 30,  # permitir reintentos razonables sin bloquear demo
+            "/api/v1/auth/register": 10,
+            "/api/": 300,  # subir límite general para evitar 429 en uso normal
             "/": 200  # 200 requests por minuto para frontend
         }
         
@@ -117,9 +121,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         
         # Verificar límite
         if len(self.rate_limit_store[ip]) >= limit:
-            # Bloquear IP si excede límite en endpoints críticos
-            if path.startswith("/api/v1/auth/"):
-                self.block_ip(ip)
+            # No bloquear IP de forma persistente; solo responder 429 temporal
             return False
         
         # Agregar request actual

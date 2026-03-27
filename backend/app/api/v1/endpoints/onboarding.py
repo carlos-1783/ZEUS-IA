@@ -12,6 +12,7 @@ from app.db.session import SessionLocal
 from app.models.user import User
 from app.core.security import get_password_hash
 from services.email_service import email_service
+from services.global_company_bootstrap import run_global_autonomous_bootstrap
 import secrets
 import string
 
@@ -84,6 +85,7 @@ class OnboardingRequest(BaseModel):
     full_name: str
     employees: int
     plan: str  # startup, growth, business, enterprise
+    sector: Optional[str] = None
     stripe_customer_id: Optional[str] = None
     stripe_subscription_id: Optional[str] = None
     payment_intent_id: Optional[str] = None
@@ -165,6 +167,16 @@ async def create_account_after_payment(
         db.add(new_user)
         db.commit()
         db.refresh(new_user)
+
+        bootstrap_result = run_global_autonomous_bootstrap(
+            db,
+            user=new_user,
+            company_name=request.company_name,
+            sector=request.sector,
+            onboarding_completed=True,
+            billing_enabled=True,
+            source_event="onboarding.create_account",
+        )
         
         # 5. Guardar metadata del plan (podríamos crear tabla separada después)
         # Por ahora lo guardamos en logs
@@ -201,11 +213,13 @@ async def create_account_after_payment(
             "email": request.email,
             "company_name": request.company_name,
             "plan": request.plan,
+            "sector": request.sector,
             "credentials": {
                 "email": request.email,
                 "password": temp_password
             },
             "email_sent": email_sent,
+            "bootstrap_result": bootstrap_result,
             "message": "Cuenta creada exitosamente. Revisa tu email para las credenciales."
         }
         
@@ -312,7 +326,7 @@ async def send_welcome_email(
         print("="*80)
         print(f"Para: {email}")
         print(f"Empresa: {company_name}")
-        print(f"Contraseña temporal: {temp_password}")
+        print("Contraseña temporal: [REDACTED]")
         print("="*80 + "\n")
         return True
 

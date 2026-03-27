@@ -18,6 +18,7 @@ from app.db.session import SessionLocal
 from app.models.user import User
 from services.activity_logger import ActivityLogger
 from services.email_service import email_service
+from services.global_company_bootstrap import run_global_autonomous_bootstrap
 from services.stripe_service import stripe_service
 from services.whatsapp_service import whatsapp_service
 
@@ -171,7 +172,7 @@ async def _send_welcome_email_and_log(
             priority="high"
         )
     else:
-        print(f"\n[WEBHOOK] Email de bienvenida (SendGrid no configurado): {email} / {temp_password}\n")
+        print(f"\n[WEBHOOK] Email de bienvenida (SendGrid no configurado): {email} / [REDACTED]\n")
         email_sent = True
     
     return email_sent
@@ -226,9 +227,11 @@ async def stripe_webhook_handler(
     metadata = payment_intent.get("metadata", {})
     plan = metadata.get("plan") or metadata.get("plan_type")
     company_name = metadata.get("company_name") or metadata.get("company")
+    sector = metadata.get("sector") or metadata.get("business_sector")
     full_name = metadata.get("full_name") or metadata.get("name") or customer_email.split("@")[0]
     employees = metadata.get("employees")
     stripe_customer_id = payment_intent.get("customer")
+    billing_enabled = str(metadata.get("billing_enabled", "true")).lower() != "false"
     
     if not customer_email:
         ActivityLogger.log_activity(
@@ -283,6 +286,16 @@ async def stripe_webhook_handler(
             user.is_active = True
             db.commit()
             email_sent = True
+
+        bootstrap_result = run_global_autonomous_bootstrap(
+            db,
+            user=user,
+            company_name=company_name,
+            sector=sector,
+            onboarding_completed=True,
+            billing_enabled=billing_enabled,
+            source_event="stripe.payment_intent.succeeded",
+        )
         
         ActivityLogger.log_activity(
             agent_name="ZEUS",
@@ -297,6 +310,8 @@ async def stripe_webhook_handler(
                 "is_new_user": is_new_user,
                 "user_id": user.id,
                 "email_sent": email_sent,
+                "sector": sector,
+                "bootstrap_result": bootstrap_result,
                 "executed_handler": "STRIPE_WEBHOOK_HANDLER",
             },
             metrics={
@@ -317,6 +332,7 @@ async def stripe_webhook_handler(
             "user_id": user.id,
             "is_new_user": is_new_user,
             "email_sent": email_sent,
+            "bootstrap_result": bootstrap_result,
         }
     except Exception as e:
         db.rollback()

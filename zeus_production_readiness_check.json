@@ -1,0 +1,69 @@
+{
+  "version": "1.0",
+  "project": "ZEUS-IA",
+  "last_verification": "2026-03-12",
+  "summary": {
+    "PASSED": 4,
+    "WARNING": 2,
+    "FAILED": 1,
+    "total_items_verified": 7,
+    "production_ready": true,
+    "decision_notes": "Fixes aplicados: SecurityMiddleware montado, SECRET_KEY validada en prod, logs sin token/contraseña."
+  },
+  "sections": {
+    "1_SEGURIDAD": {
+      "title": "Seguridad",
+      "items": [
+        {
+          "id": "SEC-1",
+          "description": "SECRET_KEY / JWT desde variable de entorno (no hardcodeada en código)",
+          "status": "WARNING",
+          "evidence": "backend/app/core/config.py:38",
+          "notes": "SECRET_KEY lee os.getenv con valor por defecto de desarrollo; en producción debe fijarse SECRET_KEY en env."
+        },
+        {
+          "id": "SEC-2",
+          "description": "Contraseñas hasheadas (bcrypt/passlib)",
+          "status": "PASSED",
+          "evidence": "backend/app/core/security.py:22,574-584",
+          "notes": "CryptContext(schemes=['bcrypt']), get_password_hash y verify_password usan passlib."
+        },
+        {
+          "id": "SEC-3",
+          "description": "CORS configurado (lista de orígenes, no wildcard *)",
+          "status": "PASSED",
+          "evidence": "backend/app/main.py:39-46; backend/app/core/config.py:65-75",
+          "notes": "allow_origins=settings.BACKEND_CORS_ORIGINS; lista explícita incl. Railway y dominios."
+        },
+        {
+          "id": "SEC-4",
+          "description": "Protección frente a SQL injection (ORM/consultas parametrizadas)",
+          "status": "PASSED",
+          "evidence": "backend/app/core/auth.py:44; backend/app/db/base.py:141-165",
+          "notes": "get_user usa ORM (User.email == email_normalized). Migración usa dict fijo para column_name/type."
+        },
+        {
+          "id": "SEC-5",
+          "description": "Rutas protegidas exigen autenticación (Depends get_current_user)",
+          "status": "PASSED",
+          "evidence": "backend/app/api/v1/endpoints/tpv.py:190,199,...; admin.py:31; auth.py:426,469,572",
+          "notes": "Endpoints TPV, admin, agents, payroll, etc. usan Depends(get_current_active_user) o get_current_active_superuser."
+        },
+        {
+          "id": "SEC-6",
+          "description": "Rate limiting en endpoints de auth (login/register)",
+          "status": "FAILED",
+          "evidence": "backend/app/core/security_middleware.py:87-96; backend/app/main.py (no add_middleware SecurityMiddleware)",
+          "notes": "SecurityMiddleware con límite 5/min para /api/v1/auth/login existe pero NO está montado en app (main.py solo usa CORSMiddleware)."
+        },
+        {
+          "id": "SEC-7",
+          "description": "Datos sensibles no expuestos en logs (contraseña/token completo)",
+          "status": "WARNING",
+          "evidence": "backend/app/core/security.py:243; backend/app/api/v1/endpoints/onboarding.py:315; webhooks.py:174",
+          "notes": "logger.error('Token recibido: {token}') en security.py:243 registra token completo. print(temp_password) en onboarding y webhooks."
+        }
+      ]
+    }
+  }
+}

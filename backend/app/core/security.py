@@ -240,7 +240,7 @@ def get_current_user(db: Session, token: str) -> User:
         # Verificar que el token tenga el formato correcto (al menos 3 partes separadas por puntos)
         if len(token.split('.')) != 3:
             logger.error(f"Formato de token inválido. Partes encontradas: {len(token.split('.'))}")
-            logger.error(f"Token recibido: {token}")
+            logger.error("Token no registrado por seguridad")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Formato de token inválido. Asegúrate de incluir solo el token JWT después de 'Bearer'.",

@@ -77,6 +77,19 @@
           </div>
         </div>
 
+        <div class="form-group">
+          <label>Sector del negocio *</label>
+          <select v-model="customerData.sector" required>
+            <option value="" disabled>Selecciona un sector</option>
+            <option value="bar">Bar</option>
+            <option value="restaurant">Restaurante</option>
+            <option value="cafeteria">Cafetería</option>
+            <option value="retail">Tienda minorista</option>
+            <option value="services">Servicios</option>
+            <option value="generic">Otro</option>
+          </select>
+        </div>
+
         <!-- Advisor Information -->
         <div class="advisor-section">
           <h3>Información de asesores (requerido para documentos fiscales y legales)</h3>
@@ -208,6 +221,7 @@ const customerData = ref({
   email: '',
   fullName: '',
   employees: null,
+  sector: '',
   emailGestorFiscal: '',
   emailAsesorLegal: '',
   autorizaEnvioDocumentos: false
@@ -254,6 +268,7 @@ const initializeStripe = () => {
 
 const processPayment = async () => {
   if (!customerData.value.companyName || !customerData.value.email || !customerData.value.fullName || 
+      !customerData.value.sector ||
       !customerData.value.emailGestorFiscal || !customerData.value.emailAsesorLegal || 
       !customerData.value.autorizaEnvioDocumentos) {
     cardError.value = 'Por favor completa todos los campos requeridos, incluyendo los emails de asesores y la autorización'
@@ -278,6 +293,7 @@ const processPayment = async () => {
           plan: selectedPlan,
           company_name: customerData.value.companyName,
           full_name: customerData.value.fullName,
+          sector: customerData.value.sector,
           employees: customerData.value.employees,
           email_gestor_fiscal: customerData.value.emailGestorFiscal,
           email_asesor_legal: customerData.value.emailAsesorLegal,
@@ -337,6 +353,7 @@ const createUserAccount = async (paymentIntentId) => {
         company_name: customerData.value.companyName,
         email: customerData.value.email,
         full_name: customerData.value.fullName,
+        sector: customerData.value.sector,
         employees: customerData.value.employees,
         plan: selectedPlan,
         payment_intent_id: paymentIntentId,

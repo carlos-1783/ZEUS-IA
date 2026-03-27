@@ -1,0 +1,57 @@
+{
+  "version": "1.0",
+  "project": "ZEUS-IA",
+  "order": [1, 2, 3, 4, 5, 6, 7],
+  "create_files": [
+    {
+      "path": "backend/scripts/verify_production_ready.py",
+      "description": "Script de verificación post-fixes",
+      "content": "#!/usr/bin/env python3\n\"\"\"Verificación rápida: sin secrets hardcodeados en producción.\"\"\"\nimport os\nimport sys\n\n# Subir al backend para importar app\nsys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))\n\nENV = os.getenv(\"ENVIRONMENT\", os.getenv(\"RAILWAY_ENVIRONMENT\", \"production\")).lower()\nDEV_SECRET = \"dev_default_secret_key_change_in_production\"\nDEV_REFRESH = \"dev_default_refresh_secret\"\n\n def main():\n    errors = []\n    if ENV == \"production\":\n        sk = os.getenv(\"SECRET_KEY\", \"\")\n        if not sk or DEV_SECRET in sk:\n            errors.append(\"SECRET_KEY debe estar definida y no usar valor de desarrollo en producción\")\n        rk = os.getenv(\"REFRESH_TOKEN_SECRET\", \"\")\n        if not rk or DEV_REFRESH in rk:\n            errors.append(\"REFRESH_TOKEN_SECRET debe estar definida y no usar valor de desarrollo en producción\")\n    if errors:\n        print(\"\\n\".join(errors))\n        sys.exit(1)\n    print(\"OK: Verificación de secrets superada\")\n\nif __name__ == \"__main__\":\n    main()\n"
+    }
+  ],
+  "modify_files": [
+    {
+      "id": 1,
+      "path": "backend/app/main.py",
+      "description": "Montar SecurityMiddleware (rate limiting auth)",
+      "old": "from fastapi.middleware.cors import CORSMiddleware\nimport os",
+      "new": "from fastapi.middleware.cors import CORSMiddleware\nimport os\nfrom app.core.security_middleware import SecurityMiddleware"
+    },
+    {
+      "id": 2,
+      "path": "backend/app/main.py",
+      "description": "Añadir add_middleware SecurityMiddleware tras CORS",
+      "old": "    max_age=getattr(settings, \"CORS_MAX_AGE\", 600),\n)\n\n# Middleware específico para WebSockets",
+      "new": "    max_age=getattr(settings, \"CORS_MAX_AGE\", 600),\n)\napp.add_middleware(SecurityMiddleware)\n\n# Middleware específico para WebSockets"
+    },
+    {
+      "id": 3,
+      "path": "backend/app/core/config.py",
+      "description": "En producción rechazar SECRET_KEY de desarrollo",
+      "old": "    # Validar clave secreta\n    if not SECRET_KEY:\n        raise ValueError(\"La SECRET_KEY no puede estar vacía\")",
+      "new": "    # Validar clave secreta\n    if not SECRET_KEY:\n        raise ValueError(\"La SECRET_KEY no puede estar vacía\")\n    _env = os.getenv(\"ENVIRONMENT\", os.getenv(\"RAILWAY_ENVIRONMENT\", \"production\")).lower()\n    if _env == \"production\" and \"dev_default_secret\" in (SECRET_KEY or \"\"):\n        raise ValueError(\"En producción SECRET_KEY debe definirse por variable de entorno; no usar valor de desarrollo\")"
+    },
+    {
+      "id": 4,
+      "path": "backend/app/core/security.py",
+      "description": "No registrar token completo en logs",
+      "old": "        if len(token.split('.')) != 3:\n            logger.error(f\"Formato de token inválido. Partes encontradas: {len(token.split('.'))}\")\n            logger.error(f\"Token recibido: {token}\")",
+      "new": "        if len(token.split('.')) != 3:\n            logger.error(f\"Formato de token inválido. Partes encontradas: {len(token.split('.'))}\")\n            logger.error(\"Token no registrado por seguridad\")"
+    },
+    {
+      "id": 5,
+      "path": "backend/app/api/v1/endpoints/onboarding.py",
+      "description": "No imprimir contraseña temporal",
+      "old": "        print(f\"Contraseña temporal: {temp_password}\")",
+      "new": "        print(\"Contraseña temporal: [REDACTED]\")"
+    },
+    {
+      "id": 6,
+      "path": "backend/app/api/v1/endpoints/webhooks.py",
+      "description": "No imprimir contraseña en webhook",
+      "old": "        print(f\"\\n[WEBHOOK] Email de bienvenida (SendGrid no configurado): {email} / {temp_password}\\n\")",
+      "new": "        print(f\"\\n[WEBHOOK] Email de bienvenida (SendGrid no configurado): {email} / [REDACTED]\\n\")"
+    }
+  ],
+  "verification_script": "backend/scripts/verify_production_ready.py"
+}

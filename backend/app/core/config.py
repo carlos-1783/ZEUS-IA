@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     # Validar clave secreta
     if not SECRET_KEY:
         raise ValueError("La SECRET_KEY no puede estar vacía")
+    _env = os.getenv("ENVIRONMENT", os.getenv("RAILWAY_ENVIRONMENT", "production")).lower()
+    if _env == "production" and "dev_default_secret" in (SECRET_KEY or ""):
+        raise ValueError("En producción SECRET_KEY debe definirse por variable de entorno; no usar valor de desarrollo")
     
     # Token refresh settings
     REFRESH_TOKEN_SECRET: str = os.getenv("REFRESH_TOKEN_SECRET", "dev_default_refresh_secret_934ce6750fb8c844e26972be922326cbd0ff924c")

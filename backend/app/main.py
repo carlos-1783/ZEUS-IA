@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
+from app.core.security_middleware import SecurityMiddleware
 
 # Import your existing app
 from app.core.config import settings
@@ -44,6 +45,7 @@ app.add_middleware(
     expose_headers=getattr(settings, "CORS_EXPOSE_HEADERS", ["Content-Disposition", "Content-Length", "Content-Type"]),
     max_age=getattr(settings, "CORS_MAX_AGE", 600),
 )
+app.add_middleware(SecurityMiddleware)
 
 # Middleware específico para WebSockets en Railway
 # @app.middleware("http")

@@ -126,5 +126,4 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         self.rate_limit_store[ip].append(current_time)
         return True
 
-# Instancia global del middleware
-security_middleware = SecurityMiddleware()
+# No crear instancia global: FastAPI la construye vía app.add_middleware(...)

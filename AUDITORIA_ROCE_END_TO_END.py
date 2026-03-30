@@ -133,7 +133,8 @@ class ZeusEndToEndAudit:
                 json={
                     "email": email,
                     "password": password,
-                    "full_name": full_name
+                    "full_name": full_name,
+                    "phone": "+34600111233",
                 },
                 timeout=10
             )

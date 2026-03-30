@@ -5,6 +5,7 @@ from datetime import datetime
 class UserBase(BaseModel):
     email: EmailStr
     full_name: Optional[str] = None
+    phone: Optional[str] = None
     is_active: bool = True
     is_superuser: bool = False
 

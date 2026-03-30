@@ -68,11 +68,12 @@ export interface RegisterPayload {
   email: string;
   password: string;
   full_name?: string;
+  phone: string;
 }
 
 export interface ApiClient {
   login: (credentials: { username: string; password: string }) => Promise<AuthTokens>;
-  register: (payload: RegisterPayload) => Promise<{ id: number; email: string; full_name?: string }>;
+  register: (payload: RegisterPayload) => Promise<{ id: number; email: string; full_name?: string; phone?: string }>;
   logout: () => Promise<void>;
   refreshToken: (refreshToken: string) => Promise<AuthTokens>;
   getCurrentUser: () => Promise<UserProfile>;

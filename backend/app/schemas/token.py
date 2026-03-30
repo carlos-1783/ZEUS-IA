@@ -94,8 +94,17 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     email: EmailStr = Field(..., description="Email del usuario")
     password: str = Field(..., min_length=8, max_length=100)
-    full_name: str = Field(..., min_length=3, max_length=100)
+    full_name: str = Field(..., min_length=1, max_length=200, description="Nombre completo")
+    phone: str = Field(..., min_length=6, max_length=32, description="Teléfono de contacto")
     role: Optional[str] = "user"
+
+    @validator('phone')
+    def phone_ok(cls, v):
+        s = (v or "").strip()
+        digits = re.sub(r"\D", "", s)
+        if len(digits) < 6:
+            raise ValueError("Introduce un teléfono válido (mínimo 6 dígitos)")
+        return s[:32]
 
     @validator('password')
     def password_strength(cls, v):

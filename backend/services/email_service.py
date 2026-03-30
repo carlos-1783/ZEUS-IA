@@ -1,10 +1,15 @@
 """
-📧 Email Service - SendGrid Integration
+📧 Email Service - SendGrid + Resend (fallback)
 Automatiza respuestas por correo electrónico
 """
+import asyncio
+import logging
 import os
 from typing import Optional, Dict, Any, List
-from app.core.config import settings
+
+import requests
+
+logger = logging.getLogger(__name__)
 
 try:
     from sendgrid import SendGridAPIClient
@@ -22,6 +27,9 @@ class EmailService:
         self.api_key = os.getenv("SENDGRID_API_KEY")
         self.from_email = os.getenv("SENDGRID_FROM_EMAIL", "noreply@zeus-ia.com")
         self.from_name = os.getenv("SENDGRID_FROM_NAME", "ZEUS-IA")
+        self.resend_api_key = os.getenv("RESEND_API_KEY")
+        # Resend / genérico: EMAIL_FROM o RESEND_FROM_EMAIL (dominio verificado en Resend)
+        self.resend_from = os.getenv("EMAIL_FROM") or os.getenv("RESEND_FROM_EMAIL")
         
         self.client = None
         if not SENDGRID_AVAILABLE:
@@ -36,8 +44,53 @@ class EmailService:
             print("⚠️ Email Service: SENDGRID_API_KEY no configurada")
     
     def is_configured(self) -> bool:
-        """Verificar si el servicio está configurado"""
+        """SendGrid listo para enviar."""
         return self.client is not None
+
+    def is_resend_configured(self) -> bool:
+        return bool(self.resend_api_key and self.resend_from)
+
+    def _send_via_resend_sync(
+        self,
+        to_email: str,
+        subject: str,
+        content: str,
+        content_type: str = "text/html",
+    ) -> Dict[str, Any]:
+        """POST síncrono a la API de Resend (se ejecuta en thread pool desde async)."""
+        payload: Dict[str, Any] = {
+            "from": self.resend_from,
+            "to": [to_email],
+            "subject": subject,
+        }
+        if content_type == "text/html":
+            payload["html"] = content
+        else:
+            payload["text"] = content
+        resp = requests.post(
+            "https://api.resend.com/emails",
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {self.resend_api_key}",
+                "Content-Type": "application/json",
+            },
+            timeout=30,
+        )
+        if resp.status_code in (200, 201):
+            data = resp.json() if resp.text else {}
+            return {
+                "success": True,
+                "status_code": resp.status_code,
+                "to": to_email,
+                "subject": subject,
+                "message_id": data.get("id"),
+                "provider": "resend",
+            }
+        return {
+            "success": False,
+            "error": f"Resend HTTP {resp.status_code}: {resp.text[:500]}",
+            "provider": "resend",
+        }
     
     async def send_email(
         self,
@@ -62,101 +115,115 @@ class EmailService:
         Returns:
             Dict con status y message_id
         """
-        if not self.is_configured():
+        if not self.is_configured() and not self.is_resend_configured():
             return {
                 "success": False,
-                "error": "Email service not configured. Set SENDGRID_API_KEY"
+                "error": "Email no configurado: define SENDGRID_API_KEY o RESEND_API_KEY + EMAIL_FROM",
             }
-        
-        try:
-            message = Mail(
-                from_email=Email(self.from_email, self.from_name),
-                to_emails=To(to_email),
-                subject=subject,
-                html_content=Content(content_type, content)
-            )
-            
-            # Agregar CC y BCC si existen
-            if cc:
-                for cc_email in cc:
-                    message.add_cc(cc_email)
-            
-            if bcc:
-                for bcc_email in bcc:
-                    message.add_bcc(bcc_email)
-            
-            # Enviar email real (sin candados, solo depende de credenciales)
-            response = self.client.send(message)
-            
-            # Extraer message_id de headers de SendGrid si está disponible
-            message_id = None
-            if hasattr(response, 'headers') and response.headers:
-                message_id = response.headers.get('X-Message-Id') or response.headers.get('x-message-id')
-            
-            result = {
-                "success": True,
-                "status_code": response.status_code,
-                "to": to_email,
-                "subject": subject,
-                "message_id": message_id
-            }
-            
-            # ✅ REGISTRAR ACTIVIDAD: Email enviado directamente con auditoría completa
+
+        if self.is_configured():
             try:
-                from services.activity_logger import ActivityLogger
-                from datetime import datetime
-                ActivityLogger.log_activity(
-                    agent_name="ZEUS",
-                    action_type="email_sent",
-                    action_description=f"Email enviado a {to_email}: {subject}",
-                    details={
-                        "to": to_email,
-                        "subject": subject,
-                        "provider": "sendgrid",
-                        "status_code": response.status_code,
-                        "content_type": content_type,
-                        "message_id": message_id,
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "executed_handler": "SENDGRID_HANDLER",
-                    },
-                    metrics={
-                        "status_code": response.status_code,
-                        "executed_handler": "SENDGRID_HANDLER",
-                    },
-                    status="completed",
-                    priority="normal"
+                message = Mail(
+                    from_email=Email(self.from_email, self.from_name),
+                    to_emails=To(to_email),
+                    subject=subject,
+                    html_content=Content(content_type, content),
                 )
-            except Exception as log_error:
-                # No fallar si el logging falla, pero registrar en consola
-                print(f"[EMAIL] Error registrando actividad: {log_error}")
-            
-            return result
-            
-        except Exception as e:
-            error_result = {
-                "success": False,
-                "error": str(e)
-            }
-            
-            # ✅ REGISTRAR ERROR: Email fallido
+
+                if cc:
+                    for cc_email in cc:
+                        message.add_cc(cc_email)
+
+                if bcc:
+                    for bcc_email in bcc:
+                        message.add_bcc(bcc_email)
+
+                response = self.client.send(message)
+
+                message_id = None
+                if hasattr(response, "headers") and response.headers:
+                    message_id = response.headers.get("X-Message-Id") or response.headers.get("x-message-id")
+
+                result = {
+                    "success": True,
+                    "status_code": response.status_code,
+                    "to": to_email,
+                    "subject": subject,
+                    "message_id": message_id,
+                    "provider": "sendgrid",
+                }
+
+                try:
+                    from services.activity_logger import ActivityLogger
+                    from datetime import datetime
+
+                    ActivityLogger.log_activity(
+                        agent_name="ZEUS",
+                        action_type="email_sent",
+                        action_description=f"Email enviado a {to_email}: {subject}",
+                        details={
+                            "to": to_email,
+                            "subject": subject,
+                            "provider": "sendgrid",
+                            "status_code": response.status_code,
+                            "content_type": content_type,
+                            "message_id": message_id,
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "executed_handler": "SENDGRID_HANDLER",
+                        },
+                        metrics={
+                            "status_code": response.status_code,
+                            "executed_handler": "SENDGRID_HANDLER",
+                        },
+                        status="completed",
+                        priority="normal",
+                    )
+                except Exception as log_error:
+                    print(f"[EMAIL] Error registrando actividad: {log_error}")
+
+                return result
+
+            except Exception as e:
+                logger.warning("[EMAIL] SendGrid falló, probando Resend si está configurado: %s", e)
+                try:
+                    from services.activity_logger import ActivityLogger
+
+                    ActivityLogger.log_activity(
+                        agent_name="ZEUS",
+                        action_type="email_error",
+                        action_description=f"Error enviando email a {to_email}: {str(e)}",
+                        details={
+                            "to": to_email,
+                            "subject": subject,
+                            "error": str(e),
+                            "provider": "sendgrid",
+                        },
+                        status="failed",
+                        priority="high",
+                    )
+                except Exception:
+                    pass
+
+        # Resend: sin SendGrid, o SendGrid falló
+        if self.is_resend_configured():
             try:
-                from services.activity_logger import ActivityLogger
-                ActivityLogger.log_activity(
-                    agent_name="ZEUS",
-                    action_type="email_error",
-                    action_description=f"Error enviando email a {to_email}: {str(e)}",
-                    details={
-                        "to": to_email,
-                        "subject": subject,
-                        "error": str(e),
-                    },
-                    status="failed",
-                    priority="high"
+                result = await asyncio.to_thread(
+                    self._send_via_resend_sync,
+                    to_email,
+                    subject,
+                    content,
+                    content_type,
                 )
-            except Exception:
-                pass
-            
-            return error_result
+                if result.get("success"):
+                    return result
+                logger.warning("[EMAIL] Resend: %s", result.get("error"))
+            except Exception as e:
+                logger.warning("[EMAIL] Resend exception: %s", e, exc_info=True)
+
+        return {
+            "success": False,
+            "error": "No se pudo enviar el email (SendGrid/Resend)",
+        }
     
     async def process_incoming_email(
         self,
@@ -312,10 +379,11 @@ class EmailService:
     def get_status(self) -> Dict[str, Any]:
         """Obtener estado del servicio"""
         return {
-            "configured": self.is_configured(),
-            "provider": "SendGrid",
-            "from_email": self.from_email if self.is_configured() else None,
-            "from_name": self.from_name if self.is_configured() else None
+            "configured": self.is_configured() or self.is_resend_configured(),
+            "sendgrid": self.is_configured(),
+            "resend": self.is_resend_configured(),
+            "from_email": self.from_email if self.is_configured() else (self.resend_from if self.is_resend_configured() else None),
+            "from_name": self.from_name if self.is_configured() else None,
         }
 
 

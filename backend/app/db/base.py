@@ -134,6 +134,7 @@ def _migrate_user_columns():
             "role": "VARCHAR(20)" if is_postgres else "TEXT",
             "public_site_enabled": "BOOLEAN" if is_postgres else "BOOLEAN",
             "public_site_slug": "VARCHAR(100)" if is_postgres else "TEXT",
+            "phone": "VARCHAR(32)" if is_postgres else "TEXT",
         }
         
         added_columns = []

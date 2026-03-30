@@ -146,6 +146,7 @@ class ROCEAuditor:
             "email": "superuser@empresaglobal.com",
             "password": "SuperSecure123!",
             "full_name": "Super Usuario Global",
+            "phone": "+34900111222",
             "is_superuser": True
         }
         result = self.api_request("POST", "/api/v1/auth/register", data=superuser_data)
@@ -216,6 +217,7 @@ class ROCEAuditor:
                                         "email": user_data["email"],
                                         "password": "Password123!",
                                         "full_name": user_data["name"],
+                                        "phone": "+34600111222",
                                         "is_superuser": (user_data["role"] == "ADMIN")
                                     })
             if result["success"]:

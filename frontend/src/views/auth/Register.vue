@@ -60,6 +60,28 @@
         </div>
 
         <div class="sm:col-span-6">
+          <label for="phone" class="block text-sm font-medium text-gray-700">
+            Teléfono
+          </label>
+          <div class="mt-1">
+            <input
+              id="phone"
+              v-model="form.phone"
+              name="phone"
+              type="tel"
+              autocomplete="tel"
+              required
+              placeholder="Ej. 612 345 678"
+              class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              :class="{ 'border-red-300': errors.phone }"
+            >
+            <p v-if="errors.phone" class="mt-2 text-sm text-red-600">
+              {{ errors.phone }}
+            </p>
+          </div>
+        </div>
+
+        <div class="sm:col-span-6">
           <label for="email" class="block text-sm font-medium text-gray-700">
             Correo electrónico
           </label>
@@ -199,6 +221,7 @@ const error = ref('');
 const form = reactive({
   first_name: '',
   last_name: '',
+  phone: '',
   email: '',
   password: '',
   password_confirmation: '',
@@ -208,6 +231,7 @@ const form = reactive({
 const errors = reactive({
   first_name: '',
   last_name: '',
+  phone: '',
   email: '',
   password: '',
   password_confirmation: '',
@@ -248,6 +272,15 @@ const validateForm = () => {
     isValid = false;
   } else if (!/\S+@\S+\.\S+/.test(form.email)) {
     errors.email = 'El correo electrónico no es válido';
+    isValid = false;
+  }
+
+  const phoneDigits = (form.phone || '').replace(/\D/g, '');
+  if (!form.phone || !form.phone.trim()) {
+    errors.phone = 'El teléfono es obligatorio';
+    isValid = false;
+  } else if (phoneDigits.length < 6) {
+    errors.phone = 'Introduce un teléfono válido (mínimo 6 dígitos)';
     isValid = false;
   }
   
@@ -292,6 +325,7 @@ const handleSubmit = async () => {
       email: form.email.trim(),
       password: form.password,
       full_name: [form.first_name, form.last_name].filter(Boolean).join(' ').trim() || undefined,
+      phone: form.phone.trim(),
     });
     router.push({
       name: 'AuthLogin',

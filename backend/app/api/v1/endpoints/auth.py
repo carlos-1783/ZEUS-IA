@@ -10,6 +10,7 @@ from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from app.core.auth import get_current_active_user, resolve_user_scopes
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.core import security
 from app.core.jwt_auth import create_access_token, create_refresh_token as create_jwt_refresh_token, get_current_user
@@ -19,12 +20,32 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models.user import User, RefreshToken, PasswordResetToken
 from app.schemas.token import Token, TokenRefresh, LoginRequest, RegisterRequest, ResetPasswordRequest, NewPasswordRequest
+from services.email_service import email_service
 from app.schemas.user import User as UserSchema
 
 # Configurar logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _send_register_welcome_email(user: User) -> Dict[str, Any]:
+    """Email de bienvenida tras registro (SendGrid o Resend). No lanza: el registro ya está guardado."""
+    display = (user.full_name or user.email or "Usuario").strip()
+    html = f"""<html><body style="font-family: Arial, sans-serif; max-width: 560px;">
+    <h2 style="color: #1e293b;">Cuenta creada correctamente</h2>
+    <p>Hola {display},</p>
+    <p>Ya puedes iniciar sesión en <strong>ZEUS-IA</strong> con tu correo y la contraseña que elegiste.</p>
+    <p>Si no has sido tú quien se registró, ignora este mensaje.</p>
+    <p style="margin-top: 24px; font-size: 12px; color: #64748b;">Este correo lo envía ZEUS-IA.</p>
+    </body></html>"""
+    return await email_service.send_email(
+        to_email=user.email,
+        subject="Bienvenido a ZEUS-IA",
+        content=html,
+        content_type="text/html",
+    )
+
 
 async def create_tokens(db: Session, user: User) -> Dict[str, Any]:
     """
@@ -203,61 +224,54 @@ async def login_for_access_token(
     status_code=status.HTTP_201_CREATED,
     operation_id="auth_register_api_v1",
     summary="Register New User",
-    description="Register a new user with email and password"
+    description="Register a new user with email, password, full name and phone; sends welcome email if SMTP/SendGrid/Resend is configured"
 )
 async def register_user(
-    user_data: dict = Body(...),
+    user_data: RegisterRequest,
     db: Session = Depends(get_db)
 ):
     """
-    Register a new user
-    - email: must be a valid email
-    - password: min 8 chars, must contain uppercase, lowercase and number
-    - full_name: min 3 chars, max 100
+    Registro completo: email, contraseña fuerte, nombre y teléfono.
+    Tras crear el usuario se intenta enviar correo de bienvenida (no bloquea el 201 si falla el envío).
     """
-    try:
-        # Validate email
-        if not user_data.get('email') or '@' not in user_data['email']:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid email format"
-            )
-            
-        # Check if user already exists
-        db_user = db.query(User).filter(User.email == user_data['email']).first()
-        if db_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered"
-            )
-        
-        # Validate password
-        password = user_data.get('password', '')
-        if len(password) < 8:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Password must be at least 8 characters long"
-            )
-        
-        # Create new user
-        hashed_password = get_password_hash(password)
-        db_user = User(
-            email=user_data['email'],
-            hashed_password=hashed_password,
-            full_name=user_data.get('full_name', ''),
-            is_active=True
+    email_norm = str(user_data.email).strip().lower()
+    if db.query(User).filter(User.email == email_norm).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered",
         )
-        db.add(db_user)
+
+    hashed_password = get_password_hash(user_data.password)
+    db_user = User(
+        email=email_norm,
+        hashed_password=hashed_password,
+        full_name=user_data.full_name.strip(),
+        phone=user_data.phone,
+        is_active=True,
+    )
+    db.add(db_user)
+    try:
         db.commit()
         db.refresh(db_user)
-        return db_user
-        
-    except Exception as e:
+    except IntegrityError:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            detail="Email already registered",
         )
+
+    try:
+        sent = await _send_register_welcome_email(db_user)
+        if not sent.get("success"):
+            logger.warning(
+                "Registro OK pero email de bienvenida no enviado a %s: %s",
+                email_norm,
+                sent.get("error"),
+            )
+    except Exception as e:
+        logger.warning("Registro OK pero error enviando bienvenida a %s: %s", email_norm, e)
+
+    return db_user
 
 # Tiempo de validez del token de reset (1 hora)
 RESET_TOKEN_EXPIRE_MINUTES = 60

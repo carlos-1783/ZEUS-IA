@@ -460,9 +460,9 @@
             />
           </div>
           <div class="form-group">
-            <label>Precio (sin IVA) *</label>
+            <label>Precio final (con IVA) *</label>
             <input 
-              v-model.number="productForm.price" 
+              v-model.number="productPriceWithIvaInput" 
               type="number" 
               step="0.01"
               min="0"
@@ -490,6 +490,9 @@
               placeholder="21.0"
               class="form-input"
             />
+            <p class="form-hint">
+              Base sin IVA: €{{ formatPrice(productForm.price || 0) }} | IVA: €{{ formatPrice(productIvaAmount) }}
+            </p>
           </div>
           <div class="form-group">
             <label>Stock (opcional)</label>
@@ -566,7 +569,9 @@ const seatReservationId = ref(null)
 const userRole = ref(null)
 const isSuperuser = ref(false)
 const canEditProducts = computed(() => {
-  return isSuperuser.value || userRole.value === 'ADMIN'
+  const role = String(userRole.value || '').toLowerCase()
+  // owner (dueno) y superuser pueden crear/editar productos; employee no.
+  return isSuperuser.value || role === 'owner' || role === 'admin' || role === 'superuser'
 })
 
 // Estado del modal de producto
@@ -670,6 +675,32 @@ const goToDashboard = () => {
 const formatPrice = (price) => {
   return Number(price).toFixed(2).replace('.', ',')
 }
+
+const normalizeIvaRate = () => {
+  const rate = Number(productForm.value.iva_rate)
+  return Number.isFinite(rate) && rate >= 0 ? rate : 21
+}
+
+const productPriceWithIvaInput = computed({
+  get() {
+    const net = Number(productForm.value.price) || 0
+    const rate = normalizeIvaRate()
+    return Number((net * (1 + rate / 100)).toFixed(2))
+  },
+  set(value) {
+    const gross = Number(value) || 0
+    const rate = normalizeIvaRate()
+    const divisor = 1 + rate / 100
+    const net = divisor > 0 ? gross / divisor : gross
+    productForm.value.price = Number(net.toFixed(4))
+  }
+})
+
+const productIvaAmount = computed(() => {
+  const net = Number(productForm.value.price) || 0
+  const rate = normalizeIvaRate()
+  return net * (rate / 100)
+})
 
 // Sistema de feedback visual para acciones del carrito
 const showCartFeedback = (message, type = 'added') => {
@@ -833,7 +864,7 @@ const checkStatus = async () => {
       userRole.value = userInfo.role || 
                       userInfo.user_role ||
                       (isSuperuser.value ? 'SUPERUSER' : null) ||
-                      'EMPLOYEE'
+                      'owner'
       
       console.log('👤 Permisos usuario:', { 
         isSuperuser: isSuperuser.value, 
@@ -844,7 +875,7 @@ const checkStatus = async () => {
       })
       
       // Si no tenemos permisos claros, intentar obtenerlos del backend
-      if (!isSuperuser.value && userRole.value !== 'ADMIN') {
+      if (!canEditProducts.value) {
         console.log('⚠️ Permisos no claros, verificando con backend...')
         try {
           const api = (await import('@/services/api')).default
@@ -1785,9 +1816,9 @@ const saveProduct = async () => {
           isSuperuser.value = true
           userRole.value = 'SUPERUSER'
           console.log('✅ Permisos actualizados: SUPERUSER')
-        } else if (userData.role === 'ADMIN') {
-          userRole.value = 'ADMIN'
-          console.log('✅ Permisos actualizados: ADMIN')
+        } else if (userData.role) {
+          userRole.value = userData.role
+          console.log('✅ Permisos actualizados:', userData.role)
         }
       }
     } catch (err) {
@@ -1796,7 +1827,7 @@ const saveProduct = async () => {
     
     // Si aún no tiene permisos, mostrar mensaje
     if (!canEditProducts.value) {
-      warning('No tienes permisos para crear productos. Se requiere rol ADMIN o SUPERUSER. Contacta con un administrador para obtener permisos.')
+      warning('No tienes permisos para crear productos con esta cuenta. El dueno del negocio (owner) si puede crear y editar productos.')
       console.error('❌ Permisos insuficientes:', {
         isSuperuser: isSuperuser.value,
         userRole: userRole.value,
@@ -3317,6 +3348,12 @@ onMounted(async () => {
 
 .form-input::placeholder {
   color: rgba(255, 255, 255, 0.4);
+}
+
+.form-hint {
+  margin-top: 8px;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.82rem;
 }
 
 .modal-footer {

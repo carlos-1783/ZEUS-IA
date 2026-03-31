@@ -20,36 +20,8 @@ declare module '@/utils/audioService' {
   export function isAudioEnabled(): boolean;
 }
 
-declare module '@/api' {
-  export function executeCommand(command: string, params?: Record<string, any>): Promise<any>;
-  export function getSystemStatus(): Promise<any>;
-  export const auth: {
-    login: (credentials: { username: string; password: string; grant_type?: string }) => Promise<{
-      access_token: string;
-      refresh_token: string;
-      expires_in: number;
-      token_type?: string;
-    }>;
-    logout: () => Promise<void>;
-    refreshToken: (refreshToken: string) => Promise<{
-      access_token: string;
-      refresh_token: string;
-      expires_in: number;
-      token_type?: string;
-    }>;
-  };
-  export const system: {
-    getStatus: () => Promise<any>;
-    activateCompany: (companyId: string) => Promise<any>;
-    deactivateCompany: (companyId: string) => Promise<any>;
-  };
-  export const commands: {
-    execute: (command: string, params?: Record<string, any>) => Promise<any>;
-  };
-}
-
 declare module '@/utils/tokenService' {
-  export function getToken(): string | null;
+export function getToken(): string | null;
   export function setToken(token: string): void;
   export function removeToken(): void;
   export function getRefreshToken(): string | null;

@@ -312,6 +312,7 @@ def create_access_token(
     is_superuser: bool = False,
     expires_delta: Optional[timedelta] = None,
     scopes: Optional[List[str]] = None,
+    role: Optional[str] = None,
 ) -> str:
     """
     Crea un token de acceso JWT para un usuario.
@@ -330,6 +331,7 @@ def create_access_token(
         expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
     # Crear payload con la información del usuario
+    _role = (role or "owner").strip().lower()
     data = {
         "sub": str(user_id),  # Usar el ID como subject para consistencia
         "email": email,
@@ -337,6 +339,7 @@ def create_access_token(
         "is_superuser": is_superuser,
         "type": "access",  # Añadir tipo de token
         "scopes": scopes or [],
+        "role": _role,
     }
 
     return create_jwt_token(data, expires_delta)

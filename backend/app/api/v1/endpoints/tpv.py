@@ -8,19 +8,43 @@ from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
 import logging
 from pathlib import Path
-from datetime import datetime, date
+from datetime import datetime, date, timedelta, timezone
 import secrets
+import uuid
 
 from app.db.session import get_db
 from app.core.auth import get_current_active_user, get_current_active_superuser
 from app.core.config import settings
 from app.models.user import User
+from app.models.company import UserCompany
 from app.models.erp import TPVProduct, FiscalProfile, TPVSale, TPVSaleItem
 from app.models.reservation import Reservation
+from app.models.tpv_comanda_share import TPVComandaShare
 from services.tpv_service import tpv_service, BusinessProfile, PaymentMethod
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _users_share_company(db: Session, user_a_id: int, user_b_id: int) -> bool:
+    """True si ambos usuarios están vinculados a la misma empresa (user_companies)."""
+    if user_a_id == user_b_id:
+        return True
+    ca = {r[0] for r in db.query(UserCompany.company_id).filter(UserCompany.user_id == user_a_id).all()}
+    cb = {r[0] for r in db.query(UserCompany.company_id).filter(UserCompany.user_id == user_b_id).all()}
+    return bool(ca & cb)
+
+
+def _can_view_comanda_share(db: Session, viewer: User, row: TPVComandaShare) -> bool:
+    if getattr(viewer, "is_superuser", False):
+        return True
+    if viewer.id == row.owner_user_id:
+        return True
+    role = (getattr(viewer, "role", None) or "owner").strip().lower()
+    # Empleado: acceso con enlace secreto + cuenta empleado (evita depender solo de user_companies).
+    if role == "employee":
+        return True
+    return _users_share_company(db, row.owner_user_id, viewer.id)
 
 
 class BusinessDataRequest(BaseModel):
@@ -38,6 +62,12 @@ class ProductCreateRequest(BaseModel):
     image: Optional[str] = None
     icon: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+
+
+class ComandaShareUpsertRequest(BaseModel):
+    """Snapshot JSON: tableCarts, tables, cart, products, tablesMode, selectedTable, etc."""
+    share_id: Optional[str] = None
+    payload: Dict[str, Any]
 
 
 class AddToCartRequest(BaseModel):
@@ -325,6 +355,79 @@ async def list_products(
     return {
         "success": True,
         "products": products
+    }
+
+
+@router.post("/comanda-share")
+async def upsert_comanda_share(
+    body: ComandaShareUpsertRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Publicar o actualizar instantánea de comanda (mesas + carritos) para compartir con empleados.
+    Solo el dueño (no rol employee) o superusuario.
+    """
+    role = (getattr(current_user, "role", None) or "owner").strip().lower()
+    if role == "employee" and not getattr(current_user, "is_superuser", False):
+        raise HTTPException(status_code=403, detail="Solo el dueño puede publicar la comanda compartida")
+
+    now = datetime.now(timezone.utc)
+    ttl = timedelta(days=7)
+
+    if body.share_id:
+        row = db.query(TPVComandaShare).filter(TPVComandaShare.id == body.share_id.strip()).first()
+        if not row or row.owner_user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Sesión de comanda no encontrada")
+        row.payload = body.payload
+        row.updated_at = now
+        if row.expires_at is None:
+            row.expires_at = now + ttl
+        db.commit()
+        return {"success": True, "share_id": row.id}
+
+    sid = str(uuid.uuid4())
+    row = TPVComandaShare(
+        id=sid,
+        owner_user_id=current_user.id,
+        payload=body.payload,
+        expires_at=now + ttl,
+    )
+    db.add(row)
+    db.commit()
+    return {"success": True, "share_id": sid}
+
+
+@router.get("/comanda-share/{share_id}")
+async def get_comanda_share(
+    share_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Obtener instantánea si el usuario es dueño o empleado de la misma empresa."""
+    row = db.query(TPVComandaShare).filter(TPVComandaShare.id == share_id.strip()).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Comanda no encontrada")
+
+    if row.expires_at:
+        exp = row.expires_at
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp < datetime.now(timezone.utc):
+            raise HTTPException(status_code=410, detail="Enlace de comanda caducado")
+
+    if not _can_view_comanda_share(db, current_user, row):
+        raise HTTPException(
+            status_code=403,
+            detail="No tienes acceso a esta comanda. Debes estar vinculado a la misma empresa que el dueño.",
+        )
+
+    return {
+        "success": True,
+        "share_id": row.id,
+        "owner_user_id": row.owner_user_id,
+        "payload": row.payload,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
 
 

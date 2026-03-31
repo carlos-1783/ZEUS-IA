@@ -61,6 +61,7 @@ def create_tables():
             from app.models.automation_readiness import AutomationReadiness
             from app.models.payroll_draft import PayrollDraft
             from app.models.reservation import Reservation
+            from app.models.tpv_comanda_share import TPVComandaShare
 
             Base.metadata.create_all(bind=engine)
             print("[DATABASE] [OK] Tablas creadas correctamente")

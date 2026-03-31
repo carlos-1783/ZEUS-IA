@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { jwtDecode } from 'jwt-decode';
 import type { User } from '@/types';
-import api from '@/api';
+import api from '@/api/index';
 
 // Types
 interface JwtPayload {
@@ -88,7 +88,10 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed<boolean>(() => !!token.value);
   const isAdmin = computed<boolean>(() => !!user.value?.is_superuser);
   /** Empleado: solo TPV + control horario; sin nóminas ni admin */
-  const isEmployee = computed<boolean>(() => (user.value as any)?.role === 'employee');
+  const isEmployee = computed<boolean>(() => {
+    const r = String((user.value as any)?.role || '').toLowerCase();
+    return r === 'employee';
+  });
 
   // Token management
   function getToken(): string | null {
@@ -169,7 +172,7 @@ export const useAuthStore = defineStore('auth', () => {
         name: decoded.name || 'User',
         is_active: decoded.is_active || false,
         is_superuser: decoded.is_superuser || false,
-        role: (decoded as any).role || 'owner'
+        role: ((decoded as any).role && String((decoded as any).role).toLowerCase()) || 'owner'
       };
 
       console.log('[AuthStore] User data updated from token');
@@ -307,7 +310,7 @@ export const useAuthStore = defineStore('auth', () => {
             name: data.full_name || data.email,
             is_active: data.is_active,
             is_superuser: data.is_superuser,
-            role: data.role || 'owner'
+            role: String(data.role || 'owner').toLowerCase()
           };
         } catch (_) {
           // mantener user desde token
@@ -508,7 +511,7 @@ export const useAuthStore = defineStore('auth', () => {
             name: data.full_name || data.email,
             is_active: data.is_active,
             is_superuser: data.is_superuser,
-            role: data.role || 'owner'
+            role: String(data.role || 'owner').toLowerCase()
           };
         } catch (_) { /* mantener user desde token */ }
         console.log('[AuthStore] Initialization successful');

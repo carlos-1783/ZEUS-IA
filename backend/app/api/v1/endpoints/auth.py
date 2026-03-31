@@ -60,6 +60,7 @@ async def create_tokens(db: Session, user: User) -> Dict[str, Any]:
         user_scopes = resolve_user_scopes(user)
         is_active = getattr(user, "is_active", True)
         is_superuser = getattr(user, "is_superuser", False)
+        user_role = getattr(user, "role", None) or "owner"
 
         access_token = create_access_token(
             user_id=str(user.id),
@@ -68,6 +69,7 @@ async def create_tokens(db: Session, user: User) -> Dict[str, Any]:
             is_superuser=is_superuser,
             expires_delta=access_token_expires,
             scopes=user_scopes,
+            role=str(user_role),
         )
         
         # Create refresh token and store it in the database

@@ -135,7 +135,9 @@ const router = createRouter({
       path: '/',
       redirect: () => {
         const authStore = useAuthStore()
-        return authStore.isAuthenticated ? '/dashboard' : { name: 'AuthLogin' }
+        if (!authStore.isAuthenticated) return { name: 'AuthLogin' }
+        if (authStore.isEmployee) return '/tpv'
+        return '/dashboard'
       }
     },
     
@@ -389,9 +391,10 @@ router.beforeEach((to, from, next) => {
     return
   }
 
-  // Empleado: solo TPV y control horario; nóminas solo para dueño
+  // Empleado: solo TPV y control horario (resto de rutas protegidas → TPV)
+  const employeeAllowedRoutes = new Set(['TPV', 'ControlHorario'])
   if (requiresAuth && authStore.isAuthenticated && authStore.isEmployee) {
-    if (to.name === 'PayrollDrafts' || to.name === 'AdminPanel') {
+    if (!employeeAllowedRoutes.has(to.name)) {
       next('/tpv')
       return
     }
@@ -399,7 +402,7 @@ router.beforeEach((to, from, next) => {
 
   // Admin Panel: solo superusuario (el resto de empresas no puede acceder)
   if (to.meta.requiresSuperuser && !authStore.isAdmin) {
-    next('/dashboard')
+    next(authStore.isEmployee ? '/tpv' : '/dashboard')
     return
   }
 
@@ -418,7 +421,7 @@ router.beforeEach((to, from, next) => {
     publicRoutes.includes(to.name) &&
     !publicRoutesOkWhenAuthenticated.includes(to.name)
   ) {
-    const redirectTo = to.query.redirect || '/dashboard'
+    const redirectTo = to.query.redirect || (authStore.isEmployee ? '/tpv' : '/dashboard')
     console.log('✅ Usuario autenticado, redirigiendo a:', redirectTo)
     next(redirectTo)
     return

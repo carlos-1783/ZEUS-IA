@@ -22,9 +22,10 @@
           🪑 {{ tablesMode ? $t('tpv.viewProducts') : $t('tpv.tablesMode') }}
         </button>
         <button 
+          v-if="canEditProducts"
           @click="copyComanderoLink" 
           class="header-btn"
-          title="Copiar enlace del TPV para compartir con empleados (comandero digital)"
+          title="Copiar enlace del TPV con la comanda actual para compartir con empleados"
         >
           🔗 {{ $t('tpv.shareComandero') || 'Compartir comandero' }}
         </button>
@@ -515,14 +516,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
 import { useNotifications } from '@/composables/useNotifications'
 import { jwtDecode } from 'jwt-decode'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const { t } = useI18n()
 const { success, error, warning, info } = useNotifications()
@@ -564,6 +566,11 @@ const reservationsList = ref([])
 const reservationsDate = ref('')
 const loadingReservations = ref(false)
 const seatReservationId = ref(null)
+
+/** Sincronización comandero: ID de sesión compartida (dueño); lectura vía ?comanda= en URL */
+const activeComandaShareId = ref(typeof localStorage !== 'undefined' ? localStorage.getItem('zeus-tpv-comanda-share-id') : null)
+let comandaPollTimer = null
+let comandaPushTimer = null
 
 // Permisos de usuario
 const userRole = ref(null)
@@ -669,7 +676,110 @@ const getTableOrderTotal = (tableId) => {
 
 // Métodos
 const goToDashboard = () => {
+  if (authStore.isEmployee) {
+    router.push('/control-horario')
+    return
+  }
   router.push('/dashboard')
+}
+
+const loginRedirectPath = () => {
+  const p = route.fullPath && !route.path.startsWith('/auth') && !route.path.startsWith('/login')
+    ? route.fullPath
+    : '/tpv'
+  return `/login?redirect=${encodeURIComponent(p)}`
+}
+
+const normalizeUserMe = (raw) => {
+  if (raw && typeof raw === 'object' && raw.data) return raw.data
+  return raw
+}
+
+const buildComandaPayload = () => ({
+  tableCarts: { ...tableCarts.value },
+  tables: Array.isArray(tables.value) ? [...tables.value] : [],
+  selectedTable: selectedTable.value,
+  tablesMode: tablesMode.value,
+  cart: [...cart.value],
+  products: [...products.value],
+})
+
+const applyComandaFromResponse = (payload) => {
+  if (!payload || typeof payload !== 'object') return
+  tableCarts.value = payload.tableCarts ? { ...payload.tableCarts } : {}
+  tables.value = Array.isArray(payload.tables) ? [...payload.tables] : []
+  selectedTable.value = payload.selectedTable ?? null
+  tablesMode.value = !!payload.tablesMode
+  if (Array.isArray(payload.products) && payload.products.length > 0) {
+    products.value = [...payload.products]
+  }
+  const selId = selectedTable.value?.id
+  const cartForTable =
+    selId != null
+      ? tableCarts.value[selId] ?? tableCarts.value[String(selId)]
+      : null
+  if (Array.isArray(cartForTable)) {
+    cart.value = [...cartForTable]
+  } else if (Array.isArray(payload.cart)) {
+    cart.value = [...payload.cart]
+  }
+}
+
+const pushComandaSnapshot = async () => {
+  if (authStore.isEmployee) return
+  if (!activeComandaShareId.value) return
+  const token = await getAuthToken()
+  if (!token) return
+  try {
+    const api = (await import('@/services/api')).default
+    await api.post(
+      '/api/v1/tpv/comanda-share',
+      { share_id: activeComandaShareId.value, payload: buildComandaPayload() },
+      token
+    )
+  } catch (e) {
+    console.warn('comanda sync', e)
+  }
+}
+
+const scheduleComandaPush = () => {
+  if (authStore.isEmployee) return
+  if (!activeComandaShareId.value) return
+  if (comandaPushTimer) clearTimeout(comandaPushTimer)
+  comandaPushTimer = setTimeout(() => {
+    void pushComandaSnapshot()
+  }, 1200)
+}
+
+const applyComandaFromQuery = async (token) => {
+  const cid = route.query.comanda
+  const comandaId = typeof cid === 'string' ? cid : Array.isArray(cid) ? cid[0] : null
+  if (!comandaId || !token) return
+  try {
+    const api = (await import('@/services/api')).default
+    const res = await api.get(`/api/v1/tpv/comanda-share/${encodeURIComponent(comandaId)}`, token)
+    if (res.payload) {
+      applyComandaFromResponse(res.payload)
+      info('Comanda sincronizada con el local')
+    }
+    if (!comandaPollTimer) {
+      comandaPollTimer = setInterval(async () => {
+        try {
+          const t = await getAuthToken()
+          if (!t) return
+          const r2 = await api.get(`/api/v1/tpv/comanda-share/${encodeURIComponent(comandaId)}`, t)
+          if (r2.payload) applyComandaFromResponse(r2.payload)
+        } catch (_) {
+          /* ignorar errores de red en poll */
+        }
+      }, 4000)
+    }
+  } catch (e) {
+    warning(
+      'No se pudo cargar la comanda compartida. Comprueba el enlace o vuelve a compartir desde el dueño.'
+    )
+    console.warn(e)
+  }
 }
 
 const formatPrice = (price) => {
@@ -826,7 +936,7 @@ const checkStatus = async () => {
       errorMessage.value = 'Sesión expirada. Por favor, inicia sesión nuevamente.'
       // Redirigir al login después de 2 segundos
       setTimeout(() => {
-        router.push('/login?redirect=/tpv')
+        router.push(loginRedirectPath())
       }, 2000)
       return
     }
@@ -879,14 +989,15 @@ const checkStatus = async () => {
         console.log('⚠️ Permisos no claros, verificando con backend...')
         try {
           const api = (await import('@/services/api')).default
-          const userData = await api.get('/api/v1/user/me', token)
+          const raw = await api.get('/api/v1/auth/me', token)
+          const userData = normalizeUserMe(raw)
           console.log('👤 Datos del usuario desde backend:', userData)
           
           if (userData.is_superuser || userData.isSuperuser) {
             isSuperuser.value = true
             userRole.value = 'SUPERUSER'
           } else if (userData.role) {
-            userRole.value = userData.role
+            userRole.value = String(userData.role).toLowerCase()
           }
           
           console.log('✅ Permisos actualizados:', { 
@@ -928,7 +1039,7 @@ const checkStatus = async () => {
         errorMessage.value = 'Sesión expirada. Por favor, inicia sesión nuevamente.'
         authStore.resetAuthState()
         setTimeout(() => {
-          router.push('/login?redirect=/tpv')
+          router.push(loginRedirectPath())
         }, 2000)
         return
       }
@@ -960,7 +1071,7 @@ const loadTPVConfig = async () => {
       if (!retryToken) {
         errorMessage.value = 'Sesión expirada. Redirigiendo al login...'
         setTimeout(() => {
-          router.push('/login?redirect=/tpv')
+          router.push(loginRedirectPath())
         }, 2000)
         return
       }
@@ -1426,12 +1537,43 @@ const backToTablesList = () => {
 }
 
 const copyComanderoLink = async () => {
-  const url = `${window.location.origin}${import.meta.env.BASE_URL}tpv`.replace(/([^/])\/+$/g, '$1')
+  if (authStore.isEmployee || !canEditProducts.value) {
+    warning('Solo el dueño puede generar el enlace de comanda compartida.')
+    return
+  }
+  const token = await getAuthToken()
+  if (!token) {
+    warning('Inicia sesión para compartir la comanda')
+    router.push(loginRedirectPath())
+    return
+  }
   try {
+    const api = (await import('@/services/api')).default
+    const res = await api.post(
+      '/api/v1/tpv/comanda-share',
+      {
+        share_id: activeComandaShareId.value || undefined,
+        payload: buildComandaPayload(),
+      },
+      token
+    )
+    if (res.share_id) {
+      activeComandaShareId.value = res.share_id
+      localStorage.setItem('zeus-tpv-comanda-share-id', res.share_id)
+    }
+    const sid = res.share_id || activeComandaShareId.value
+    const baseRaw = `${window.location.origin}${import.meta.env.BASE_URL || '/'}`
+    const base = baseRaw.replace(/\/?$/, '/')
+    const url = `${base}tpv?comanda=${encodeURIComponent(sid)}`
     await navigator.clipboard.writeText(url)
-    success(t('tpv.comanderoLinkCopied') || 'Enlace del comandero copiado. Compártelo con tus empleados para que abran el TPV.')
-  } catch {
-    warning(t('tpv.comanderoLinkCopyFailed') || 'No se pudo copiar. Comparte manualmente: ' + url)
+    success(
+      t('tpv.comanderoLinkCopied') ||
+        'Enlace copiado con la comanda actual. El empleado debe iniciar sesión y abrir este enlace.'
+    )
+    scheduleComandaPush()
+  } catch (e) {
+    console.error(e)
+    warning(t('tpv.comanderoLinkCopyFailed') || 'No se pudo generar el enlace. Inténtalo de nuevo.')
   }
 }
 
@@ -1451,7 +1593,7 @@ const processPayment = async () => {
     if (!token) {
       console.error('❌ No hay token de autenticación')
       warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
-      router.push('/login?redirect=/tpv')
+      router.push(loginRedirectPath())
       return
     }
     
@@ -1770,7 +1912,7 @@ const deleteProduct = async (product) => {
     if (!token) {
       console.error('❌ No hay token de autenticación')
       warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
-      router.push('/login?redirect=/tpv')
+      router.push(loginRedirectPath())
       return
     }
     
@@ -1809,7 +1951,8 @@ const saveProduct = async () => {
       const token = await getAuthToken()
       if (token) {
         const api = (await import('@/services/api')).default
-        const userData = await api.get('/api/v1/user/me', token)
+        const raw = await api.get('/api/v1/auth/me', token)
+        const userData = normalizeUserMe(raw)
         console.log('👤 Verificación de permisos desde backend:', userData)
         
         if (userData.is_superuser || userData.isSuperuser) {
@@ -1817,7 +1960,7 @@ const saveProduct = async () => {
           userRole.value = 'SUPERUSER'
           console.log('✅ Permisos actualizados: SUPERUSER')
         } else if (userData.role) {
-          userRole.value = userData.role
+          userRole.value = String(userData.role).toLowerCase()
           console.log('✅ Permisos actualizados:', userData.role)
         }
       }
@@ -1852,7 +1995,7 @@ const saveProduct = async () => {
     if (!token) {
       console.error('❌ No hay token de autenticación')
       warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
-      router.push('/login?redirect=/tpv')
+      router.push(loginRedirectPath())
       return
     }
     
@@ -1873,7 +2016,7 @@ const saveProduct = async () => {
           console.error('❌ Token expirado (401) al subir imagen')
           authStore.resetAuthState()
           warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
-          router.push('/login?redirect=/tpv')
+          router.push(loginRedirectPath())
           return
         }
         console.warn('⚠️ Error al subir imagen:', uploadError)
@@ -1929,7 +2072,7 @@ const saveProduct = async () => {
         console.error('❌ Token expirado (401) al guardar producto')
         authStore.resetAuthState()
         warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
-        router.push('/login?redirect=/tpv')
+        router.push(loginRedirectPath())
         return
       }
       
@@ -1957,12 +2100,12 @@ onMounted(async () => {
     // Verificar autenticación
     if (!authStore.isAuthenticated) {
       console.warn('⚠️ Usuario no autenticado, redirigiendo al login')
-      router.push('/login?redirect=/tpv')
+      router.push(loginRedirectPath())
       return
     }
   } catch (err) {
     console.error('❌ Error inicializando authStore:', err)
-    router.push('/login?redirect=/tpv')
+    router.push(loginRedirectPath())
     return
   }
   
@@ -1970,7 +2113,8 @@ onMounted(async () => {
   await loadTPVConfig()
   // Luego cargar productos
   await checkStatus()
-  
+  await applyComandaFromQuery(await getAuthToken())
+
   // Log del estado final
   console.log('✅ TPV cargado:', {
     estado: tpvState.value,
@@ -1979,6 +2123,25 @@ onMounted(async () => {
     config: tpvConfig.value,
     autenticado: authStore.isAuthenticated
   })
+})
+
+watch(
+  [tableCarts, tables, cart, selectedTable, tablesMode, products],
+  () => {
+    scheduleComandaPush()
+  },
+  { deep: true }
+)
+
+onUnmounted(() => {
+  if (comandaPollTimer) {
+    clearInterval(comandaPollTimer)
+    comandaPollTimer = null
+  }
+  if (comandaPushTimer) {
+    clearTimeout(comandaPushTimer)
+    comandaPushTimer = null
+  }
 })
 </script>
 

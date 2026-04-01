@@ -365,26 +365,29 @@ async def upsert_comanda_share(
     db: Session = Depends(get_db),
 ):
     """
-    Publicar o actualizar instantánea de comanda (mesas + carritos) para compartir con empleados.
-    Solo el dueño (no rol employee) o superusuario.
+    Publicar o actualizar instantánea de comanda (mesas + carritos) para compartir entre dispositivos.
+    - Crear share nuevo: solo dueño/superusuario.
+    - Actualizar share existente: dueño o cualquier usuario con acceso al share (p.ej. empleado con enlace).
     """
-    role = (getattr(current_user, "role", None) or "owner").strip().lower()
-    if role == "employee" and not getattr(current_user, "is_superuser", False):
-        raise HTTPException(status_code=403, detail="Solo el dueño puede publicar la comanda compartida")
-
     now = datetime.now(timezone.utc)
     ttl = timedelta(days=7)
 
     if body.share_id:
         row = db.query(TPVComandaShare).filter(TPVComandaShare.id == body.share_id.strip()).first()
-        if not row or row.owner_user_id != current_user.id:
+        if not row:
             raise HTTPException(status_code=404, detail="Sesión de comanda no encontrada")
+        if not _can_view_comanda_share(db, current_user, row):
+            raise HTTPException(status_code=403, detail="No tienes acceso para actualizar esta comanda")
         row.payload = body.payload
         row.updated_at = now
         if row.expires_at is None:
             row.expires_at = now + ttl
         db.commit()
         return {"success": True, "share_id": row.id}
+
+    role = (getattr(current_user, "role", None) or "owner").strip().lower()
+    if role == "employee" and not getattr(current_user, "is_superuser", False):
+        raise HTTPException(status_code=403, detail="Solo el dueño puede crear una nueva comanda compartida")
 
     sid = str(uuid.uuid4())
     row = TPVComandaShare(

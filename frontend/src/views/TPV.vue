@@ -567,8 +567,11 @@ const reservationsDate = ref('')
 const loadingReservations = ref(false)
 const seatReservationId = ref(null)
 
-/** Sincronización comandero: ID de sesión compartida (dueño); lectura vía ?comanda= en URL */
-const activeComandaShareId = ref(typeof localStorage !== 'undefined' ? localStorage.getItem('zeus-tpv-comanda-share-id') : null)
+const COMANDA_SHARE_KEY = 'zeus-tpv-comanda-share-id'
+const TPV_TABLES_STATE_KEY = 'zeus-tpv-tables-state'
+
+/** Sincronización comandero: ID de sesión compartida (persistida localmente) */
+const activeComandaShareId = ref(typeof localStorage !== 'undefined' ? localStorage.getItem(COMANDA_SHARE_KEY) : null)
 let comandaPollTimer = null
 let comandaPushTimer = null
 
@@ -702,12 +705,24 @@ const buildComandaPayload = () => ({
   tablesMode: tablesMode.value,
   cart: [...cart.value],
   products: [...products.value],
+  updatedAt: Date.now(),
 })
 
 const applyComandaFromResponse = (payload) => {
   if (!payload || typeof payload !== 'object') return
-  tableCarts.value = payload.tableCarts ? { ...payload.tableCarts } : {}
-  tables.value = Array.isArray(payload.tables) ? [...payload.tables] : []
+  const hasIncomingTableCarts =
+    payload.tableCarts &&
+    typeof payload.tableCarts === 'object' &&
+    Object.keys(payload.tableCarts).length > 0
+  const hasLocalTableCarts = tableCarts.value && Object.keys(tableCarts.value).length > 0
+  if (hasIncomingTableCarts || !hasLocalTableCarts) {
+    tableCarts.value = payload.tableCarts ? { ...payload.tableCarts } : {}
+  }
+
+  const incomingTables = Array.isArray(payload.tables) ? payload.tables : []
+  if (incomingTables.length > 0 || !Array.isArray(tables.value) || tables.value.length === 0) {
+    tables.value = [...incomingTables]
+  }
   selectedTable.value = payload.selectedTable ?? null
   tablesMode.value = !!payload.tablesMode
   if (Array.isArray(payload.products) && payload.products.length > 0) {
@@ -726,7 +741,6 @@ const applyComandaFromResponse = (payload) => {
 }
 
 const pushComandaSnapshot = async () => {
-  if (authStore.isEmployee) return
   if (!activeComandaShareId.value) return
   const token = await getAuthToken()
   if (!token) return
@@ -743,7 +757,6 @@ const pushComandaSnapshot = async () => {
 }
 
 const scheduleComandaPush = () => {
-  if (authStore.isEmployee) return
   if (!activeComandaShareId.value) return
   if (comandaPushTimer) clearTimeout(comandaPushTimer)
   comandaPushTimer = setTimeout(() => {
@@ -753,8 +766,15 @@ const scheduleComandaPush = () => {
 
 const applyComandaFromQuery = async (token) => {
   const cid = route.query.comanda
-  const comandaId = typeof cid === 'string' ? cid : Array.isArray(cid) ? cid[0] : null
+  const comandaIdFromQuery = typeof cid === 'string' ? cid : Array.isArray(cid) ? cid[0] : null
+  const comandaId = comandaIdFromQuery || activeComandaShareId.value
   if (!comandaId || !token) return
+  activeComandaShareId.value = comandaId
+  try {
+    localStorage.setItem(COMANDA_SHARE_KEY, comandaId)
+  } catch (_) {
+    /* ignore localStorage errors */
+  }
   try {
     const api = (await import('@/services/api')).default
     const res = await api.get(`/api/v1/tpv/comanda-share/${encodeURIComponent(comandaId)}`, token)
@@ -1051,6 +1071,7 @@ const checkStatus = async () => {
     
     // Cargar configuración del TPV
     await loadTPVConfig()
+    await applyComandaFromQuery(token)
   } catch (err) {
     console.error('Error:', err)
     errorMessage.value = err.message || 'Error al cargar el TPV'
@@ -2088,6 +2109,18 @@ const saveProduct = async () => {
 
 // Cargar al montar
 onMounted(async () => {
+  // Recuperar estado local de mesas para evitar pérdidas al recargar.
+  try {
+    const raw = localStorage.getItem(TPV_TABLES_STATE_KEY)
+    if (raw) {
+      const localState = JSON.parse(raw)
+      if (Array.isArray(localState.tables)) tables.value = localState.tables
+      if (localState.tableCarts && typeof localState.tableCarts === 'object') tableCarts.value = localState.tableCarts
+    }
+  } catch (_) {
+    /* ignore local state parse errors */
+  }
+
   // Asegurar que el estado inicial sea CART
   tpvState.value = TPV_STATES.CART
   console.log('🔄 TPV montado. Estado inicial:', tpvState.value)
@@ -2128,6 +2161,17 @@ onMounted(async () => {
 watch(
   [tableCarts, tables, cart, selectedTable, tablesMode, products],
   () => {
+    try {
+      localStorage.setItem(
+        TPV_TABLES_STATE_KEY,
+        JSON.stringify({
+          tables: tables.value,
+          tableCarts: tableCarts.value,
+        })
+      )
+    } catch (_) {
+      /* ignore localStorage errors */
+    }
     scheduleComandaPush()
   },
   { deep: true }

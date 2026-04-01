@@ -516,7 +516,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, onUnmounted, computed, nextTick, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
@@ -568,12 +568,78 @@ const loadingReservations = ref(false)
 const seatReservationId = ref(null)
 
 const COMANDA_SHARE_KEY = 'zeus-tpv-comanda-share-id'
+/** Compatibilidad: antes solo mesas + carritos por mesa */
 const TPV_TABLES_STATE_KEY = 'zeus-tpv-tables-state'
+const TPV_SESSION_VERSION = 1
+/** No restaurar sesión muy antigua (evita reabrir mesa de hace días) */
+const TPV_SESSION_MAX_AGE_MS = 48 * 60 * 60 * 1000
 
 /** Sincronización comandero: ID de sesión compartida (persistida localmente) */
 const activeComandaShareId = ref(typeof localStorage !== 'undefined' ? localStorage.getItem(COMANDA_SHARE_KEY) : null)
 let comandaPollTimer = null
 let comandaPushTimer = null
+
+/** Clave por usuario: al volver del dashboard se recupera mesa abierta y carrito. */
+const getTpvSessionStorageKey = () => {
+  const uid = authStore.user?.id
+  if (uid != null && uid !== '') return `zeus-tpv-session-v${TPV_SESSION_VERSION}-${uid}`
+  try {
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      const t = localStorage.getItem('auth_token')
+      if (t) {
+        const d = jwtDecode(t)
+        const sub = d?.sub
+        if (sub != null && sub !== '') return `zeus-tpv-session-v${TPV_SESSION_VERSION}-${sub}`
+      }
+    }
+  } catch (_) {}
+  return `zeus-tpv-session-v${TPV_SESSION_VERSION}-anon`
+}
+
+const persistTpvSession = () => {
+  try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return
+    const key = getTpvSessionStorageKey()
+    const payload = {
+      v: TPV_SESSION_VERSION,
+      savedAt: Date.now(),
+      tables: tables.value,
+      tableCarts: { ...tableCarts.value },
+      selectedTable: selectedTable.value,
+      tablesMode: tablesMode.value,
+      cart: Array.isArray(cart.value) ? [...cart.value] : [],
+      selectedCategory: selectedCategory.value,
+    }
+    localStorage.setItem(key, JSON.stringify(payload))
+    localStorage.setItem(
+      TPV_TABLES_STATE_KEY,
+      JSON.stringify({
+        tables: payload.tables,
+        tableCarts: payload.tableCarts,
+      })
+    )
+  } catch (_) {}
+}
+
+const hydrateTpvSessionFromStorage = () => {
+  try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return
+    const key = getTpvSessionStorageKey()
+    let raw = localStorage.getItem(key)
+    if (!raw) raw = localStorage.getItem(TPV_TABLES_STATE_KEY)
+    if (!raw) return
+    const s = JSON.parse(raw)
+    if (typeof s.savedAt === 'number' && Date.now() - s.savedAt > TPV_SESSION_MAX_AGE_MS) return
+    if (Array.isArray(s.tables)) tables.value = s.tables
+    if (s.tableCarts && typeof s.tableCarts === 'object') tableCarts.value = { ...s.tableCarts }
+    if (Object.prototype.hasOwnProperty.call(s, 'selectedTable')) selectedTable.value = s.selectedTable
+    if (Object.prototype.hasOwnProperty.call(s, 'tablesMode')) tablesMode.value = !!s.tablesMode
+    if (Array.isArray(s.cart)) cart.value = [...s.cart]
+    if (Object.prototype.hasOwnProperty.call(s, 'selectedCategory') && s.selectedCategory != null) {
+      selectedCategory.value = s.selectedCategory
+    }
+  } catch (_) {}
+}
 
 // Permisos de usuario
 const userRole = ref(null)
@@ -679,6 +745,8 @@ const getTableOrderTotal = (tableId) => {
 
 // Métodos
 const goToDashboard = () => {
+  saveCartToCurrentTable()
+  persistTpvSession()
   if (authStore.isEmployee) {
     router.push('/control-horario')
     return
@@ -723,8 +791,13 @@ const applyComandaFromResponse = (payload) => {
   if (incomingTables.length > 0 || !Array.isArray(tables.value) || tables.value.length === 0) {
     tables.value = [...incomingTables]
   }
-  selectedTable.value = payload.selectedTable ?? null
-  tablesMode.value = !!payload.tablesMode
+  // No pisar mesa/modo local si el snapshot remoto no los envía (evita perder mesa abierta).
+  if (Object.prototype.hasOwnProperty.call(payload, 'selectedTable')) {
+    selectedTable.value = payload.selectedTable
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'tablesMode')) {
+    tablesMode.value = !!payload.tablesMode
+  }
   if (Array.isArray(payload.products) && payload.products.length > 0) {
     products.value = [...payload.products]
   }
@@ -1580,7 +1653,7 @@ const copyComanderoLink = async () => {
     )
     if (res.share_id) {
       activeComandaShareId.value = res.share_id
-      localStorage.setItem('zeus-tpv-comanda-share-id', res.share_id)
+      localStorage.setItem(COMANDA_SHARE_KEY, res.share_id)
     }
     const sid = res.share_id || activeComandaShareId.value
     const baseRaw = `${window.location.origin}${import.meta.env.BASE_URL || '/'}`
@@ -2109,18 +2182,6 @@ const saveProduct = async () => {
 
 // Cargar al montar
 onMounted(async () => {
-  // Recuperar estado local de mesas para evitar pérdidas al recargar.
-  try {
-    const raw = localStorage.getItem(TPV_TABLES_STATE_KEY)
-    if (raw) {
-      const localState = JSON.parse(raw)
-      if (Array.isArray(localState.tables)) tables.value = localState.tables
-      if (localState.tableCarts && typeof localState.tableCarts === 'object') tableCarts.value = localState.tableCarts
-    }
-  } catch (_) {
-    /* ignore local state parse errors */
-  }
-
   // Asegurar que el estado inicial sea CART
   tpvState.value = TPV_STATES.CART
   console.log('🔄 TPV montado. Estado inicial:', tpvState.value)
@@ -2141,12 +2202,17 @@ onMounted(async () => {
     router.push(loginRedirectPath())
     return
   }
+
+  // Recuperar sesión (mesa abierta, carrito, modo mesas) antes de cargar API
+  hydrateTpvSessionFromStorage()
   
   // Cargar configuración primero
   await loadTPVConfig()
   // Luego cargar productos
   await checkStatus()
   await applyComandaFromQuery(await getAuthToken())
+  // Tras snapshot remoto: volver a aplicar sesión local (volver del dashboard / evitar snapshot incompleto)
+  hydrateTpvSessionFromStorage()
 
   // Log del estado final
   console.log('✅ TPV cargado:', {
@@ -2159,23 +2225,18 @@ onMounted(async () => {
 })
 
 watch(
-  [tableCarts, tables, cart, selectedTable, tablesMode, products],
+  [tableCarts, tables, cart, selectedTable, tablesMode, products, selectedCategory],
   () => {
-    try {
-      localStorage.setItem(
-        TPV_TABLES_STATE_KEY,
-        JSON.stringify({
-          tables: tables.value,
-          tableCarts: tableCarts.value,
-        })
-      )
-    } catch (_) {
-      /* ignore localStorage errors */
-    }
+    persistTpvSession()
     scheduleComandaPush()
   },
   { deep: true }
 )
+
+onBeforeUnmount(() => {
+  saveCartToCurrentTable()
+  persistTpvSession()
+})
 
 onUnmounted(() => {
   if (comandaPollTimer) {

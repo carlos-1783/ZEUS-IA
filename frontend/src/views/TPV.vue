@@ -550,6 +550,8 @@ const selectedTable = ref(null)
 const tables = ref([])
 /** Carrito por mesa: cada mesa es independiente (id de mesa -> array de ítems) */
 const tableCarts = ref({})
+/** Tras GET /api/v1/tpv/tables: lista de mesas viene de BD; el snapshot no debe vaciarla. */
+const tablesHydratedFromDb = ref(false)
 const tpvState = ref(TPV_STATES.CART) // Estado actual del TPV
 const paymentNote = ref('') // Nota adicional para el pago
 const cartFeedback = ref(null) // Feedback visual del carrito
@@ -600,25 +602,26 @@ const persistTpvSession = () => {
   try {
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') return
     const key = getTpvSessionStorageKey()
+    // Mesas y líneas por mesa persisten en BD; aquí solo UI de sesión (volver del dashboard).
     const payload = {
       v: TPV_SESSION_VERSION,
       savedAt: Date.now(),
-      tables: tables.value,
-      tableCarts: { ...tableCarts.value },
       selectedTable: selectedTable.value,
       tablesMode: tablesMode.value,
       cart: Array.isArray(cart.value) ? [...cart.value] : [],
       selectedCategory: selectedCategory.value,
     }
     localStorage.setItem(key, JSON.stringify(payload))
-    localStorage.setItem(
-      TPV_TABLES_STATE_KEY,
-      JSON.stringify({
-        tables: payload.tables,
-        tableCarts: payload.tableCarts,
-      })
-    )
   } catch (_) {}
+}
+
+const rebindCartToSelectedTable = () => {
+  const sid = selectedTable.value?.id
+  if (sid == null) return
+  const lines = tableCarts.value[sid] ?? tableCarts.value[String(sid)]
+  if (Array.isArray(lines)) {
+    cart.value = lines.map((item) => ({ ...item }))
+  }
 }
 
 const hydrateTpvSessionFromStorage = () => {
@@ -630,14 +633,13 @@ const hydrateTpvSessionFromStorage = () => {
     if (!raw) return
     const s = JSON.parse(raw)
     if (typeof s.savedAt === 'number' && Date.now() - s.savedAt > TPV_SESSION_MAX_AGE_MS) return
-    if (Array.isArray(s.tables)) tables.value = s.tables
-    if (s.tableCarts && typeof s.tableCarts === 'object') tableCarts.value = { ...s.tableCarts }
     if (Object.prototype.hasOwnProperty.call(s, 'selectedTable')) selectedTable.value = s.selectedTable
     if (Object.prototype.hasOwnProperty.call(s, 'tablesMode')) tablesMode.value = !!s.tablesMode
     if (Array.isArray(s.cart)) cart.value = [...s.cart]
     if (Object.prototype.hasOwnProperty.call(s, 'selectedCategory') && s.selectedCategory != null) {
       selectedCategory.value = s.selectedCategory
     }
+    rebindCartToSelectedTable()
   } catch (_) {}
 }
 
@@ -738,14 +740,85 @@ const total = computed(() => {
 
 /** Total del carrito de una mesa (para mostrar en la tarjeta de la mesa). */
 const getTableOrderTotal = (tableId) => {
-  const items = tableCarts.value[tableId]
+  const items = tableCarts.value[tableId] ?? tableCarts.value[String(tableId)]
   if (!Array.isArray(items) || items.length === 0) return 0
   return items.reduce((sum, item) => sum + calcItemTotal(item), 0)
 }
 
+let tableBackendSyncTimer = null
+
+const flushTablesToBackend = async () => {
+  if (!tablesHydratedFromDb.value || !tpvConfig.value?.tables_enabled) return
+  const token = await getAuthToken()
+  if (!token) return
+  const api = (await import('@/services/api')).default
+  for (const table of tables.value) {
+    const tid = table.id
+    const raw = tableCarts.value[tid] ?? tableCarts.value[String(tid)]
+    const items = Array.isArray(raw) ? raw : []
+    const tot = items.reduce((sum, item) => sum + calcItemTotal(item), 0)
+    try {
+      await api.patch(
+        `/api/v1/tpv/tables/${tid}`,
+        {
+          cart_snapshot: items,
+          order_total: tot,
+          status: tot > 0 ? 'occupied' : 'free',
+        },
+        token
+      )
+    } catch (e) {
+      console.warn('sync mesa', tid, e)
+    }
+  }
+}
+
+const scheduleTablesBackendSync = () => {
+  if (!tablesHydratedFromDb.value) return
+  if (tableBackendSyncTimer) clearTimeout(tableBackendSyncTimer)
+  tableBackendSyncTimer = setTimeout(() => {
+    void flushTablesToBackend()
+  }, 900)
+}
+
+const fetchPersistedTablesFromApi = async (token) => {
+  if (!tpvConfig.value?.tables_enabled) {
+    tablesHydratedFromDb.value = false
+    return
+  }
+  try {
+    const api = (await import('@/services/api')).default
+    const data = await api.get('/api/v1/tpv/tables', token)
+    if (!data?.success || !Array.isArray(data.tables)) return
+    tables.value = data.tables.map((t) => ({
+      id: t.id,
+      number: t.number,
+      name: t.name || `Mesa ${t.number}`,
+      status: t.status || 'free',
+      order_total: typeof t.order_total === 'number' ? t.order_total : parseFloat(t.order_total) || 0,
+    }))
+    const nextCarts = {}
+    for (const t of data.tables) {
+      const id = t.id
+      nextCarts[id] = Array.isArray(t.cart_snapshot) ? t.cart_snapshot.map((line) => ({ ...line })) : []
+    }
+    tableCarts.value = nextCarts
+    const ids = new Set(data.tables.map((t) => t.id))
+    if (selectedTable.value && !ids.has(selectedTable.value.id)) {
+      selectedTable.value = null
+    }
+    tablesHydratedFromDb.value = true
+    rebindCartToSelectedTable()
+  } catch (e) {
+    console.warn('No se pudieron cargar mesas desde el servidor:', e)
+    tablesHydratedFromDb.value = false
+  }
+}
+
 // Métodos
-const goToDashboard = () => {
+const goToDashboard = async () => {
   saveCartToCurrentTable()
+  await flushTablesToBackend()
   persistTpvSession()
   if (authStore.isEmployee) {
     router.push('/control-horario')
@@ -788,8 +861,10 @@ const applyComandaFromResponse = (payload) => {
   }
 
   const incomingTables = Array.isArray(payload.tables) ? payload.tables : []
-  if (incomingTables.length > 0 || !Array.isArray(tables.value) || tables.value.length === 0) {
-    tables.value = [...incomingTables]
+  if (!tablesHydratedFromDb.value) {
+    if (incomingTables.length > 0 || !Array.isArray(tables.value) || tables.value.length === 0) {
+      tables.value = [...incomingTables]
+    }
   }
   // No pisar mesa/modo local si el snapshot remoto no los envía (evita perder mesa abierta).
   if (Object.prototype.hasOwnProperty.call(payload, 'selectedTable')) {
@@ -1144,6 +1219,7 @@ const checkStatus = async () => {
     
     // Cargar configuración del TPV
     await loadTPVConfig()
+    await fetchPersistedTablesFromApi(token)
     await applyComandaFromQuery(token)
   } catch (err) {
     console.error('Error:', err)
@@ -1615,14 +1691,43 @@ const selectTable = (table) => {
   info(`Mesa ${table.number} – carrito independiente`)
 }
 
-const addTable = () => {
-  const newNumber = tables.value.length + 1
-  tables.value.push({
-    id: newNumber,
-    number: newNumber,
-    status: 'free',
-    order_total: 0
-  })
+const addTable = async () => {
+  if (!tpvConfig.value.tables_enabled) {
+    warning(t('tpv.messages.tablesNotAvailable') || 'Las mesas no están disponibles para este tipo de negocio')
+    return
+  }
+  const token = await getAuthToken()
+  if (!token) {
+    warning('Sesión expirada')
+    router.push(loginRedirectPath())
+    return
+  }
+  try {
+    const api = (await import('@/services/api')).default
+    const res = await api.post('/api/v1/tpv/tables', {}, token)
+    if (res.success && res.table) {
+      const t = res.table
+      tables.value.push({
+        id: t.id,
+        number: t.number,
+        name: t.name || `Mesa ${t.number}`,
+        status: t.status || 'free',
+        order_total: typeof t.order_total === 'number' ? t.order_total : parseFloat(t.order_total) || 0,
+      })
+      tableCarts.value[t.id] = []
+      tablesHydratedFromDb.value = true
+    }
+  } catch (e) {
+    console.error(e)
+    const msg = e?.message || ''
+    if (e?.status === 403) {
+      warning('Solo el dueño puede crear mesas.')
+    } else if (e?.status === 400) {
+      warning('Tu cuenta no tiene empresa vinculada; no se pueden guardar mesas en el servidor.')
+    } else {
+      warning('No se pudo crear la mesa en el servidor. Revisa la conexión.')
+    }
+  }
 }
 
 const backToTablesList = () => {
@@ -2208,10 +2313,9 @@ onMounted(async () => {
   
   // Cargar configuración primero
   await loadTPVConfig()
-  // Luego cargar productos
+  // Luego cargar productos (incluye mesas en BD y comanda compartida)
   await checkStatus()
-  await applyComandaFromQuery(await getAuthToken())
-  // Tras snapshot remoto: volver a aplicar sesión local (volver del dashboard / evitar snapshot incompleto)
+  // Tras snapshot remoto: volver a aplicar solo UI de sesión (mesa seleccionada, modo mesas)
   hydrateTpvSessionFromStorage()
 
   // Log del estado final
@@ -2229,12 +2333,14 @@ watch(
   () => {
     persistTpvSession()
     scheduleComandaPush()
+    scheduleTablesBackendSync()
   },
   { deep: true }
 )
 
-onBeforeUnmount(() => {
+onBeforeUnmount(async () => {
   saveCartToCurrentTable()
+  await flushTablesToBackend()
   persistTpvSession()
 })
 
@@ -2246,6 +2352,10 @@ onUnmounted(() => {
   if (comandaPushTimer) {
     clearTimeout(comandaPushTimer)
     comandaPushTimer = null
+  }
+  if (tableBackendSyncTimer) {
+    clearTimeout(tableBackendSyncTimer)
+    tableBackendSyncTimer = null
   }
 })
 </script>

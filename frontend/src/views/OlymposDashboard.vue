@@ -218,7 +218,7 @@
       :class="{ 'superuser-badge': authStore.isAdmin }"
       title="Abrir TPV Universal Enterprise - Los superusuarios tienen acceso completo"
     >
-      🧾 {{ authStore.isAdmin ? 'TPV (Admin)' : 'Abrir TPV' }}
+      🧾 {{ authStore.isAdmin ? 'TPV (Admin)' : 'Abrir TPV' }}{{ tpvTablesLabel }}
     </button>
 
     <!-- Botón Instalar PWA -->
@@ -230,6 +230,25 @@
     >
       📲 Instalar ZEUS
     </button>
+
+    <!-- Mesas TPV desde BD (GET /api/v1/tpv/tables) — solo vista 2D Olimpo -->
+    <div
+      v-if="!firstPersonMode && authStore.isAuthenticated && tpvTablesPreview.length > 0"
+      class="tpv-tables-strip"
+      title="Mesas guardadas en base de datos. Clic para abrir el TPV."
+    >
+      <span class="tpv-tables-strip-label">🪑 Mesas</span>
+      <button
+        v-for="t in tpvTablesPreview"
+        :key="t.id"
+        type="button"
+        class="tpv-table-chip"
+        @click="goToTPV"
+      >
+        <span class="tpv-table-chip-dot" :class="t.busy ? 'busy' : 'free'" />
+        {{ t.label }}
+      </button>
+    </div>
 
     <!-- Notificaciones Divinas -->
     <div class="divine-notifications">
@@ -281,6 +300,53 @@ const showAgents = ref(true)  // Mostrar agentes por defecto
 const showMetrics = ref(true)
 const activeAgent = ref(null)
 const notifications = ref([])
+
+/** Mesas TPV persistidas en BD (GET /api/v1/tpv/tables) — vista rápida desde el Olimpo */
+const tpvTablesCount = ref(null)
+/** Lista corta para chips (nombre + ocupación) */
+const tpvTablesPreview = ref([])
+
+const tpvTablesLabel = computed(() => {
+  if (tpvTablesCount.value === null) return ''
+  const n = tpvTablesCount.value
+  return ` · ${n} ${n === 1 ? 'mesa' : 'mesas'}`
+})
+
+const loadTpvTablesFromApi = async () => {
+  if (!authStore.isAuthenticated) {
+    tpvTablesCount.value = null
+    tpvTablesPreview.value = []
+    return
+  }
+  try {
+    const api = (await import('@/services/api')).default
+    const token = authStore.getToken?.() ?? authStore.token
+    if (!token) return
+    const data = await api.get('/api/v1/tpv/tables', token)
+    if (data?.success && Array.isArray(data.tables)) {
+      tpvTablesCount.value = data.tables.length
+      tpvTablesPreview.value = data.tables.map((t) => {
+        const ot = Number(t.order_total)
+        const snap = t.cart_snapshot
+        const busy =
+          (Number.isFinite(ot) && ot > 0) ||
+          (Array.isArray(snap) && snap.length > 0) ||
+          String(t.status || '').toLowerCase() === 'occupied'
+        const label = (t.name && String(t.name).trim()) || `Mesa ${t.number}`
+        return { id: t.id, label, busy }
+      })
+    } else {
+      tpvTablesPreview.value = []
+    }
+  } catch {
+    /* Sin TPV o sin empresa: no molestar */
+    tpvTablesCount.value = null
+    tpvTablesPreview.value = []
+  }
+}
+
+let agentsPollTimer = null
+let tpvTablesPollTimer = null
 
 // Estado de conversación por voz
 const voiceActive = ref(false)
@@ -368,8 +434,22 @@ const updateAgentsFromBackend = async () => {
 // Cargar estado desde backend en segundo plano
 onMounted(() => {
   updateAgentsFromBackend()
-  // Actualizar cada 30 segundos
-  setInterval(updateAgentsFromBackend, 30000)
+  void loadTpvTablesFromApi()
+  agentsPollTimer = window.setInterval(updateAgentsFromBackend, 30000)
+  tpvTablesPollTimer = window.setInterval(() => {
+    void loadTpvTablesFromApi()
+  }, 60000)
+})
+
+onUnmounted(() => {
+  if (agentsPollTimer != null) {
+    clearInterval(agentsPollTimer)
+    agentsPollTimer = null
+  }
+  if (tpvTablesPollTimer != null) {
+    clearInterval(tpvTablesPollTimer)
+    tpvTablesPollTimer = null
+  }
 })
 
 // Métricas
@@ -1412,6 +1492,69 @@ onMounted(() => {
   background: rgba(59, 130, 246, 0.7);
   transform: scale(1.05);
   box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+}
+
+.tpv-tables-strip {
+  position: fixed;
+  top: 86px;
+  right: 24px;
+  max-width: min(420px, 92vw);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(10, 35, 66, 0.88);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: 14px;
+  backdrop-filter: blur(10px);
+  z-index: 59;
+}
+
+.tpv-tables-strip-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 215, 0, 0.95);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 4px;
+}
+
+.tpv-table-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.tpv-table-chip:hover {
+  background: rgba(16, 185, 129, 0.25);
+  transform: translateY(-1px);
+}
+
+.tpv-table-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tpv-table-chip-dot.free {
+  background: #94a3b8;
+  box-shadow: 0 0 6px rgba(148, 163, 184, 0.6);
+}
+
+.tpv-table-chip-dot.busy {
+  background: #22c55e;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.7);
 }
 
 @media (max-width: 1200px) {

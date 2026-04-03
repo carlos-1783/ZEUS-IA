@@ -2,9 +2,11 @@
 💳 TPV Universal Enterprise API Endpoints
 """
 
-from fastapi import APIRouter, HTTPException, Depends, File, UploadFile
+from fastapi import APIRouter, HTTPException, Depends, File, UploadFile, Query
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
+from decimal import Decimal
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 import logging
 from pathlib import Path
@@ -20,6 +22,7 @@ from app.models.company import UserCompany
 from app.models.erp import TPVProduct, FiscalProfile, TPVSale, TPVSaleItem
 from app.models.reservation import Reservation
 from app.models.tpv_comanda_share import TPVComandaShare
+from app.models.tpv_table import TPVTable
 from services.tpv_service import tpv_service, BusinessProfile, PaymentMethod
 
 router = APIRouter()
@@ -33,6 +36,45 @@ def _users_share_company(db: Session, user_a_id: int, user_b_id: int) -> bool:
     ca = {r[0] for r in db.query(UserCompany.company_id).filter(UserCompany.user_id == user_a_id).all()}
     cb = {r[0] for r in db.query(UserCompany.company_id).filter(UserCompany.user_id == user_b_id).all()}
     return bool(ca & cb)
+
+
+def _company_ids_for_user(db: Session, user: User) -> List[int]:
+    rows = db.query(UserCompany.company_id).filter(UserCompany.user_id == user.id).all()
+    return [r[0] for r in rows]
+
+
+def _primary_company_id(db: Session, user: User) -> Optional[int]:
+    uc = (
+        db.query(UserCompany)
+        .filter(UserCompany.user_id == user.id)
+        .order_by(UserCompany.id.asc())
+        .first()
+    )
+    return uc.company_id if uc else None
+
+
+def _can_manage_tpv_tables(user: User) -> bool:
+    """Crear/borrar mesas: dueño o superusuario; no empleado estándar."""
+    if getattr(user, "is_superuser", False):
+        return True
+    role = (getattr(user, "role", None) or "owner").strip().lower()
+    return role != "employee"
+
+
+def _tpv_table_row_allowed(db: Session, user: User, row: TPVTable) -> bool:
+    return row.company_id in _company_ids_for_user(db, user)
+
+
+def _tpv_table_to_api_dict(row: TPVTable) -> Dict[str, Any]:
+    return {
+        "id": row.id,
+        "company_id": row.company_id,
+        "number": row.number,
+        "name": row.name,
+        "status": row.status,
+        "order_total": float(row.order_total or 0),
+        "cart_snapshot": row.cart_snapshot,
+    }
 
 
 def _can_view_comanda_share(db: Session, viewer: User, row: TPVComandaShare) -> bool:
@@ -68,6 +110,18 @@ class ComandaShareUpsertRequest(BaseModel):
     """Snapshot JSON: tableCarts, tables, cart, products, tablesMode, selectedTable, etc."""
     share_id: Optional[str] = None
     payload: Dict[str, Any]
+
+
+class TPVTableCreateBody(BaseModel):
+    number: Optional[int] = None
+    name: Optional[str] = None
+
+
+class TPVTablePatchBody(BaseModel):
+    name: Optional[str] = None
+    status: Optional[str] = None
+    order_total: Optional[float] = None
+    cart_snapshot: Optional[List[Any]] = None
 
 
 class AddToCartRequest(BaseModel):
@@ -432,6 +486,125 @@ async def get_comanda_share(
         "payload": row.payload,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
+
+
+@router.get("/tables")
+async def list_tpv_tables(
+    company_id: Optional[int] = Query(
+        None,
+        description="Opcional: filtrar por empresa. Debe ser una empresa vinculada al usuario (user_companies).",
+    ),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Listar mesas persistidas en BD (tpv_tables), scoped por empresa del usuario.
+    Sin company_id: todas las empresas vinculadas. Con company_id: solo si el usuario pertenece a esa empresa.
+    Equivale a GET /api/tables?company_id= con prefijo API v1: /api/v1/tpv/tables?company_id=
+    """
+    cids = _company_ids_for_user(db, current_user)
+    if not cids:
+        return {"success": True, "tables": []}
+    if company_id is not None:
+        if company_id not in cids:
+            raise HTTPException(
+                status_code=403,
+                detail="No tienes acceso a la empresa indicada o no existe en tu cuenta.",
+            )
+        filter_ids = [company_id]
+    else:
+        filter_ids = list(cids)
+    rows = (
+        db.query(TPVTable)
+        .filter(TPVTable.company_id.in_(filter_ids))
+        .order_by(TPVTable.company_id.asc(), TPVTable.number.asc())
+        .all()
+    )
+    return {"success": True, "tables": [_tpv_table_to_api_dict(r) for r in rows]}
+
+
+@router.post("/tables")
+async def create_tpv_table(
+    body: TPVTableCreateBody,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    if not _can_manage_tpv_tables(current_user):
+        raise HTTPException(status_code=403, detail="Solo el dueño puede crear mesas")
+    cid = _primary_company_id(db, current_user)
+    if not cid:
+        raise HTTPException(
+            status_code=400,
+            detail="No hay empresa vinculada a tu cuenta. Completa el registro o contacta con soporte.",
+        )
+    number = body.number
+    if number is None:
+        mx = db.query(func.max(TPVTable.number)).filter(TPVTable.company_id == cid).scalar()
+        number = int(mx or 0) + 1
+    exists = (
+        db.query(TPVTable)
+        .filter(TPVTable.company_id == cid, TPVTable.number == number)
+        .first()
+    )
+    if exists:
+        raise HTTPException(status_code=409, detail="Ya existe una mesa con ese número en tu local")
+    name = (body.name or "").strip() or f"Mesa {number}"
+    row = TPVTable(
+        company_id=cid,
+        number=number,
+        name=name,
+        status="free",
+        order_total=Decimal("0"),
+        cart_snapshot=None,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    logger.info(f"🪑 Mesa TPV creada id={row.id} company={cid} number={number} user={current_user.id}")
+    return {"success": True, "table": _tpv_table_to_api_dict(row)}
+
+
+@router.patch("/tables/{table_id}")
+async def patch_tpv_table(
+    table_id: int,
+    body: TPVTablePatchBody,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    row = db.query(TPVTable).filter(TPVTable.id == table_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Mesa no encontrada")
+    if not _tpv_table_row_allowed(db, current_user, row):
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta mesa")
+    if body.name is not None:
+        row.name = body.name.strip() or row.name
+    if body.status is not None:
+        row.status = body.status.strip() or row.status
+    if body.order_total is not None:
+        row.order_total = Decimal(str(body.order_total))
+    if body.cart_snapshot is not None:
+        row.cart_snapshot = body.cart_snapshot
+    db.commit()
+    db.refresh(row)
+    return {"success": True, "table": _tpv_table_to_api_dict(row)}
+
+
+@router.delete("/tables/{table_id}")
+async def delete_tpv_table(
+    table_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    if not _can_manage_tpv_tables(current_user):
+        raise HTTPException(status_code=403, detail="Solo el dueño puede eliminar mesas")
+    row = db.query(TPVTable).filter(TPVTable.id == table_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Mesa no encontrada")
+    if not _tpv_table_row_allowed(db, current_user, row):
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta mesa")
+    db.delete(row)
+    db.commit()
+    return {"success": True, "deleted_id": table_id}
 
 
 @router.put("/products/{product_id}")

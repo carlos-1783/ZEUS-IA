@@ -262,6 +262,18 @@ async def register_user(
             detail="Email already registered",
         )
 
+    # Empresa mínima + user_companies: TPV mesas y multi-tenant requieren company_id (dueños).
+    try:
+        from services.global_company_bootstrap import ensure_user_company_link_for_operations
+
+        ensure_user_company_link_for_operations(db, db_user)
+    except Exception as e:
+        logger.warning(
+            "Usuario registrado pero no se pudo crear empresa por defecto (user_id=%s): %s",
+            getattr(db_user, "id", None),
+            e,
+        )
+
     try:
         sent = await _send_register_welcome_email(db_user)
         if not sent.get("success"):

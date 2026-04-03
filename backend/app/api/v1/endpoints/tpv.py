@@ -24,6 +24,7 @@ from app.models.reservation import Reservation
 from app.models.tpv_comanda_share import TPVComandaShare
 from app.models.tpv_table import TPVTable
 from services.tpv_service import tpv_service, BusinessProfile, PaymentMethod
+from services.global_company_bootstrap import ensure_user_company_link_for_operations
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -502,6 +503,8 @@ async def list_tpv_tables(
     Sin company_id: todas las empresas vinculadas. Con company_id: solo si el usuario pertenece a esa empresa.
     Equivale a GET /api/tables?company_id= con prefijo API v1: /api/v1/tpv/tables?company_id=
     """
+    # Dueños sin fila user_companies (registro antiguo) reciben empresa mínima para poder usar TPV.
+    ensure_user_company_link_for_operations(db, current_user)
     cids = _company_ids_for_user(db, current_user)
     if not cids:
         return {"success": True, "tables": []}
@@ -531,6 +534,7 @@ async def create_tpv_table(
 ):
     if not _can_manage_tpv_tables(current_user):
         raise HTTPException(status_code=403, detail="Solo el dueño puede crear mesas")
+    ensure_user_company_link_for_operations(db, current_user)
     cid = _primary_company_id(db, current_user)
     if not cid:
         raise HTTPException(

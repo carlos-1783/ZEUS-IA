@@ -10,6 +10,7 @@ Reglas clave:
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -24,6 +25,7 @@ from services.unified_agent_runtime import run_chat
 
 
 ROCE_ID = "ZEUS_GLOBAL_AUTONOMOUS_COMPANY_BOOTSTRAP_001"
+logger = logging.getLogger(__name__)
 
 
 def _slugify(value: str) -> str:
@@ -96,6 +98,74 @@ def _ensure_company(db: Session, user: User, company_name: str, sector: Optional
         )
     )
     return company
+
+
+def ensure_user_company_link_for_operations(db: Session, user: User) -> Optional[int]:
+    """
+    Garantiza que exista al menos una fila en user_companies para usuarios que operan
+    como dueño (TPV mesas multi-tenant, etc.). Sin esto, POST /tpv/tables devuelve 400.
+
+    - Idempotente: si ya hay vínculo, devuelve ese company_id.
+    - No aplica a empleados estándar (deben ser invitados/vinculados por el dueño).
+    - Registro previo a onboarding: crea empresa mínima (sin flujo de pago ROCE).
+    """
+    link = (
+        db.query(UserCompany)
+        .filter(UserCompany.user_id == user.id)
+        .order_by(UserCompany.id.asc())
+        .first()
+    )
+    if link:
+        return link.company_id
+
+    role = (getattr(user, "role", None) or "owner").strip().lower()
+    if role == "employee" and not getattr(user, "is_superuser", False):
+        return None
+
+    label = (
+        (getattr(user, "company_name", None) or "").strip()
+        or (getattr(user, "full_name", None) or "").strip()
+        or (getattr(user, "email", None) or "").split("@")[0].strip()
+        or "Mi negocio"
+    )
+    tail = _slugify(label or user.email or "negocio")[:72]
+    # Slug único y <=100 chars: id de usuario primero por si hay que truncar el tail
+    slug = f"u{user.id}-{tail}" if tail else f"u{user.id}"
+    if len(slug) > 100:
+        slug = slug[:100]
+    company = Company(
+        company_name=label[:255],
+        slug=slug,
+        pilot_company=False,
+        status="active",
+        sector=None,
+        country="ES",
+        currency="EUR",
+        metadata_={
+            "billing_enabled": False,
+            "onboarding_completed": False,
+            "source": "user_default_company",
+            "note": "Creada automáticamente para multi-tenant (TPV mesas); completar datos en onboarding si aplica.",
+        },
+    )
+    db.add(company)
+    db.flush()
+    db.add(
+        UserCompany(
+            user_id=user.id,
+            company_id=company.id,
+            role="company_admin",
+        )
+    )
+    db.commit()
+    db.refresh(company)
+    logger.info(
+        "Empresa por defecto para operaciones: user_id=%s email=%s company_id=%s",
+        user.id,
+        getattr(user, "email", None),
+        company.id,
+    )
+    return company.id
 
 
 def _ensure_hospitality_products(db: Session, user: User) -> int:

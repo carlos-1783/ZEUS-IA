@@ -23,11 +23,46 @@ from app.models.erp import TPVProduct, FiscalProfile, TPVSale, TPVSaleItem
 from app.models.reservation import Reservation
 from app.models.tpv_comanda_share import TPVComandaShare
 from app.models.tpv_table import TPVTable
-from services.tpv_service import tpv_service, BusinessProfile, PaymentMethod
+from services.tpv_service import BusinessProfile, PaymentMethod, TPVService, create_tpv_service
 from services.global_company_bootstrap import ensure_user_company_link_for_operations
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _tpv_service_for_user(db: Session, current_user: User):
+    """Instancia TPV por petición + perfil desde BD (sin estado de carrito compartido)."""
+    svc = create_tpv_service()
+    is_superuser = getattr(current_user, "is_superuser", False)
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if user:
+        user_data = {
+            "id": user.id,
+            "tpv_business_profile": getattr(user, "tpv_business_profile", None),
+            "company_name": getattr(user, "company_name", None),
+        }
+        try:
+            svc.load_user_profile(user_data)
+        except Exception as e:
+            logger.warning("Error cargando perfil de usuario TPV: %s", e)
+            if not svc.business_profile:
+                svc.set_business_profile(BusinessProfile.OTROS, user.id)
+    else:
+        user_data = {
+            "id": current_user.id,
+            "company_name": getattr(current_user, "company_name", None),
+        }
+        try:
+            svc.load_user_profile(user_data)
+        except Exception as e:
+            logger.warning("Error cargando perfil TPV: %s", e)
+        if not svc.business_profile and not is_superuser:
+            svc.set_business_profile(BusinessProfile.OTROS, current_user.id)
+        elif not svc.business_profile and is_superuser:
+            svc.set_business_profile(BusinessProfile.OTROS, current_user.id)
+    if not svc.business_profile:
+        svc.set_business_profile(BusinessProfile.OTROS, current_user.id)
+    return svc
 
 
 def _users_share_company(db: Session, user_a_id: int, user_b_id: int) -> bool:
@@ -162,72 +197,12 @@ class FiscalProfileCreate(BaseModel):
     recargo_rate: Optional[float] = None  # e.g. 5.2 for 5.2%
 
 
-async def _get_tpv_info(current_user: User):
-    """Función auxiliar para obtener información del TPV
-    Los superusuarios tienen acceso completo sin restricciones de business_profile
-    """
-    from sqlalchemy.orm import Session
-    from app.db.base import SessionLocal
-    
-    is_superuser = getattr(current_user, 'is_superuser', False)
-    
-    # Cargar business_profile del usuario si existe
-    # Para superusuarios, esto es opcional - tienen acceso completo de todas formas
-    db: Session = SessionLocal()
-    try:
-        user = db.query(User).filter(User.id == current_user.id).first()
-        if user:
-            # Usar getattr para evitar errores si las columnas no existen aún
-            user_data = {
-                "id": user.id,
-                "tpv_business_profile": getattr(user, 'tpv_business_profile', None),
-                "company_name": getattr(user, 'company_name', None)
-            }
-            # Cargar perfil del usuario (opcional para superusuarios)
-            try:
-                tpv_service.load_user_profile(user_data)
-            except Exception as e:
-                logger.warning(f"Error cargando perfil de usuario: {e}")
-                # Para superusuarios, no requerir business_profile
-                if not tpv_service.business_profile and not is_superuser:
-                    from services.tpv_service import BusinessProfile
-                    tpv_service.set_business_profile(BusinessProfile.OTROS)
-                elif not tpv_service.business_profile and is_superuser:
-                    # Superusuarios pueden usar un perfil genérico o ninguno
-                    from services.tpv_service import BusinessProfile
-                    tpv_service.set_business_profile(BusinessProfile.OTROS)
-        else:
-            # Si no hay perfil, usar auto-detección o default
-            if not tpv_service.business_profile:
-                user_data = {
-                    "id": current_user.id,
-                    "company_name": getattr(current_user, 'company_name', None)
-                }
-                tpv_service.load_user_profile(user_data)
-                # Si aún no hay perfil y no es superusuario, usar default
-                if not tpv_service.business_profile and not is_superuser:
-                    from services.tpv_service import BusinessProfile
-                    tpv_service.set_business_profile(BusinessProfile.OTROS)
-                elif not tpv_service.business_profile and is_superuser:
-                    # Superusuarios pueden usar perfil genérico
-                    from services.tpv_service import BusinessProfile
-                    tpv_service.set_business_profile(BusinessProfile.OTROS)
-    except Exception as e:
-        logger.error(f"Error cargando perfil de usuario: {e}")
-        # Usar default si hay error (pero no bloquear superusuarios)
-        if not tpv_service.business_profile:
-            from services.tpv_service import BusinessProfile
-            tpv_service.set_business_profile(BusinessProfile.OTROS)
-    finally:
-        db.close()
-    
-    # Obtener configuración actual
-    # Superusuarios siempre tienen acceso, incluso sin config
-    config = tpv_service.config if tpv_service.business_profile else {}
-    
-    # Para superusuarios, asegurar que tengan acceso completo
+async def _get_tpv_info(db: Session, current_user: User):
+    """Información del TPV; perfil y conteos por usuario (sin carrito en servidor)."""
+    is_superuser = getattr(current_user, "is_superuser", False)
+    svc = _tpv_service_for_user(db, current_user)
+    config = svc.config if svc.business_profile else {}
     if is_superuser and not config:
-        # Configuración mínima para superusuarios
         config = {
             "tables_enabled": True,
             "services_enabled": True,
@@ -237,9 +212,14 @@ async def _get_tpv_info(current_user: User):
             "discounts_enabled": True,
             "requires_employee": False,
             "requires_customer_data": False,
-            "superuser_override": True
+            "superuser_override": True,
         }
-    
+    products_count = (
+        db.query(TPVProduct).filter(TPVProduct.user_id == current_user.id).count()
+        if current_user
+        else 0
+    )
+    company_ids = _company_ids_for_user(db, current_user)
     return {
         "success": True,
         "service": "TPV Universal Enterprise",
@@ -247,7 +227,7 @@ async def _get_tpv_info(current_user: User):
         "user": {
             "email": current_user.email,
             "is_superuser": is_superuser,
-            "is_active": current_user.is_active
+            "is_active": current_user.is_active,
         },
         "endpoints": {
             "status": "/api/v1/tpv/status",
@@ -256,26 +236,28 @@ async def _get_tpv_info(current_user: User):
             "sale": "/api/v1/tpv/sale",
             "invoice": "/api/v1/tpv/invoice",
             "close_register": "/api/v1/tpv/close-register",
-            "detect_business_type": "/api/v1/tpv/detect-business-type"
+            "detect_business_type": "/api/v1/tpv/detect-business-type",
         },
-        "business_profile": tpv_service.business_profile.value if tpv_service.business_profile else None,
+        "business_profile": svc.business_profile.value if svc.business_profile else None,
         "config": config,
-        "products_count": db.query(TPVProduct).filter(TPVProduct.user_id == current_user.id).count() if current_user else 0,
+        "products_count": products_count,
+        "company_ids": company_ids,
         "integrations": {
-            "rafael": tpv_service.rafael_integration is not None,
-            "justicia": tpv_service.justicia_integration is not None,
-            "afrodita": tpv_service.afrodita_integration is not None
-        }
+            "rafael": svc.rafael_integration is not None,
+            "justicia": svc.justicia_integration is not None,
+            "afrodita": svc.afrodita_integration is not None,
+        },
     }
 
 
 @router.get("", include_in_schema=True)
 @router.get("/", include_in_schema=True)
 async def get_tpv_root(
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """Endpoint raíz del TPV - Devuelve información básica y endpoints disponibles"""
-    return await _get_tpv_info(current_user)
+    return await _get_tpv_info(db, current_user)
 
 
 @router.post("/detect-business-type")
@@ -290,12 +272,13 @@ async def detect_business_type(
         "products": request.products
     }
     
-    profile = tpv_service.auto_detect_business_type(business_data)
-    
+    svc = create_tpv_service()
+    profile = svc.auto_detect_business_type(business_data)
+
     return {
         "success": True,
         "business_profile": profile.value,
-        "detected_by": "TPV Auto-Detection"
+        "detected_by": "TPV Auto-Detection",
     }
 
 
@@ -787,41 +770,59 @@ async def delete_product(
 @router.post("/cart/add")
 async def add_to_cart(
     request: AddToCartRequest,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    """Agregar producto al carrito"""
-    result = tpv_service.add_to_cart(
-        product_id=request.product_id,
-        quantity=request.quantity
+    """Valida producto del usuario y devuelve línea + total de esa línea (no persiste carrito en servidor)."""
+    ensure_user_company_link_for_operations(db, current_user)
+    db_product = (
+        db.query(TPVProduct)
+        .filter(
+            TPVProduct.product_id == request.product_id,
+            TPVProduct.user_id == current_user.id,
+        )
+        .first()
     )
-    
-    if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("error"))
-    
-    return result
+    if not db_product:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Producto {request.product_id} no encontrado",
+        )
+    try:
+        line = TPVService.cart_line_from_product_row(db_product, request.quantity)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {
+        "success": True,
+        "cart_item": line,
+        "cart_total": TPVService.compute_cart_total([line]),
+        "server_side_cart": False,
+    }
 
 
 @router.get("/cart")
 async def get_cart(
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
 ):
-    """Obtener estado del carrito"""
+    """El carrito vive en el cliente; el servidor no almacena líneas entre peticiones."""
     return {
         "success": True,
-        "cart": tpv_service.current_cart,
-        "total": tpv_service.get_cart_total()
+        "cart": [],
+        "total": {"subtotal": 0.0, "iva": 0.0, "total": 0.0, "items_count": 0},
+        "server_side_cart": False,
+        "message": "Carrito en cliente; envíe cart_items en POST /api/v1/tpv/sale.",
     }
 
 
 @router.delete("/cart")
 async def clear_cart(
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
 ):
-    """Limpiar carrito"""
-    tpv_service.current_cart = []
+    """No-op compatible: el carrito no está en el servidor."""
     return {
         "success": True,
-        "message": "Carrito limpiado"
+        "message": "Carrito gestionado en cliente; nada que limpiar en servidor.",
+        "server_side_cart": False,
     }
 
 
@@ -829,106 +830,126 @@ async def clear_cart(
 async def process_sale(
     request: ProcessSaleRequest,
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """Procesar venta y generar ticket - MULTI-TENANCY: Solo productos del usuario"""
+    """Procesar venta: cart_items obligatorio; persistencia fiscal en BD o error 5xx."""
     try:
         payment_method = PaymentMethod(request.payment_method.lower())
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=f"Método de pago inválido. Válidos: {[m.value for m in PaymentMethod]}"
+            detail=f"Método de pago inválido. Válidos: {[m.value for m in PaymentMethod]}",
         )
-    
-    # Sincronizar carrito del frontend con el servicio si se envía
-    if request.cart_items:
-        # Limpiar carrito actual
-        tpv_service.current_cart = []
-        # Añadir items del frontend al carrito del servicio
-        for item in request.cart_items:
-            # El frontend envía {product_id, quantity, unit_price, iva_rate}
-            # Buscar producto en BD del usuario actual (multi-tenancy)
-            product_id = item.get("product_id")
-            quantity = item.get("quantity", 1)
-            
-            if product_id:
-                # Buscar producto en BD del usuario actual
-                db_product = db.query(TPVProduct).filter(
-                    TPVProduct.product_id == product_id,
-                    TPVProduct.user_id == current_user.id
-                ).first()
-                
-                if db_product:
-                    # Producto encontrado en BD del usuario
-                    tpv_service.current_cart.append({
-                        "product_id": db_product.product_id,
-                        "name": db_product.name,
-                        "price": db_product.price,
-                        "price_with_iva": db_product.price_with_iva,
-                        "quantity": quantity,
-                        "subtotal": db_product.price * quantity,
-                        "subtotal_with_iva": db_product.price_with_iva * quantity,
-                        "iva_rate": db_product.iva_rate,
-                        "category": db_product.category
-                    })
-                else:
-                    # Producto no encontrado - usar datos del frontend como fallback
-                    logger.warning(f"Producto {product_id} no encontrado en BD del usuario {current_user.id}, usando datos del frontend")
-                    tpv_service.current_cart.append({
-                        "product_id": product_id,
-                        "name": f"Producto {product_id}",
-                        "price": item.get("unit_price", 0),
-                        "price_with_iva": item.get("unit_price", 0) * (1 + item.get("iva_rate", 21) / 100),
-                        "quantity": quantity,
-                        "subtotal": item.get("unit_price", 0) * quantity,
-                        "subtotal_with_iva": item.get("unit_price", 0) * quantity * (1 + item.get("iva_rate", 21) / 100),
-                        "iva_rate": item.get("iva_rate", 21),
-                        "category": "General"
-                    })
-    
-    result = tpv_service.process_sale(
-        payment_method=payment_method,
-        employee_id=request.employee_id,
-        terminal_id=request.terminal_id,
-        customer_data=request.customer_data,
-        user_id=current_user.id,
-        db=db,
-        consumption_type=request.consumption_type,
+
+    ensure_user_company_link_for_operations(db, current_user)
+    if not request.cart_items:
+        raise HTTPException(
+            status_code=400,
+            detail="cart_items es obligatorio y no puede estar vacío",
+        )
+
+    cart_lines: List[Dict[str, Any]] = []
+    for item in request.cart_items:
+        product_id = item.get("product_id")
+        quantity = item.get("quantity", 1)
+        if not product_id:
+            raise HTTPException(status_code=400, detail="Cada línea debe incluir product_id")
+        db_product = (
+            db.query(TPVProduct)
+            .filter(
+                TPVProduct.product_id == product_id,
+                TPVProduct.user_id == current_user.id,
+            )
+            .first()
+        )
+        if not db_product:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Producto {product_id} no encontrado o no pertenece a su cuenta",
+            )
+        try:
+            cart_lines.append(
+                TPVService.cart_line_from_product_row(db_product, quantity)
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    svc = _tpv_service_for_user(db, current_user)
+    company_ids = _company_ids_for_user(db, current_user)
+    logger.info(
+        "TPV venta intento user_id=%s email=%s company_ids=%s lineas=%s",
+        current_user.id,
+        getattr(current_user, "email", None),
+        company_ids,
+        len(cart_lines),
     )
-    
+    try:
+        result = svc.process_sale(
+            payment_method=payment_method,
+            cart_lines=cart_lines,
+            employee_id=request.employee_id,
+            terminal_id=request.terminal_id,
+            customer_data=request.customer_data,
+            user_id=current_user.id,
+            db=db,
+            consumption_type=request.consumption_type,
+        )
+    except Exception:
+        logger.exception(
+            "TPV venta fallo (persistencia u error interno) user_id=%s",
+            current_user.id,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo registrar la venta en base de datos. Inténtelo de nuevo o contacte con soporte.",
+        )
+
     if not result.get("success"):
+        logger.warning(
+            "TPV venta rechazada validación user_id=%s detalle=%s",
+            current_user.id,
+            result.get("error"),
+        )
         raise HTTPException(status_code=400, detail=result.get("error"))
-    
+
+    logger.info(
+        "TPV venta ok user_id=%s ticket_id=%s fiscal_snapshot_id=%s",
+        current_user.id,
+        result.get("ticket_id"),
+        (result.get("ticket") or {}).get("fiscal_snapshot_id"),
+    )
     return result
 
 
 @router.post("/invoice")
 async def generate_invoice(
     request: GenerateInvoiceRequest,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """Generar factura desde ticket"""
-    result = tpv_service.generate_invoice(
+    svc = _tpv_service_for_user(db, current_user)
+    result = svc.generate_invoice(
         ticket_id=request.ticket_id,
-        customer_data=request.customer_data
+        customer_data=request.customer_data,
     )
-    
     return result
 
 
 @router.post("/close-register")
 async def close_register(
     request: CloseRegisterRequest,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """Cerrar caja del terminal"""
-    result = tpv_service.close_register(
+    svc = _tpv_service_for_user(db, current_user)
+    result = svc.close_register(
         terminal_id=request.terminal_id,
         employee_id=request.employee_id,
         initial_cash=request.initial_cash,
-        final_cash=request.final_cash
+        final_cash=request.final_cash,
     )
-    
     return result
 
 
@@ -1077,94 +1098,77 @@ async def set_business_profile(
             # Continuar sin error, la migración lo resolverá
             db.rollback()
     
-    # Actualizar en servicio TPV
-    tpv_service.set_business_profile(profile, current_user.id)
-    
+    svc = _tpv_service_for_user(db, current_user)
+
     return {
         "success": True,
         "business_profile": profile.value,
-        "config": tpv_service.config,
-        "message": f"Business profile actualizado a: {profile.value}"
+        "config": svc.config,
+        "message": f"Business profile actualizado a: {profile.value}",
     }
 
 
 @router.get("/status")
 async def get_tpv_status(
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Obtener estado del TPV - Los superusuarios ven información completa"""
-    is_superuser = getattr(current_user, 'is_superuser', False)
-    
-    # Cargar perfil del usuario si no está cargado
-    if not tpv_service.business_profile:
-        from sqlalchemy.orm import Session
-        from app.db.base import SessionLocal
-        db: Session = SessionLocal()
-        try:
-            user = db.query(User).filter(User.id == current_user.id).first()
-            if user:
-                # Usar getattr para evitar errores si las columnas no existen aún
-                user_data = {
-                    "id": user.id,
-                    "tpv_business_profile": getattr(user, 'tpv_business_profile', None),
-                    "company_name": getattr(user, 'company_name', None)
-                }
-                try:
-                    tpv_service.load_user_profile(user_data)
-                except Exception as e:
-                    logger.warning(f"Error cargando perfil de usuario en status: {e}")
-                    # Usar default si hay error
-                    if not tpv_service.business_profile:
-                        from services.tpv_service import BusinessProfile
-                        tpv_service.set_business_profile(BusinessProfile.OTROS)
-        finally:
-            db.close()
-    
-    # Información básica para todos los usuarios
+    is_superuser = getattr(current_user, "is_superuser", False)
+    svc = _tpv_service_for_user(db, current_user)
+    products_count = (
+        db.query(TPVProduct).filter(TPVProduct.user_id == current_user.id).count()
+    )
+    company_ids = _company_ids_for_user(db, current_user)
+
     status = {
         "success": True,
-        "business_profile": tpv_service.business_profile.value if tpv_service.business_profile else None,
-        "config": tpv_service.config if tpv_service.business_profile else {},
-        "products_count": len(tpv_service.products),
-        "cart_items": len(tpv_service.current_cart),
+        "business_profile": svc.business_profile.value if svc.business_profile else None,
+        "config": svc.config if svc.business_profile else {},
+        "products_count": products_count,
+        "cart_items": 0,
+        "server_side_cart": False,
+        "company_ids": company_ids,
         "integrations": {
-            "rafael": tpv_service.rafael_integration is not None,
-            "justicia": tpv_service.justicia_integration is not None,
-            "afrodita": tpv_service.afrodita_integration is not None
+            "rafael": svc.rafael_integration is not None,
+            "justicia": svc.justicia_integration is not None,
+            "afrodita": svc.afrodita_integration is not None,
         },
         "user": {
             "email": current_user.email,
             "is_superuser": is_superuser,
-            "is_active": current_user.is_active
-        }
+            "is_active": current_user.is_active,
+        },
     }
-    
-    # Información adicional para superusuarios
+
     if is_superuser:
-        user_products = db.query(TPVProduct).filter(TPVProduct.user_id == current_user.id).all()
-        products_list = []
-        for db_product in user_products:
-            products_list.append({
+        user_products = (
+            db.query(TPVProduct).filter(TPVProduct.user_id == current_user.id).all()
+        )
+        products_list = [
+            {
                 "id": db_product.product_id,
                 "name": db_product.name,
                 "price": db_product.price,
                 "price_with_iva": db_product.price_with_iva,
-                "category": db_product.category
-            })
+                "category": db_product.category,
+            }
+            for db_product in user_products
+        ]
         status["admin_info"] = {
             "total_products": len(products_list),
             "products": products_list,
-            "categories": list(tpv_service.categories.values()) if tpv_service.categories else [],
-            "cart": tpv_service.current_cart.copy(),
-            "employees_count": len(tpv_service.employees),
-            "terminals_count": len(tpv_service.terminals),
-            "pricing_rules_count": len(tpv_service.pricing_rules),
-            "inventory_sync_enabled": tpv_service.inventory_sync_enabled,
-            "employees": list(tpv_service.employees.values()) if tpv_service.employees else [],
-            "terminals": list(tpv_service.terminals.values()) if tpv_service.terminals else []
+            "categories": list(svc.categories.values()) if svc.categories else [],
+            "cart": [],
+            "server_side_cart": False,
+            "employees_count": len(svc.employees),
+            "terminals_count": len(svc.terminals),
+            "pricing_rules_count": len(svc.pricing_rules),
+            "inventory_sync_enabled": svc.inventory_sync_enabled,
+            "employees": list(svc.employees.values()) if svc.employees else [],
+            "terminals": list(svc.terminals.values()) if svc.terminals else [],
         }
-    
+
     return status
 
 

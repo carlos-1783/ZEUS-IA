@@ -76,10 +76,10 @@ def persist_fiscal_sale(
     payment_method: str,
     fiscal_items: List[Dict[str, Any]],
     consumption_type: Optional[str] = None,
-) -> Optional[int]:
+) -> int:
     """
     Persistir venta fiscal en tpv_sales y tpv_sale_items (snapshot inmutable).
-    Retorna tpv_sale.id o None si falla.
+    Retorna tpv_sale.id. Lanza excepción si falla (sin éxito silencioso).
     """
     try:
         from app.models.erp import TPVSale, TPVSaleItem
@@ -121,4 +121,4 @@ def persist_fiscal_sale(
     except Exception as e:
         logger.exception(f"persist_fiscal_sale failed: {e}")
         db.rollback()
-        return None
+        raise

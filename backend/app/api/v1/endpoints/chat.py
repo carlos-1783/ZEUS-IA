@@ -73,11 +73,12 @@ try:
 
     # Conectar TPV service con agentes
     try:
-        from services.tpv_service import tpv_service
-        tpv_service.set_integrations(
+        from services.tpv_service import set_tpv_integrations
+
+        set_tpv_integrations(
             rafael=rafael,
             justicia=justicia,
-            afrodita=afrodita
+            afrodita=afrodita,
         )
         print("✅ Integraciones TPV configuradas")
     except Exception as tpv_error:

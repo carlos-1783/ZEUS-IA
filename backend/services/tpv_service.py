@@ -12,6 +12,36 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Integraciones de agentes (proceso): cada petición usa create_tpv_service() — sin carrito ni estado compartido.
+_tpv_rafael_integration: Optional[Any] = None
+_tpv_justicia_integration: Optional[Any] = None
+_tpv_afrodita_integration: Optional[Any] = None
+
+
+def set_tpv_integrations(
+    rafael: Optional[Any] = None,
+    justicia: Optional[Any] = None,
+    afrodita: Optional[Any] = None,
+) -> None:
+    """Registrar RAFAEL/JUSTICIA/AFRODITA para nuevas instancias TPV (no usar singleton)."""
+    global _tpv_rafael_integration, _tpv_justicia_integration, _tpv_afrodita_integration
+    if rafael is not None:
+        _tpv_rafael_integration = rafael
+    if justicia is not None:
+        _tpv_justicia_integration = justicia
+    if afrodita is not None:
+        _tpv_afrodita_integration = afrodita
+    logger.info("🔗 Integraciones TPV registradas (ámbito proceso)")
+
+
+def create_tpv_service() -> "TPVService":
+    """Nueva instancia por solicitud; copia integraciones globales del proceso."""
+    s = TPVService()
+    s.rafael_integration = _tpv_rafael_integration
+    s.justicia_integration = _tpv_justicia_integration
+    s.afrodita_integration = _tpv_afrodita_integration
+    return s
+
 
 class BusinessProfile(str, Enum):
     """Perfiles de negocio soportados"""
@@ -55,7 +85,6 @@ class TPVService:
         self.business_profile: Optional[BusinessProfile] = None
         self.products: Dict[str, Dict[str, Any]] = {}
         self.categories: Dict[str, Dict[str, Any]] = {}
-        self.current_cart: List[Dict[str, Any]] = []
         self.employees: Dict[str, Dict[str, Any]] = {}
         self.terminals: Dict[str, Dict[str, Any]] = {}
         self.pricing_rules: List[Dict[str, Any]] = []
@@ -481,60 +510,46 @@ class TPVService:
             "remaining_products": len(self.products)
         }
     
-    def add_to_cart(self, product_id: str, quantity: int = 1) -> Dict[str, Any]:
-        """Agregar producto al carrito"""
-        if product_id not in self.products:
-            return {
-                "success": False,
-                "error": f"Producto {product_id} no encontrado"
-            }
-        
-        product = self.products[product_id]
-        
-        # Verificar stock si está habilitado
-        if product.get("stock") is not None:
-            if product["stock"] < quantity:
-                return {
-                    "success": False,
-                    "error": f"Stock insuficiente. Disponible: {product['stock']}"
-                }
-        
-        cart_item = {
-            "product_id": product_id,
-            "name": product["name"],
-            "price": product["price"],
-            "price_with_iva": product["price_with_iva"],
-            "quantity": quantity,
-            "subtotal": product["price"] * quantity,
-            "subtotal_with_iva": product["price_with_iva"] * quantity,
-            "iva_rate": product["iva_rate"],
-            "category": product["category"]
-        }
-        
-        self.current_cart.append(cart_item)
-        
+    @staticmethod
+    def cart_line_from_product_row(row: Any, quantity: int) -> Dict[str, Any]:
+        """Línea de carrito desde modelo TPVProduct (ORM). Lanza ValueError si stock insuficiente."""
+        q = max(1, int(quantity or 1))
+        stock = getattr(row, "stock", None)
+        if stock is not None and int(stock) < q:
+            raise ValueError(f"Stock insuficiente para {row.product_id}. Disponible: {stock}")
+        price = float(row.price)
+        price_iva = float(row.price_with_iva)
         return {
-            "success": True,
-            "cart_item": cart_item,
-            "cart_total": self.get_cart_total()
+            "product_id": row.product_id,
+            "name": row.name,
+            "price": price,
+            "price_with_iva": price_iva,
+            "quantity": q,
+            "subtotal": price * q,
+            "subtotal_with_iva": price_iva * q,
+            "iva_rate": float(row.iva_rate),
+            "category": row.category or "General",
         }
-    
-    def get_cart_total(self) -> Dict[str, Any]:
-        """Calcular total del carrito"""
-        subtotal = sum(item["subtotal"] for item in self.current_cart)
-        total_iva = sum(item["subtotal_with_iva"] - item["subtotal"] for item in self.current_cart)
+
+    @staticmethod
+    def compute_cart_total(cart_lines: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Totales a partir de líneas enviadas por el cliente (sin estado en servidor)."""
+        if not cart_lines:
+            return {"subtotal": 0.0, "iva": 0.0, "total": 0.0, "items_count": 0}
+        subtotal = sum(float(item["subtotal"]) for item in cart_lines)
+        total_iva = sum(float(item["subtotal_with_iva"]) - float(item["subtotal"]) for item in cart_lines)
         total = subtotal + total_iva
-        
         return {
             "subtotal": subtotal,
             "iva": total_iva,
             "total": total,
-            "items_count": len(self.current_cart)
+            "items_count": len(cart_lines),
         }
-    
+
     def process_sale(
         self,
         payment_method: PaymentMethod,
+        cart_lines: List[Dict[str, Any]],
         employee_id: Optional[str] = None,
         terminal_id: Optional[str] = None,
         customer_data: Optional[Dict[str, Any]] = None,
@@ -576,14 +591,14 @@ class TPVService:
                 "error": "Este tipo de negocio requiere datos del cliente"
             }
         
-        if not self.current_cart:
+        if not cart_lines:
             return {
                 "success": False,
                 "error": "Carrito vacío"
             }
-        
-        cart_total = self.get_cart_total()
-        
+
+        cart_total = self.compute_cart_total(cart_lines)
+
         # Determinar tipo de documento según configuración
         document_type = TPVDocumentType.TICKET
         if self.config.get("supports_invoices") and customer_data:
@@ -596,7 +611,7 @@ class TPVService:
             "id": doc_id,
             "type": document_type.value,
             "date": datetime.utcnow().isoformat(),
-            "items": self.current_cart.copy(),
+            "items": [dict(x) for x in cart_lines],
             "totals": cart_total,
             "payment_method": payment_method.value,
             "employee_id": employee_id,
@@ -606,37 +621,33 @@ class TPVService:
             "config": self.config
         }
         
-        # ZEUS_TPV_FULL_FISCAL_INFRASTRUCTURE_ES_003: persistir snapshot fiscal por línea (backend = fuente de verdad)
+        # ZEUS_TPV_FULL_FISCAL_INFRASTRUCTURE_ES_003: persistir snapshot fiscal por línea (obligatorio si hay db+user)
         if db and user_id:
-            try:
-                from services.fiscal_engine import (
-                    get_fiscal_profile,
-                    build_fiscal_items_from_cart,
-                    persist_fiscal_sale,
-                )
-                profile = get_fiscal_profile(db, user_id)
-                apply_recargo = getattr(profile, "apply_recargo_equivalencia", False) if profile else False
-                recargo_rate = getattr(profile, "recargo_rate", None)
-                consumption_type = consumption_type or "onsite"
-                fiscal_items = build_fiscal_items_from_cart(
-                    self.current_cart,
-                    apply_recargo=apply_recargo,
-                    recargo_rate=recargo_rate,
-                    consumption_type=consumption_type,
-                )
-                tpv_sale_id = persist_fiscal_sale(
-                    db,
-                    user_id=user_id,
-                    ticket_id=doc_id,
-                    document_type=document_type.value,
-                    payment_method=payment_method.value,
-                    fiscal_items=fiscal_items,
-                    consumption_type=consumption_type,
-                )
-                if tpv_sale_id is not None:
-                    ticket["fiscal_snapshot_id"] = tpv_sale_id
-            except Exception as e:
-                logger.warning(f"Fiscal snapshot persistence skipped: {e}")
+            from services.fiscal_engine import (
+                get_fiscal_profile,
+                build_fiscal_items_from_cart,
+                persist_fiscal_sale,
+            )
+            profile = get_fiscal_profile(db, user_id)
+            apply_recargo = getattr(profile, "apply_recargo_equivalencia", False) if profile else False
+            recargo_rate = getattr(profile, "recargo_rate", None)
+            ct = consumption_type or "onsite"
+            fiscal_items = build_fiscal_items_from_cart(
+                cart_lines,
+                apply_recargo=apply_recargo,
+                recargo_rate=recargo_rate,
+                consumption_type=ct,
+            )
+            tpv_sale_id = persist_fiscal_sale(
+                db,
+                user_id=user_id,
+                ticket_id=doc_id,
+                document_type=document_type.value,
+                payment_method=payment_method.value,
+                fiscal_items=fiscal_items,
+                consumption_type=ct,
+            )
+            ticket["fiscal_snapshot_id"] = tpv_sale_id
         
         # Validar legalidad con JUSTICIA si está integrado
         if self.justicia_integration:
@@ -660,10 +671,14 @@ class TPVService:
             if employee_sync.get("success"):
                 ticket["employee_permissions"] = employee_sync.get("sync_result", {}).get("permissions")
         
-        # Limpiar carrito
-        self.current_cart = []
-        
-        logger.info(f"💳 Venta procesada: {doc_id} - €{cart_total['total']:.2f} - Tipo: {document_type.value}")
+        logger.info(
+            "💳 Venta procesada: %s user_id=%s €%.2f tipo=%s lineas=%s",
+            doc_id,
+            user_id,
+            cart_total["total"],
+            document_type.value,
+            len(cart_lines),
+        )
         
         return {
             "success": True,
@@ -970,8 +985,4 @@ class TPVService:
         self.afrodita_integration = afrodita
         
         logger.info("🔗 Integraciones TPV configuradas")
-
-
-# Instancia global del servicio TPV
-tpv_service = TPVService()
 

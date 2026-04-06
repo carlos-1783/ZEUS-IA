@@ -580,6 +580,11 @@ const TPV_SESSION_MAX_AGE_MS = 48 * 60 * 60 * 1000
 const activeComandaShareId = ref(typeof localStorage !== 'undefined' ? localStorage.getItem(COMANDA_SHARE_KEY) : null)
 let comandaPollTimer = null
 let comandaPushTimer = null
+/**
+ * Tras cobrar o vaciar mesa, el push de comanda va con debounce y el poll GET puede
+ * devolver un snapshot viejo y pisar tableCarts. Si incoming updatedAt < este umbral, ignoramos el payload.
+ */
+const minComandaPayloadUpdatedAtToApply = ref(0)
 
 /** Clave por usuario: al volver del dashboard se recupera mesa abierta y carrito. */
 const getTpvSessionStorageKey = () => {
@@ -778,7 +783,33 @@ const scheduleTablesBackendSync = () => {
   if (tableBackendSyncTimer) clearTimeout(tableBackendSyncTimer)
   tableBackendSyncTimer = setTimeout(() => {
     void flushTablesToBackend()
-  }, 900)
+  }, 500)
+}
+
+/** Persiste mesas en API y comanda compartida ya (sin esperar debounce). Evita carrera con poll. */
+const syncTablesAndComandaNow = async () => {
+  if (tableBackendSyncTimer) {
+    clearTimeout(tableBackendSyncTimer)
+    tableBackendSyncTimer = null
+  }
+  if (comandaPushTimer) {
+    clearTimeout(comandaPushTimer)
+    comandaPushTimer = null
+  }
+  const barrier = Date.now()
+  minComandaPayloadUpdatedAtToApply.value = barrier
+  try {
+    await flushTablesToBackend()
+    await pushComandaSnapshot()
+  } catch (e) {
+    console.warn('syncTablesAndComandaNow', e)
+  } finally {
+    window.setTimeout(() => {
+      if (minComandaPayloadUpdatedAtToApply.value === barrier) {
+        minComandaPayloadUpdatedAtToApply.value = 0
+      }
+    }, 12000)
+  }
 }
 
 const fetchPersistedTablesFromApi = async (token) => {
@@ -851,6 +882,14 @@ const buildComandaPayload = () => ({
 
 const applyComandaFromResponse = (payload) => {
   if (!payload || typeof payload !== 'object') return
+  const incomingTs = typeof payload.updatedAt === 'number' ? payload.updatedAt : 0
+  const minNeed = minComandaPayloadUpdatedAtToApply.value
+  if (minNeed > 0) {
+    if (incomingTs === 0 || incomingTs < minNeed) {
+      return
+    }
+    minComandaPayloadUpdatedAtToApply.value = 0
+  }
   const hasIncomingTableCarts =
     payload.tableCarts &&
     typeof payload.tableCarts === 'object' &&
@@ -909,7 +948,7 @@ const scheduleComandaPush = () => {
   if (comandaPushTimer) clearTimeout(comandaPushTimer)
   comandaPushTimer = setTimeout(() => {
     void pushComandaSnapshot()
-  }, 1200)
+  }, 500)
 }
 
 const applyComandaFromQuery = async (token) => {
@@ -1532,9 +1571,11 @@ const clearCart = () => {
   if (window.confirm(`¿Estás seguro de limpiar el carrito de esta mesa? Se eliminarán ${cart.value.length} producto(s).`)) {
     cart.value = []
     if (selectedTable.value?.id != null) {
-      tableCarts.value[selectedTable.value.id] = []
+      const tid = selectedTable.value.id
+      tableCarts.value = { ...tableCarts.value, [tid]: [] }
     }
     showCartFeedback('Carrito vaciado', 'cleared')
+    void syncTablesAndComandaNow()
     success('Carrito vaciado correctamente')
   }
 }
@@ -1850,10 +1891,15 @@ const processPayment = async () => {
     tpvState.value = TPV_STATES.CLOSED
     // Vaciar carrito de esta mesa (cada mesa es independiente; la venta ya se cobró)
     if (selectedTable.value?.id != null) {
-      tableCarts.value[selectedTable.value.id] = []
+      const tid = selectedTable.value.id
+      tableCarts.value = { ...tableCarts.value, [tid]: [] }
+      cart.value = []
+    } else {
       cart.value = []
     }
-    
+    // Persistir mesas + comanda ya: si no, el poll de comanda-share restaura el snapshot anterior.
+    await syncTablesAndComandaNow()
+
     // Mostrar confirmación usando ticket_id del resultado
     const backendTotal = result?.ticket?.totals?.total ?? result?.totals?.total ?? null
     const totalToShow = backendTotal !== null ? backendTotal : total.value

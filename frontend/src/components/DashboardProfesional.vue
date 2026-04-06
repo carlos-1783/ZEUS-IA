@@ -863,14 +863,18 @@ const agentsData = ref([
   }
 ])
 
-// Cargar actividades reales de cada agente (últimas 24h)
+// Cargar actividades reales de cada agente (últimas 24h) — requiere JWT (igual que /metrics/summary)
 const loadAgentsActivities = async () => {
+  const token = authStore.getToken ? authStore.getToken() : authStore.token
+  if (!token) {
+    console.warn('⚠️ No hay token, no se pueden cargar actividades de agentes')
+    return
+  }
+  const api = (await import('@/services/api')).default
   for (const agent of agentsData.value) {
     try {
       const agentName = agent.name.split(' ')[0].toUpperCase()
-      const response = await fetch(`/api/v1/activities/${agentName}?days=1`)
-      const data = await response.json()
-      
+      const data = await api.get(`/api/v1/activities/${agentName}?days=1`, token)
       if (data.success) {
         agent.activities_24h = data.total_activities || 0
       }

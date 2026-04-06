@@ -231,6 +231,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 import PerseoWorkspace from './agent-workspaces/PerseoWorkspace.vue'
 import RafaelWorkspace from './agent-workspaces/RafaelWorkspace.vue'
 import AfroditaWorkspace from './agent-workspaces/AfroditaWorkspace.vue'
@@ -244,6 +245,8 @@ const props = defineProps({
     required: true
   }
 })
+
+const authStore = useAuthStore()
 
 // Workspaces mapping
 const workspaces = {
@@ -396,38 +399,48 @@ watch(() => props.agent.name, () => {
 
 const loadActivities = async () => {
   try {
+    const token = authStore.getToken?.() ?? authStore.token ?? null
+    if (!token) {
+      console.warn('Sin token para /activities')
+      activities.value = generateMockActivities()
+      return
+    }
     const agentName = props.agent.name.split(' ')[0].toUpperCase()
-    const response = await fetch(
-      `/api/v1/activities/${agentName}?days=${activityDays.value}`
+    const api = (await import('@/services/api')).default
+    const data = await api.get(
+      `/api/v1/activities/${agentName}?days=${activityDays.value}`,
+      token
     )
-    const data = await response.json()
-    
     if (data.success) {
       activities.value = data.activities
       console.log(`✅ Actividades de ${agentName} cargadas:`, data.total_activities)
     }
   } catch (error) {
     console.error('Error loading activities:', error)
-    // Datos de ejemplo si falla
     activities.value = generateMockActivities()
   }
 }
 
 const loadMetrics = async () => {
   try {
+    const token = authStore.getToken?.() ?? authStore.token ?? null
+    if (!token) {
+      console.warn('Sin token para /activities/.../metrics')
+      metrics.value = generateMockMetrics()
+      return
+    }
     const agentName = props.agent.name.split(' ')[0].toUpperCase()
-    const response = await fetch(
-      `/api/v1/activities/${agentName}/metrics?days=30`
+    const api = (await import('@/services/api')).default
+    const data = await api.get(
+      `/api/v1/activities/${agentName}/metrics?days=30`,
+      token
     )
-    const data = await response.json()
-    
     if (data.success) {
       metrics.value = data
       console.log(`✅ Métricas de ${agentName} cargadas`)
     }
   } catch (error) {
     console.error('Error loading metrics:', error)
-    // Métricas de ejemplo
     metrics.value = generateMockMetrics()
   }
 }

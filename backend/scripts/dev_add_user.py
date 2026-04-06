@@ -21,7 +21,71 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.security import get_password_hash
 from app.db.session import SessionLocal
+from app.models.company import Company, UserCompany  # noqa: F401 — mapper User.user_companies
 from app.models.user import User
+
+
+def _slugify(value: str) -> str:
+    s = (value or "").strip().lower()
+    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    return s or "empresa"
+
+
+def _ensure_default_company_local(db, user: User):
+    """
+    Misma lógica que ensure_user_company_link_for_operations pero sin importar
+    global_company_bootstrap (evita cadena whatsapp_service + prints Unicode en consola Windows).
+    """
+    link = (
+        db.query(UserCompany)
+        .filter(UserCompany.user_id == user.id)
+        .order_by(UserCompany.id.asc())
+        .first()
+    )
+    if link:
+        return link.company_id
+
+    role = (getattr(user, "role", None) or "owner").strip().lower()
+    if role == "employee" and not getattr(user, "is_superuser", False):
+        return None
+
+    label = (
+        (getattr(user, "company_name", None) or "").strip()
+        or (getattr(user, "full_name", None) or "").strip()
+        or (getattr(user, "email", None) or "").split("@")[0].strip()
+        or "Mi negocio"
+    )
+    tail = _slugify(label)[:72]
+    slug = f"u{user.id}-{tail}" if tail else f"u{user.id}"
+    if len(slug) > 100:
+        slug = slug[:100]
+
+    company = Company(
+        company_name=label[:255],
+        slug=slug,
+        pilot_company=False,
+        status="active",
+        sector=None,
+        country="ES",
+        currency="EUR",
+        metadata_={
+            "billing_enabled": False,
+            "onboarding_completed": False,
+            "source": "dev_add_user",
+        },
+    )
+    db.add(company)
+    db.flush()
+    db.add(
+        UserCompany(
+            user_id=user.id,
+            company_id=company.id,
+            role="company_admin",
+        )
+    )
+    db.commit()
+    db.refresh(company)
+    return company.id
 
 
 def _password_ok(p: str) -> tuple[bool, str]:
@@ -55,7 +119,11 @@ def main() -> int:
     try:
         existing = db.query(User).filter(User.email == email).first()
         if existing:
-            print(f"Ya existe el usuario: {email} (id={existing.id})")
+            try:
+                cid = _ensure_default_company_local(db, existing)
+                print(f"Ya existe: {email} (id={existing.id}) company_id={cid}")
+            except Exception as e:
+                print(f"Ya existe: {email} (id={existing.id}) empresa: {repr(e)}")
             return 0
 
         u = User(
@@ -72,11 +140,10 @@ def main() -> int:
         db.refresh(u)
 
         try:
-            from services.global_company_bootstrap import ensure_user_company_link_for_operations
-
-            ensure_user_company_link_for_operations(db, u)
+            cid = _ensure_default_company_local(db, u)
+            print(f"OK empresa company_id={cid}")
         except Exception as e:
-            print(f"Aviso: no se pudo enlazar empresa por defecto: {e}")
+            print(f"Aviso empresa: {repr(e)}")
 
         print(f"OK creado user_id={u.id} email={email} superuser={args.superuser}")
         return 0

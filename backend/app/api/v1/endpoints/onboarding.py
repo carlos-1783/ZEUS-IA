@@ -311,7 +311,7 @@ async def send_welcome_email(
     </html>
     """
     
-    if email_service.is_configured():
+    if email_service.is_configured() or email_service.is_resend_configured():
         result = await email_service.send_email(
             to_email=email,
             subject=f"🎉 Bienvenido a ZEUS-IA - Tus credenciales de acceso",
@@ -320,9 +320,9 @@ async def send_welcome_email(
         )
         return result.get("success", False)
     else:
-        # Si no está configurado SendGrid, mostrar en consola
+        # Sin SendGrid ni Resend: mostrar en consola (mismo criterio que email_service.send_email)
         print("\n" + "="*80)
-        print("📧 EMAIL DE BIENVENIDA (SendGrid no configurado)")
+        print("📧 EMAIL DE BIENVENIDA (SendGrid/Resend no configurado)")
         print("="*80)
         print(f"Para: {email}")
         print(f"Empresa: {company_name}")

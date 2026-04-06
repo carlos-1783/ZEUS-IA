@@ -63,6 +63,7 @@ def create_tables():
             from app.models.reservation import Reservation
             from app.models.tpv_comanda_share import TPVComandaShare
             from app.models.tpv_table import TPVTable
+            from app.models.company_employee import CompanyEmployee
 
             Base.metadata.create_all(bind=engine)
             print("[DATABASE] [OK] Tablas creadas correctamente")

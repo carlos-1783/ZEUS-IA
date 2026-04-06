@@ -562,12 +562,21 @@ const api: ApiClient = {
     throw new Error(response.data?.detail || 'Login failed');
   },
 
-  register: async (payload: { email: string; password: string; full_name?: string; phone: string }) => {
+  register: async (payload: {
+    email: string;
+    password: string;
+    full_name?: string;
+    phone: string;
+    company_name: string;
+    business_type: 'restaurant' | 'retail' | 'services';
+  }) => {
     const response = await axiosInstance.post('auth/register', {
       email: payload.email.trim().toLowerCase(),
       password: payload.password,
       full_name: (payload.full_name || '').trim() || undefined,
       phone: (payload.phone || '').trim(),
+      company_name: (payload.company_name || '').trim(),
+      business_type: payload.business_type,
     });
     return response.data;
   },

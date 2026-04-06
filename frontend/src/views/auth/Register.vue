@@ -60,6 +60,60 @@
         </div>
 
         <div class="sm:col-span-6">
+          <label for="company_name" class="block text-sm font-medium text-gray-700">
+            Nombre del negocio
+          </label>
+          <div class="mt-1">
+            <input
+              id="company_name"
+              v-model="form.company_name"
+              name="company_name"
+              type="text"
+              autocomplete="organization"
+              required
+              placeholder="Ej. Bar El Olimpo"
+              class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              :class="{ 'border-red-300': errors.company_name }"
+            >
+            <p v-if="errors.company_name" class="mt-2 text-sm text-red-600">
+              {{ errors.company_name }}
+            </p>
+          </div>
+        </div>
+
+        <div class="sm:col-span-6">
+          <label for="business_type" class="block text-sm font-medium text-gray-700">
+            Tipo de negocio
+          </label>
+          <div class="mt-1">
+            <select
+              id="business_type"
+              v-model="form.business_type"
+              name="business_type"
+              required
+              class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              :class="{ 'border-red-300': errors.business_type }"
+            >
+              <option value="" disabled>
+                Selecciona una opción
+              </option>
+              <option value="restaurant">
+                Restauración / bar / cafetería
+              </option>
+              <option value="retail">
+                Comercio / tienda (retail)
+              </option>
+              <option value="services">
+                Servicios profesionales
+              </option>
+            </select>
+            <p v-if="errors.business_type" class="mt-2 text-sm text-red-600">
+              {{ errors.business_type }}
+            </p>
+          </div>
+        </div>
+
+        <div class="sm:col-span-6">
           <label for="phone" class="block text-sm font-medium text-gray-700">
             Teléfono
           </label>
@@ -221,6 +275,8 @@ const error = ref('');
 const form = reactive({
   first_name: '',
   last_name: '',
+  company_name: '',
+  business_type: '',
   phone: '',
   email: '',
   password: '',
@@ -231,6 +287,8 @@ const form = reactive({
 const errors = reactive({
   first_name: '',
   last_name: '',
+  company_name: '',
+  business_type: '',
   phone: '',
   email: '',
   password: '',
@@ -272,6 +330,16 @@ const validateForm = () => {
     isValid = false;
   } else if (!/\S+@\S+\.\S+/.test(form.email)) {
     errors.email = 'El correo electrónico no es válido';
+    isValid = false;
+  }
+
+  if (!form.company_name.trim()) {
+    errors.company_name = 'El nombre del negocio es obligatorio';
+    isValid = false;
+  }
+
+  if (!form.business_type) {
+    errors.business_type = 'Selecciona el tipo de negocio';
     isValid = false;
   }
 
@@ -326,6 +394,8 @@ const handleSubmit = async () => {
       password: form.password,
       full_name: [form.first_name, form.last_name].filter(Boolean).join(' ').trim() || undefined,
       phone: form.phone.trim(),
+      company_name: form.company_name.trim(),
+      business_type: form.business_type,
     });
     router.push({
       name: 'AuthLogin',

@@ -266,6 +266,7 @@ def run_global_autonomous_bootstrap(
     onboarding_completed: bool,
     billing_enabled: bool,
     source_event: str,
+    skip_self_test: bool = False,
 ) -> Dict[str, Any]:
     result: Dict[str, Any] = {
         "roce_id": ROCE_ID,
@@ -329,15 +330,19 @@ def run_global_autonomous_bootstrap(
         _activate_core_workflows(user, business_type)
         db.commit()
 
-        # Self test de respuesta automática
-        chat = run_chat(
-            agent_name="ZEUS CORE",
-            thread_id="auto_bootstrap_selftest",
-            message="Hola",
-            company_id=user.email,
-            context={"source": "auto_bootstrap", "company_id": user.email},
-        )
-        result["self_test_ok"] = bool(chat.get("success"))
+        # Self test vía run_chat puede bloquear o fallar sin OPENAI; omitir en registro en background
+        if skip_self_test:
+            result["self_test_ok"] = None
+            result["self_test_skipped"] = True
+        else:
+            chat = run_chat(
+                agent_name="ZEUS CORE",
+                thread_id="auto_bootstrap_selftest",
+                message="Hola",
+                company_id=user.email,
+                context={"source": "auto_bootstrap", "company_id": user.email},
+            )
+            result["self_test_ok"] = bool(chat.get("success"))
 
         ActivityLogger.log_activity(
             agent_name="ZEUS",
@@ -348,7 +353,8 @@ def run_global_autonomous_bootstrap(
                 "company_id": company.id,
                 "business_type": business_type,
                 "products_created": result["products_created"],
-                "self_test_ok": result["self_test_ok"],
+                "self_test_ok": result.get("self_test_ok"),
+                "self_test_skipped": result.get("self_test_skipped", False),
             },
             user_email=user.email,
             status="completed",

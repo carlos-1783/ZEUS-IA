@@ -94,8 +94,12 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     email: EmailStr = Field(..., description="Email del usuario")
     password: str = Field(..., min_length=8, max_length=100)
-    full_name: str = Field(..., min_length=1, max_length=200, description="Nombre completo")
+    full_name: str = Field(..., min_length=1, max_length=200, description="Nombre del titular (owner)")
     phone: str = Field(..., min_length=6, max_length=32, description="Teléfono de contacto")
+    company_name: str = Field(..., min_length=1, max_length=255, description="Nombre comercial")
+    business_type: Literal["restaurant", "retail", "services"] = Field(
+        ..., description="Tipo de negocio: restaurant, retail o services"
+    )
     role: Optional[str] = "user"
 
     @validator('phone')
@@ -117,6 +121,20 @@ class RegisterRequest(BaseModel):
         if not re.search(r'[0-9]', v):
             raise ValueError('La contraseña debe contener al menos un número')
         return v
+
+
+class OnboardingQuestionnaireRequest(BaseModel):
+    """Pasos post-registro (ZEUS_ONBOARDING_ENGINE_WITH_VALIDATION_001)."""
+
+    employees_count: int = Field(..., ge=0, le=100_000, description="Número de empleados")
+    uses_tpv: bool = Field(..., description="¿Usa TPV?")
+    business_hours: str = Field(
+        ...,
+        min_length=1,
+        max_length=4000,
+        description="Horario del negocio (texto libre)",
+    )
+
 
 class ResetPasswordRequest(BaseModel):
     email: EmailStr

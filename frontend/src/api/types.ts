@@ -64,11 +64,15 @@ export interface RetryConfig extends InternalAxiosRequestConfig {
   skipAuthRefresh?: boolean;
 }
 
+export type RegisterBusinessType = 'restaurant' | 'retail' | 'services';
+
 export interface RegisterPayload {
   email: string;
   password: string;
   full_name?: string;
   phone: string;
+  company_name: string;
+  business_type: RegisterBusinessType;
 }
 
 export interface ApiClient {

@@ -19,7 +19,15 @@ from app.core.security import get_password_hash, verify_password
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.user import User, RefreshToken, PasswordResetToken
-from app.schemas.token import Token, TokenRefresh, LoginRequest, RegisterRequest, ResetPasswordRequest, NewPasswordRequest
+from app.schemas.token import (
+    Token,
+    TokenRefresh,
+    LoginRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+    NewPasswordRequest,
+    OnboardingQuestionnaireRequest,
+)
 from services.email_service import email_service
 from app.schemas.user import User as UserSchema
 
@@ -226,16 +234,22 @@ async def login_for_access_token(
     status_code=status.HTTP_201_CREATED,
     operation_id="auth_register_api_v1",
     summary="Register New User",
-    description="Register a new user with email, password, full name and phone; sends welcome email if SMTP/SendGrid/Resend is configured"
+    description="Registro con titular, teléfono, empresa y tipo de negocio; activa TPV y empresa en una transacción; email si hay proveedor configurado",
 )
 async def register_user(
     user_data: RegisterRequest,
     db: Session = Depends(get_db)
 ):
     """
-    Registro completo: email, contraseña fuerte, nombre y teléfono.
-    Tras crear el usuario se intenta enviar correo de bienvenida (no bloquea el 201 si falla el envío).
+    Registro ZEUS_ONBOARDING_ENGINE: usuario + empresa + perfil TPV en la misma transacción.
+    Si falla la creación de empresa, se revierte el usuario (no registro silencioso incompleto).
     """
+    from services.onboarding_engine import (
+        apply_registration_onboarding,
+        send_welcome_notifications,
+        validate_onboarding_state,
+        schedule_post_register_bootstrap,
+    )
     email_norm = str(user_data.email).strip().lower()
     if db.query(User).filter(User.email == email_norm).first():
         raise HTTPException(
@@ -249,9 +263,32 @@ async def register_user(
         hashed_password=hashed_password,
         full_name=user_data.full_name.strip(),
         phone=user_data.phone,
+        company_name=user_data.company_name.strip(),
         is_active=True,
     )
     db.add(db_user)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered",
+        )
+
+    outcome = apply_registration_onboarding(
+        db,
+        db_user,
+        user_data.company_name.strip(),
+        user_data.business_type,
+    )
+    if not outcome.get("success"):
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=outcome.get("error") or "No se pudo crear la empresa. Revisa los datos e inténtalo de nuevo.",
+        )
+
     try:
         db.commit()
         db.refresh(db_user)
@@ -261,31 +298,97 @@ async def register_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered",
         )
-
-    # Empresa mínima + user_companies: TPV mesas y multi-tenant requieren company_id (dueños).
-    try:
-        from services.global_company_bootstrap import ensure_user_company_link_for_operations
-
-        ensure_user_company_link_for_operations(db, db_user)
     except Exception as e:
-        logger.warning(
-            "Usuario registrado pero no se pudo crear empresa por defecto (user_id=%s): %s",
-            getattr(db_user, "id", None),
-            e,
+        db.rollback()
+        logger.exception("register commit failed: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error guardando el registro. Inténtalo de nuevo.",
+        )
+
+    # Bootstrap global (actividades ZEUS/THALOS, metadata) en hilo — sin run_chat (skip_self_test).
+    schedule_post_register_bootstrap(
+        db_user.id,
+        user_data.company_name.strip(),
+        user_data.business_type,
+    )
+
+    validation = validate_onboarding_state(db, db_user.id)
+    if not validation.get("ok"):
+        logger.error(
+            "Validación onboarding fallida user_id=%s checks=%s",
+            db_user.id,
+            validation.get("checks"),
         )
 
     try:
-        sent = await _send_register_welcome_email(db_user)
-        if not sent.get("success"):
+        welcome_extra = await send_welcome_notifications(
+            user=db_user,
+            company_name=user_data.company_name.strip(),
+        )
+        em = welcome_extra.get("email")
+        if isinstance(em, dict) and not em.get("success"):
             logger.warning(
-                "Registro OK pero email de bienvenida no enviado a %s: %s",
+                "Email activación no enviado a %s: %s",
                 email_norm,
-                sent.get("error"),
+                em.get("error"),
             )
     except Exception as e:
-        logger.warning("Registro OK pero error enviando bienvenida a %s: %s", email_norm, e)
+        logger.warning("Notificaciones bienvenida: %s", e)
 
     return db_user
+
+
+@router.post(
+    "/onboarding/questionnaire",
+    summary="Cuestionario post-registro",
+    description="Guarda empleados, uso TPV y horario; requiere sesión.",
+)
+async def onboarding_questionnaire(
+    body: OnboardingQuestionnaireRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    from services.onboarding_engine import apply_questionnaire_answers
+
+    result = apply_questionnaire_answers(db, current_user, body)
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("error", "No se pudo guardar el cuestionario"),
+        )
+    return {"success": True, "company_id": result.get("company_id")}
+
+
+@router.get(
+    "/onboarding/status",
+    summary="Estado onboarding",
+    description="Validación explícita de empresa, TPV y cuestionario.",
+)
+def onboarding_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    from services.onboarding_engine import validate_onboarding_state
+    from app.models.company import Company, UserCompany
+
+    v = validate_onboarding_state(db, current_user.id)
+    questionnaire_completed = False
+    link = (
+        db.query(UserCompany)
+        .filter(UserCompany.user_id == current_user.id)
+        .order_by(UserCompany.id.asc())
+        .first()
+    )
+    if link:
+        co = db.query(Company).filter(Company.id == link.company_id).first()
+        if co and isinstance(co.metadata_, dict):
+            questionnaire_completed = bool(co.metadata_.get("onboarding_questionnaire_completed"))
+    return {
+        "validation": v,
+        "questionnaire_completed": questionnaire_completed,
+    }
+
 
 # Tiempo de validez del token de reset (1 hora)
 RESET_TOKEN_EXPIRE_MINUTES = 60

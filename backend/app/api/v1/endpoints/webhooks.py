@@ -9,7 +9,7 @@ import os
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-import stripe
+import stripe  # pyright: ignore[reportMissingImports]
 from fastapi import APIRouter, HTTPException, Header, Request, status
 from sqlalchemy.orm import Session
 
@@ -148,7 +148,7 @@ async def _send_welcome_email_and_log(
     """
     
     email_sent = False
-    if email_service.is_configured():
+    if email_service.is_configured() or email_service.is_resend_configured():
         result = await email_service.send_email(
             to_email=email,
             subject=f"🎉 Bienvenido a ZEUS-IA - Tus credenciales de acceso",
@@ -172,7 +172,7 @@ async def _send_welcome_email_and_log(
             priority="high"
         )
     else:
-        print(f"\n[WEBHOOK] Email de bienvenida (SendGrid no configurado): {email} / [REDACTED]\n")
+        print(f"\n[WEBHOOK] Email de bienvenida (SendGrid/Resend no configurado): {email} / [REDACTED]\n")
         email_sent = True
     
     return email_sent

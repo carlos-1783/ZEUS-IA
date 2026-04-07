@@ -116,6 +116,10 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         # Endpoints con polling frecuente en TPV/paneles
         if path.startswith("/api/v1/tpv/comanda-share/"):
             return ("tpv_comanda_poll", 1200 if is_auth else 300)
+        # Escrituras de estado de mesas: en operación real puede haber ráfagas
+        # por sincronización multi-dispositivo (barra/sala/comandero).
+        if path.startswith("/api/v1/tpv/tables/") and method in ("PATCH", "PUT", "POST"):
+            return ("tpv_tables_write", 2400 if is_auth else 300)
         if path.startswith("/api/v1/documents/pending") or path.startswith("/api/v1/document-approval/pending"):
             return ("documents_pending_poll", 600 if is_auth else 180)
         if path.startswith("/api/v1/tpv/tables") and method == "GET":

@@ -197,9 +197,26 @@ const toNumber = (v: any) => {
 
 const eur = (v: any) => `${toNumber(v).toFixed(2)} EUR`
 
+const parseMaybeJson = (input: any) => {
+  let out = input
+  // Algunos backends guardan JSON serializado varias veces.
+  for (let i = 0; i < 3; i++) {
+    if (typeof out !== 'string') break
+    const s = out.trim()
+    if (!(s.startsWith('{') || s.startsWith('['))) break
+    try {
+      out = JSON.parse(s)
+    } catch {
+      break
+    }
+  }
+  return out
+}
+
 const formatTpvTicketText = (doc: any) => {
-  const payload = doc?.content || doc || {}
-  const fiscal = payload?.fiscal_data || {}
+  const source = parseMaybeJson(doc)
+  const payload = parseMaybeJson(source?.content ?? source ?? {})
+  const fiscal = parseMaybeJson(payload?.fiscal_data ?? payload?.content?.fiscal_data ?? {})
   const items = Array.isArray(fiscal?.productos) ? fiscal.productos : []
   const lines: string[] = []
 
@@ -242,17 +259,19 @@ const formatTpvTicketText = (doc: any) => {
 const formatDocumentContent = (payload: any) => {
   if (!payload) return 'Sin contenido'
 
-  let parsed = payload
-  if (typeof parsed === 'string') {
-    try {
-      parsed = JSON.parse(parsed)
-    } catch {
-      return parsed
-    }
+  let parsed = parseMaybeJson(payload)
+
+  // Intentar un segundo nivel típico: document_payload.content serializado en string
+  if (parsed?.content) {
+    parsed = { ...parsed, content: parseMaybeJson(parsed.content) }
   }
 
-  const documentType = String(parsed?.document_type || '').toLowerCase()
-  const hasTpvShape = !!(parsed?.content?.fiscal_data || parsed?.fiscal_data)
+  const documentType = String(parsed?.document_type || parsed?.type || '').toLowerCase()
+  const hasTpvShape = !!(
+    parsed?.content?.fiscal_data ||
+    parsed?.fiscal_data ||
+    parsed?.content?.content?.fiscal_data
+  )
   if (documentType.includes('tpv') || hasTpvShape) {
     return formatTpvTicketText(parsed)
   }

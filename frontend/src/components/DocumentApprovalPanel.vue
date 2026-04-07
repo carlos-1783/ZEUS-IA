@@ -47,7 +47,7 @@
         <div v-if="expandedDoc === doc.id" class="document-details">
           <div class="document-content">
             <h4>Contenido del Documento:</h4>
-            <pre class="document-preview">{{ formatDocumentContent(doc.document_payload) }}</pre>
+            <pre class="document-preview">{{ formatDocumentContent(doc.document_payload || (doc as any).document_payload_json || doc) }}</pre>
           </div>
 
           <div v-if="doc.advisor_email" class="advisor-info">
@@ -281,7 +281,8 @@ const formatDocumentContent = (payload: any) => {
       ? parsed.content
       : JSON.stringify(parsed.content, null, 2)
   }
-  return JSON.stringify(parsed, null, 2)
+  const out = JSON.stringify(parsed, null, 2)
+  return out && out !== '{}' ? out : 'Documento sin contenido legible'
 }
 
 const getStatusLabel = (status: string) => {
@@ -481,10 +482,13 @@ onMounted(() => {
 
 .document-preview {
   background: #f9fafb;
+  color: #111827;
   padding: 12px;
   border-radius: 6px;
   font-size: 12px;
+  line-height: 1.45;
   max-height: 300px;
+  min-height: 120px;
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-word;

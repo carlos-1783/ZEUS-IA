@@ -1,7 +1,7 @@
 """
 Endpoint para chat con agentes IA
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List
 import sys
@@ -19,6 +19,9 @@ from agents.thalos import Thalos
 from agents.justicia import Justicia
 from agents.afrodita import Afrodita
 from services.teamflow_engine import teamflow_engine
+from app.core.auth import get_current_active_user
+from app.models.user import User
+from services.activity_logger import ActivityLogger
 
 router = APIRouter()
 
@@ -127,7 +130,11 @@ class MultiAgentTaskRequest(BaseModel):
     context: Optional[dict] = None
 
 @router.post("/{agent_name}/chat", response_model=ChatResponse)
-async def chat_with_agent(agent_name: str, request: ChatRequest):
+async def chat_with_agent(
+    agent_name: str,
+    request: ChatRequest,
+    current_user: User = Depends(get_current_active_user),
+):
     """
     Chat con un agente específico
     
@@ -161,6 +168,8 @@ async def chat_with_agent(agent_name: str, request: ChatRequest):
 
         context = request.context or {}
         context["user_message"] = request.message
+        context.setdefault("user_id", current_user.id)
+        context.setdefault("user_email", current_user.email)
         thread_id = request.thread_id or context.get("thread_id") or "main"
         company_id = context.get("company_id") or context.get("user_email")
 
@@ -173,6 +182,21 @@ async def chat_with_agent(agent_name: str, request: ChatRequest):
         )
 
         if result.get("success"):
+            ActivityLogger.log_activity(
+                agent_name=agent_name,
+                action_type="chat_request_processed",
+                action_description=f"Chat procesado por {agent_name}",
+                details={
+                    "request_type": "chat",
+                    "thread_id": thread_id,
+                    "user_id": current_user.id,
+                },
+                metrics={"chat_messages": 1},
+                user_email=current_user.email,
+                status="completed",
+                priority="normal",
+                visible_to_client=True,
+            )
             return ChatResponse(
                 agent=agent_name,
                 message=result.get("message", "Sin respuesta"),
@@ -180,6 +204,22 @@ async def chat_with_agent(agent_name: str, request: ChatRequest):
                 confidence=result.get("confidence"),
                 hitl_required=result.get("hitl_required", False),
             )
+        ActivityLogger.log_activity(
+            agent_name=agent_name,
+            action_type="chat_request_failed",
+            action_description=f"Chat fallido en {agent_name}",
+            details={
+                "error": result.get("error"),
+                "request_type": "chat",
+                "thread_id": thread_id,
+                "user_id": current_user.id,
+            },
+            metrics={"chat_failures": 1},
+            user_email=current_user.email,
+            status="failed",
+            priority="normal",
+            visible_to_client=True,
+        )
         return ChatResponse(
             agent=agent_name,
             message=result.get("message", f"Error: {result.get('error', 'Error desconocido')}"),
@@ -190,6 +230,17 @@ async def chat_with_agent(agent_name: str, request: ChatRequest):
         print(f"❌ Error en chat con {agent_name}: {e}")
         import traceback
         traceback.print_exc()
+        ActivityLogger.log_activity(
+            agent_name=agent_name,
+            action_type="chat_request_exception",
+            action_description=f"Excepción en chat {agent_name}",
+            details={"error": str(e), "request_type": "chat", "user_id": current_user.id},
+            metrics={"chat_exceptions": 1},
+            user_email=current_user.email,
+            status="failed",
+            priority="high",
+            visible_to_client=True,
+        )
         return ChatResponse(
             agent=agent_name,
             message=f"Error interno: {str(e)}",

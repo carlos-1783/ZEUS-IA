@@ -546,6 +546,18 @@ class TPVService:
             "items_count": len(cart_lines),
         }
 
+    @staticmethod
+    def _resolve_user_email(db: Optional[Any], user_id: Optional[int]) -> Optional[str]:
+        """Resolver email por user_id para trazabilidad de actividades en workspace."""
+        if not db or not user_id:
+            return None
+        try:
+            from app.models.user import User
+            u = db.query(User).filter(User.id == user_id).first()
+            return u.email if u else None
+        except Exception:
+            return None
+
     def process_sale(
         self,
         payment_method: PaymentMethod,
@@ -653,6 +665,29 @@ class TPVService:
         if self.justicia_integration:
             legal_validation = self._validate_ticket_legality(ticket)
             ticket["legal_validation"] = legal_validation
+            try:
+                from services.activity_logger import ActivityLogger
+                ActivityLogger.log_activity(
+                    agent_name="JUSTICIA",
+                    action_type="tpv_legal_validation",
+                    action_description=f"Validación legal ticket {doc_id}",
+                    details={
+                        "ticket_id": doc_id,
+                        "validated": legal_validation.get("validated", False),
+                        "gdpr_compliant": legal_validation.get("gdpr_compliant", None),
+                        "user_id": user_id,
+                    },
+                    metrics={
+                        "validated": 1 if legal_validation.get("validated") else 0,
+                        "rejected": 0 if legal_validation.get("validated") else 1,
+                    },
+                    user_email=self._resolve_user_email(db, user_id),
+                    status="completed" if legal_validation.get("validated", False) else "failed",
+                    priority="normal",
+                    visible_to_client=True,
+                )
+            except Exception as e:
+                logger.warning("No se pudo registrar actividad JUSTICIA TPV: %s", e)
         
         # Enviar datos a RAFAEL para contabilidad automática
         # PERSISTIR AUTOMÁTICAMENTE documento fiscal en BD
@@ -663,6 +698,30 @@ class TPVService:
                 ticket["accounting_entry"] = accounting_result.get("accounting_entry")
                 ticket["fiscal_document_id"] = accounting_result.get("fiscal_document_id")
                 ticket["fiscal_document_persisted"] = accounting_result.get("fiscal_document_persisted", False)
+            try:
+                from services.activity_logger import ActivityLogger
+                ActivityLogger.log_activity(
+                    agent_name="RAFAEL",
+                    action_type="tpv_accounting_processed",
+                    action_description=f"Procesamiento fiscal ticket {doc_id}",
+                    details={
+                        "ticket_id": doc_id,
+                        "success": accounting_result.get("success", False),
+                        "fiscal_document_id": accounting_result.get("fiscal_document_id"),
+                        "fiscal_document_persisted": accounting_result.get("fiscal_document_persisted", False),
+                        "user_id": user_id,
+                    },
+                    metrics={
+                        "amount": cart_total.get("total", 0.0),
+                        "persisted": 1 if accounting_result.get("fiscal_document_persisted") else 0,
+                    },
+                    user_email=self._resolve_user_email(db, user_id),
+                    status="completed" if accounting_result.get("success", False) else "failed",
+                    priority="normal",
+                    visible_to_client=True,
+                )
+            except Exception as e:
+                logger.warning("No se pudo registrar actividad RAFAEL TPV: %s", e)
         
         # Sincronizar con AFRODITA para empleados
         if self.afrodita_integration and employee_id:
@@ -670,6 +729,26 @@ class TPVService:
             ticket["employee_synced"] = employee_sync.get("success", False)
             if employee_sync.get("success"):
                 ticket["employee_permissions"] = employee_sync.get("sync_result", {}).get("permissions")
+            try:
+                from services.activity_logger import ActivityLogger
+                ActivityLogger.log_activity(
+                    agent_name="AFRODITA",
+                    action_type="tpv_employee_sync",
+                    action_description=f"Sincronización empleado {employee_id} en ticket {doc_id}",
+                    details={
+                        "ticket_id": doc_id,
+                        "employee_id": employee_id,
+                        "success": employee_sync.get("success", False),
+                        "user_id": user_id,
+                    },
+                    metrics={"employee_sync": 1 if employee_sync.get("success", False) else 0},
+                    user_email=self._resolve_user_email(db, user_id),
+                    status="completed" if employee_sync.get("success", False) else "failed",
+                    priority="normal",
+                    visible_to_client=True,
+                )
+            except Exception as e:
+                logger.warning("No se pudo registrar actividad AFRODITA TPV: %s", e)
         
         logger.info(
             "💳 Venta procesada: %s user_id=%s €%.2f tipo=%s lineas=%s",

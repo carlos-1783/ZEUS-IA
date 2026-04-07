@@ -36,6 +36,38 @@ def tables_ready() -> bool:
 
 class ActivityLogger:
     """Servicio para registrar y consultar actividades de agentes"""
+
+    @staticmethod
+    def _infer_user_email_from_payload(
+        db: Session,
+        user_email: Optional[str],
+        details: Optional[Dict[str, Any]],
+        metrics: Optional[Dict[str, Any]],
+    ) -> Optional[str]:
+        """Completa user_email cuando el caller solo pasa user_id en details/metrics."""
+        if user_email:
+            return user_email
+        payloads = [details or {}, metrics or {}]
+        user_id = None
+        for p in payloads:
+            for key in ("user_id", "requested_by_user_id", "owner_user_id"):
+                v = p.get(key)
+                if isinstance(v, int):
+                    user_id = v
+                    break
+                if isinstance(v, str) and v.isdigit():
+                    user_id = int(v)
+                    break
+            if user_id is not None:
+                break
+        if user_id is None:
+            return None
+        try:
+            from app.models.user import User
+            u = db.query(User).filter(User.id == user_id).first()
+            return u.email if u else None
+        except Exception:
+            return None
     
     @staticmethod
     def log_activity(
@@ -70,13 +102,20 @@ class ActivityLogger:
         ensure_tables_initialized()
         db = SessionLocal()
         try:
+            resolved_email = ActivityLogger._infer_user_email_from_payload(
+                db=db,
+                user_email=user_email,
+                details=details,
+                metrics=metrics,
+            )
+            normalized_agent = (agent_name or "").strip().upper()
             activity = AgentActivity(
-                agent_name=agent_name,
+                agent_name=normalized_agent or agent_name,
                 action_type=action_type,
                 action_description=action_description,
                 details=details,
                 metrics=metrics,
-                user_email=user_email,
+                user_email=resolved_email,
                 status=status,
                 priority=priority,
                 visible_to_client=visible_to_client,
@@ -87,7 +126,7 @@ class ActivityLogger:
             db.commit()
             db.refresh(activity)
             
-            print(f"[ACTIVITY] {agent_name}: {action_description}")
+            print(f"[ACTIVITY] {normalized_agent or agent_name}: {action_description}")
             
             return activity
             

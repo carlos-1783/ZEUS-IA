@@ -230,7 +230,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import PerseoWorkspace from './agent-workspaces/PerseoWorkspace.vue'
 import RafaelWorkspace from './agent-workspaces/RafaelWorkspace.vue'
@@ -348,7 +348,7 @@ const sendVoiceToAgent = async (transcript) => {
     const agentNameUrl = props.agent.name.toLowerCase().replace(/ /g, '-')
     const response = await fetch(`/api/v1/chat/${agentNameUrl}/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ message: transcript, context: {} })
     })
     
@@ -383,10 +383,25 @@ const activityDays = ref(7)
 
 // Metrics
 const metrics = ref({})
+let activityPollTimer = null
 
 onMounted(() => {
   loadActivities()
   loadMetrics()
+  activityPollTimer = setInterval(() => {
+    if (activeTab.value === 'activity') {
+      loadActivities()
+    } else if (activeTab.value === 'metrics') {
+      loadMetrics()
+    }
+  }, 15000)
+})
+
+onUnmounted(() => {
+  if (activityPollTimer) {
+    clearInterval(activityPollTimer)
+    activityPollTimer = null
+  }
 })
 
 // Watch para recargar cuando cambie de agente
@@ -402,7 +417,7 @@ const loadActivities = async () => {
     const token = authStore.getToken?.() ?? authStore.token ?? null
     if (!token) {
       console.warn('Sin token para /activities')
-      activities.value = generateMockActivities()
+      activities.value = []
       return
     }
     const agentName = props.agent.name.split(' ')[0].toUpperCase()
@@ -417,7 +432,7 @@ const loadActivities = async () => {
     }
   } catch (error) {
     console.error('Error loading activities:', error)
-    activities.value = generateMockActivities()
+    activities.value = []
   }
 }
 
@@ -426,7 +441,7 @@ const loadMetrics = async () => {
     const token = authStore.getToken?.() ?? authStore.token ?? null
     if (!token) {
       console.warn('Sin token para /activities/.../metrics')
-      metrics.value = generateMockMetrics()
+      metrics.value = {}
       return
     }
     const agentName = props.agent.name.split(' ')[0].toUpperCase()
@@ -441,8 +456,15 @@ const loadMetrics = async () => {
     }
   } catch (error) {
     console.error('Error loading metrics:', error)
-    metrics.value = generateMockMetrics()
+    metrics.value = {}
   }
+}
+
+const getAuthHeaders = () => {
+  const token = authStore.getToken?.() ?? authStore.token ?? null
+  const headers = { 'Content-Type': 'application/json' }
+  if (token) headers.Authorization = `Bearer ${token}`
+  return headers
 }
 
 const sendTextMessage = async () => {
@@ -478,9 +500,7 @@ const sendTextMessage = async () => {
 
     const response = await fetch(`/api/v1/chat/${agentNameUrl}/chat`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         message: userMessage,
         context: contextPayload
@@ -694,15 +714,7 @@ const generateMockMetrics = () => {
   return agentMetrics[agentKey] || {}
 }
 
-// Inicializar con mock data
-onMounted(() => {
-  if (activities.value.length === 0) {
-    activities.value = generateMockActivities()
-  }
-  if (Object.keys(metrics.value).length === 0) {
-    metrics.value = generateMockMetrics()
-  }
-})
+// Producción: no inyectar mock automático para no ocultar problemas reales.
 </script>
 
 <style scoped>

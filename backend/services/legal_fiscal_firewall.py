@@ -158,6 +158,21 @@ class LegalFiscalFirewall:
                 logger.error(f"[FIREWALL] ⚠️ Error persistiendo documento: {e}")
                 if self.db:
                     self.db.rollback()
+                try:
+                    from services.activity_logger import ActivityLogger
+                    ActivityLogger.log_activity(
+                        agent_name=agent_name,
+                        action_type="document_draft_persist_failed",
+                        action_description=f"Fallo persistiendo borrador {document_type}",
+                        details={"error": str(e), "document_type": document_type},
+                        metrics={"persist_errors": 1},
+                        user_email=self._get_user_email(user_id),
+                        status="failed",
+                        priority="high",
+                        visible_to_client=True,
+                    )
+                except Exception:
+                    pass
                 # Autorreparar schema y reintentar una sola vez si es fallo por columna ausente.
                 em = str(e).lower()
                 if "undefinedcolumn" in em or "column" in em and "does not exist" in em:
@@ -458,6 +473,18 @@ class LegalFiscalFirewall:
         except Exception as e:
             logger.error(f"[FIREWALL] Error obteniendo email asesor: {e}")
             return None
+
+    def _get_user_email(self, user_id: int) -> Optional[str]:
+        """Obtener email del cliente para enlazar actividad visible en panel."""
+        if not self.db:
+            return None
+        try:
+            from app.models.user import User
+            user = self.db.query(User).filter(User.id == user_id).first()
+            return user.email if user else None
+        except Exception as e:
+            logger.error(f"[FIREWALL] Error obteniendo email usuario: {e}")
+            return None
     
     async def _send_to_advisor(
         self,
@@ -564,7 +591,7 @@ class LegalFiscalFirewall:
         document_type: str,
         document: Dict[str, Any]
     ):
-        """Registrar generación de documento en logs"""
+        """Registrar generación de documento en logs y en actividad visible al cliente."""
         log_entry = {
             "timestamp": datetime.utcnow().isoformat(),
             "event": "document_generated",
@@ -575,6 +602,33 @@ class LegalFiscalFirewall:
             "metadata": document
         }
         logger.info(f"[AUDIT] {json.dumps(log_entry)}")
+        # También registrar en AgentActivity para pestaña "Actividad" del workspace.
+        try:
+            from services.activity_logger import ActivityLogger
+            user_email = self._get_user_email(user_id)
+            status = "completed" if document.get("status") == DocumentStatus.DRAFT.value else "pending"
+            ticket_id = (
+                (document.get("metadata") or {}).get("ticket_id")
+                or (document.get("content") or {}).get("ticket_id")
+            )
+            ActivityLogger.log_activity(
+                agent_name=agent_name,
+                action_type="document_draft_generated",
+                action_description=f"Borrador {document_type} generado para aprobación del cliente",
+                details={
+                    "document_type": document_type,
+                    "ticket_id": ticket_id,
+                    "requires_approval": document.get("requires_approval", True),
+                    "draft_only": document.get("draft_only", True),
+                },
+                metrics={"draft_generated": 1},
+                user_email=user_email,
+                status=status,
+                priority="normal",
+                visible_to_client=True,
+            )
+        except Exception as e:
+            logger.warning(f"[FIREWALL] No se pudo registrar AgentActivity de borrador: {e}")
     
     def _log_approval_request(
         self,
@@ -598,7 +652,7 @@ class LegalFiscalFirewall:
         document_id: str,
         approval_record: Dict[str, Any]
     ):
-        """Registrar acción de aprobación"""
+        """Registrar acción de aprobación en auditoría y actividad."""
         log_entry = {
             "timestamp": datetime.utcnow().isoformat(),
             "event": "approval_action",
@@ -607,6 +661,23 @@ class LegalFiscalFirewall:
             "metadata": approval_record
         }
         logger.info(f"[AUDIT] {json.dumps(log_entry)}")
+        try:
+            from services.activity_logger import ActivityLogger
+            user_email = self._get_user_email(user_id)
+            status = approval_record.get("status", "completed")
+            ActivityLogger.log_activity(
+                agent_name=approval_record.get("agent", "ZEUS"),
+                action_type="document_approval_action",
+                action_description=f"Documento {document_id} -> {status}",
+                details={"document_id": document_id, **approval_record},
+                metrics={"approval_actions": 1},
+                user_email=user_email,
+                status="completed" if status in ("approved", "sent_to_advisor", "exported") else "pending",
+                priority="normal",
+                visible_to_client=True,
+            )
+        except Exception as e:
+            logger.warning(f"[FIREWALL] No se pudo registrar AgentActivity de aprobación: {e}")
 
 
 # Instancia global del firewall

@@ -190,21 +190,79 @@ const formatDate = (dateString: string) => {
   })
 }
 
-const formatDocumentContent = (payload: any) => {
-  if (!payload) return 'Sin contenido'
-  if (typeof payload === 'string') {
-    try {
-      return JSON.stringify(JSON.parse(payload), null, 2)
-    } catch {
-      return payload
+const toNumber = (v: any) => {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : 0
+}
+
+const eur = (v: any) => `${toNumber(v).toFixed(2)} EUR`
+
+const formatTpvTicketText = (doc: any) => {
+  const payload = doc?.content || doc || {}
+  const fiscal = payload?.fiscal_data || {}
+  const items = Array.isArray(fiscal?.productos) ? fiscal.productos : []
+  const lines: string[] = []
+
+  lines.push('FACTURA / TICKET BORRADOR')
+  lines.push('----------------------------------------')
+  lines.push(`Ticket: ${fiscal.ticket_id || payload.ticket_id || 'N/A'}`)
+  lines.push(`Fecha: ${fiscal.fecha || 'N/A'} ${fiscal.hora || ''}`.trim())
+  lines.push(`Metodo de pago: ${fiscal['método_pago'] || fiscal.metodo_pago || 'N/A'}`)
+  lines.push('')
+  lines.push('LINEAS')
+  if (!items.length) {
+    lines.push('- Sin lineas')
+  } else {
+    for (const it of items) {
+      const nombre = it?.nombre || 'Concepto'
+      const cantidad = toNumber(it?.cantidad)
+      const pu = toNumber(it?.precio_unitario)
+      const subtotal = toNumber(it?.subtotal)
+      const iva = toNumber(it?.iva)
+      const tasa = it?.tasa_iva != null ? `${toNumber(it.tasa_iva).toFixed(2)}%` : 'N/A'
+      lines.push(`- ${nombre}`)
+      lines.push(`  ${cantidad} x ${eur(pu)}  |  Base: ${eur(subtotal)}  |  IVA(${tasa}): ${eur(iva)}`)
     }
   }
-  if (payload.content) {
-    return typeof payload.content === 'string' 
-      ? payload.content 
-      : JSON.stringify(payload.content, null, 2)
+
+  lines.push('')
+  lines.push('TOTALES')
+  lines.push(`Base imponible: ${eur(fiscal.subtotal)}`)
+  lines.push(`IVA: ${eur(fiscal.iva)}`)
+  lines.push(`TOTAL: ${eur(fiscal.total)}`)
+
+  const note = payload?.note || doc?.note
+  if (note) {
+    lines.push('')
+    lines.push(`Nota: ${note}`)
   }
-  return JSON.stringify(payload, null, 2)
+  return lines.join('\n')
+}
+
+const formatDocumentContent = (payload: any) => {
+  if (!payload) return 'Sin contenido'
+
+  let parsed = payload
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed)
+    } catch {
+      return parsed
+    }
+  }
+
+  const documentType = String(parsed?.document_type || '').toLowerCase()
+  const hasTpvShape = !!(parsed?.content?.fiscal_data || parsed?.fiscal_data)
+  if (documentType.includes('tpv') || hasTpvShape) {
+    return formatTpvTicketText(parsed)
+  }
+
+  if (parsed?.content) {
+    return typeof parsed.content === 'string'
+      ? parsed.content
+      : JSON.stringify(parsed.content, null, 2)
+  }
+  return JSON.stringify(parsed, null, 2)
 }
 
 const getStatusLabel = (status: string) => {

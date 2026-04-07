@@ -91,7 +91,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import api from '@/api'
+import api from '@/services/api'
 
 interface Document {
   id: number
@@ -117,14 +117,14 @@ const loadPendingDocuments = async () => {
   loading.value = true
   error.value = ''
   try {
-    const response = await api.get('/documents/pending')
-    if (response.data.success) {
-      documents.value = response.data.pending_documents || []
+    const response = await api.get('/api/v1/documents/pending')
+    if (response?.success) {
+      documents.value = response.pending_documents || []
     } else {
-      error.value = response.data.message || 'Error cargando documentos'
+      error.value = response?.message || 'Error cargando documentos'
     }
   } catch (err: any) {
-    error.value = err.response?.data?.detail || 'Error al cargar documentos pendientes'
+    error.value = err?.message || 'Error al cargar documentos pendientes'
     console.error('Error loading pending documents:', err)
   } finally {
     loading.value = false
@@ -140,23 +140,23 @@ const approveDocument = async (doc: Document) => {
   approving.value = true
   error.value = ''
   try {
-    const response = await api.post('/documents/approve', {
+    const response = await api.post('/api/v1/documents/approve', {
       document_id: doc.id.toString(),
       agent_name: doc.agent_name,
       document_content: doc.document_payload?.content || doc.document_payload,
       advisor_email: doc.advisor_email
     })
 
-    if (response.data.success) {
+    if (response?.success) {
       // Recargar documentos
       await loadPendingDocuments()
       expandedDoc.value = null
       alert('✅ Documento aprobado y enviado al asesor exitosamente')
     } else {
-      error.value = response.data.message || 'Error al aprobar documento'
+      error.value = response?.message || 'Error al aprobar documento'
     }
   } catch (err: any) {
-    error.value = err.response?.data?.detail || 'Error al aprobar documento'
+    error.value = err?.message || 'Error al aprobar documento'
     console.error('Error approving document:', err)
   } finally {
     approving.value = false

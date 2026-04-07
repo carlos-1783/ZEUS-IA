@@ -429,6 +429,25 @@ const loadActivities = async () => {
     if (data.success) {
       activities.value = data.activities
       console.log(`✅ Actividades de ${agentName} cargadas:`, data.total_activities)
+      // Fallback operacional: si aún no hay filas en agent_activities,
+      // mostrar entregables recientes para no dejar el workspace vacío.
+      if ((activities.value?.length || 0) === 0) {
+        try {
+          const outputs = await api.get(`/api/v1/automation/outputs?agent=${encodeURIComponent(agentName)}`, token)
+          const files = outputs?.outputs || []
+          activities.value = files.slice(0, 20).map((o, idx) => ({
+            id: `out-${idx}-${o.filename}`,
+            action_type: 'automation_output',
+            description: o.title || o.filename || 'Entregable generado',
+            status: 'completed',
+            priority: 'normal',
+            created_at: o.created_at || new Date().toISOString(),
+            metrics: { source: 'automation_outputs' },
+          }))
+        } catch (fallbackErr) {
+          console.warn('Fallback automation outputs no disponible', fallbackErr)
+        }
+      }
     }
   } catch (error) {
     console.error('Error loading activities:', error)

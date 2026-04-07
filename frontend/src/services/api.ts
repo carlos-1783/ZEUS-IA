@@ -35,9 +35,17 @@ const buildUrl = (endpoint: string): string => {
   if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
     return endpoint;
   }
-  const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  let normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   if (API_BASE_URL) {
-    return `${API_BASE_URL}${normalizedEndpoint}`;
+    const base = API_BASE_URL.replace(/\/+$/, '');
+    // Evitar duplicar prefijos cuando la base ya incluye /api/v1
+    // y el endpoint llega también como /api/v1/...
+    if (base.endsWith('/api/v1') && normalizedEndpoint.startsWith('/api/v1/')) {
+      normalizedEndpoint = normalizedEndpoint.replace(/^\/api\/v1/, '');
+    } else if (base.endsWith('/api') && normalizedEndpoint.startsWith('/api/')) {
+      normalizedEndpoint = normalizedEndpoint.replace(/^\/api/, '');
+    }
+    return `${base}${normalizedEndpoint}`;
   }
   return normalizedEndpoint;
 };

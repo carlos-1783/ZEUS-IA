@@ -49,6 +49,7 @@ def create_tables():
             # IMPORTANTE: Ejecutar migración ANTES de crear tablas
             # Esto asegura que las columnas existan antes de que SQLAlchemy intente usarlas
             _migrate_user_columns()
+            _migrate_document_approvals_columns()
             
             # Importar modelos aquí para evitar importación circular
             from app.models.user import User, RefreshToken, PasswordResetToken
@@ -70,6 +71,7 @@ def create_tables():
             
             # Ejecutar migración nuevamente después de crear tablas (por si acaso)
             _migrate_user_columns()
+            _migrate_document_approvals_columns()
             return  # Éxito, salir de la función
             
         except Exception as e:
@@ -186,6 +188,88 @@ def _migrate_user_columns():
                 
     except Exception as e:
         print(f"[MIGRATION] [WARN] No se pudo ejecutar migracion: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def _migrate_document_approvals_columns():
+    """Alinea document_approvals con el modelo (SQLite/PostgreSQL) de forma idempotente."""
+    from sqlalchemy import inspect, text
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+
+    try:
+        inspector = inspect(engine)
+        if "document_approvals" not in inspector.get_table_names():
+            print("[MIGRATION] Tabla 'document_approvals' no existe aún; se creará con create_all")
+            return
+
+        existing_columns = {col["name"] for col in inspector.get_columns("document_approvals")}
+        is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
+
+        columns_to_add = {
+            "ticket_id": "VARCHAR(100)" if is_postgres else "TEXT",
+            "fiscal_document_type": "VARCHAR(50)" if is_postgres else "TEXT",
+            "export_format": "VARCHAR(20)" if is_postgres else "TEXT",
+            "exported_at": "TIMESTAMP WITH TIME ZONE" if is_postgres else "TIMESTAMP",
+            "filed_external_at": "TIMESTAMP WITH TIME ZONE" if is_postgres else "TIMESTAMP",
+            "approved_at": "TIMESTAMP WITH TIME ZONE" if is_postgres else "TIMESTAMP",
+            "sent_at": "TIMESTAMP WITH TIME ZONE" if is_postgres else "TIMESTAMP",
+            "audit_log_json": "TEXT",
+        }
+
+        added = []
+        for column_name, column_type in columns_to_add.items():
+            if column_name in existing_columns:
+                continue
+            try:
+                with engine.begin() as conn:
+                    if is_postgres:
+                        sql = (
+                            f'ALTER TABLE document_approvals '
+                            f'ADD COLUMN IF NOT EXISTS "{column_name}" {column_type}'
+                        )
+                    else:
+                        sql = f"ALTER TABLE document_approvals ADD COLUMN {column_name} {column_type}"
+                    conn.execute(text(sql))
+                added.append(column_name)
+                existing_columns.add(column_name)
+                print(f"[MIGRATION] [OK] document_approvals.{column_name} agregada")
+            except (OperationalError, ProgrammingError) as e:
+                em = str(e).lower()
+                if "duplicate column" in em or "already exists" in em:
+                    print(f"[MIGRATION] [INFO] document_approvals.{column_name} ya existe")
+                else:
+                    print(f"[MIGRATION] [WARN] No se pudo agregar document_approvals.{column_name}: {e}")
+
+        # Índice útil para trazabilidad de tickets
+        try:
+            indexes = {ix["name"] for ix in inspector.get_indexes("document_approvals")}
+            if "ix_document_approvals_ticket_id" not in indexes and "ticket_id" in existing_columns:
+                with engine.begin() as conn:
+                    if is_postgres:
+                        conn.execute(
+                            text(
+                                "CREATE INDEX IF NOT EXISTS ix_document_approvals_ticket_id "
+                                "ON document_approvals (ticket_id)"
+                            )
+                        )
+                    else:
+                        conn.execute(
+                            text(
+                                "CREATE INDEX IF NOT EXISTS ix_document_approvals_ticket_id "
+                                "ON document_approvals(ticket_id)"
+                            )
+                        )
+                print("[MIGRATION] [OK] Índice ix_document_approvals_ticket_id creado")
+        except Exception as e:
+            print(f"[MIGRATION] [WARN] No se pudo crear índice ticket_id en document_approvals: {e}")
+
+        if added:
+            print(f"[MIGRATION] [OK] document_approvals alineada. Nuevas columnas: {', '.join(added)}")
+        else:
+            print("[MIGRATION] [OK] document_approvals ya estaba alineada")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] No se pudo verificar document_approvals: {e}")
         import traceback
         traceback.print_exc()
 

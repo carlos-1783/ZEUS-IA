@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from enum import Enum
 import json
 import logging
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,56 @@ class LegalFiscalFirewall:
     
     def __init__(self, db: Optional[Session] = None):
         self.db = db
+
+    def _heal_document_approvals_schema_if_needed(self) -> bool:
+        """
+        Autorreparación mínima para entornos desalineados (sin columnas de fiscal en document_approvals).
+        Devuelve True si ejecutó intento de reparación.
+        """
+        if not self.db:
+            return False
+        try:
+            bind = self.db.get_bind()
+            dialect = bind.dialect.name.lower()
+            if "postgres" in dialect:
+                statements = [
+                    'ALTER TABLE document_approvals ADD COLUMN IF NOT EXISTS ticket_id VARCHAR(100)',
+                    'ALTER TABLE document_approvals ADD COLUMN IF NOT EXISTS fiscal_document_type VARCHAR(50)',
+                    'ALTER TABLE document_approvals ADD COLUMN IF NOT EXISTS export_format VARCHAR(20)',
+                    'ALTER TABLE document_approvals ADD COLUMN IF NOT EXISTS exported_at TIMESTAMPTZ',
+                    'ALTER TABLE document_approvals ADD COLUMN IF NOT EXISTS filed_external_at TIMESTAMPTZ',
+                    'CREATE INDEX IF NOT EXISTS ix_document_approvals_ticket_id ON document_approvals(ticket_id)',
+                ]
+            else:
+                # SQLite no siempre soporta IF NOT EXISTS en ADD COLUMN; usar estrategia tolerante.
+                statements = [
+                    'ALTER TABLE document_approvals ADD COLUMN ticket_id TEXT',
+                    'ALTER TABLE document_approvals ADD COLUMN fiscal_document_type TEXT',
+                    'ALTER TABLE document_approvals ADD COLUMN export_format TEXT',
+                    'ALTER TABLE document_approvals ADD COLUMN exported_at TIMESTAMP',
+                    'ALTER TABLE document_approvals ADD COLUMN filed_external_at TIMESTAMP',
+                    'CREATE INDEX IF NOT EXISTS ix_document_approvals_ticket_id ON document_approvals(ticket_id)',
+                ]
+
+            for sql in statements:
+                try:
+                    self.db.execute(text(sql))
+                except Exception as inner:
+                    msg = str(inner).lower()
+                    if "already exists" in msg or "duplicate column" in msg or "duplicate" in msg:
+                        continue
+                    # Seguimos para intentar el resto; puede faltar solo una parte
+                    logger.warning("[FIREWALL] schema-heal warning: %s :: %s", sql, inner)
+            self.db.commit()
+            logger.warning("[FIREWALL] document_approvals schema-heal aplicado")
+            return True
+        except Exception as e:
+            logger.error("[FIREWALL] schema-heal falló: %s", e)
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
+            return False
     
     def generate_draft_document(
         self,
@@ -107,6 +158,35 @@ class LegalFiscalFirewall:
                 logger.error(f"[FIREWALL] ⚠️ Error persistiendo documento: {e}")
                 if self.db:
                     self.db.rollback()
+                # Autorreparar schema y reintentar una sola vez si es fallo por columna ausente.
+                em = str(e).lower()
+                if "undefinedcolumn" in em or "column" in em and "does not exist" in em:
+                    healed = self._heal_document_approvals_schema_if_needed()
+                    if healed and self.db:
+                        try:
+                            from app.models.document_approval import DocumentApproval
+                            doc_approval = DocumentApproval(
+                                user_id=user_id,
+                                agent_name=agent_name,
+                                document_type=document_type,
+                                document_payload=draft_document,
+                                status=DocumentStatus.DRAFT.value,
+                                advisor_email=advisor_email,
+                            )
+                            doc_approval.audit_log = [{
+                                "timestamp": datetime.utcnow().isoformat(),
+                                "event": "document_generated",
+                                "agent": agent_name,
+                                "status": DocumentStatus.DRAFT.value
+                            }]
+                            self.db.add(doc_approval)
+                            self.db.commit()
+                            self.db.refresh(doc_approval)
+                            document_id = doc_approval.id
+                            logger.info(f"[FIREWALL] ✅ Documento persistido tras schema-heal, ID: {document_id}")
+                        except Exception as retry_e:
+                            logger.error(f"[FIREWALL] ⚠️ Reintento persistencia falló: {retry_e}")
+                            self.db.rollback()
                 # Continuar sin persistencia si falla (modo degradado)
         
         # Guardar en logs de auditoría

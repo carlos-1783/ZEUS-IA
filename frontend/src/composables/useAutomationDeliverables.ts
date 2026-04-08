@@ -6,6 +6,7 @@ import {
 } from '@/api/automationService';
 import apiClient from '@/api/apiClient';
 import tokenService from '@/api/tokenService';
+import api from '@/services/api';
 
 export interface DeliverableFiles {
   json?: AutomationOutput;
@@ -19,6 +20,10 @@ export interface DeliverableItem {
   createdAt: number;
   sizeBytes: number;
   files: DeliverableFiles;
+  /** Entregable persistido vía /api/v1/workspace (document_approvals) */
+  isWorkspace?: boolean;
+  workspacePayload?: Record<string, unknown>;
+  displayTitle?: string;
 }
 
 const EXTENSION_REGEX = /\.(json|md|markdown)$/i;
@@ -65,7 +70,35 @@ export function useAutomationDeliverables(agent: string) {
     error.value = null;
     try {
       const outputs = await fetchAutomationOutputs(agent);
-      items.value = groupOutputs(outputs);
+      let merged = groupOutputs(outputs);
+      if (agent === 'PERSEO') {
+        try {
+          const ws = await api.get('/api/v1/workspace/list?agent_name=PERSEO&limit=100');
+          if (ws?.success && Array.isArray(ws.items)) {
+            const wsItems: DeliverableItem[] = ws.items.map((doc: Record<string, unknown>) => {
+              const payload = (doc.document_payload || {}) as Record<string, unknown>;
+              const created = doc.created_at ? new Date(String(doc.created_at)).getTime() / 1000 : 0;
+              return {
+                id: `ws:${doc.id}`,
+                agent: 'PERSEO',
+                createdAt: Number.isFinite(created) ? created : 0,
+                sizeBytes: 0,
+                files: {},
+                isWorkspace: true,
+                workspacePayload: payload,
+                displayTitle:
+                  (typeof payload.title === 'string' && payload.title) ||
+                  (typeof doc.document_type === 'string' && doc.document_type) ||
+                  `Entregable #${doc.id}`,
+              };
+            });
+            merged = [...wsItems, ...merged].sort((a, b) => b.createdAt - a.createdAt);
+          }
+        } catch (e) {
+          console.warn('Workspace list PERSEO no disponible', e);
+        }
+      }
+      items.value = merged;
     } catch (err) {
       console.error(`Error fetching outputs for agent ${agent}`, err);
       error.value = err instanceof Error ? err.message : String(err);
@@ -83,6 +116,12 @@ export function useAutomationDeliverables(agent: string) {
   };
 
   const fetchDeliverableData = async (deliverable: DeliverableItem) => {
+    if (deliverable.isWorkspace && deliverable.workspacePayload) {
+      return {
+        workspace_deliverable: true,
+        payload: deliverable.workspacePayload,
+      };
+    }
     if (!deliverable.files.json) return null;
     const [agent, filename] = deliverable.files.json.path.split('/');
     // Usar axios para incluir el token automáticamente

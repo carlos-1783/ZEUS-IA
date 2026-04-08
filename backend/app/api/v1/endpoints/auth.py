@@ -336,6 +336,18 @@ async def register_user(
     except Exception as e:
         logger.warning("Notificaciones bienvenida: %s", e)
 
+    try:
+        from services.event_bus import emit_user_registered
+
+        emit_user_registered(
+            user_id=db_user.id,
+            user_email=db_user.email,
+            company_name=user_data.company_name.strip(),
+            db=db,
+        )
+    except Exception:
+        logger.exception("emit_user_registered falló (no bloquea el registro)")
+
     return db_user
 
 

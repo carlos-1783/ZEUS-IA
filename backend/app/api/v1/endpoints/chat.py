@@ -192,8 +192,17 @@ async def chat_with_agent(
             try:
                 from services.workspace_deliverables import persist_agent_chat_deliverable
 
+                extra_ctx = {
+                    k: context[k]
+                    for k in ("image_url", "video_url", "pdf_url", "media_url")
+                    if context.get(k)
+                }
                 wd = persist_agent_chat_deliverable(
-                    db, current_user, agent_name, result.get("message", "") or ""
+                    db,
+                    current_user,
+                    agent_name,
+                    result.get("message", "") or "",
+                    extra_context=extra_ctx or None,
                 )
                 if wd is not None:
                     workspace_document_id = wd.id

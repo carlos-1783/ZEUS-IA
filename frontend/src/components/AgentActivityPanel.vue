@@ -85,7 +85,7 @@
         <div v-if="isPerseoAgent" class="image-uploader-wrapper">
           <ImageUploader @uploaded="handleImageUploaded" />
           <div v-if="imageReferenceUrl" class="image-reference-chip">
-            <span>Imagen adjunta</span>
+            <span>Medio adjunto (imagen / vídeo / PDF)</span>
             <a :href="imageReferenceUrl" target="_blank" rel="noopener">Ver</a>
             <button type="button" class="chip-remove" @click="clearImageReference">Quitar</button>
           </div>
@@ -278,6 +278,10 @@ const messagesContainer = ref(null)
 const isPerseoAgent = computed(() => (props.agent?.name || '').toUpperCase().includes('PERSEO'))
 const imageReferenceUrl = ref(null)
 
+const CHAT_MIN_INTERVAL_MS = 3000
+const lastTextChatSentAt = ref(0)
+const lastVoiceChatSentAt = ref(0)
+
 const handleImageUploaded = (payload) => {
   imageReferenceUrl.value = payload?.url || null
 }
@@ -339,6 +343,13 @@ const initSpeechRecognition = () => {
 // Enviar mensaje de voz al agente
 const sendVoiceToAgent = async (transcript) => {
   if (!transcript.trim()) return
+
+  const now = Date.now()
+  if (now - lastVoiceChatSentAt.value < CHAT_MIN_INTERVAL_MS) {
+    agentVoiceResponse.value = '⏳ Espera unos segundos entre mensajes (límite anti-429).'
+    return
+  }
+  lastVoiceChatSentAt.value = now
   
   isListening.value = false
   isSpeaking.value = true
@@ -346,10 +357,17 @@ const sendVoiceToAgent = async (transcript) => {
   
   try {
     const agentNameUrl = props.agent.name.toLowerCase().replace(/ /g, '-')
+    const vctx = {}
+    if (isPerseoAgent.value && imageReferenceUrl.value) {
+      const u = imageReferenceUrl.value
+      if (/\.pdf($|\?)/i.test(u) || u.includes('/documents/')) vctx.pdf_url = u
+      else if (/\.(mp4|webm|mov|m4v)($|\?)/i.test(u) || u.includes('/videos/')) vctx.video_url = u
+      else vctx.image_url = u
+    }
     const response = await fetch(`/api/v1/chat/${agentNameUrl}/chat`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ message: transcript, context: {} })
+      body: JSON.stringify({ message: transcript, context: vctx })
     })
     
     const data = await response.json()
@@ -488,6 +506,12 @@ const getAuthHeaders = () => {
 
 const sendTextMessage = async () => {
   if (!textInput.value.trim()) return
+
+  const now = Date.now()
+  if (now - lastTextChatSentAt.value < CHAT_MIN_INTERVAL_MS) {
+    return
+  }
+  lastTextChatSentAt.value = now
   
   const userMessage = textInput.value
   textInput.value = ''
@@ -514,7 +538,10 @@ const sendTextMessage = async () => {
     const agentNameUrl = props.agent.name.toLowerCase().replace(/ /g, '-')
     const contextPayload = {}
     if (isPerseoAgent.value && imageReferenceUrl.value) {
-      contextPayload.image_url = imageReferenceUrl.value
+      const u = imageReferenceUrl.value
+      if (/\.pdf($|\?)/i.test(u) || u.includes('/documents/')) contextPayload.pdf_url = u
+      else if (/\.(mp4|webm|mov|m4v)($|\?)/i.test(u) || u.includes('/videos/')) contextPayload.video_url = u
+      else contextPayload.image_url = u
     }
 
     const response = await fetch(`/api/v1/chat/${agentNameUrl}/chat`, {
@@ -526,11 +553,15 @@ const sendTextMessage = async () => {
       })
     })
     
-    const data = await response.json()
-    
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      lastTextChatSentAt.value = 0
+      throw new Error(data?.detail || data?.message || `Error ${response.status}`)
+    }
+
     // Remover mensaje de "procesando"
     messages.value = messages.value.filter(m => m.id !== processingId)
-    
+
     // Añadir respuesta real del agente
     messages.value.push({
       id: Date.now() + 2,
@@ -548,10 +579,11 @@ const sendTextMessage = async () => {
     
   } catch (error) {
     console.error('Error al comunicarse con el agente:', error)
-    
+    lastTextChatSentAt.value = 0
+
     // Remover mensaje de "procesando"
     messages.value = messages.value.filter(m => m.id !== processingId)
-    
+
     // Mostrar error
     messages.value.push({
       id: Date.now() + 2,
@@ -903,6 +935,43 @@ const generateMockMetrics = () => {
 
 .perseo-image-uploader input[type="file"] {
   color: rgba(255, 255, 255, 0.8);
+}
+
+:deep(.uploader-dropzone) {
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  padding: 8px;
+}
+
+:deep(.uploader-dnd-hint) {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  margin: 6px 0 0 16px;
+}
+
+:deep(.uploader-preview-video) {
+  width: 120px;
+  height: 72px;
+}
+
+:deep(.uploader-video) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+:deep(.uploader-preview-pdf) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+:deep(.pdf-label) {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fecaca;
 }
 
 .uploader-header {

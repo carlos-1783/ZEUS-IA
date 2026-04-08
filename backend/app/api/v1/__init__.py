@@ -23,6 +23,7 @@ from app.api.v1.endpoints import (
     teamflow,
     workspaces,
     workspace as workspace_deliverables,
+    upload as upload_media,
     document_approval,
     tpv,
     admin,
@@ -76,6 +77,9 @@ api_router.include_router(document_approval.router, prefix="/documents", tags=["
 
 # Workspace (entregables estructurados persistidos)
 api_router.include_router(workspace_deliverables.router, prefix="/workspace", tags=["workspace"])
+
+# Subida unificada (imagen / vídeo / PDF)
+api_router.include_router(upload_media.router, prefix="/upload", tags=["upload"])
 
 # TPV Universal Enterprise
 api_router.include_router(tpv.router, prefix="/tpv", tags=["tpv"])

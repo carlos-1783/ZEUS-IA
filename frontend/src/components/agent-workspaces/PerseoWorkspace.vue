@@ -73,6 +73,17 @@
         </header>
 
         <div class="details-grid">
+          <section v-if="currentDetails?.workspace_deliverable" class="card workspace-persisted-card">
+            <header class="card-header">
+              <h5>📌 Entregable en workspace (BD)</h5>
+              <span class="badge">Chat / API</span>
+            </header>
+            <p class="card-description">
+              Persistido en base de datos; también aparece en Documentos pendientes. Incluye copia, adjuntos y metadatos.
+            </p>
+            <pre class="workspace-json">{{ formatWorkspacePayload(currentDetails.payload) }}</pre>
+          </section>
+
           <section class="card tip-card" v-if="currentDeliverable">
             <header class="card-header">
               <h5>🎯 Activar entrega</h5>
@@ -382,8 +393,9 @@ const selectDeliverable = (id: string) => {
   }
 };
 
-const formatTitle = (item?: { id: string }) => {
+const formatTitle = (item?: { id: string; displayTitle?: string }) => {
   if (!item) return 'Entregable';
+  if (item.displayTitle) return item.displayTitle;
   const parts = item.id.split('/');
   const filename = parts[parts.length - 1];
   return filename.replace(/_/g, ' ').replace(/\d{8}T\d{6}Z$/, '').trim() || 'Campaña';
@@ -408,6 +420,14 @@ const formatSize = (bytes: number) => {
     index += 1;
   }
   return `${value.toFixed(1)} ${units[index]}`;
+};
+
+const formatWorkspacePayload = (payload: unknown) => {
+  try {
+    return JSON.stringify(payload ?? {}, null, 2);
+  } catch {
+    return String(payload);
+  }
 };
 
 const formatPlatform = (name: string | number) => String(name).replace(/_/g, ' ').toUpperCase();
@@ -921,6 +941,18 @@ onMounted(async () => {
   100% {
     transform: rotate(360deg);
   }
+}
+
+.workspace-persisted-card .workspace-json {
+  margin: 0;
+  padding: 16px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-x: auto;
+  max-height: 420px;
 }
 
 @media (max-width: 900px) {

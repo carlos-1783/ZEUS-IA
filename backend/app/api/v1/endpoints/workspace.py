@@ -2,10 +2,11 @@
 Workspace: crear entregables estructurados persistidos (document_approvals).
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user
@@ -106,4 +107,54 @@ async def workspace_create(
         "success": True,
         "workspace_document_id": doc.id,
         "document": d,
+    }
+
+
+@router.get("/list")
+async def workspace_list(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    agent_name: Optional[str] = None,
+    company_id: Optional[int] = None,
+):
+    """Listado de entregables workspace persistidos (document_approvals visibles)."""
+    from app.models.document_approval import DocumentApproval
+    from app.models.company import UserCompany
+
+    q = db.query(DocumentApproval).filter(
+        DocumentApproval.user_id == current_user.id,
+        or_(
+            DocumentApproval.visible_in_workspace.is_(None),
+            DocumentApproval.visible_in_workspace == True,  # noqa: E712
+        ),
+    )
+    if agent_name:
+        q = q.filter(DocumentApproval.agent_name == agent_name.strip().upper())
+    if company_id is not None:
+        allowed = {
+            r[0]
+            for r in db.query(UserCompany.company_id)
+            .filter(UserCompany.user_id == current_user.id)
+            .all()
+        }
+        if company_id not in allowed:
+            raise HTTPException(status_code=403, detail="company_id no permitido")
+        q = q.filter(DocumentApproval.company_id == company_id)
+
+    rows = (
+        q.order_by(DocumentApproval.created_at.desc()).offset(offset).limit(limit).all()
+    )
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        d = row.to_dict()
+        items.append(d)
+
+    return {
+        "success": True,
+        "items": items,
+        "count": len(items),
+        "limit": limit,
+        "offset": offset,
     }

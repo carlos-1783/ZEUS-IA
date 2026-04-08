@@ -112,6 +112,13 @@ def persist_workspace_deliverable(
         db.add(doc)
         db.commit()
         db.refresh(doc)
+        pl = dict(doc.document_payload or {})
+        if doc.created_at:
+            pl["created_at"] = doc.created_at.isoformat()
+        doc.document_payload = pl
+        db.add(doc)
+        db.commit()
+        db.refresh(doc)
     except Exception:
         db.rollback()
         raise
@@ -127,7 +134,11 @@ def persist_workspace_deliverable(
 
 
 def persist_agent_chat_deliverable(
-    db: Session, user: User, agent_name: str, message: str
+    db: Session,
+    user: User,
+    agent_name: str,
+    message: str,
+    extra_context: Optional[Dict[str, Any]] = None,
 ) -> Optional[DocumentApproval]:
     if not message or not str(message).strip():
         return None
@@ -139,6 +150,12 @@ def persist_agent_chat_deliverable(
     raw = str(message).strip()
     title = raw.split("\n")[0][:200].strip() or f"Entregable {agent_key}"
     cid = primary_company_id_for_user(db, user)
+    content: Dict[str, Any] = {"body": raw, "format": "markdown_or_plain"}
+    if extra_context:
+        for key in ("image_url", "video_url", "pdf_url", "media_url"):
+            v = extra_context.get(key)
+            if v:
+                content[key] = v
     return persist_workspace_deliverable(
         db,
         user_id=user.id,
@@ -147,7 +164,7 @@ def persist_agent_chat_deliverable(
         workspace_category=workspace_cat,
         title=title,
         content_type=ctype,
-        content={"body": raw, "format": "markdown_or_plain"},
+        content=content,
         status="draft",
         visible_in_workspace=True,
     )

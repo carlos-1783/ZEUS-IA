@@ -206,6 +206,11 @@ def _migrate_document_approvals_columns():
         existing_columns = {col["name"] for col in inspector.get_columns("document_approvals")}
         is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
 
+        vis_sql = (
+            "BOOLEAN NOT NULL DEFAULT true"
+            if is_postgres
+            else "INTEGER NOT NULL DEFAULT 1"
+        )
         columns_to_add = {
             "ticket_id": "VARCHAR(100)" if is_postgres else "TEXT",
             "fiscal_document_type": "VARCHAR(50)" if is_postgres else "TEXT",
@@ -215,6 +220,8 @@ def _migrate_document_approvals_columns():
             "approved_at": "TIMESTAMP WITH TIME ZONE" if is_postgres else "TIMESTAMP",
             "sent_at": "TIMESTAMP WITH TIME ZONE" if is_postgres else "TIMESTAMP",
             "audit_log_json": "TEXT",
+            "company_id": "INTEGER",
+            "visible_in_workspace": vis_sql,
         }
 
         added = []
@@ -263,6 +270,28 @@ def _migrate_document_approvals_columns():
                 print("[MIGRATION] [OK] Índice ix_document_approvals_ticket_id creado")
         except Exception as e:
             print(f"[MIGRATION] [WARN] No se pudo crear índice ticket_id en document_approvals: {e}")
+
+        try:
+            indexes = {ix["name"] for ix in inspector.get_indexes("document_approvals")}
+            if "ix_document_approvals_company_id" not in indexes and "company_id" in existing_columns:
+                with engine.begin() as conn:
+                    if is_postgres:
+                        conn.execute(
+                            text(
+                                "CREATE INDEX IF NOT EXISTS ix_document_approvals_company_id "
+                                "ON document_approvals (company_id)"
+                            )
+                        )
+                    else:
+                        conn.execute(
+                            text(
+                                "CREATE INDEX IF NOT EXISTS ix_document_approvals_company_id "
+                                "ON document_approvals(company_id)"
+                            )
+                        )
+                print("[MIGRATION] [OK] Índice ix_document_approvals_company_id creado")
+        except Exception as e:
+            print(f"[MIGRATION] [WARN] No se pudo crear índice company_id en document_approvals: {e}")
 
         if added:
             print(f"[MIGRATION] [OK] document_approvals alineada. Nuevas columnas: {', '.join(added)}")

@@ -28,7 +28,7 @@
       >
         <div class="document-header" @click="toggleExpand(doc.id)">
           <div class="document-info">
-            <span class="agent-badge" :class="doc.agent_name.toLowerCase()">
+            <span class="agent-badge" :class="agentBadgeClass(doc.agent_name)">
               {{ doc.agent_name }}
             </span>
             <span class="document-type">{{ doc.document_type }}</span>
@@ -50,29 +50,34 @@
             <pre class="document-preview">{{ formatDocumentContent(doc.document_payload || (doc as any).document_payload_json || doc) }}</pre>
           </div>
 
-          <div v-if="doc.advisor_email" class="advisor-info">
-            <strong>Asesor:</strong> {{ doc.advisor_email }}
-          </div>
+          <template v-if="isAdvisorApprovalAgent(doc.agent_name)">
+            <div v-if="doc.advisor_email" class="advisor-info">
+              <strong>Asesor:</strong> {{ doc.advisor_email }}
+            </div>
 
-          <div v-else class="advisor-warning">
-            ⚠️ Falta email de asesor. Configúralo en tu perfil.
-          </div>
+            <div v-else class="advisor-warning">
+              ⚠️ Falta email de asesor. Configúralo en tu perfil.
+            </div>
 
-          <div class="approval-actions">
-            <button
-              @click="approveDocument(doc)"
-              :disabled="approving || !doc.advisor_email"
-              class="btn-approve"
-            >
-              {{ getApprovalButtonLabel(doc.agent_name) }}
-            </button>
-            <button
-              @click="rejectDocument(doc)"
-              :disabled="approving"
-              class="btn-reject"
-            >
-              Rechazar
-            </button>
+            <div class="approval-actions">
+              <button
+                @click="approveDocument(doc)"
+                :disabled="approving || !doc.advisor_email"
+                class="btn-approve"
+              >
+                {{ getApprovalButtonLabel(doc.agent_name) }}
+              </button>
+              <button
+                @click="rejectDocument(doc)"
+                :disabled="approving"
+                class="btn-reject"
+              >
+                Rechazar
+              </button>
+            </div>
+          </template>
+          <div v-else class="workspace-deliverable-note">
+            <p>Entregable en workspace ({{ doc.agent_name }}). No usa el flujo de envío a asesor fiscal/legal desde este panel.</p>
           </div>
 
           <div v-if="doc.audit_log && doc.audit_log.length > 0" class="audit-log">
@@ -276,6 +281,21 @@ const formatDocumentContent = (payload: any) => {
     return formatTpvTicketText(parsed)
   }
 
+  // Entregable workspace (title + type + content estructurado)
+  if (parsed?.title && parsed?.content != null) {
+    const meta: string[] = []
+    if (parsed.type) meta.push(`Tipo contenido: ${parsed.type}`)
+    if (parsed.status) meta.push(`Estado: ${parsed.status}`)
+    const c = parsed.content
+    const body =
+      typeof c === 'string'
+        ? c
+        : typeof c?.body === 'string'
+          ? c.body
+          : JSON.stringify(c, null, 2)
+    return [parsed.title, meta.length ? meta.join(' | ') : '', '', body].filter(Boolean).join('\n')
+  }
+
   if (parsed?.content) {
     return typeof parsed.content === 'string'
       ? parsed.content
@@ -305,6 +325,12 @@ const getApprovalButtonLabel = (agentName: string) => {
   }
   return '✅ Aprobar y Enviar al Asesor'
 }
+
+const isAdvisorApprovalAgent = (name: string) =>
+  name === 'RAFAEL' || name === 'JUSTICIA'
+
+const agentBadgeClass = (name: string) =>
+  name.toLowerCase().replace(/\s+/g, '-')
 
 onMounted(() => {
   loadPendingDocuments()
@@ -416,6 +442,39 @@ onMounted(() => {
 .agent-badge.justicia {
   background: #fce7f3;
   color: #9f1239;
+}
+
+.agent-badge.perseo {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.agent-badge.afrodita {
+  background: #fce7f3;
+  color: #831843;
+}
+
+.agent-badge.thalos {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.agent-badge.zeus-core {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.workspace-deliverable-note {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.workspace-deliverable-note p {
+  margin: 0;
 }
 
 .document-type {

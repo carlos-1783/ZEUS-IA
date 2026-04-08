@@ -20,6 +20,9 @@ class DocumentApproval(Base):
     
     # Usuario que solicitó el documento
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    # Empresa (multi-tenant workspace)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True)
     
     # Agente que generó el documento
     agent_name = Column(String(50), nullable=False, index=True)  # "RAFAEL" o "JUSTICIA"
@@ -31,7 +34,10 @@ class DocumentApproval(Base):
     document_payload_json = Column(Text, nullable=False)  # JSON serializado
     
     # Estado del documento
-    status = Column(String(50), nullable=False, default="draft", index=True)  
+    status = Column(String(50), nullable=False, default="draft", index=True)
+
+    # Mostrar en panel workspace / documentos pendientes
+    visible_in_workspace = Column(Boolean, nullable=False, default=True)
     # Estados: draft, pending_approval, pending_review, approved, approved_by_manager, 
     #          rejected, sent_to_advisor, exported, filed_external, failed
     
@@ -55,6 +61,7 @@ class DocumentApproval(Base):
     
     # Relationship
     user = relationship("User", back_populates="document_approvals")
+    company = relationship("Company", foreign_keys=[company_id])
     
     def __repr__(self):
         return f"<DocumentApproval id={self.id} agent={self.agent_name} type={self.document_type} status={self.status}>"
@@ -64,6 +71,8 @@ class DocumentApproval(Base):
         return {
             "id": self.id,
             "user_id": self.user_id,
+            "company_id": self.company_id,
+            "visible_in_workspace": getattr(self, "visible_in_workspace", True),
             "agent_name": self.agent_name,
             "document_type": self.document_type,
             "document_payload": json.loads(self.document_payload_json) if self.document_payload_json else {},

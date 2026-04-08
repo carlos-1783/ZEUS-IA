@@ -6,6 +6,7 @@ Endpoints para aprobación de documentos generados por RAFAEL y JUSTICIA
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from datetime import datetime
 
@@ -150,7 +151,11 @@ async def get_pending_documents(
                 DocumentStatus.DRAFT.value,
                 DocumentStatus.PENDING_APPROVAL.value,
                 DocumentStatus.PENDING_REVIEW.value
-            ])
+            ]),
+            or_(
+                DocumentApproval.visible_in_workspace.is_(None),
+                DocumentApproval.visible_in_workspace == True,  # noqa: E712
+            ),
         )
         
         # Filtrar por agente si se especifica

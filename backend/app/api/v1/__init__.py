@@ -22,6 +22,7 @@ from app.api.v1.endpoints import (
     perseo_images,
     teamflow,
     workspaces,
+    workspace as workspace_deliverables,
     document_approval,
     tpv,
     admin,
@@ -72,6 +73,9 @@ api_router.include_router(onboarding.router, prefix="/onboarding", tags=["onboar
 
 # Document Approval (aprobación de documentos RAFAEL/JUSTICIA)
 api_router.include_router(document_approval.router, prefix="/documents", tags=["document-approval"])
+
+# Workspace (entregables estructurados persistidos)
+api_router.include_router(workspace_deliverables.router, prefix="/workspace", tags=["workspace"])
 
 # TPV Universal Enterprise
 api_router.include_router(tpv.router, prefix="/tpv", tags=["tpv"])

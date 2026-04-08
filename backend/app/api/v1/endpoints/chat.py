@@ -1,16 +1,19 @@
 """
 Endpoint para chat con agentes IA
 """
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
-from typing import Optional, List
-import sys
+import logging
 import os
+import sys
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.db.session import get_db
 
 # Agregar el directorio raíz al path para importar agentes
-import sys
-import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../..")))
 
 from agents.zeus_core import ZeusCore
 from agents.perseo import Perseo
@@ -24,6 +27,7 @@ from app.models.user import User
 from services.activity_logger import ActivityLogger
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # Instancias de agentes
 try:
@@ -117,6 +121,7 @@ class ChatResponse(BaseModel):
     confidence: Optional[float] = None
     hitl_required: Optional[bool] = None
     error: Optional[str] = None
+    workspace_document_id: Optional[int] = None
 
 class AgentCommunicationRequest(BaseModel):
     from_agent: str
@@ -134,6 +139,7 @@ async def chat_with_agent(
     agent_name: str,
     request: ChatRequest,
     current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """
     Chat con un agente específico
@@ -182,6 +188,24 @@ async def chat_with_agent(
         )
 
         if result.get("success"):
+            workspace_document_id = None
+            try:
+                from services.workspace_deliverables import persist_agent_chat_deliverable
+
+                wd = persist_agent_chat_deliverable(
+                    db, current_user, agent_name, result.get("message", "") or ""
+                )
+                if wd is not None:
+                    workspace_document_id = wd.id
+            except Exception as persist_err:
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+                logger.exception(
+                    "No se pudo persistir entregable workspace tras chat: %s", persist_err
+                )
+
             ActivityLogger.log_activity(
                 agent_name=agent_name,
                 action_type="chat_request_processed",
@@ -190,6 +214,7 @@ async def chat_with_agent(
                     "request_type": "chat",
                     "thread_id": thread_id,
                     "user_id": current_user.id,
+                    "workspace_document_id": workspace_document_id,
                 },
                 metrics={"chat_messages": 1},
                 user_email=current_user.email,
@@ -203,6 +228,7 @@ async def chat_with_agent(
                 success=True,
                 confidence=result.get("confidence"),
                 hitl_required=result.get("hitl_required", False),
+                workspace_document_id=workspace_document_id,
             )
         ActivityLogger.log_activity(
             agent_name=agent_name,

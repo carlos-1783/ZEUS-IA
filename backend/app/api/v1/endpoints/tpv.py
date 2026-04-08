@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, File, UploadFile, Query
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 from decimal import Decimal
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 import logging
 from pathlib import Path
@@ -295,6 +295,9 @@ async def create_product(
     # (No restringir por rol, solo requiere autenticación)
     
     logger.info(f"📦 Creando producto: {request.name} - Precio: €{request.price} - Usuario: {current_user.id}")
+
+    ensure_user_company_link_for_operations(db, current_user)
+    primary_cid = _primary_company_id(db, current_user)
     
     # Generar ID único
     import time
@@ -317,6 +320,7 @@ async def create_product(
     # Crear producto en BD
     db_product = TPVProduct(
         user_id=current_user.id,  # MULTI-TENANCY: Filtrar por usuario
+        company_id=primary_cid,
         product_id=product_id,
         name=request.name,
         category=request.category,
@@ -366,9 +370,21 @@ async def list_products(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Listar todos los productos DEL USUARIO ACTUAL - MULTI-TENANCY"""
-    # Filtrar SOLO productos del usuario actual
-    db_products = db.query(TPVProduct).filter(TPVProduct.user_id == current_user.id).all()
+    """Listar productos del usuario y catálogo compartido por empresa (multi-tenant)."""
+    company_ids = _company_ids_for_user(db, current_user)
+    if company_ids:
+        db_products = (
+            db.query(TPVProduct)
+            .filter(
+                or_(
+                    TPVProduct.user_id == current_user.id,
+                    TPVProduct.company_id.in_(company_ids),
+                )
+            )
+            .all()
+        )
+    else:
+        db_products = db.query(TPVProduct).filter(TPVProduct.user_id == current_user.id).all()
     
     # Convertir a formato dict para mantener compatibilidad con API
     products = []
@@ -827,6 +843,7 @@ async def clear_cart(
 
 
 @router.post("/sale")
+@router.post("/sell")
 async def process_sale(
     request: ProcessSaleRequest,
     current_user: User = Depends(get_current_active_user),
@@ -842,6 +859,8 @@ async def process_sale(
         )
 
     ensure_user_company_link_for_operations(db, current_user)
+    company_ids = _company_ids_for_user(db, current_user)
+    primary_cid = _primary_company_id(db, current_user)
     if not request.cart_items:
         raise HTTPException(
             status_code=400,
@@ -854,14 +873,16 @@ async def process_sale(
         quantity = item.get("quantity", 1)
         if not product_id:
             raise HTTPException(status_code=400, detail="Cada línea debe incluir product_id")
-        db_product = (
-            db.query(TPVProduct)
-            .filter(
-                TPVProduct.product_id == product_id,
-                TPVProduct.user_id == current_user.id,
-            )
-            .first()
-        )
+        pq = db.query(TPVProduct).filter(TPVProduct.product_id == product_id)
+        if company_ids:
+            db_product = pq.filter(
+                or_(
+                    TPVProduct.user_id == current_user.id,
+                    TPVProduct.company_id.in_(company_ids),
+                )
+            ).first()
+        else:
+            db_product = pq.filter(TPVProduct.user_id == current_user.id).first()
         if not db_product:
             raise HTTPException(
                 status_code=400,
@@ -875,7 +896,6 @@ async def process_sale(
             raise HTTPException(status_code=400, detail=str(e))
 
     svc = _tpv_service_for_user(db, current_user)
-    company_ids = _company_ids_for_user(db, current_user)
     logger.info(
         "TPV venta intento user_id=%s email=%s company_ids=%s lineas=%s",
         current_user.id,
@@ -893,6 +913,7 @@ async def process_sale(
             user_id=current_user.id,
             db=db,
             consumption_type=request.consumption_type,
+            company_id=primary_cid,
         )
     except Exception:
         logger.exception(

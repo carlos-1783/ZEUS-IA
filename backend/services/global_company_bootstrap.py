@@ -168,7 +168,7 @@ def ensure_user_company_link_for_operations(db: Session, user: User) -> Optional
     return company.id
 
 
-def _ensure_hospitality_products(db: Session, user: User) -> int:
+def _ensure_hospitality_products(db: Session, user: User, company_id: Optional[int] = None) -> int:
     existing = db.query(TPVProduct).filter(TPVProduct.user_id == user.id).count()
     if existing > 0:
         return 0
@@ -186,6 +186,7 @@ def _ensure_hospitality_products(db: Session, user: User) -> int:
         db.add(
             TPVProduct(
                 user_id=user.id,
+                company_id=company_id,
                 product_id=f"PROD_AUTO_{base}_{i}",
                 name=name,
                 category=category,
@@ -310,7 +311,7 @@ def run_global_autonomous_bootstrap(
         db.add(user)
 
         if business_type == "hospitality":
-            result["products_created"] = _ensure_hospitality_products(db, user)
+            result["products_created"] = _ensure_hospitality_products(db, user, company.id)
 
         # Activar modo autónomo en metadata de company
         meta = company.metadata_ or {}

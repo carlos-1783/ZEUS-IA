@@ -76,6 +76,7 @@ def persist_fiscal_sale(
     payment_method: str,
     fiscal_items: List[Dict[str, Any]],
     consumption_type: Optional[str] = None,
+    company_id: Optional[int] = None,
 ) -> int:
     """
     Persistir venta fiscal en tpv_sales y tpv_sale_items (snapshot inmutable).
@@ -89,6 +90,7 @@ def persist_fiscal_sale(
         total = subtotal + tax_total + recargo_total
         sale = TPVSale(
             user_id=user_id,
+            company_id=company_id,
             ticket_id=ticket_id,
             document_type=document_type,
             payment_method=payment_method,

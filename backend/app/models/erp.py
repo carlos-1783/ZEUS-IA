@@ -254,6 +254,7 @@ class TPVProduct(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)  # Multi-tenancy
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True)
     
     # Product identification
     product_id = Column(String(100), nullable=False, index=True)  # PROD_xxx format
@@ -281,6 +282,7 @@ class TPVProduct(Base):
     
     # Relationship
     user = relationship("User", backref="tpv_products")
+    company = relationship("Company", foreign_keys=[company_id])
     
     def __repr__(self):
         return f"<TPVProduct {self.product_id} - {self.name} (User: {self.user_id})>"
@@ -322,6 +324,7 @@ class TPVSale(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True)
     ticket_id = Column(String(100), nullable=False, unique=True, index=True)
     document_type = Column(String(20), nullable=False)  # ticket, factura
     sale_date = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -335,6 +338,7 @@ class TPVSale(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     user = relationship("User", backref="tpv_sales")
+    company = relationship("Company", foreign_keys=[company_id])
     items = relationship("TPVSaleItem", back_populates="sale", cascade="all, delete-orphan")
 
 

@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     PERSEO_CHAT_AUTO_VIDEO: bool = os.getenv("PERSEO_CHAT_AUTO_VIDEO", "true").lower() in ("true", "1", "yes")
     # Segundos por diapositiva en el MP4/GIF de presentación PERSEO (chat con imagen)
     PERSEO_VIDEO_SECONDS_PER_SLIDE: float = float(os.getenv("PERSEO_VIDEO_SECONDS_PER_SLIDE", "5") or "5")
+    # Calidad tipo “presentación pro”: 16:9 (alto = ancho * 9/16). Máx. razonable 4K ancho.
+    PERSEO_VIDEO_WIDTH: int = int(os.getenv("PERSEO_VIDEO_WIDTH", "1920") or "1920")
+    PERSEO_VIDEO_FPS: int = int(os.getenv("PERSEO_VIDEO_FPS", "24") or "24")
+    PERSEO_VIDEO_CROSSFADE_SEC: float = float(os.getenv("PERSEO_VIDEO_CROSSFADE_SEC", "0.45") or "0.45")
+    # libx264 CRF (menor = más calidad, ~18–23 típico). No sustituye a un modelo generativo tipo Veo.
+    PERSEO_VIDEO_CRF: int = int(os.getenv("PERSEO_VIDEO_CRF", "20") or "20")
     IMAGE_STORAGE: str = os.getenv("IMAGE_STORAGE", "local")
     PERSEO_IMAGE_UPLOAD_DIR: str = os.getenv(
         "PERSEO_IMAGE_UPLOAD_DIR",

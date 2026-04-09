@@ -4,6 +4,7 @@ Entregables de workspace: estructura fija, persistencia en document_approvals, v
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -36,6 +37,62 @@ DEFAULT_CONTENT_TYPE: Dict[str, str] = {
     "JUSTICIA": "legal_document",
     "AFRODITA": "hr_document",
 }
+
+
+def _clean_marketing_text(raw: str) -> str:
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    # Quitar preámbulos frecuentes de "asistente" que no aportan al copy final.
+    drop_prefixes = (
+        "por supuesto",
+        "claro",
+        "aquí está un bosquejo",
+        "te recomendaría trabajar",
+        "desafortunadamente, como inteligencia artificial",
+    )
+    lines = [ln.strip() for ln in text.splitlines()]
+    kept: List[str] = []
+    for ln in lines:
+        low = ln.lower()
+        if any(low.startswith(p) for p in drop_prefixes):
+            continue
+        kept.append(ln)
+    text = "\n".join(kept).strip()
+    # Si viene con formato "Título:" / "Descripción:", extraer descripción como cuerpo principal.
+    m_title = re.search(r"t[ií]tulo:\s*[\"“]?([^\"\n]+)", text, flags=re.IGNORECASE)
+    m_desc = re.search(r"descripci[oó]n:\s*[\"“]?(.+?)(?:\n\n|$)", text, flags=re.IGNORECASE | re.DOTALL)
+    if m_desc:
+        body = m_desc.group(1).strip().strip('"”')
+        return body
+    # Fallback: primera parte útil (evitar párrafos de disclaimer largos)
+    parts = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    if parts:
+        return parts[0]
+    return text
+
+
+def _normalize_perseo_content(raw: str, extra_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    body = _clean_marketing_text(raw)
+    title = "Campaña de promoción"
+    title_match = re.search(r"t[ií]tulo:\s*[\"“]?([^\"\n]+)", raw or "", flags=re.IGNORECASE)
+    if title_match:
+        title = title_match.group(1).strip()
+    elif body:
+        title = body[:80].rstrip(".,;:! ") + ("..." if len(body) > 80 else "")
+
+    content: Dict[str, Any] = {
+        "copy": body or (raw or "").strip(),
+        "cta": "Reserva ahora",
+        "platforms": ["instagram", "facebook"],
+        "format": "social_media_post",
+    }
+    if extra_context:
+        for key in ("image_url", "video_url", "pdf_url", "media_url"):
+            v = extra_context.get(key)
+            if v:
+                content[key] = v
+    return {"title": title, "content": content}
 
 
 def primary_company_id_for_user(db: Session, user: User) -> Optional[int]:
@@ -150,12 +207,17 @@ def persist_agent_chat_deliverable(
     raw = str(message).strip()
     title = raw.split("\n")[0][:200].strip() or f"Entregable {agent_key}"
     cid = primary_company_id_for_user(db, user)
-    content: Dict[str, Any] = {"body": raw, "format": "markdown_or_plain"}
-    if extra_context:
-        for key in ("image_url", "video_url", "pdf_url", "media_url"):
-            v = extra_context.get(key)
-            if v:
-                content[key] = v
+    if agent_key == "PERSEO":
+        normalized = _normalize_perseo_content(raw, extra_context=extra_context)
+        title = normalized["title"]
+        content = normalized["content"]
+    else:
+        content = {"body": raw, "format": "markdown_or_plain"}
+        if extra_context:
+            for key in ("image_url", "video_url", "pdf_url", "media_url"):
+                v = extra_context.get(key)
+                if v:
+                    content[key] = v
     return persist_workspace_deliverable(
         db,
         user_id=user.id,

@@ -81,7 +81,18 @@
             <p class="card-description">
               Persistido en base de datos; también aparece en Documentos pendientes. Incluye copia, adjuntos y metadatos.
             </p>
-            <pre class="workspace-json">{{ formatWorkspacePayload(currentDetails.payload) }}</pre>
+            <div class="workspace-ad">
+              <h6>{{ workspaceAdTitle }}</h6>
+              <p class="workspace-copy">{{ workspaceAdCopy }}</p>
+              <div class="workspace-meta">
+                <span class="meta-chip">CTA: {{ workspaceAdCta }}</span>
+                <span class="meta-chip">Canales: {{ workspaceAdPlatforms }}</span>
+              </div>
+            </div>
+            <details class="workspace-raw">
+              <summary>Ver JSON completo</summary>
+              <pre class="workspace-json">{{ formatWorkspacePayload(currentDetails.payload) }}</pre>
+            </details>
           </section>
 
           <section class="card tip-card" v-if="currentDeliverable">
@@ -315,6 +326,30 @@ const workspaceVideoUrl = computed(() => {
 const workspacePdfUrl = computed(() => {
   const c = workspaceContent.value || {};
   return String(c.pdf_url || '').trim() || '';
+});
+const workspaceAdTitle = computed(() => {
+  const p = workspacePayload.value || {};
+  const raw = String(p.title || '').trim();
+  const badPrefix = /^por supuesto|^claro|^aquí está/i.test(raw);
+  if (!raw || badPrefix) {
+    const copy = workspaceAdCopy.value;
+    return copy.length > 80 ? `${copy.slice(0, 80).trim()}...` : (copy || 'Campaña');
+  }
+  return raw;
+});
+const workspaceAdCopy = computed(() => {
+  const c = workspaceContent.value || {};
+  const copy = c.copy || c.body || '';
+  return String(copy).trim() || 'Sin copy disponible.';
+});
+const workspaceAdCta = computed(() => {
+  const c = workspaceContent.value || {};
+  return String(c.cta || 'Reserva ahora').trim();
+});
+const workspaceAdPlatforms = computed(() => {
+  const c = workspaceContent.value || {};
+  const arr = Array.isArray(c.platforms) ? c.platforms : [];
+  return arr.length ? arr.join(', ') : 'instagram, facebook';
 });
 const videoAsset = computed(() => currentDetails.value?.video_asset ?? null);
 const extractRelativePathFromAsset = (asset: any): string | null => {
@@ -1027,6 +1062,40 @@ onMounted(async () => {
   line-height: 1.45;
   overflow-x: auto;
   max-height: 420px;
+}
+
+.workspace-ad h6 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: #0f172a;
+}
+
+.workspace-copy {
+  margin: 0;
+  color: #1f2937;
+  line-height: 1.5;
+}
+
+.workspace-meta {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.meta-chip {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.1);
+  color: #1e40af;
+}
+
+.workspace-raw summary {
+  cursor: pointer;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #475569;
 }
 
 @media (max-width: 900px) {

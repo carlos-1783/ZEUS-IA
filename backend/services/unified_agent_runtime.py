@@ -68,7 +68,20 @@ def run_chat(
         append_decision_log(company_id, agent_name, thread_id, "chat_error", {"error": str(e)})
         return {"success": False, "error": str(e), "message": f"Error: {e}"}
 
-    content = result.get("content") or result.get("response") or "Sin respuesta"
+    content = result.get("content") or result.get("response") or ""
+    if not str(content).strip():
+        append_decision_log(
+            company_id,
+            agent_name,
+            thread_id,
+            "chat_empty_response",
+            {"user_message_len": len(message)},
+        )
+        return {
+            "success": False,
+            "message": "",
+            "error": "El agente no devolvió contenido. Reintenta en unos segundos.",
+        }
     buf.append({"role": "assistant", "content": content})
 
     persist_short_term(company_id, agent_name, thread_id, buf)

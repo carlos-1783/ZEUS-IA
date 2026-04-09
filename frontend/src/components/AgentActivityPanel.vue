@@ -534,26 +534,41 @@ const sendTextMessage = async () => {
   })
   
   try {
-    // Llamar al API real del agente
-    const agentNameUrl = props.agent.name.toLowerCase().replace(/ /g, '-')
-    const contextPayload = {}
-    if (isPerseoAgent.value && imageReferenceUrl.value) {
-      const u = imageReferenceUrl.value
-      if (/\.pdf($|\?)/i.test(u) || u.includes('/documents/')) contextPayload.pdf_url = u
-      else if (/\.(mp4|webm|mov|m4v)($|\?)/i.test(u) || u.includes('/videos/')) contextPayload.video_url = u
-      else contextPayload.image_url = u
+    const doChatCall = async () => {
+      // Llamar al API real del agente
+      const agentNameUrl = props.agent.name.toLowerCase().replace(/ /g, '-')
+      const contextPayload = {}
+      if (isPerseoAgent.value && imageReferenceUrl.value) {
+        const u = imageReferenceUrl.value
+        if (/\.pdf($|\?)/i.test(u) || u.includes('/documents/')) contextPayload.pdf_url = u
+        else if (/\.(mp4|webm|mov|m4v)($|\?)/i.test(u) || u.includes('/videos/')) contextPayload.video_url = u
+        else contextPayload.image_url = u
+      }
+
+      const response = await fetch(`/api/v1/chat/${agentNameUrl}/chat`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          message: userMessage,
+          context: contextPayload
+        })
+      })
+      const data = await response.json().catch(() => ({}))
+      return { response, data }
+    }
+    let { response, data } = await doChatCall()
+    // Reintento único cuando viene vacío o "Sin respuesta"
+    const msg = String(data?.message || '').trim()
+    if (
+      response.ok &&
+      (!msg || msg.toLowerCase() === 'sin respuesta')
+    ) {
+      await new Promise(resolve => setTimeout(resolve, 450))
+      const second = await doChatCall()
+      response = second.response
+      data = second.data
     }
 
-    const response = await fetch(`/api/v1/chat/${agentNameUrl}/chat`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        message: userMessage,
-        context: contextPayload
-      })
-    })
-    
-    const data = await response.json().catch(() => ({}))
     if (!response.ok) {
       lastTextChatSentAt.value = 0
       throw new Error(data?.detail || data?.message || `Error ${response.status}`)
@@ -566,7 +581,7 @@ const sendTextMessage = async () => {
     messages.value.push({
       id: Date.now() + 2,
       sender: 'agent',
-      content: data.message || 'Lo siento, no pude procesar tu solicitud.',
+      content: (data.message && String(data.message).trim()) || '⚠️ El agente no devolvió contenido útil. Reintenta en unos segundos.',
       timestamp: new Date()
     })
     

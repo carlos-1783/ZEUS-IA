@@ -77,6 +77,14 @@ export function useAutomationDeliverables(agent: string) {
           if (ws?.success && Array.isArray(ws.items)) {
             const wsItems: DeliverableItem[] = ws.items.map((doc: Record<string, unknown>) => {
               const payload = (doc.document_payload || {}) as Record<string, unknown>;
+              const content = (payload.content || {}) as Record<string, unknown>;
+              const hasUsefulContent =
+                (typeof payload.title === 'string' && payload.title.trim().length > 0) ||
+                (typeof content.copy === 'string' && content.copy.trim().length > 0) ||
+                (typeof content.body === 'string' && content.body.trim().length > 0);
+              if (!hasUsefulContent) {
+                return null as unknown as DeliverableItem;
+              }
               const created = doc.created_at ? new Date(String(doc.created_at)).getTime() / 1000 : 0;
               return {
                 id: `ws:${doc.id}`,
@@ -91,7 +99,7 @@ export function useAutomationDeliverables(agent: string) {
                   (typeof doc.document_type === 'string' && doc.document_type) ||
                   `Entregable #${doc.id}`,
               };
-            });
+            }).filter(Boolean);
             merged = [...wsItems, ...merged].sort((a, b) => b.createdAt - a.createdAt);
           }
         } catch (e) {

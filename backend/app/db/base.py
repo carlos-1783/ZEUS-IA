@@ -50,6 +50,7 @@ def create_tables():
             # Esto asegura que las columnas existan antes de que SQLAlchemy intente usarlas
             _migrate_user_columns()
             _migrate_document_approvals_columns()
+            _migrate_tpv_company_columns()
             
             # Importar modelos aquí para evitar importación circular
             from app.models.user import User, RefreshToken, PasswordResetToken
@@ -72,6 +73,7 @@ def create_tables():
             # Ejecutar migración nuevamente después de crear tablas (por si acaso)
             _migrate_user_columns()
             _migrate_document_approvals_columns()
+            _migrate_tpv_company_columns()
             return  # Éxito, salir de la función
             
         except Exception as e:
@@ -299,6 +301,60 @@ def _migrate_document_approvals_columns():
             print("[MIGRATION] [OK] document_approvals ya estaba alineada")
     except Exception as e:
         print(f"[MIGRATION] [WARN] No se pudo verificar document_approvals: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def _migrate_tpv_company_columns():
+    """Alinea tpv_products/tpv_sales con columnas company_id esperadas por el ORM."""
+    from sqlalchemy import inspect, text
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+
+    try:
+        inspector = inspect(engine)
+        is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
+        tables = ("tpv_products", "tpv_sales")
+        for table_name in tables:
+            if table_name not in inspector.get_table_names():
+                continue
+            cols = {c["name"] for c in inspector.get_columns(table_name)}
+            if "company_id" in cols:
+                continue
+            try:
+                with engine.begin() as conn:
+                    if is_postgres:
+                        conn.execute(
+                            text(f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "company_id" INTEGER')
+                        )
+                    else:
+                        conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN company_id INTEGER"))
+                print(f"[MIGRATION] [OK] {table_name}.company_id agregada")
+            except (OperationalError, ProgrammingError) as e:
+                em = str(e).lower()
+                if "duplicate column" in em or "already exists" in em:
+                    print(f"[MIGRATION] [INFO] {table_name}.company_id ya existe")
+                else:
+                    print(f"[MIGRATION] [WARN] No se pudo agregar {table_name}.company_id: {e}")
+
+            # índice útil para consultas por empresa en TPV
+            try:
+                indexes = {ix["name"] for ix in inspector.get_indexes(table_name)}
+                idx_name = f"ix_{table_name}_company_id"
+                if idx_name not in indexes:
+                    with engine.begin() as conn:
+                        if is_postgres:
+                            conn.execute(
+                                text(f'CREATE INDEX IF NOT EXISTS "{idx_name}" ON "{table_name}" (company_id)')
+                            )
+                        else:
+                            conn.execute(
+                                text(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table_name}(company_id)")
+                            )
+                    print(f"[MIGRATION] [OK] Índice {idx_name} creado")
+            except Exception as e:
+                print(f"[MIGRATION] [WARN] No se pudo crear índice company_id en {table_name}: {e}")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] No se pudo verificar tpv company_id: {e}")
         import traceback
         traceback.print_exc()
 

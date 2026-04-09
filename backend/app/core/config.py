@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     # Static files
     STATIC_URL: str = "/static"
     STATIC_DIR: str = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "static")
+    # Origen público del API (sin barra final). Subidas: URL absoluta del vídeo/imagen. Ej. https://tu-app.up.railway.app
+    PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
     PERSEO_IMAGES_ENABLED: bool = os.getenv("PERSEO_IMAGES_ENABLED", "true").lower() in ("true", "1", "yes")
     IMAGE_STORAGE: str = os.getenv("IMAGE_STORAGE", "local")
     PERSEO_IMAGE_UPLOAD_DIR: str = os.getenv(

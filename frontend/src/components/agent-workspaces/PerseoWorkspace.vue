@@ -115,22 +115,37 @@
             </p>
             <img
               v-if="workspaceImageUrl"
-              :src="workspaceImageUrl"
+              :src="workspaceImageDisplayUrl"
               loading="lazy"
               class="media-image"
               alt="Referencia visual adjuntada"
             />
-            <video
-              v-else-if="workspaceVideoUrl"
-              :src="workspaceVideoUrl"
-              controls
-              playsinline
-              preload="metadata"
-              class="media-video"
-            ></video>
+            <template v-else-if="workspaceVideoUrl">
+              <video
+                v-show="!workspaceVideoLoadError"
+                :key="workspaceVideoDisplayUrl"
+                :src="workspaceVideoDisplayUrl"
+                controls
+                playsinline
+                preload="metadata"
+                class="media-video"
+                @error="onWorkspaceVideoError"
+              ></video>
+              <div v-if="workspaceVideoLoadError" class="media-video-fallback">
+                <p>No se pudo reproducir en el navegador (URL o red).</p>
+                <a
+                  :href="workspaceVideoDisplayUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="btn ghost"
+                >
+                  Abrir vídeo en nueva pestaña
+                </a>
+              </div>
+            </template>
             <div v-else-if="workspacePdfUrl" class="media-pdf">
               <span>PDF adjunto</span>
-              <a :href="workspacePdfUrl" target="_blank" rel="noopener noreferrer" class="btn ghost">
+              <a :href="workspacePdfDisplayUrl" target="_blank" rel="noopener noreferrer" class="btn ghost">
                 Abrir PDF
               </a>
             </div>
@@ -290,6 +305,7 @@
 import { onMounted, ref, computed, watch } from 'vue';
 import type { AutomationOutput } from '@/api/automationService';
 import { useAutomationDeliverables } from '@/composables/useAutomationDeliverables';
+import { resolveWorkspaceMediaUrl } from '@/utils/resolveWorkspaceMediaUrl';
 import PerseoToolsPanel from './PerseoToolsPanel.vue';
 
 const {
@@ -327,6 +343,18 @@ const workspacePdfUrl = computed(() => {
   const c = workspaceContent.value || {};
   return String(c.pdf_url || '').trim() || '';
 });
+
+const workspaceImageDisplayUrl = computed(() => resolveWorkspaceMediaUrl(workspaceImageUrl.value));
+const workspaceVideoDisplayUrl = computed(() => resolveWorkspaceMediaUrl(workspaceVideoUrl.value));
+const workspacePdfDisplayUrl = computed(() => resolveWorkspaceMediaUrl(workspacePdfUrl.value));
+
+const workspaceVideoLoadError = ref(false);
+watch(workspaceVideoDisplayUrl, () => {
+  workspaceVideoLoadError.value = false;
+});
+const onWorkspaceVideoError = () => {
+  workspaceVideoLoadError.value = true;
+};
 const workspaceAdTitle = computed(() => {
   const p = workspacePayload.value || {};
   const raw = String(p.title || '').trim();
@@ -870,6 +898,19 @@ onMounted(async () => {
   background: #0f172a;
   max-height: 460px;
   object-fit: contain;
+}
+
+.media-video-fallback {
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.06);
+  border: 1px dashed rgba(148, 163, 184, 0.45);
+  font-size: 14px;
+  color: #475569;
+}
+
+.media-video-fallback p {
+  margin: 0 0 12px;
 }
 
 .media-pdf {

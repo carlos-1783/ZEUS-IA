@@ -4,10 +4,11 @@ Subida unificada: imágenes, vídeo, PDF. Autenticada, tamaño acotado, URL púb
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Set
+from typing import Optional, Set
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
@@ -29,6 +30,25 @@ ALLOWED_CONTENT_TYPES: Set[str] = {
     "video/quicktime",
     "application/pdf",
 }
+
+def _public_origin_for_upload(request: Request) -> Optional[str]:
+    """
+    Host público visto por el navegador (proxy / Railway). Evita guardar http://127.0.0.1 en la BD.
+    """
+    explicit = (getattr(settings, "PUBLIC_BASE_URL", None) or "").strip().rstrip("/")
+    if explicit:
+        return explicit
+    rdom = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip()
+    if rdom:
+        return f"https://{rdom}".rstrip("/")
+    fwd_host = (request.headers.get("x-forwarded-host") or "").split(",")[0].strip()
+    if fwd_host:
+        proto = (request.headers.get("x-forwarded-proto") or "https").split(",")[0].strip().lower()
+        if proto not in ("http", "https"):
+            proto = "https"
+        return f"{proto}://{fwd_host}".rstrip("/")
+    return None
+
 
 EXT_FALLBACK = {
     ".jpg": "image/jpeg",
@@ -101,14 +121,17 @@ async def upload_media(
     if not path_url.startswith("/"):
         path_url = "/" + path_url.lstrip("/")
 
-    # URL absoluta (host del backend) para previsualización desde el frontend en otro puerto
-    host = request.url.hostname or "127.0.0.1"
-    port = request.url.port
-    scheme = request.url.scheme or "http"
-    netloc = host
-    if port and not ((scheme == "http" and port == 80) or (scheme == "https" and port == 443)):
-        netloc = f"{host}:{port}"
-    absolute_url = f"{scheme}://{netloc}{path_url}"
+    public_origin = _public_origin_for_upload(request)
+    if public_origin:
+        absolute_url = f"{public_origin}{path_url}"
+    else:
+        host = request.url.hostname or "127.0.0.1"
+        port = request.url.port
+        scheme = request.url.scheme or "http"
+        netloc = host
+        if port and not ((scheme == "http" and port == 80) or (scheme == "https" and port == 443)):
+            netloc = f"{host}:{port}"
+        absolute_url = f"{scheme}://{netloc}{path_url}"
 
     return {
         "success": True,

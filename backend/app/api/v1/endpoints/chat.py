@@ -188,6 +188,16 @@ async def chat_with_agent(
         )
 
         if result.get("success"):
+            # Producción: sanitizar respuesta PERSEO para evitar disclaimers tipo
+            # "como IA no puedo crear vídeos" en el mensaje visible al cliente.
+            if agent_name == "PERSEO":
+                try:
+                    from services.workspace_deliverables import normalize_perseo_chat_message
+
+                    result["message"] = normalize_perseo_chat_message(result.get("message", "") or "")
+                except Exception:
+                    logger.exception("No se pudo normalizar mensaje PERSEO")
+
             workspace_document_id = None
             try:
                 from services.workspace_deliverables import persist_agent_chat_deliverable

@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     PERSEO_IMAGES_ENABLED: bool = os.getenv("PERSEO_IMAGES_ENABLED", "true").lower() in ("true", "1", "yes")
     # Tras chat PERSEO con imagen (sin vídeo adjunto), generar MP4/GIF de presentación en segundo plano
     PERSEO_CHAT_AUTO_VIDEO: bool = os.getenv("PERSEO_CHAT_AUTO_VIDEO", "true").lower() in ("true", "1", "yes")
+    # Segundos por diapositiva en el MP4/GIF de presentación PERSEO (chat con imagen)
+    PERSEO_VIDEO_SECONDS_PER_SLIDE: float = float(os.getenv("PERSEO_VIDEO_SECONDS_PER_SLIDE", "5") or "5")
     IMAGE_STORAGE: str = os.getenv("IMAGE_STORAGE", "local")
     PERSEO_IMAGE_UPLOAD_DIR: str = os.getenv(
         "PERSEO_IMAGE_UPLOAD_DIR",

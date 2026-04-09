@@ -46,12 +46,21 @@ def build_deliverable_from_chat_content(content: Dict[str, Any], title: str) -> 
         ]
     summary = (copy_text[:600] if copy_text else "") or (title or "Campaña PERSEO")[:600]
     cta = str(content.get("cta") or "Reserva ahora").strip()
-    return {
+    out: Dict[str, Any] = {
         "summary": summary,
         "video_script": {"structure": structure, "goal": "Entregable chat PERSEO"},
         "distribution_plan": {},
         "cta_slide": cta,
     }
+    img_ref = str(content.get("image_url") or "").strip()
+    if img_ref:
+        out["reference_image_url"] = img_ref
+    try:
+        spf = float(settings.PERSEO_VIDEO_SECONDS_PER_SLIDE)
+    except (TypeError, ValueError):
+        spf = 5.0
+    out["seconds_per_slide"] = max(1.0, min(spf, 120.0))
+    return out
 
 
 def run_perseo_chat_video_generation(doc_id: int, user_id: int) -> None:

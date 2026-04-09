@@ -7,10 +7,13 @@ siempre reciba un recurso visual descargable.
 
 from __future__ import annotations
 
+import io
 import logging
+import re
 import textwrap
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import unquote, urlparse
 
 from PIL import Image, ImageDraw, ImageFont  # type: ignore
 
@@ -44,13 +47,16 @@ def generate_marketing_video(
         logger.warning("No se generaron frames para el vídeo de PERSEO")
         return {"success": False, "reason": "no_frames"}
 
+    spf = _seconds_per_slide_int(deliverable)
+    frames = _repeat_each_frame(frames, spf)
+
     agent_dir = ensure_dir(OUTPUT_BASE_DIR / agent.lower())
     base_name = artifact_id or f"{prefix}_{timestamp()}"
     mp4_path = agent_dir / f"{base_name}.mp4"
 
     # Intentar generar MP4 primero
     logger.info(f"Intentando generar MP4 para {base_name}...")
-    if _write_mp4(frames, mp4_path):
+    if _write_mp4(frames, mp4_path, fps=1):
         file_size = mp4_path.stat().st_size if mp4_path.exists() else 0
         logger.info(f"✅ MP4 generado exitosamente: {mp4_path.name} ({file_size} bytes)")
         return _build_video_asset_payload(
@@ -63,7 +69,7 @@ def generate_marketing_video(
     # Si falla MP4, generar GIF como fallback
     logger.warning("MP4 falló, generando GIF como fallback...")
     gif_path = agent_dir / f"{base_name}_fallback.gif"
-    if _write_gif(frames, gif_path):
+    if _write_gif(frames, gif_path, frame_duration_ms=1000):
         file_size = gif_path.stat().st_size if gif_path.exists() else 0
         logger.info(f"✅ GIF fallback generado: {gif_path.name} ({file_size} bytes)")
         payload = _build_video_asset_payload(
@@ -106,8 +112,139 @@ def _build_video_asset_payload(
     }
 
 
+def _seconds_per_slide_int(deliverable: Optional[Dict[str, Any]]) -> int:
+    try:
+        s = float((deliverable or {}).get("seconds_per_slide") or 5.0)
+    except (TypeError, ValueError):
+        s = 5.0
+    return max(1, min(int(round(s)), 120))
+
+
+def _repeat_each_frame(frames: List[Image.Image], repeats: int) -> List[Image.Image]:
+    repeats = max(1, min(repeats, 120))
+    out: List[Image.Image] = []
+    for f in frames:
+        for _ in range(repeats):
+            out.append(f)
+    return out
+
+
+def _ensure_rgb_max(im: Image.Image) -> Image.Image:
+    im = im.convert("RGB")
+    try:
+        resample = Image.Resampling.LANCZOS
+    except AttributeError:
+        resample = Image.LANCZOS  # type: ignore[attr-defined]
+    im.thumbnail((1920, 1920), resample)
+    return im
+
+
+def _resolve_local_reference_path(raw: str) -> Optional[Path]:
+    from app.core.config import settings
+
+    s = raw.strip()
+    if not s:
+        return None
+    path_part = s
+    if s.startswith("http://") or s.startswith("https://"):
+        path_part = unquote(urlparse(s).path or "")
+    elif "?" in s:
+        path_part = s.split("?", 1)[0]
+
+    if path_part.startswith("/static/"):
+        rel = path_part[len("/static/") :].lstrip("/")
+        p = (Path(settings.STATIC_DIR) / rel).resolve()
+        try:
+            p.relative_to(Path(settings.STATIC_DIR).resolve())
+        except ValueError:
+            return None
+        return p if p.is_file() else None
+
+    m = re.match(
+        r"^/api/v1/upload/file/(images|videos|documents|media)/([^/?#]+)$",
+        path_part,
+    )
+    if m:
+        cat, fn = m.group(1), unquote(m.group(2))
+        base = (Path(settings.STATIC_DIR) / "uploads" / cat).resolve()
+        p = (base / fn).resolve()
+        try:
+            p.relative_to(base)
+        except ValueError:
+            return None
+        return p if p.is_file() else None
+    return None
+
+
+def _load_reference_image(raw: str) -> Optional[Image.Image]:
+    lp = _resolve_local_reference_path(raw)
+    if lp is not None:
+        try:
+            return _ensure_rgb_max(Image.open(lp))
+        except Exception as exc:
+            logger.warning("No se pudo abrir imagen de referencia en disco: %s", exc)
+    s = raw.strip()
+    if s.startswith("http://") or s.startswith("https://"):
+        try:
+            import requests  # pyright: ignore[reportMissingModuleSource]
+
+            r = requests.get(
+                s,
+                timeout=25,
+                headers={"User-Agent": "ZEUS-IA-PerseoVideo/1.0"},
+            )
+            r.raise_for_status()
+            return _ensure_rgb_max(Image.open(io.BytesIO(r.content)))
+        except Exception as exc:
+            logger.warning("No se pudo descargar imagen de referencia: %s", exc)
+    return None
+
+
+def _render_reference_slide(pil_img: Image.Image, caption: str = "") -> Image.Image:
+    image = Image.new("RGB", (WIDTH, HEIGHT), color=BACKGROUND)
+    draw = ImageDraw.Draw(image)
+    font_title = ImageFont.load_default()
+    font_small = ImageFont.load_default()
+    draw.text((140, 90), "Referencia visual", fill=WHITE, font=font_title, spacing=4)
+    box_left, box_top, box_right, box_bottom = 140, 150, WIDTH - 140, HEIGHT - 150
+    bw, bh = box_right - box_left, box_bottom - box_top
+    pic = pil_img.copy()
+    try:
+        resample = Image.Resampling.LANCZOS
+    except AttributeError:
+        resample = Image.LANCZOS  # type: ignore[attr-defined]
+    pic.thumbnail((bw, bh), resample)
+    iw, ih = pic.size
+    x = box_left + (bw - iw) // 2
+    y = box_top + (bh - ih) // 2
+    image.paste(pic, (x, y))
+    if caption.strip():
+        wrapped = "\n".join(textwrap.wrap(caption.strip(), width=52))
+        draw.text((140, HEIGHT - 130), wrapped, fill=SUBACCENT, font=font_small, spacing=4)
+    draw.rectangle((140, HEIGHT - 52, WIDTH - 140, HEIGHT - 38), fill=ACCENT)
+    draw.text(
+        (152, HEIGHT - 50),
+        "ZEUS IA • PERSEO (imagen del chat)",
+        fill=WHITE,
+        font=font_small,
+    )
+    return image
+
+
 def _build_frames(deliverable: Dict[str, Any]) -> List[Image.Image]:
     frames: List[Image.Image] = []
+
+    ref_raw = deliverable.get("reference_image_url") or deliverable.get("reference_image")
+    if isinstance(ref_raw, str) and ref_raw.strip():
+        ref_pil = _load_reference_image(ref_raw)
+        if ref_pil:
+            cap = str(deliverable.get("reference_caption") or "").strip()
+            frames.append(_render_reference_slide(ref_pil, cap))
+        else:
+            logger.warning(
+                "Hay reference_image_url pero no se pudo cargar para el vídeo: %s",
+                ref_raw[:120],
+            )
 
     summary = deliverable.get("summary")
     if summary:
@@ -184,7 +321,7 @@ def _render_slide(title: str, body: str, accent: bool = False, highlight: bool =
     return image
 
 
-def _write_mp4(frames: List[Image.Image], output_path: Path, fps: int = 2) -> bool:
+def _write_mp4(frames: List[Image.Image], output_path: Path, fps: float = 1) -> bool:
     """
     Genera un MP4 a partir de frames PIL usando MoviePy.
     Usa el binario FFmpeg de imageio-ffmpeg si está disponible.
@@ -228,14 +365,14 @@ def _write_mp4(frames: List[Image.Image], output_path: Path, fps: int = 2) -> bo
             return False
         
         # Crear clip desde los frames
-        clip = ImageSequenceClip(frame_arrays, fps=fps)
+        clip = ImageSequenceClip(frame_arrays, fps=float(fps))
         
         # Escribir el archivo MP4
         clip.write_videofile(
             str(output_path),
             codec="libx264",
             audio=False,
-            fps=fps,
+            fps=float(fps),
             logger=None,
             preset='medium',  # Balance entre calidad y velocidad
             bitrate='1000k',  # Bitrate razonable para slides
@@ -266,13 +403,15 @@ def _write_mp4(frames: List[Image.Image], output_path: Path, fps: int = 2) -> bo
         return False
 
 
-def _write_gif(frames: List[Image.Image], output_path: Path, duration: int = 1200) -> bool:
+def _write_gif(
+    frames: List[Image.Image], output_path: Path, frame_duration_ms: int = 1000
+) -> bool:
     try:
         frames[0].save(
             output_path,
             save_all=True,
             append_images=frames[1:],
-            duration=duration,
+            duration=frame_duration_ms,
             loop=0,
             optimize=True,
         )

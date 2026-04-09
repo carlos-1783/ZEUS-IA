@@ -1,14 +1,33 @@
 """
 🔷 WhatsApp Service - Twilio Integration
-Envío depende ÚNICAMENTE de credenciales Twilio válidas.
-SI existen TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN y TWILIO_WHATSAPP_NUMBER (o TWILIO_WHATSAPP_FROM) → enviar.
-Sin candados ni flags adicionales.
+
+Credenciales: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN y TWILIO_WHATSAPP_NUMBER (o TWILIO_WHATSAPP_FROM).
+
+TWILIO_WHATSAPP_ENABLED=false (o 0/no) desactiva el envío aunque existan credenciales (útil hasta
+activar sandbox o número de WhatsApp Business en Twilio).
+
+Twilio 63031: "From" y "To" no pueden ser el mismo identificador; se valida antes de llamar a la API.
 """
 import os
 import logging
 from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
+
+
+def _env_flag(name: str, default: bool = True) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    if not raw:
+        return default
+    return raw in ("1", "true", "yes", "on")
+
+
+def _whatsapp_canonical(addr: str) -> str:
+    """Compara números Twilio WhatsApp sin depender del prefijo whatsapp:."""
+    s = (addr or "").strip().lower()
+    if s.startswith("whatsapp:"):
+        s = s[9:]
+    return "".join(c for c in s if c.isdigit() or c == "+")
 
 try:
     from twilio.rest import Client  # type: ignore[reportMissingImports]
@@ -24,15 +43,18 @@ class WhatsAppService:
     def __init__(self):
         self.account_sid = os.getenv("TWILIO_ACCOUNT_SID")
         self.auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+        self.whatsapp_enabled = _env_flag("TWILIO_WHATSAPP_ENABLED", default=True)
         # TWILIO_WHATSAPP_FROM o TWILIO_WHATSAPP_NUMBER (número productivo o sandbox)
         self.whatsapp_number = (
             os.getenv("TWILIO_WHATSAPP_FROM")
             or os.getenv("TWILIO_WHATSAPP_NUMBER")
             or "whatsapp:+14155238886"
-        )        
+        )
         self.client = None
         if not TWILIO_AVAILABLE:
             print("⚠️ WhatsApp Service: Twilio library not installed (pip install twilio)")
+        elif not self.whatsapp_enabled:
+            print("ℹ️ WhatsApp Service: TWILIO_WHATSAPP_ENABLED=false — envío desactivado")
         elif self.account_sid and self.auth_token:
             try:
                 self.client = Client(self.account_sid, self.auth_token)
@@ -43,8 +65,8 @@ class WhatsAppService:
             print("⚠️ WhatsApp Service: Credenciales de Twilio no configuradas")
     
     def is_configured(self) -> bool:
-        """Verificar si el servicio está configurado"""
-        return self.client is not None
+        """Cliente Twilio listo y envío WhatsApp permitido por configuración."""
+        return bool(self.whatsapp_enabled and self.client is not None)
     
     async def send_message(
         self, 
@@ -63,6 +85,11 @@ class WhatsAppService:
         Returns:
             Dict con status y message_sid
         """
+        if not self.whatsapp_enabled:
+            return {
+                "success": False,
+                "error": "WhatsApp desactivado (TWILIO_WHATSAPP_ENABLED=false). Actívalo cuando Twilio/WhatsApp estén listos.",
+            }
         if not self.is_configured():
             return {
                 "success": False,
@@ -72,6 +99,14 @@ class WhatsAppService:
         try:
             if not to_number.startswith("whatsapp:"):
                 to_number = f"whatsapp:{to_number}"
+
+            if _whatsapp_canonical(self.whatsapp_number) == _whatsapp_canonical(to_number):
+                err = (
+                    "Twilio 63031: el remitente (From) y el destino (To) no pueden ser el mismo número. "
+                    "TWILIO_WHATSAPP_FROM debe ser el número de Twilio/sandbox; el cliente va en To."
+                )
+                logger.warning("[WHATSAPP] %s", err)
+                return {"success": False, "error": err, "twilio_error_code": "63031"}
             
             message_params = {
                 "from_": self.whatsapp_number,
@@ -257,8 +292,9 @@ class WhatsAppService:
             }
     
     def get_status(self) -> Dict[str, Any]:
-        """Estado del servicio. Envío permitido si configured=True (credenciales válidas)."""
+        """Estado del servicio. Envío permitido si configured=True (credenciales + enabled)."""
         return {
+            "enabled": self.whatsapp_enabled,
             "configured": self.is_configured(),
             "provider": "Twilio",
             "whatsapp_number": self.whatsapp_number if self.is_configured() else None,

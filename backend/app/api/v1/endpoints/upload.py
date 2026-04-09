@@ -10,13 +10,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Set
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
+from fastapi.responses import FileResponse
 
 from app.core.auth import get_current_active_user
 from app.core.config import settings
 from app.models.user import User
 
 router = APIRouter()
+
+# Debe coincidir con subcarpetas de POST "" (images, videos, documents, media)
+_SERVE_UPLOAD_CATEGORIES = frozenset({"images", "videos", "documents", "media"})
+_FILENAME_SAFE = re.compile(r"^u\d+_[a-zA-Z0-9._-]+$")
 
 MAX_BYTES = 100 * 1024 * 1024  # 100 MB
 
@@ -142,3 +147,60 @@ async def upload_media(
         "path_url": path_url,
         "path": f"uploads/{subdir}/{filename}",
     }
+
+
+def _media_type_upload(filename: str) -> str:
+    ext = Path(filename).suffix.lower()
+    return EXT_FALLBACK.get(ext, "application/octet-stream")
+
+
+@router.options("/file/{category}/{filename}", include_in_schema=False)
+async def upload_file_options(category: str, filename: str) -> Response:
+    return Response(status_code=204)
+
+
+@router.get("/file/{category}/{filename}")
+async def serve_user_upload(
+    category: str,
+    filename: str,
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Sirve un fichero subido vía POST /upload (mismo disco que STATIC_DIR).
+    Autenticado; solo el propietario (prefijo u{user_id}_). Útil cuando /static da 404
+    (disco efímero, otro réplica, etc.): el cliente usa ?token= en <video src>.
+    """
+    if category not in _SERVE_UPLOAD_CATEGORIES:
+        raise HTTPException(status_code=404, detail="Not Found")
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=404, detail="Not Found")
+    if not _FILENAME_SAFE.match(filename):
+        raise HTTPException(status_code=404, detail="Not Found")
+    prefix = f"u{current_user.id}_"
+    if not filename.startswith(prefix):
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    base_dir = (Path(settings.STATIC_DIR) / "uploads" / category).resolve()
+    file_path = (base_dir / filename).resolve()
+    try:
+        file_path.relative_to(base_dir)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Not Found")
+    if not file_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Archivo no encontrado. En Railway sin volumen persistente las subidas "
+                "se pierden al redeploy; vuelve a subir el vídeo o configura STATIC_DIR en un volumen."
+            ),
+        )
+
+    media = _media_type_upload(filename)
+    return FileResponse(
+        file_path,
+        media_type=media,
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"',
+            "Accept-Ranges": "bytes",
+        },
+    )

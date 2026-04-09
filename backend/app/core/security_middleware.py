@@ -110,7 +110,11 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             return ("preflight", 10_000)
 
         # No limitar health/static/service-worker para evitar falsos positivos
-        if path in ("/health", "/api/v1/health", "/service-worker.js") or path.startswith("/assets/"):
+        if (
+            path in ("/health", "/api/v1/health", "/service-worker.js")
+            or path.startswith("/assets/")
+            or path.startswith("/static/")
+        ):
             return ("public_static", 10_000)
 
         # Endpoints con polling frecuente en TPV/paneles

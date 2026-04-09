@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     # Origen público del API (sin barra final). Subidas: URL absoluta del vídeo/imagen. Ej. https://tu-app.up.railway.app
     PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
     PERSEO_IMAGES_ENABLED: bool = os.getenv("PERSEO_IMAGES_ENABLED", "true").lower() in ("true", "1", "yes")
+    # Tras chat PERSEO con imagen (sin vídeo adjunto), generar MP4/GIF de presentación en segundo plano
+    PERSEO_CHAT_AUTO_VIDEO: bool = os.getenv("PERSEO_CHAT_AUTO_VIDEO", "true").lower() in ("true", "1", "yes")
     IMAGE_STORAGE: str = os.getenv("IMAGE_STORAGE", "local")
     PERSEO_IMAGE_UPLOAD_DIR: str = os.getenv(
         "PERSEO_IMAGE_UPLOAD_DIR",

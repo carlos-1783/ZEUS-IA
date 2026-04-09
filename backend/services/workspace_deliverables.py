@@ -141,6 +141,17 @@ def normalize_perseo_workspace_payload(payload: Dict[str, Any]) -> Dict[str, Any
     normalized = _normalize_perseo_content(raw_text, extra_context=content)
     out["title"] = normalized["title"]
     out["content"] = normalized["content"]
+    # No perder metadatos de vídeo generado tras chat (no forman parte del copy normalizado)
+    _preserve = (
+        "generated_video_url",
+        "generated_video_status",
+        "generated_video_format",
+        "generated_video_asset",
+        "generated_video_error",
+    )
+    for key in _preserve:
+        if key in content and content[key] is not None:
+            out["content"][key] = content[key]
     return out
 
 

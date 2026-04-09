@@ -104,16 +104,13 @@
               <span class="badge">Qué hace este flujo</span>
             </header>
             <p class="card-description">
-              Al subir una <strong>foto</strong> en el chat, PERSEO la guarda como <strong>referencia visual</strong>
-              junto al texto (copy, CTA, canales). Eso <strong>no genera un archivo de vídeo</strong> (MP4) en el
-              servidor: el modelo devuelve estrategia y redacción para que tú (o tu IA de vídeo tipo Runway,
-              Veo, etc.) montéis el pieza.
+              La <strong>foto</strong> que subes es <strong>referencia visual</strong> para la campaña (copy, CTA,
+              canales). Si solo adjuntas imagen (no vídeo), el servidor genera en segundo plano un
+              <strong>vídeo de presentación</strong> (diapositivas animadas con tu texto) en MP4 o GIF; recarga el
+              workspace en unos segundos para verlo. Para vídeos creativos tipo Runway/CapCut sigue usando el briefing.
             </p>
-            <p v-if="workspaceImageUrl && !workspaceVideoUrl" class="card-description subtle-expectation">
-              Solo hay imagen adjunta: úsala como referencia de escena o marca en tu herramienta de generación de vídeo.
-            </p>
-            <p v-else-if="workspaceVideoUrl" class="card-description subtle-expectation">
-              Hay un vídeo adjunto al pedido: es el que subiste tú, no un render automático nuevo.
+            <p v-if="workspaceVideoUrl" class="card-description subtle-expectation">
+              Has adjuntado un vídeo: no se genera un segundo MP4 automático.
             </p>
           </section>
 
@@ -135,23 +132,23 @@
             </p>
           </section>
 
-          <section
-            v-if="currentDetails?.workspace_deliverable && (workspaceImageUrl || workspaceVideoUrl || workspacePdfUrl)"
-            class="card media-card"
-          >
-            <h5>🖼️ Adjuntos del chat</h5>
+          <section v-if="workspaceMediaCardVisible" class="card media-card">
+            <h5>🖼️ Medios del entregable</h5>
             <p class="card-description">
-              Archivo adjuntado al pedir la campaña. Se guarda en BD y se reutiliza en el entregable (referencia, no
-              sustituye a un vídeo generado aquí).
+              Referencias que subiste al chat y, si aplica, el vídeo de presentación generado por PERSEO a partir del
+              copy.
             </p>
-            <img
-              v-if="workspaceImageUrl"
-              :src="workspaceImageDisplayUrl"
-              loading="lazy"
-              class="media-image"
-              alt="Referencia visual adjuntada"
-            />
-            <template v-else-if="workspaceVideoUrl">
+            <div v-if="workspaceImageUrl" class="media-block">
+              <h6 class="media-block-title">Referencia visual</h6>
+              <img
+                :src="workspaceImageDisplayUrl"
+                loading="lazy"
+                class="media-image"
+                alt="Referencia visual adjuntada"
+              />
+            </div>
+            <div v-if="workspaceVideoUrl" class="media-block">
+              <h6 class="media-block-title">Vídeo adjunto por ti</h6>
               <video
                 v-show="!workspaceVideoLoadError"
                 :key="workspaceVideoDisplayUrl"
@@ -173,12 +170,47 @@
                   Abrir vídeo en nueva pestaña
                 </a>
               </div>
-            </template>
-            <div v-else-if="workspacePdfUrl" class="media-pdf">
-              <span>PDF adjunto</span>
+            </div>
+            <div v-if="workspacePdfUrl" class="media-block media-pdf">
+              <h6 class="media-block-title">PDF</h6>
               <a :href="workspacePdfDisplayUrl" target="_blank" rel="noopener noreferrer" class="btn ghost">
                 Abrir PDF
               </a>
+            </div>
+            <div v-if="generatedVideoPending" class="media-block media-pending">
+              <h6 class="media-block-title">Vídeo de presentación</h6>
+              <p class="pending-text">
+                Generando MP4 o GIF a partir del copy… Actualiza la página en unos segundos.
+              </p>
+            </div>
+            <div v-else-if="workspaceGeneratedVideoUrl" class="media-block">
+              <h6 class="media-block-title">Vídeo generado (presentación)</h6>
+              <video
+                v-show="!generatedVideoLoadError"
+                :key="workspaceGeneratedVideoDisplayUrl"
+                :src="workspaceGeneratedVideoDisplayUrl"
+                controls
+                playsinline
+                preload="metadata"
+                class="media-video"
+                @error="onGeneratedVideoError"
+              ></video>
+              <div v-if="generatedVideoLoadError" class="media-video-fallback">
+                <a
+                  :href="workspaceGeneratedVideoDisplayUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="btn ghost"
+                >
+                  Abrir vídeo en nueva pestaña
+                </a>
+              </div>
+            </div>
+            <div v-if="generatedVideoFailed" class="media-block media-failed">
+              <h6 class="media-block-title">Vídeo automático</h6>
+              <p class="failed-text">
+                No se pudo generar (¿MoviePy/FFmpeg en el servidor?). {{ generatedVideoErrorHint }}
+              </p>
             </div>
           </section>
 
@@ -381,16 +413,57 @@ const workspacePdfUrl = computed(() => {
   return String(c.pdf_url || '').trim() || '';
 });
 
+const workspaceGeneratedVideoUrl = computed(() => {
+  const c = workspaceContent.value || {};
+  return String(c.generated_video_url || '').trim() || '';
+});
+const generatedVideoStatus = computed(() => {
+  const c = workspaceContent.value || {};
+  return String(c.generated_video_status || '').trim().toLowerCase();
+});
+const generatedVideoPending = computed(
+  () => generatedVideoStatus.value === 'pending'
+);
+const generatedVideoFailed = computed(() => generatedVideoStatus.value === 'failed');
+const generatedVideoErrorHint = computed(() => {
+  const c = workspaceContent.value || {};
+  return String(c.generated_video_error || '').trim() || 'Revisa logs del backend.';
+});
+
+const workspaceMediaCardVisible = computed(() => {
+  if (!currentDetails.value?.workspace_deliverable) {
+    return false;
+  }
+  return Boolean(
+    workspaceImageUrl.value ||
+      workspaceVideoUrl.value ||
+      workspacePdfUrl.value ||
+      workspaceGeneratedVideoUrl.value ||
+      generatedVideoPending.value ||
+      generatedVideoFailed.value
+  );
+});
+
 const workspaceImageDisplayUrl = computed(() => resolveWorkspaceMediaUrl(workspaceImageUrl.value));
 const workspaceVideoDisplayUrl = computed(() => resolveWorkspaceMediaUrl(workspaceVideoUrl.value));
 const workspacePdfDisplayUrl = computed(() => resolveWorkspaceMediaUrl(workspacePdfUrl.value));
+const workspaceGeneratedVideoDisplayUrl = computed(() =>
+  resolveWorkspaceMediaUrl(workspaceGeneratedVideoUrl.value)
+);
 
 const workspaceVideoLoadError = ref(false);
+const generatedVideoLoadError = ref(false);
 watch(workspaceVideoDisplayUrl, () => {
   workspaceVideoLoadError.value = false;
 });
+watch(workspaceGeneratedVideoDisplayUrl, () => {
+  generatedVideoLoadError.value = false;
+});
 const onWorkspaceVideoError = () => {
   workspaceVideoLoadError.value = true;
+};
+const onGeneratedVideoError = () => {
+  generatedVideoLoadError.value = true;
 };
 const workspaceAdTitle = computed(() => {
   const p = workspacePayload.value || {};
@@ -984,6 +1057,45 @@ onMounted(async () => {
 
 .media-video-fallback p {
   margin: 0 0 12px;
+}
+
+.media-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.media-block-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.media-pending {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px dashed rgba(59, 130, 246, 0.35);
+}
+
+.pending-text {
+  margin: 0;
+  font-size: 14px;
+  color: #1d4ed8;
+}
+
+.media-failed {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+}
+
+.failed-text {
+  margin: 0;
+  font-size: 13px;
+  color: #b91c1c;
 }
 
 .media-pdf {

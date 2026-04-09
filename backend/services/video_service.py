@@ -144,7 +144,9 @@ def _build_frames(deliverable: Dict[str, Any]) -> List[Image.Image]:
             )
         )
 
-    cta = "Activa ZEUS IA hoy y deja que PERSEO automatice tu marketing 24/7."
+    cta = (deliverable.get("cta_slide") or "").strip() or (
+        "Activa ZEUS IA hoy y deja que PERSEO automatice tu marketing 24/7."
+    )
     frames.append(_render_slide("CTA", cta, highlight=True))
 
     return frames

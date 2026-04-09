@@ -6,7 +6,7 @@ import os
 import sys
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,7 @@ from agents.justicia import Justicia
 from agents.afrodita import Afrodita
 from services.teamflow_engine import teamflow_engine
 from app.core.auth import get_current_active_user
+from app.core.config import settings as core_settings
 from app.models.user import User
 from services.activity_logger import ActivityLogger
 
@@ -138,6 +139,7 @@ class MultiAgentTaskRequest(BaseModel):
 async def chat_with_agent(
     agent_name: str,
     request: ChatRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -216,6 +218,36 @@ async def chat_with_agent(
                 )
                 if wd is not None:
                     workspace_document_id = wd.id
+                    # Vídeo de presentación (slides) en segundo plano si hay imagen de referencia y no hay vídeo adjunto
+                    if (
+                        agent_name.upper().strip() == "PERSEO"
+                        and core_settings.PERSEO_CHAT_AUTO_VIDEO
+                    ):
+                        img_u = (context.get("image_url") or "").strip()
+                        vid_u = (context.get("video_url") or "").strip()
+                        if img_u and not vid_u:
+                            try:
+                                pl = dict(wd.document_payload or {})
+                                c = pl.get("content")
+                                if isinstance(c, dict):
+                                    c["generated_video_status"] = "pending"
+                                    pl["content"] = c
+                                    wd.document_payload = pl
+                                    db.add(wd)
+                                    db.commit()
+                                from services.perseo_chat_video_job import (
+                                    run_perseo_chat_video_generation,
+                                )
+
+                                background_tasks.add_task(
+                                    run_perseo_chat_video_generation,
+                                    wd.id,
+                                    current_user.id,
+                                )
+                            except Exception as vid_sched:
+                                logger.warning(
+                                    "No se pudo programar vídeo PERSEO chat: %s", vid_sched
+                                )
             except Exception as persist_err:
                 try:
                     db.rollback()

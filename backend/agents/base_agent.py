@@ -9,7 +9,7 @@ from datetime import datetime
 from abc import ABC, abstractmethod
 
 from services.openai_service import chat_completion, parse_json_response
-from config.settings import settings
+from config.settings import settings, resolved_openai_context_limit
 
 
 class BaseAgent(ABC):
@@ -108,36 +108,62 @@ class BaseAgent(ABC):
             skip = {"conversation_history", "_memory", "user_message"}
             extra = {k: v for k, v in additional_context.items() if k not in skip and not k.startswith("_")}
             if extra:
-                context_str = f"\n\nContexto adicional:\n{json.dumps(extra, indent=2, ensure_ascii=False)}"
+                context_str = (
+                    "\n\nContexto adicional:\n"
+                    + json.dumps(extra, ensure_ascii=False, separators=(",", ":"))
+                )
                 messages[-1]["content"] = messages[-1]["content"] + context_str
 
-        # Presupuesto de contexto: evitar 400 context_length_exceeded (gpt-4 = 8192 típico).
+        # Presupuesto de contexto: evitar 400 context_length_exceeded.
         def _estimate_tokens(text: str) -> int:
-            # Heurística robusta: ~4 chars/token + margen fijo
+            # Español / JSON suele ser más denso que ~4 chars/token; ser conservadores.
             if not text:
                 return 0
-            return max(1, int(len(text) / 4))
+            return max(1, int(len(text) / 3) + 2)
 
         def _message_tokens(msg: Dict[str, str]) -> int:
-            # overhead por mensaje + contenido
-            return 8 + _estimate_tokens(msg.get("content", ""))
+            return 12 + _estimate_tokens(msg.get("content", ""))
 
         model_name = (settings.OPENAI_MODEL or "").lower()
-        context_limit = 8192 if "gpt-4" in model_name else 16384
-        # reservar margen para respuesta y estructura interna
-        reserve_for_completion = min(max(int(self.max_tokens), 300), 1400 if "gpt-4" in model_name else 2200)
-        budget_for_prompt = max(1200, context_limit - reserve_for_completion - 300)
+        context_limit = resolved_openai_context_limit(settings.OPENAI_MODEL)
+        tight_window = context_limit <= 10000
+        # reservar margen para respuesta + overhead API (más margen en ventanas pequeñas)
+        reserve_for_completion = min(
+            max(int(self.max_tokens), 300),
+            1200 if tight_window else min(4000, context_limit // 4),
+        )
+        safety = 650 if tight_window else 400
+        budget_for_prompt = max(1500, context_limit - reserve_for_completion - safety)
 
-        # Añadir historial desde el final (más reciente primero) hasta el presupuesto
+        def _trim_history_entry(msg: Dict[str, str], max_chars: int) -> Dict[str, str]:
+            c = msg.get("content") or ""
+            if len(c) <= max_chars:
+                return {"role": msg["role"], "content": c}
+            head = max_chars - 80
+            return {
+                "role": msg["role"],
+                "content": c[:head] + "\n[… mensaje anterior recortado por límite de contexto …]\n",
+            }
+
+        # Añadir historial desde el final hasta el presupuesto (recortar cuerpos largos)
+        max_hist_chars = 4000 if tight_window else 12000
         if history:
             selected_rev: List[Dict[str, str]] = []
             base_tokens = sum(_message_tokens(m) for m in messages)  # system + user actual
             running = base_tokens
-            for h in reversed(history):
-                t = _message_tokens(h)
+            tail_keep = 4
+            for idx, h in enumerate(reversed(history)):
+                if tight_window:
+                    cap = 2600
+                elif idx < tail_keep:
+                    cap = 14000
+                else:
+                    cap = max_hist_chars
+                entry = _trim_history_entry(h, cap)
+                t = _message_tokens(entry)
                 if running + t > budget_for_prompt:
                     break
-                selected_rev.append(h)
+                selected_rev.append(entry)
                 running += t
             if selected_rev:
                 selected = list(reversed(selected_rev))
@@ -147,7 +173,10 @@ class BaseAgent(ABC):
             prompt_tokens_est = sum(_message_tokens(m) for m in messages)
 
         # Ajuste dinámico de max_tokens para no rebasar límite del modelo
-        adaptive_max_tokens = max(250, min(self.max_tokens, context_limit - prompt_tokens_est - 120))
+        tail_room = 200 if tight_window else 120
+        adaptive_max_tokens = max(
+            250, min(self.max_tokens, context_limit - prompt_tokens_est - tail_room)
+        )
         
         # Llamar a OpenAI
         response = chat_completion(

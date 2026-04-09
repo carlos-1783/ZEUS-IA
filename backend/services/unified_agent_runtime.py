@@ -53,14 +53,18 @@ def run_chat(
     agent = agents[agent_name]
     memory = memory_load(company_id, agent_name, thread_id)
     buf = memory.get("short_term") or []
+    if not isinstance(buf, list):
+        buf = []
 
-    buf.append({"role": "user", "content": message})
     ctx = dict(context or {})
     ctx["user_message"] = message
     ctx["_memory"] = memory
     ctx["_thread_id"] = thread_id
     ctx["_company_id"] = company_id
-    ctx["conversation_history"] = memory.get("short_term") or []
+    # Sin el turno actual: evita duplicar el último user en el prompt y reduce tokens.
+    ctx["conversation_history"] = list(buf)
+
+    buf.append({"role": "user", "content": message})
 
     try:
         result = agent.process_request(ctx)

@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.models.agent_memory import AgentOperationalState, AgentDecisionLog, AgentShortTermBuffer
+from config.settings import get_settings
 
 
 SHORT_TERM_TTL_HOURS = 6
@@ -113,6 +114,9 @@ def persist_short_term(
         company_id = company_id or "default"
         agent_id = (agent_id or "").upper()
         thread_id = thread_id or "main"
+        max_msg = int(get_settings().AGENT_SHORT_TERM_MAX_MESSAGES or 36)
+        if max_msg > 0 and len(messages) > max_msg:
+            messages = messages[-max_msg:]
         expires = _utcnow() + timedelta(hours=SHORT_TERM_TTL_HOURS)
 
         row = (

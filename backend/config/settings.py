@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     # =============================================================================
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+    # 0 = inferir del nombre del modelo (p. ej. gpt-4o-mini → 128k; gpt-4 legacy → 8k)
+    OPENAI_CONTEXT_LIMIT: int = int(os.getenv("OPENAI_CONTEXT_LIMIT", "0"))
     OPENAI_MAX_TOKENS: int = int(os.getenv("OPENAI_MAX_TOKENS", "2000"))
     OPENAI_TEMPERATURE: float = float(os.getenv("OPENAI_TEMPERATURE", "0.3"))
     
@@ -65,6 +67,8 @@ class Settings(BaseSettings):
     # =============================================================================
     MAX_REQUESTS_PER_MINUTE: int = int(os.getenv("MAX_REQUESTS_PER_MINUTE", "60"))
     MAX_OPENAI_COST_PER_DAY: float = float(os.getenv("MAX_OPENAI_COST_PER_DAY", "20.0"))
+    # Máx. mensajes user+assistant en buffer por hilo (evita prompts gigantes en BD)
+    AGENT_SHORT_TERM_MAX_MESSAGES: int = int(os.getenv("AGENT_SHORT_TERM_MAX_MESSAGES", "36"))
     
     class Config:
         env_file = ".env"
@@ -80,6 +84,28 @@ def get_settings() -> Settings:
 
 # Global settings instance
 settings = get_settings()
+
+
+def resolved_openai_context_limit(model: Optional[str] = None) -> int:
+    """
+    Tokens de contexto total del modelo (prompt + completion).
+    OPENAI_CONTEXT_LIMIT > 0 fuerza un valor fijo (útil en Railway si el nombre del modelo no coincide).
+    """
+    s = get_settings()
+    if getattr(s, "OPENAI_CONTEXT_LIMIT", 0) and s.OPENAI_CONTEXT_LIMIT > 0:
+        return s.OPENAI_CONTEXT_LIMIT
+    m = (model or s.OPENAI_MODEL or "").lower()
+    if "gpt-3.5" in m:
+        return 16384
+    if "gpt-4o" in m or "gpt-4.1" in m:
+        return 128000
+    if "gpt-4" in m and any(
+        x in m for x in ("turbo", "0125", "1106", "preview")
+    ):
+        return 128000
+    if "gpt-4" in m:
+        return 8192
+    return 16384
 
 
 # Validación al inicio

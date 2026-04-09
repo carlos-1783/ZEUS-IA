@@ -45,10 +45,12 @@ def _clean_marketing_text(raw: str) -> str:
         return ""
     # Quitar preámbulos frecuentes de "asistente" que no aportan al copy final.
     drop_prefixes = (
+        "lamento la confusión",
         "por supuesto",
         "claro",
         "aquí está un bosquejo",
         "te recomendaría trabajar",
+        "como inteligencia artificial",
         "desafortunadamente, como inteligencia artificial",
     )
     lines = [ln.strip() for ln in text.splitlines()]
@@ -56,6 +58,10 @@ def _clean_marketing_text(raw: str) -> str:
     for ln in lines:
         low = ln.lower()
         if any(low.startswith(p) for p in drop_prefixes):
+            continue
+        if "no tengo la capacidad de crear vídeos" in low or "no tengo la capacidad de crear videos" in low:
+            continue
+        if "trabajar con un profesional de la producción de vídeos" in low or "trabajar con un profesional de la producción de videos" in low:
             continue
         kept.append(ln)
     text = "\n".join(kept).strip()
@@ -68,7 +74,10 @@ def _clean_marketing_text(raw: str) -> str:
     # Fallback: primera parte útil (evitar párrafos de disclaimer largos)
     parts = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
     if parts:
-        return parts[0]
+        candidate = parts[0]
+        # Si viene enumerado (1. Inicio... 2. Medio...), mantener solo texto útil
+        candidate = re.sub(r"\b\d+\.\s*", "", candidate).strip()
+        return candidate
     return text
 
 
@@ -87,6 +96,17 @@ def _normalize_perseo_content(raw: str, extra_context: Optional[Dict[str, Any]] 
         "platforms": ["instagram", "facebook"],
         "format": "social_media_post",
     }
+    # Derivar mini guion de video si hay estructura por tramos
+    segments = re.findall(
+        r"(inicio|medio|final)\s*\([^)]*\)\s*:\s*(.+?)(?=(?:\n\s*\d+\.\s*\*\*|$))",
+        raw or "",
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if segments:
+        content["video_script"] = [
+            {"segment": s[0].strip().capitalize(), "copy": re.sub(r"\s+", " ", s[1]).strip()}
+            for s in segments
+        ]
     if extra_context:
         for key in ("image_url", "video_url", "pdf_url", "media_url"):
             v = extra_context.get(key)

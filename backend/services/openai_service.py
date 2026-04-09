@@ -25,15 +25,18 @@ def get_openai_client() -> OpenAI:
             # Inicializar solo con api_key (sin kwargs adicionales)
             client = OpenAI(
                 api_key=settings.OPENAI_API_KEY,
-                timeout=60.0,
-                max_retries=2
+                timeout=float(getattr(settings, "OPENAI_TIMEOUT_SEC", 120) or 120),
+                max_retries=2,
             )
             print(f"✅ OpenAI client initialized successfully")
         except TypeError as e:
             # Si falla con parámetros adicionales, intentar solo con api_key
             print(f"⚠️ OpenAI init con parámetros falló: {e}")
             print(f"🔄 Reiniciando con solo api_key...")
-            client = OpenAI(api_key=settings.OPENAI_API_KEY)
+            client = OpenAI(
+                api_key=settings.OPENAI_API_KEY,
+                timeout=float(getattr(settings, "OPENAI_TIMEOUT_SEC", 120) or 120),
+            )
         
     return client
 

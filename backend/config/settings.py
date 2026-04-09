@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     OPENAI_CONTEXT_LIMIT: int = int(os.getenv("OPENAI_CONTEXT_LIMIT", "0"))
     OPENAI_MAX_TOKENS: int = int(os.getenv("OPENAI_MAX_TOKENS", "2000"))
     OPENAI_TEMPERATURE: float = float(os.getenv("OPENAI_TEMPERATURE", "0.3"))
+    # Timeout por petición al API OpenAI (segundos). Chat + contexto largo puede superar 60s.
+    OPENAI_TIMEOUT_SEC: float = float(os.getenv("OPENAI_TIMEOUT_SEC", "120") or "120")
     
     # =============================================================================
     # DATABASE

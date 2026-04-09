@@ -287,6 +287,7 @@ import { useAuthStore } from '@/stores/auth'
 import Agent3DAvatar from '@/components/Agent3DAvatar.vue'
 import DashboardProfesional from '@/components/DashboardProfesional.vue'
 import { usePWA } from '@/composables/usePWA'
+import { getAgentChatUrl, AGENT_CHAT_TIMEOUT_MS } from '@/utils/chatApi'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -609,20 +610,32 @@ const sendVoiceMessage = async (transcript) => {
   stopListening()
   
   try {
-    // Llamar al endpoint de chat
-    const agentNameUrl = activeAgent.value.name.toLowerCase().replace(/ /g, '-')
-    const response = await fetch(`/api/v1/chat/${agentNameUrl}/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        message: transcript,
-        context: {}
+    const token = authStore.getToken?.() ?? authStore.token ?? null
+    const headers = { 'Content-Type': 'application/json' }
+    if (token) headers.Authorization = `Bearer ${token}`
+
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), AGENT_CHAT_TIMEOUT_MS)
+    let response
+    try {
+      response = await fetch(getAgentChatUrl(activeAgent.value.name), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          message: transcript,
+          context: {},
+        }),
+        signal: controller.signal,
       })
-    })
-    
-    const data = await response.json()
+    } finally {
+      clearTimeout(timer)
+    }
+
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      const detail = data?.detail || data?.message || `HTTP ${response.status}`
+      throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
+    }
     
     // Mostrar y hablar la respuesta
     const responseText = data.message || 'Lo siento, no pude procesar tu solicitud.'

@@ -238,6 +238,7 @@ import AfroditaWorkspace from './agent-workspaces/AfroditaWorkspace.vue'
 import ThalosWorkspace from './agent-workspaces/ThalosWorkspace.vue'
 import JusticiaWorkspace from './agent-workspaces/JusticiaWorkspace.vue'
 import ImageUploader from '@/components/ImageUploader.jsx'
+import { getAgentChatUrl, AGENT_CHAT_TIMEOUT_MS } from '@/utils/chatApi'
 
 const props = defineProps({
   agent: {
@@ -356,7 +357,6 @@ const sendVoiceToAgent = async (transcript) => {
   agentVoiceResponse.value = '⏳ Procesando...'
   
   try {
-    const agentNameUrl = props.agent.name.toLowerCase().replace(/ /g, '-')
     const vctx = {}
     if (isPerseoAgent.value && imageReferenceUrl.value) {
       const u = imageReferenceUrl.value
@@ -364,13 +364,15 @@ const sendVoiceToAgent = async (transcript) => {
       else if (/\.(mp4|webm|mov|m4v)($|\?)/i.test(u) || u.includes('/videos/')) vctx.video_url = u
       else vctx.image_url = u
     }
-    const response = await fetch(`/api/v1/chat/${agentNameUrl}/chat`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ message: transcript, context: vctx })
-    })
-    
-    const data = await response.json()
+    const response = await postAgentChat({ message: transcript, context: vctx })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      const detail = data?.detail || data?.message || `HTTP ${response.status}`
+      throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
+    }
+    if (data.success === false) {
+      throw new Error(data.error || data.message || 'El agente no pudo responder.')
+    }
     const responseText = data.message || 'Lo siento, no pude procesar tu solicitud.'
     
     agentVoiceResponse.value = responseText
@@ -390,7 +392,7 @@ const sendVoiceToAgent = async (transcript) => {
     
   } catch (error) {
     console.error('Error en voz:', error)
-    agentVoiceResponse.value = '❌ Error al procesar'
+    agentVoiceResponse.value = `❌ ${formatChatFetchError(error)}`
     isSpeaking.value = false
   }
 }
@@ -504,6 +506,33 @@ const getAuthHeaders = () => {
   return headers
 }
 
+async function postAgentChat(payload) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), AGENT_CHAT_TIMEOUT_MS)
+  try {
+    return await fetch(getAgentChatUrl(props.agent.name), {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function formatChatFetchError(error) {
+  if (!error) return 'Error desconocido.'
+  if (error.name === 'AbortError') {
+    return 'Tiempo de espera agotado. Si el mensaje era largo o hay imagen adjunta, reintenta en unos segundos.'
+  }
+  const m = String(error.message || error)
+  if (/failed to fetch|networkerror|load failed/i.test(m)) {
+    return 'No se pudo contactar con el API. Comprueba la red y que la URL del backend (VITE_API_BASE_URL / proxy) sea correcta.'
+  }
+  return m
+}
+
 const sendTextMessage = async () => {
   if (!textInput.value.trim()) return
 
@@ -535,8 +564,6 @@ const sendTextMessage = async () => {
   
   try {
     const doChatCall = async () => {
-      // Llamar al API real del agente
-      const agentNameUrl = props.agent.name.toLowerCase().replace(/ /g, '-')
       const contextPayload = {}
       if (isPerseoAgent.value && imageReferenceUrl.value) {
         const u = imageReferenceUrl.value
@@ -545,13 +572,9 @@ const sendTextMessage = async () => {
         else contextPayload.image_url = u
       }
 
-      const response = await fetch(`/api/v1/chat/${agentNameUrl}/chat`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          message: userMessage,
-          context: contextPayload
-        })
+      const response = await postAgentChat({
+        message: userMessage,
+        context: contextPayload,
       })
       const data = await response.json().catch(() => ({}))
       return { response, data }
@@ -616,11 +639,10 @@ const sendTextMessage = async () => {
     // Remover mensaje de "procesando"
     messages.value = messages.value.filter(m => m.id !== processingId)
 
-    // Mostrar error
     messages.value.push({
       id: Date.now() + 2,
       sender: 'agent',
-      content: '❌ Error: No pude conectarme con el agente. Intenta de nuevo.',
+      content: `❌ Error: ${formatChatFetchError(error)}`,
       timestamp: new Date()
     })
   }

@@ -94,7 +94,38 @@
             </p>
           </section>
 
-          <section class="card video-card">
+          <section
+            v-if="currentDetails?.workspace_deliverable && (workspaceImageUrl || workspaceVideoUrl || workspacePdfUrl)"
+            class="card media-card"
+          >
+            <h5>🖼️ Adjuntos del chat</h5>
+            <p class="card-description">
+              Archivo adjuntado al pedir la campaña. Se guarda en BD y se reutiliza en el entregable.
+            </p>
+            <img
+              v-if="workspaceImageUrl"
+              :src="workspaceImageUrl"
+              loading="lazy"
+              class="media-image"
+              alt="Referencia visual adjuntada"
+            />
+            <video
+              v-else-if="workspaceVideoUrl"
+              :src="workspaceVideoUrl"
+              controls
+              playsinline
+              preload="metadata"
+              class="media-video"
+            ></video>
+            <div v-else-if="workspacePdfUrl" class="media-pdf">
+              <span>PDF adjunto</span>
+              <a :href="workspacePdfUrl" target="_blank" rel="noopener noreferrer" class="btn ghost">
+                Abrir PDF
+              </a>
+            </div>
+          </section>
+
+          <section v-if="!currentDetails?.workspace_deliverable" class="card video-card">
             <h5>🎥 Montaje del vídeo</h5>
             <p class="card-description">
               Render automático generado por PERSEO listo para revisión y descarga.
@@ -268,6 +299,23 @@ const currentDeliverable = computed(() =>
 );
 
 const buildDownloadLink = buildDownloadLinkFor;
+const workspacePayload = computed(() => (currentDetails.value?.payload || {}) as any);
+const workspaceContent = computed(() => {
+  const payload = workspacePayload.value || {};
+  return payload.content && typeof payload.content === 'object' ? payload.content : {};
+});
+const workspaceImageUrl = computed(() => {
+  const c = workspaceContent.value || {};
+  return String(c.image_url || '').trim() || '';
+});
+const workspaceVideoUrl = computed(() => {
+  const c = workspaceContent.value || {};
+  return String(c.video_url || '').trim() || '';
+});
+const workspacePdfUrl = computed(() => {
+  const c = workspaceContent.value || {};
+  return String(c.pdf_url || '').trim() || '';
+});
 const videoAsset = computed(() => currentDetails.value?.video_asset ?? null);
 const extractRelativePathFromAsset = (asset: any): string | null => {
   if (!asset) return null;
@@ -770,6 +818,32 @@ onMounted(async () => {
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
   background: #0f172a;
   object-fit: contain;
+}
+
+.media-card {
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, #ffffff 60%);
+}
+
+.media-image,
+.media-video {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: #0f172a;
+  max-height: 460px;
+  object-fit: contain;
+}
+
+.media-pdf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.25);
 }
 
 .video-meta {

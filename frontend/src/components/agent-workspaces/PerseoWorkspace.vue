@@ -95,13 +95,43 @@
             </details>
           </section>
 
+          <section
+            v-if="currentDetails?.workspace_deliverable"
+            class="card workspace-expectations-card"
+          >
+            <header class="card-header">
+              <h5>📷 Imagen y vídeo (chat)</h5>
+              <span class="badge">Qué hace este flujo</span>
+            </header>
+            <p class="card-description">
+              Al subir una <strong>foto</strong> en el chat, PERSEO la guarda como <strong>referencia visual</strong>
+              junto al texto (copy, CTA, canales). Eso <strong>no genera un archivo de vídeo</strong> (MP4) en el
+              servidor: el modelo devuelve estrategia y redacción para que tú (o tu IA de vídeo tipo Runway,
+              Veo, etc.) montéis el pieza.
+            </p>
+            <p v-if="workspaceImageUrl && !workspaceVideoUrl" class="card-description subtle-expectation">
+              Solo hay imagen adjunta: úsala como referencia de escena o marca en tu herramienta de generación de vídeo.
+            </p>
+            <p v-else-if="workspaceVideoUrl" class="card-description subtle-expectation">
+              Hay un vídeo adjunto al pedido: es el que subiste tú, no un render automático nuevo.
+            </p>
+          </section>
+
           <section class="card tip-card" v-if="currentDeliverable">
             <header class="card-header">
               <h5>🎯 Activar entrega</h5>
               <span class="badge">Todo listo</span>
             </header>
-            <p class="tip-body">
-              Cuando estés conforme, pulsa <strong>“Descargar Markdown”</strong>. Obtendrás el briefing completo para pasarlo al equipo creativo o a tu IA de vídeo sin tocar nada más.
+            <p v-if="currentDetails?.workspace_deliverable" class="tip-body">
+              Entregable desde <strong>chat / API</strong>: revisa copy y adjuntos. Para llevarlo a vídeo, exporta el
+              briefing o copia el guion de abajo hacia tu editor o IA de vídeo.
+              <template v-if="currentDeliverable.files.markdown">
+                Si tienes export local, también puedes usar <strong>Descargar Markdown</strong>.
+              </template>
+            </p>
+            <p v-else class="tip-body">
+              Cuando estés conforme, pulsa <strong>“Descargar Markdown”</strong>. Obtendrás el briefing completo para
+              pasarlo al equipo creativo o a tu IA de vídeo sin tocar nada más.
             </p>
           </section>
 
@@ -111,7 +141,8 @@
           >
             <h5>🖼️ Adjuntos del chat</h5>
             <p class="card-description">
-              Archivo adjuntado al pedir la campaña. Se guarda en BD y se reutiliza en el entregable.
+              Archivo adjuntado al pedir la campaña. Se guarda en BD y se reutiliza en el entregable (referencia, no
+              sustituye a un vídeo generado aquí).
             </p>
             <img
               v-if="workspaceImageUrl"
@@ -194,16 +225,22 @@
             </div>
           </section>
 
-          <section class="card" v-if="currentDetails.video_script">
+          <section class="card" v-if="videoScriptSegments.length">
             <h5>🎬 Guion de Vídeo</h5>
-            <p class="card-description">{{ currentDetails.video_script.goal }}</p>
+            <p v-if="currentDetails.video_script?.goal" class="card-description">
+              {{ currentDetails.video_script.goal }}
+            </p>
+            <p v-else class="card-description">
+              Escenas o tramos detectados en el texto de la campaña. Úsalos como guion en tu herramienta de vídeo; la
+              imagen de arriba puede servir de referencia visual.
+            </p>
             <ul class="script-list">
-              <li v-for="segment in currentDetails.video_script.structure" :key="segment.segment">
+              <li v-for="(segment, idx) in videoScriptSegments" :key="`${segment.segment}-${idx}`">
                 <span class="segment-title">{{ segment.segment }}</span>
                 <span class="segment-copy">{{ segment.copy }}</span>
               </li>
             </ul>
-            <div v-if="currentDetails.video_script.visual_notes" class="notes">
+            <div v-if="currentDetails.video_script?.visual_notes?.length" class="notes">
               <h6>Notas visuales</h6>
               <ul>
                 <li v-for="note in currentDetails.video_script.visual_notes" :key="note">
@@ -379,6 +416,31 @@ const workspaceAdPlatforms = computed(() => {
   const arr = Array.isArray(c.platforms) ? c.platforms : [];
   return arr.length ? arr.join(', ') : 'instagram, facebook';
 });
+
+/** Tramos Inicio/Medio/Final extraídos en backend (workspace_deliverables) */
+const workspaceChatVideoScript = computed(() => {
+  const vs = (workspaceContent.value as Record<string, unknown>)?.video_script;
+  if (!Array.isArray(vs)) return [];
+  return vs.filter(
+    (x: unknown) =>
+      x &&
+      typeof x === 'object' &&
+      (String((x as { segment?: string }).segment || '').trim() ||
+        String((x as { copy?: string }).copy || '').trim())
+  ) as { segment?: string; copy?: string }[];
+});
+
+const videoScriptSegments = computed(() => {
+  const json = currentDetails.value?.video_script;
+  if (json?.structure && Array.isArray(json.structure) && json.structure.length) {
+    return json.structure as { segment: string; copy: string }[];
+  }
+  return workspaceChatVideoScript.value.map((x) => ({
+    segment: String(x.segment || 'Escena').trim() || 'Escena',
+    copy: String(x.copy || '').trim(),
+  }));
+});
+
 const videoAsset = computed(() => currentDetails.value?.video_asset ?? null);
 const extractRelativePathFromAsset = (asset: any): string | null => {
   if (!asset) return null;
@@ -812,6 +874,17 @@ onMounted(async () => {
   color: #1d4ed8;
   font-size: 14px;
   line-height: 1.6;
+}
+
+.workspace-expectations-card {
+  border-left: 4px solid #6366f1;
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.08) 0%, #ffffff 55%);
+}
+
+.subtle-expectation {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
 }
 
 .card-description {

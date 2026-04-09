@@ -18,7 +18,12 @@ class StripeService:
         self.api_key = os.getenv("STRIPE_API_KEY")
         self.webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
         self.currency = os.getenv("STRIPE_CURRENCY", "eur")
-        self.requested_mode = (os.getenv("STRIPE_MODE") or "auto").lower()
+        _mode_raw = (os.getenv("STRIPE_MODE") or "auto").strip().lower()
+        # STRIPE_MODE=false / off / vacío mal puesto → auto sin warning
+        if _mode_raw in ("false", "0", "no", "off", "disabled", "none"):
+            self.requested_mode = "auto"
+        else:
+            self.requested_mode = _mode_raw
         self.detected_mode = "unknown"
         
         if self.api_key:

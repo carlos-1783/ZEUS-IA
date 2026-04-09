@@ -32,9 +32,22 @@ def handle_zeus_launch_started(activity: AgentActivity) -> Dict[str, Any]:
     whatsapp_sent = False
     whatsapp_message_id = None
     whatsapp_error = None
+
+    launch_wa = (os.getenv("ZEUS_LAUNCH_WHATSAPP") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
     
-    # Enviar WhatsApp al superusuario si está configurado (llamada async desde handler sync)
-    if superuser_phone and whatsapp_service.is_configured():
+    # WhatsApp solo si se solicita explícitamente (evita Twilio 63031 y ruido en cada deploy)
+    if not launch_wa:
+        whatsapp_error = "omitido (ZEUS_LAUNCH_WHATSAPP no activado)"
+    elif not superuser_phone:
+        whatsapp_error = "omitido (sin SUPERUSER_PHONE / ZEUS_ADMIN_PHONE)"
+    elif not whatsapp_service.is_configured():
+        whatsapp_error = "omitido (Twilio no configurado o TWILIO_WHATSAPP_ENABLED=false)"
+    else:
         try:
             message = "⚡ ZEUS ACTIVADO\n\nLanzamiento operativo iniciado correctamente.\n\nSistema: ZEUS-IA\nEntorno: " + environment
             # Ejecutar async desde función sync usando ThreadPoolExecutor para evitar conflictos con loop existente
@@ -97,6 +110,11 @@ def handle_zeus_launch_started(activity: AgentActivity) -> Dict[str, Any]:
             "executed_handler": "ZEUS_LAUNCH_HANDLER",
             "whatsapp_sent": whatsapp_sent,
         },
-        "notes": f"ZEUS launch started. WhatsApp {'enviado' if whatsapp_sent else 'no enviado' if not superuser_phone else 'falló'}.",
+        "notes": "ZEUS launch started. "
+        + (
+            "WhatsApp enviado."
+            if whatsapp_sent
+            else f"WhatsApp no enviado ({whatsapp_error or 'desconocido'})."
+        ),
         "executed_handler": "ZEUS_LAUNCH_HANDLER",
     }

@@ -9,7 +9,6 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-import os
 from app.core.security_middleware import SecurityMiddleware
 
 # Import your existing app
@@ -97,9 +96,24 @@ app.include_router(api_router, prefix="/api/v1")
 logger = _configure_zeus_startup_logger()
 
 
+def _should_run_startup_launch_activity() -> bool:
+    """
+    En Railway/producción no ejecutar por defecto: evita actividad + WhatsApp en cada deploy.
+    Activa con ZEUS_STARTUP_LAUNCH_ACTIVITY=true. Desactiva explícitamente con =false.
+    """
+    raw = (os.getenv("ZEUS_STARTUP_LAUNCH_ACTIVITY") or "").strip().lower()
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    if raw in ("0", "false", "no", "off"):
+        return False
+    if (os.getenv("RAILWAY_ENVIRONMENT") or "").strip().lower() == "production":
+        return False
+    return True
+
+
 def _execute_zeus_launch_started():
     """
-    Ejecuta acción zeus_launch_started al arranque: crea AgentActivity y envía WhatsApp.
+    Opcional: actividad interna + WhatsApp al superusuario (solo si ZEUS_LAUNCH_WHATSAPP=true).
     """
     session = SessionLocal()
     try:
@@ -122,7 +136,7 @@ def _execute_zeus_launch_started():
             user_email=superuser.email,
             status="pending",
             priority="high",
-            visible_to_client=True,
+            visible_to_client=False,
         )
         if not activity:
             logger.error("Failed to create zeus_launch_started activity.")
@@ -171,8 +185,13 @@ async def startup_event():
     create_tables()
     ensure_initial_superuser()
     await start_agent_automation()
-    # Ejecutar acción de lanzamiento
-    _execute_zeus_launch_started()
+    if _should_run_startup_launch_activity():
+        _execute_zeus_launch_started()
+    else:
+        logger.info(
+            "Omitido zeus_launch_started (producción por defecto). "
+            "Pon ZEUS_STARTUP_LAUNCH_ACTIVITY=true para activarlo."
+        )
     logger.info("ZEUS-IA backend ready")
 
 

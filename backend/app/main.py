@@ -3,6 +3,8 @@
 # ========================================
 
 import logging
+import sys
+import os
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -24,6 +26,34 @@ from services.automation.handlers import resolve_handler
 from services.automation.utils import merge_dict
 from services.unified_agent_runtime import run_workspace_task
 from datetime import datetime
+
+
+def _configure_zeus_startup_logger() -> logging.Logger:
+    """
+    INFO en stdout: agregadores (Railway, drains, etc.) suelen marcar como 'error' todo stderr,
+    aunque el nivel sea INFO. ZEUS_LOG_INFO_TO_STDOUT=false desactiva este comportamiento.
+    """
+    log = logging.getLogger("zeus.startup")
+    if os.getenv("ZEUS_LOG_INFO_TO_STDOUT", "true").lower() not in ("1", "true", "yes", "on"):
+        return log
+    if getattr(log, "_zeus_stdout_configured", False):
+        return log
+    log._zeus_stdout_configured = True  # type: ignore[attr-defined]
+    log.handlers.clear()
+    log.setLevel(logging.INFO)
+    log.propagate = False
+    fmt = logging.Formatter("%(levelname)s:%(name)s:%(message)s")
+    h_info = logging.StreamHandler(sys.stdout)
+    h_info.setLevel(logging.DEBUG)
+    h_info.addFilter(lambda r: r.levelno < logging.ERROR)
+    h_info.setFormatter(fmt)
+    h_err = logging.StreamHandler(sys.stderr)
+    h_err.setLevel(logging.ERROR)
+    h_err.setFormatter(fmt)
+    log.addHandler(h_info)
+    log.addHandler(h_err)
+    return log
+
 
 # Create FastAPI app
 app = FastAPI(
@@ -64,7 +94,7 @@ app.add_middleware(SecurityMiddleware)
 app.include_router(api_router, prefix="/api/v1")
 
 # Crear tablas al iniciar la aplicación
-logger = logging.getLogger("zeus.startup")
+logger = _configure_zeus_startup_logger()
 
 
 def _execute_zeus_launch_started():

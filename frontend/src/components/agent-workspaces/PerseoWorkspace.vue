@@ -448,7 +448,9 @@ const reload = async () => {
   const previous = selectedId.value;
   const exists = previous && deliverables.value.some((item) => item.id === previous);
   if (!exists) {
-    selectedId.value = deliverables.value[0].id;
+    const preferred =
+      deliverables.value.find((item: any) => item.isWorkspace) || deliverables.value[0];
+    selectedId.value = preferred.id;
   } else {
     await loadDetails();
   }

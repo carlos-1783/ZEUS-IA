@@ -127,6 +127,23 @@ def normalize_perseo_chat_message(raw: str) -> str:
     return copy or (raw or "").strip()
 
 
+def normalize_perseo_workspace_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Normaliza payload legado de PERSEO para visualización consistente en workspace.
+    No requiere escritura en BD; se puede aplicar al leer.
+    """
+    out = dict(payload or {})
+    content = out.get("content")
+    if not isinstance(content, dict):
+        content = {"body": str(content or "")}
+
+    raw_text = str(content.get("copy") or content.get("body") or out.get("title") or "")
+    normalized = _normalize_perseo_content(raw_text, extra_context=content)
+    out["title"] = normalized["title"]
+    out["content"] = normalized["content"]
+    return out
+
+
 def primary_company_id_for_user(db: Session, user: User) -> Optional[int]:
     row = (
         db.query(UserCompany)

@@ -16,6 +16,7 @@ from services.global_company_bootstrap import ensure_user_company_link_for_opera
 from services.legal_fiscal_firewall import DocumentStatus
 from services.workspace_deliverables import (
     WORKSPACE_DOCUMENT_TYPES,
+    normalize_perseo_workspace_payload,
     persist_workspace_deliverable,
     primary_company_id_for_user,
 )
@@ -149,6 +150,13 @@ async def workspace_list(
     items: List[Dict[str, Any]] = []
     for row in rows:
         d = row.to_dict()
+        if str(d.get("agent_name", "")).upper() == "PERSEO":
+            try:
+                payload = d.get("document_payload") or {}
+                if isinstance(payload, dict):
+                    d["document_payload"] = normalize_perseo_workspace_payload(payload)
+            except Exception:
+                pass
         items.append(d)
 
     return {

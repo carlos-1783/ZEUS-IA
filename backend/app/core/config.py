@@ -21,9 +21,13 @@ class Settings(BaseSettings):
     PORT: int = int(os.getenv("PORT", "8000"))
     RELOAD: bool = DEBUG
     
-    # Static files
+    # Static files (ZEUS_STATIC_DIR / STATIC_DIR = volumen persistente en Railway)
     STATIC_URL: str = "/static"
-    STATIC_DIR: str = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "static")
+    STATIC_DIR: str = os.path.abspath(
+        os.getenv("ZEUS_STATIC_DIR")
+        or os.getenv("STATIC_DIR")
+        or os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "static")
+    )
     # Origen público del API (sin barra final). Subidas: URL absoluta del vídeo/imagen. Ej. https://tu-app.up.railway.app
     PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
     PERSEO_IMAGES_ENABLED: bool = os.getenv("PERSEO_IMAGES_ENABLED", "true").lower() in ("true", "1", "yes")

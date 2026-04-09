@@ -150,62 +150,42 @@ async def startup_event():
 async def shutdown_event():
     await stop_agent_automation()
 
-# Serve static files (frontend) - FIXED
-if os.path.exists("static"):
-    static_abs = os.path.abspath("static")
-    print(f"[DEBUG] Serving static files from: {static_abs}")
-    try:
-        print(f"[DEBUG] Static files: {os.listdir('static')}")
-    except OSError:
-        pass
+# Serve static files: misma ruta absoluta que upload.py (settings.STATIC_DIR).
+# Antes se usaba directory="static" relativo al CWD; si uvicorn no arranca desde /app/backend,
+# las subidas escribían en un sitio y /static leía otro → 404 en vídeos/imágenes.
+static_root = os.path.abspath(settings.STATIC_DIR)
+os.makedirs(static_root, exist_ok=True)
+for _sub in ("images", "videos", "documents", "media"):
+    os.makedirs(os.path.join(static_root, "uploads", _sub), exist_ok=True)
 
-    app.mount("/static", StaticFiles(directory="static"), name="static")
+if settings.ENVIRONMENT.lower() in ("production", "staging"):
+    logger.warning(
+        "Archivos en %s: sin volumen persistente (Railway/VPS) las subidas se pierden al redeploy; "
+        "monta un volumen en STATIC_DIR o usa almacenamiento externo.",
+        static_root,
+    )
 
-    # Mount assets directory for JS/CSS files
-    if os.path.exists("static/assets"):
-        app.mount("/assets", StaticFiles(directory="static/assets"), name="assets")
-        print("[DEBUG] Assets mounted at /assets")
+print(f"[DEBUG] Serving /static from: {static_root}")
+try:
+    print(f"[DEBUG] Static top-level: {os.listdir(static_root)[:20]}")
+except OSError:
+    pass
 
-    # Serve frontend for all non-API routes
-    # IMPORTANTE: Este catch-all debe ejecutarse DESPUÉS de que FastAPI evalúe las rutas del router
-    # FastAPI evalúa rutas en orden: primero rutas específicas, luego catch-alls
-    # El problema es que el catch-all puede capturar antes. Solución: usar un regex que excluya "/api"
-    from fastapi.routing import APIRoute
-    
-    @app.get("/{full_path:path}")
-    async def serve_frontend(request: Request, full_path: str):
-        # Si llegamos aquí y la ruta es de API, significa que no existe en el router
-        # Pero NO debemos servir el frontend, sino devolver un 404 apropiado
-        if full_path.startswith("api/"):
-            from fastapi.responses import JSONResponse
-            from fastapi import status
-            return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={
-                    "error": "API endpoint not found",
-                    "path": f"/{full_path}",
-                    "message": "The requested API endpoint does not exist. Check /api/docs for available endpoints."
-                }
-            )
+app.mount("/static", StaticFiles(directory=static_root), name="static")
 
-        static_path = os.path.join("static", full_path)
-        if os.path.isfile(static_path):
-            return FileResponse(static_path)
+assets_dir = os.path.join(static_root, "assets")
+if os.path.isdir(assets_dir):
+    app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+    print("[DEBUG] Assets mounted at /assets")
 
-        index_path = os.path.join("static", "index.html")
-        if os.path.exists(index_path):
-            return FileResponse(index_path)
-        return {"error": "Frontend not built", "path": full_path}
 
-# Health check
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "zeus-ia"}
 
-# Debug endpoint para Railway
+
 @app.get("/debug")
 async def debug_info():
-    import os
     return {
         "status": "debug",
         "database_url": "SET" if os.getenv("DATABASE_URL") else "NOT_SET",
@@ -214,13 +194,13 @@ async def debug_info():
         "environment": os.getenv("ENVIRONMENT", "NOT_SET"),
         "debug": os.getenv("DEBUG", "NOT_SET"),
         "websocket_support": "ENABLED",
-        "cors_origins": settings.BACKEND_CORS_ORIGINS
+        "cors_origins": settings.BACKEND_CORS_ORIGINS,
+        "static_dir": static_root,
     }
 
-# WebSocket test endpoint
+
 @app.get("/ws-test")
 async def websocket_test():
-    import os
     return {
         "message": "WebSocket endpoint available",
         "endpoint": "/api/v1/ws/{client_id}",
@@ -229,14 +209,14 @@ async def websocket_test():
         "railway_environment": os.getenv("RAILWAY_ENVIRONMENT", "NOT_SET"),
         "port": os.getenv("PORT", "8000"),
         "host": "0.0.0.0",
-        "websocket_support": "ENABLED"
+        "websocket_support": "ENABLED",
     }
 
-# Railway WebSocket diagnostic
+
 @app.get("/railway-ws-diagnostic")
 async def railway_ws_diagnostic():
-    import os
     import platform
+
     return {
         "platform": platform.system(),
         "python_version": platform.python_version(),
@@ -248,8 +228,35 @@ async def railway_ws_diagnostic():
         "fastapi_version": "0.104.1",
         "uvicorn_version": "0.24.0",
         "websocket_support": "ENABLED",
-        "middleware_configured": True
+        "middleware_configured": True,
     }
+
+
+@app.get("/{full_path:path}")
+async def serve_frontend(request: Request, full_path: str):
+    """SPA fallback; no debe interceptar /static (montaje anterior)."""
+    if full_path.startswith("api/"):
+        from fastapi.responses import JSONResponse
+        from fastapi import status
+
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "error": "API endpoint not found",
+                "path": f"/{full_path}",
+                "message": "The requested API endpoint does not exist. Check /api/docs for available endpoints.",
+            },
+        )
+
+    static_path = os.path.join(static_root, full_path)
+    if os.path.isfile(static_path):
+        return FileResponse(static_path)
+
+    index_path = os.path.join(static_root, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"error": "Frontend not built", "path": full_path}
+
 
 if __name__ == "__main__":
     import uvicorn

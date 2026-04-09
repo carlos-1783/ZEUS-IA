@@ -577,13 +577,30 @@ const sendTextMessage = async () => {
     // Remover mensaje de "procesando"
     messages.value = messages.value.filter(m => m.id !== processingId)
 
-    // Añadir respuesta real del agente
-    messages.value.push({
-      id: Date.now() + 2,
-      sender: 'agent',
-      content: (data.message && String(data.message).trim()) || '⚠️ El agente no devolvió contenido útil. Reintenta en unos segundos.',
-      timestamp: new Date()
-    })
+    // El API puede devolver 200 con success: false (p. ej. rate limit / sin contenido)
+    if (data.success === false) {
+      const errText =
+        (data.error && String(data.error).trim()) ||
+        (data.message && String(data.message).trim()) ||
+        'No se pudo obtener respuesta del agente. Reintenta en unos segundos.'
+      messages.value.push({
+        id: Date.now() + 2,
+        sender: 'agent',
+        content: errText.startsWith('⚠️') || errText.startsWith('❌') ? errText : `⚠️ ${errText}`,
+        timestamp: new Date()
+      })
+    } else {
+      const text =
+        (data.message && String(data.message).trim()) ||
+        (data.error && String(data.error).trim()) ||
+        ''
+      messages.value.push({
+        id: Date.now() + 2,
+        sender: 'agent',
+        content: text || '⚠️ El agente no devolvió contenido útil. Reintenta en unos segundos.',
+        timestamp: new Date()
+      })
+    }
     
     // Scroll al final
     nextTick(() => {

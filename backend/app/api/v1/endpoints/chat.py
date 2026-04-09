@@ -265,9 +265,12 @@ async def chat_with_agent(
             priority="normal",
             visible_to_client=True,
         )
+        fail_msg = (result.get("message") or "").strip() or (
+            result.get("error") or ""
+        ).strip() or f"Error: {result.get('error', 'Error desconocido')}"
         return ChatResponse(
             agent=agent_name,
-            message=result.get("message", f"Error: {result.get('error', 'Error desconocido')}"),
+            message=fail_msg,
             success=False,
             error=result.get("error"),
         )

@@ -68,6 +68,22 @@ def run_chat(
         append_decision_log(company_id, agent_name, thread_id, "chat_error", {"error": str(e)})
         return {"success": False, "error": str(e), "message": f"Error: {e}"}
 
+    # Fallo explícito del agente (p. ej. error OpenAI): no mezclar con "respuesta vacía".
+    if result.get("success") is False:
+        err = (result.get("error") or "").strip() or "El agente no pudo completar la respuesta."
+        append_decision_log(
+            company_id,
+            agent_name,
+            thread_id,
+            "chat_agent_failed",
+            {"error": err[:500]},
+        )
+        return {
+            "success": False,
+            "message": err,
+            "error": err,
+        }
+
     content = result.get("content") or result.get("response") or ""
     if not str(content).strip():
         append_decision_log(
@@ -77,10 +93,11 @@ def run_chat(
             "chat_empty_response",
             {"user_message_len": len(message)},
         )
+        empty_err = "El agente no devolvió contenido. Reintenta en unos segundos."
         return {
             "success": False,
-            "message": "",
-            "error": "El agente no devolvió contenido. Reintenta en unos segundos.",
+            "message": empty_err,
+            "error": empty_err,
         }
     buf.append({"role": "assistant", "content": content})
 

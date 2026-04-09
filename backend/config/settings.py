@@ -88,13 +88,13 @@ def validate_settings():
     errors = []
     
     if not settings.OPENAI_API_KEY or settings.OPENAI_API_KEY == "your-api-key-here":
-        errors.append("❌ OPENAI_API_KEY no configurada")
+        errors.append("[X] OPENAI_API_KEY no configurada")
     
     if not settings.DATABASE_URL:
-        errors.append("⚠️ DATABASE_URL no configurada (usarás SQLite local)")
+        errors.append("[!] DATABASE_URL no configurada (usarás SQLite local)")
     
     if errors:
-        print("\n🔥 ZEUS-IA Configuration Issues:")
+        print("\nZEUS-IA Configuration Issues:")
         for error in errors:
             print(f"  {error}")
         print()

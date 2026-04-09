@@ -142,6 +142,11 @@ def chat_completion(
             user_friendly_msg = "⚠️ Tu API key de OpenAI no tiene permisos suficientes. Ve a https://platform.openai.com/api-keys y crea una nueva key con permisos completos (Owner/Writer), o activa el scope 'model.request' en tu key actual."
         elif "api_key" in error_msg.lower():
             user_friendly_msg = "❌ API key de OpenAI no configurada o inválida. Verifica OPENAI_API_KEY en Railway."
+        elif "context length" in error_msg.lower() or "context_length_exceeded" in error_msg.lower():
+            user_friendly_msg = (
+                "⚠️ La conversación es demasiado larga para el modelo actual. "
+                "Reduce historial o vuelve a intentar para continuar en contexto resumido."
+            )
         else:
             user_friendly_msg = error_msg
         

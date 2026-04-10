@@ -276,11 +276,11 @@ async def chat_with_agent(
                                     db.add(wd)
                                     db.commit()
                                 from services.perseo_chat_video_job import (
-                                    run_perseo_chat_video_generation,
+                                    run_perseo_chat_video_generation_safe,
                                 )
 
                                 background_tasks.add_task(
-                                    run_perseo_chat_video_generation,
+                                    run_perseo_chat_video_generation_safe,
                                     wd.id,
                                     current_user.id,
                                 )
@@ -297,22 +297,25 @@ async def chat_with_agent(
                     "No se pudo persistir entregable workspace tras chat: %s", persist_err
                 )
 
-            ActivityLogger.log_activity(
-                agent_name=agent_name,
-                action_type="chat_request_processed",
-                action_description=f"Chat procesado por {agent_name}",
-                details={
-                    "request_type": "chat",
-                    "thread_id": thread_id,
-                    "user_id": current_user.id,
-                    "workspace_document_id": workspace_document_id,
-                },
-                metrics={"chat_messages": 1},
-                user_email=current_user.email,
-                status="completed",
-                priority="normal",
-                visible_to_client=True,
-            )
+            try:
+                ActivityLogger.log_activity(
+                    agent_name=agent_name,
+                    action_type="chat_request_processed",
+                    action_description=f"Chat procesado por {agent_name}",
+                    details={
+                        "request_type": "chat",
+                        "thread_id": thread_id,
+                        "user_id": current_user.id,
+                        "workspace_document_id": workspace_document_id,
+                    },
+                    metrics={"chat_messages": 1},
+                    user_email=current_user.email,
+                    status="completed",
+                    priority="normal",
+                    visible_to_client=True,
+                )
+            except Exception:
+                logger.exception("ActivityLogger tras chat OK omitido (BD u otro fallo)")
             return ChatResponse(
                 agent=agent_name,
                 message=result.get("message", "Sin respuesta"),
@@ -321,22 +324,25 @@ async def chat_with_agent(
                 hitl_required=result.get("hitl_required", False),
                 workspace_document_id=workspace_document_id,
             )
-        ActivityLogger.log_activity(
-            agent_name=agent_name,
-            action_type="chat_request_failed",
-            action_description=f"Chat fallido en {agent_name}",
-            details={
-                "error": result.get("error"),
-                "request_type": "chat",
-                "thread_id": thread_id,
-                "user_id": current_user.id,
-            },
-            metrics={"chat_failures": 1},
-            user_email=current_user.email,
-            status="failed",
-            priority="normal",
-            visible_to_client=True,
-        )
+        try:
+            ActivityLogger.log_activity(
+                agent_name=agent_name,
+                action_type="chat_request_failed",
+                action_description=f"Chat fallido en {agent_name}",
+                details={
+                    "error": result.get("error"),
+                    "request_type": "chat",
+                    "thread_id": thread_id,
+                    "user_id": current_user.id,
+                },
+                metrics={"chat_failures": 1},
+                user_email=current_user.email,
+                status="failed",
+                priority="normal",
+                visible_to_client=True,
+            )
+        except Exception:
+            logger.exception("ActivityLogger tras chat fallido omitido")
         fail_msg = (result.get("message") or "").strip() or (
             result.get("error") or ""
         ).strip() or f"Error: {result.get('error', 'Error desconocido')}"
@@ -350,17 +356,20 @@ async def chat_with_agent(
         print(f"❌ Error en chat con {agent_name}: {e}")
         import traceback
         traceback.print_exc()
-        ActivityLogger.log_activity(
-            agent_name=agent_name,
-            action_type="chat_request_exception",
-            action_description=f"Excepción en chat {agent_name}",
-            details={"error": str(e), "request_type": "chat", "user_id": current_user.id},
-            metrics={"chat_exceptions": 1},
-            user_email=current_user.email,
-            status="failed",
-            priority="high",
-            visible_to_client=True,
-        )
+        try:
+            ActivityLogger.log_activity(
+                agent_name=agent_name,
+                action_type="chat_request_exception",
+                action_description=f"Excepción en chat {agent_name}",
+                details={"error": str(e), "request_type": "chat", "user_id": current_user.id},
+                metrics={"chat_exceptions": 1},
+                user_email=current_user.email,
+                status="failed",
+                priority="high",
+                visible_to_client=True,
+            )
+        except Exception:
+            logger.exception("ActivityLogger tras excepción chat omitido")
         return ChatResponse(
             agent=agent_name,
             message=f"Error interno: {str(e)}",

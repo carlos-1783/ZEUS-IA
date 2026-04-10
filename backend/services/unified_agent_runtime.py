@@ -7,6 +7,7 @@ NO_RESPONSE_WITHOUT_MEMORY_WRITE.
 from __future__ import annotations
 
 import concurrent.futures
+import logging
 import os
 from typing import Any, Dict, Optional
 
@@ -19,6 +20,8 @@ from services.agent_memory_service import (
 from services.activity_logger import ActivityLogger
 from services.automation.handlers import resolve_handler
 from services.automation.utils import merge_dict
+
+logger = logging.getLogger(__name__)
 
 # Ejecutor dedicado: timeouts de agente sin bloquear el event loop del worker.
 _AGENT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
@@ -39,6 +42,21 @@ def _company_from_context(context: Optional[Dict]) -> str:
     if not context:
         return "default"
     return str(context.get("company_id") or context.get("user_email") or "default")
+
+
+def _safe_append_decision_log(*args: Any, **kwargs: Any) -> None:
+    """Nunca relanza: fallos de memoria/BD no deben tumbar el chat tras respuesta LLM."""
+    try:
+        append_decision_log(*args, **kwargs)
+    except Exception:
+        logger.exception("unified_agent_runtime: append_decision_log omitido")
+
+
+def _safe_persist_short_term(*args: Any, **kwargs: Any) -> None:
+    try:
+        persist_short_term(*args, **kwargs)
+    except Exception:
+        logger.exception("unified_agent_runtime: persist_short_term omitido")
 
 
 def run_chat(
@@ -80,7 +98,7 @@ def run_chat(
         fut = _AGENT_EXECUTOR.submit(agent.process_request, ctx)
         result = fut.result(timeout=max(5.0, timeout_sec))
     except concurrent.futures.TimeoutError:
-        append_decision_log(
+        _safe_append_decision_log(
             company_id,
             agent_name,
             thread_id,
@@ -93,13 +111,13 @@ def run_chat(
         )
         return {"success": False, "error": "timeout", "message": msg}
     except Exception as e:
-        append_decision_log(company_id, agent_name, thread_id, "chat_error", {"error": str(e)})
+        _safe_append_decision_log(company_id, agent_name, thread_id, "chat_error", {"error": str(e)})
         return {"success": False, "error": str(e), "message": f"Error: {e}"}
 
     # Fallo explícito del agente (p. ej. error OpenAI): no mezclar con "respuesta vacía".
     if result.get("success") is False:
         err = (result.get("error") or "").strip() or "El agente no pudo completar la respuesta."
-        append_decision_log(
+        _safe_append_decision_log(
             company_id,
             agent_name,
             thread_id,
@@ -114,7 +132,7 @@ def run_chat(
 
     content = result.get("content") or result.get("response") or ""
     if not str(content).strip():
-        append_decision_log(
+        _safe_append_decision_log(
             company_id,
             agent_name,
             thread_id,
@@ -129,8 +147,8 @@ def run_chat(
         }
     buf.append({"role": "assistant", "content": content})
 
-    persist_short_term(company_id, agent_name, thread_id, buf)
-    append_decision_log(
+    _safe_persist_short_term(company_id, agent_name, thread_id, buf)
+    _safe_append_decision_log(
         company_id,
         agent_name,
         thread_id,
@@ -173,17 +191,20 @@ def run_workspace_task(activity) -> Dict[str, Any]:
     status = result.get("status", "completed")
     artifacts = result.get("details_update", {}).get("automation", {}).get("deliverables") or result.get("details_update") or {}
 
-    persist_operational_state(
-        company_id,
-        agent_name,
-        thread_id,
-        current_task=activity.action_description,
-        status=status,
-        next_action=None,
-        artifacts=artifacts if isinstance(artifacts, dict) else {"raw": str(artifacts)},
-        blocked=None,
-    )
-    append_decision_log(
+    try:
+        persist_operational_state(
+            company_id,
+            agent_name,
+            thread_id,
+            current_task=activity.action_description,
+            status=status,
+            next_action=None,
+            artifacts=artifacts if isinstance(artifacts, dict) else {"raw": str(artifacts)},
+            blocked=None,
+        )
+    except Exception:
+        logger.exception("run_workspace_task: persist_operational_state omitido")
+    _safe_append_decision_log(
         company_id,
         agent_name,
         thread_id,

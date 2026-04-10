@@ -1,30 +1,57 @@
 """
 Agent memory service: short-term buffer, operational state, decision log.
 Identity: company_id, agent_id, thread_id.
-NO_RESPONSE_WITHOUT_MEMORY_WRITE: every agent interaction must persist.
+
+IMPORTANTE (estabilidad Railway): antes se llamaba create_all() en CADA load/persist/log,
+lo que bloqueaba Postgres y podía matar el worker tras una respuesta LLM (timeout Gunicorn).
+El esquema se asegura como máximo una vez por proceso; los fallos de BD no deben tumbar el API.
 """
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
+from threading import Lock
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.models.agent_memory import AgentOperationalState, AgentDecisionLog, AgentShortTermBuffer
 from config.settings import get_settings
 
+logger = logging.getLogger(__name__)
 
 SHORT_TERM_TTL_HOURS = 6
+
+_memory_schema_lock = Lock()
+_memory_schema_ok = False
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _ensure_tables(session: Session) -> None:
-    from app.db.base import Base, engine
-    Base.metadata.create_all(bind=engine)
+def _ensure_memory_schema_once() -> bool:
+    """
+    Una sola vez por proceso. Si falla (BD caída, etc.), no reintentar en bucle agresivo.
+    """
+    global _memory_schema_ok
+    if _memory_schema_ok:
+        return True
+    with _memory_schema_lock:
+        if _memory_schema_ok:
+            return True
+        try:
+            from app.db.base import Base, engine
+
+            Base.metadata.create_all(bind=engine)
+            _memory_schema_ok = True
+            return True
+        except Exception as exc:
+            logger.warning(
+                "agent_memory: esquema no disponible (modo degradado, sin memoria persistente): %s",
+                exc,
+            )
+            return False
 
 
 def load(
@@ -33,9 +60,11 @@ def load(
     thread_id: str,
 ) -> Dict[str, Any]:
     """Load short-term buffer, operational state, and recent decisions."""
+    empty = {"short_term": [], "operational": {}, "decisions": []}
+    if not _ensure_memory_schema_once():
+        return empty
     session = SessionLocal()
     try:
-        _ensure_tables(session)
         company_id = company_id or "default"
         agent_id = (agent_id or "").upper()
         thread_id = thread_id or "main"
@@ -97,6 +126,9 @@ def load(
             "operational": operational,
             "decisions": decisions,
         }
+    except Exception as exc:
+        logger.warning("agent_memory load: %s", exc)
+        return empty
     finally:
         session.close()
 
@@ -107,10 +139,11 @@ def persist_short_term(
     thread_id: str,
     messages: List[Dict[str, str]],
 ) -> None:
-    """Upsert conversation buffer. TTL 6h."""
+    """Upsert conversation buffer. TTL 6h. No relanza: el chat debe responder aunque falle la BD."""
+    if not _ensure_memory_schema_once():
+        return
     session = SessionLocal()
     try:
-        _ensure_tables(session)
         company_id = company_id or "default"
         agent_id = (agent_id or "").upper()
         thread_id = thread_id or "main"
@@ -144,7 +177,7 @@ def persist_short_term(
         session.commit()
     except Exception as e:
         session.rollback()
-        raise
+        logger.warning("agent_memory persist_short_term: %s", e)
     finally:
         session.close()
 
@@ -160,10 +193,11 @@ def persist_operational_state(
     artifacts: Optional[Dict[str, Any]] = None,
     blocked: Optional[Dict[str, Any]] = None,
 ) -> None:
-    """Upsert operational state."""
+    """Upsert operational state. Errores silenciados para no tumbar automatización."""
+    if not _ensure_memory_schema_once():
+        return
     session = SessionLocal()
     try:
-        _ensure_tables(session)
         company_id = company_id or "default"
         agent_id = (agent_id or "").upper()
         thread_id = thread_id or "main"
@@ -204,7 +238,7 @@ def persist_operational_state(
         session.commit()
     except Exception as e:
         session.rollback()
-        raise
+        logger.warning("agent_memory persist_operational_state: %s", e)
     finally:
         session.close()
 
@@ -216,10 +250,11 @@ def append_decision_log(
     decision_type: str,
     payload: Optional[Dict[str, Any]] = None,
 ) -> None:
-    """Append immutable decision log entry."""
+    """Append immutable decision log entry. Errores silenciados."""
+    if not _ensure_memory_schema_once():
+        return
     session = SessionLocal()
     try:
-        _ensure_tables(session)
         company_id = company_id or "default"
         agent_id = (agent_id or "").upper()
         thread_id = thread_id or "main"
@@ -235,6 +270,6 @@ def append_decision_log(
         session.commit()
     except Exception as e:
         session.rollback()
-        raise
+        logger.warning("agent_memory append_decision_log: %s", e)
     finally:
         session.close()

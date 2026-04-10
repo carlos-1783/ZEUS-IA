@@ -180,3 +180,17 @@ def run_perseo_chat_video_generation(doc_id: int, user_id: int) -> None:
             db.rollback()
     finally:
         db.close()
+
+
+def run_perseo_chat_video_generation_safe(doc_id: int, user_id: int) -> None:
+    """
+    Wrapper para BackgroundTasks: cualquier excepción queda aislada (no debe matar el worker).
+    """
+    try:
+        run_perseo_chat_video_generation(doc_id, user_id)
+    except Exception:
+        logger.exception(
+            "perseo_chat_video safe wrapper falló doc_id=%s user_id=%s",
+            doc_id,
+            user_id,
+        )

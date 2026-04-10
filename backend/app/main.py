@@ -7,8 +7,9 @@ import sys
 import os
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.security_middleware import SecurityMiddleware
 
 # Import your existing app
@@ -75,6 +76,22 @@ app.add_middleware(
     max_age=getattr(settings, "CORS_MAX_AGE", 600),
 )
 app.add_middleware(SecurityMiddleware)
+
+
+@app.middleware("http")
+async def uncaught_exception_guard(request: Request, call_next):
+    """Última red: respuesta JSON 500 sin tumbar el proceso ante bugs inesperados."""
+    try:
+        return await call_next(request)
+    except StarletteHTTPException:
+        raise
+    except Exception:
+        logging.getLogger("zeus.api").exception("uncaught path=%s", request.url.path)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Error interno del servidor. El servicio sigue activo; reintenta."},
+        )
+
 
 # Middleware específico para WebSockets en Railway
 # @app.middleware("http")

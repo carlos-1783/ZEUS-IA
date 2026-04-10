@@ -20,25 +20,21 @@ echo ""
 echo "📦 Paquetes instalados:"
 pip list | grep -E "(fastapi|uvicorn|gunicorn|sqlalchemy)"
 
-echo ""
-echo "🔧 Probando importación de la aplicación..."
-if python -c "from app.main import app; print('✅ Aplicación importada correctamente')" 2>&1; then
-    echo "✅ Aplicación importada exitosamente"
-else
-    echo "⚠️ Advertencia: Error al importar la aplicación, pero continuando..."
-    echo "Detalles del error:"
-    python -c "from app.main import app" 2>&1 || true
+if [ "${STARTUP_SELF_TEST:-false}" = "true" ]; then
+  echo ""
+  echo "🔧 Probando importación de la aplicación (STARTUP_SELF_TEST=true)..."
+  if python -c "from app.main import app; print('✅ Aplicación importada correctamente')" 2>&1; then
+      echo "✅ Aplicación importada exitosamente"
+  else
+      echo "⚠️ Advertencia: Error al importar la aplicación, pero continuando..."
+      echo "Detalles del error:"
+      python -c "from app.main import app" 2>&1 || true
+  fi
 fi
 
 echo ""
-echo "🌐 Iniciando servidor Gunicorn..."
+echo "🚀 Iniciando con Uvicorn (single process en Railway)..."
 echo "Puerto: ${PORT:-8000}"
-echo "Bind: 0.0.0.0:${PORT:-8000}"
-echo "Workers: 2"
-
-# Usar uvicorn directamente para simplificar
-echo ""
-echo "🚀 Iniciando con Uvicorn..."
 exec uvicorn app.main:app \
     --host 0.0.0.0 \
     --port ${PORT:-8000} \

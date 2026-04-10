@@ -71,13 +71,15 @@ try:
     justicia.set_zeus_core_ref(zeus)
     afrodita.set_zeus_core_ref(zeus)
     
-    # Asegurar que el plan pre-lanzamiento esté inicializado
-    try:
-        plan_result = zeus.ensure_prelaunch_plan()
-        if plan_result.get("success"):
-            print("✅ Plan pre-lanzamiento preparado automáticamente.")
-    except Exception as prelaunch_error:
-        print(f"⚠️ No se pudo preparar el plan pre-lanzamiento automáticamente: {prelaunch_error}")
+    # Evitar side-effects pesados en import (en algunos arranques se importa 2 veces).
+    # Solo activar explícitamente con ZEUS_AUTO_PRELAUNCH_PLAN=true.
+    if os.getenv("ZEUS_AUTO_PRELAUNCH_PLAN", "false").strip().lower() in ("1", "true", "yes", "on"):
+        try:
+            plan_result = zeus.ensure_prelaunch_plan()
+            if plan_result.get("success"):
+                print("✅ Plan pre-lanzamiento preparado automáticamente.")
+        except Exception as prelaunch_error:
+            print(f"⚠️ No se pudo preparar el plan pre-lanzamiento automáticamente: {prelaunch_error}")
 
     # Conectar TPV service con agentes
     try:

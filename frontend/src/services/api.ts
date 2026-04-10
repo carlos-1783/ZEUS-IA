@@ -51,7 +51,13 @@ const buildUrl = (endpoint: string): string => {
 };
 
 /** Endpoints donde no se debe intentar refresh en 401 (login, refresh, etc.) */
-const SKIP_REFRESH_PATHS = ['/auth/login', '/auth/refresh', '/auth/register', '/health'];
+const SKIP_REFRESH_PATHS = [
+  '/auth/login',
+  '/auth/refresh',
+  '/auth/register',
+  '/health',
+  '/api/v1/health',
+];
 
 function shouldSkipRefresh(endpoint: string): boolean {
   return SKIP_REFRESH_PATHS.some((p) => endpoint.includes(p));

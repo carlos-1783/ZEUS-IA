@@ -1,9 +1,11 @@
+import logging
+import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool, QueuePool
 from app.core.config import settings
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +28,7 @@ else:
         pool_pre_ping=True,  # Verificar conexiones antes de usarlas
         pool_recycle=3600,   # Reciclar conexiones cada hora
         connect_args={
-            "connect_timeout": 10,  # Timeout de 10 segundos
+            "connect_timeout": int(os.getenv("ZEUS_DB_CONNECT_TIMEOUT", "30")),
             "options": "-c statement_timeout=30000"  # Timeout de 30 segundos por query
         }
     )
@@ -39,8 +41,9 @@ Base = declarative_base()
 def create_tables():
     """Crear todas las tablas en la base de datos"""
     import time
-    max_retries = 3
-    retry_delay = 2
+    # Postgres "sleeping" / cold start en Railway: más intentos y backoff.
+    max_retries = int(os.getenv("ZEUS_DB_CREATE_TABLES_RETRIES", "8"))
+    retry_delay = int(os.getenv("ZEUS_DB_CREATE_TABLES_RETRY_DELAY", "3"))
     
     for attempt in range(max_retries):
         try:

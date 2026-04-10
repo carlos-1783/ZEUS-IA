@@ -78,7 +78,7 @@ RUN mkdir -p logs
 EXPOSE 8000
 
 # Health check (sin dependencia de curl y usando PORT dinámico)
-HEALTHCHECK --interval=30s --timeout=30s --start-period=20s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=30s --start-period=120s --retries=5 \
     CMD python -c "import os,urllib.request; p=os.getenv('PORT','8000'); urllib.request.urlopen(f'http://127.0.0.1:{p}/api/v1/health', timeout=5)"
 
 # Start command (PORT dinámico para Railway)

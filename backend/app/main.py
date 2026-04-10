@@ -96,9 +96,20 @@ app.include_router(api_router, prefix="/api/v1")
 logger = _configure_zeus_startup_logger()
 
 
+def _is_railway_runtime() -> bool:
+    """Railway inyecta estas variables; el nombre del entorno puede no ser literal 'production'."""
+    return bool(
+        os.getenv("RAILWAY_PROJECT_ID")
+        or os.getenv("RAILWAY_SERVICE_ID")
+        or os.getenv("RAILWAY_PUBLIC_DOMAIN")
+        or os.getenv("RAILWAY_GIT_COMMIT_SHA")
+        or os.getenv("RAILWAY_ENVIRONMENT")
+    )
+
+
 def _should_run_startup_launch_activity() -> bool:
     """
-    En Railway/producción no ejecutar por defecto: evita actividad + WhatsApp en cada deploy.
+    En Railway (cualquier entorno con nombre) no ejecutar por defecto: evita actividad + WhatsApp en cada deploy.
     Activa con ZEUS_STARTUP_LAUNCH_ACTIVITY=true. Desactiva explícitamente con =false.
     """
     raw = (os.getenv("ZEUS_STARTUP_LAUNCH_ACTIVITY") or "").strip().lower()
@@ -106,7 +117,7 @@ def _should_run_startup_launch_activity() -> bool:
         return True
     if raw in ("0", "false", "no", "off"):
         return False
-    if (os.getenv("RAILWAY_ENVIRONMENT") or "").strip().lower() == "production":
+    if _is_railway_runtime():
         return False
     return True
 

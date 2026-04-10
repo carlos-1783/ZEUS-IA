@@ -37,13 +37,16 @@ const errorDetails = ref('')
 const backendUrl = computed(() => {
   if (props.backendUrl) return props.backendUrl
   const envUrl = import.meta.env.VITE_API_BASE_URL
-  return envUrl || 'http://localhost:8000 (desarrollo)'
+  if (envUrl) return envUrl
+  // En dev el proxy de Vite solo cubre /api; no usar /health en el origen 5173.
+  if (import.meta.env.DEV) return 'http://localhost:8000 (vía proxy /api/v1)'
+  return 'mismo origen que la app'
 })
 
 const checkBackend = async () => {
   try {
     const api = (await import('@/services/api')).default
-    await api.get('/health')
+    await api.get('/api/v1/health')
     showError.value = false
     return true
   } catch (err: any) {

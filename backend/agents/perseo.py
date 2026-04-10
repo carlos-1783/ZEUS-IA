@@ -4,8 +4,39 @@ Agente especializado en Marketing, SEO y Growth
 """
 
 import json
+import re
 from typing import Dict, Any
 from agents.base_agent import BaseAgent
+
+
+def _needs_fiscal_context(message: str) -> bool:
+    """Evita falsos positivos (p. ej. 'modelo' en 'modelo de negocio' → no llamar a RAFAEL)."""
+    low = message.lower()
+    if re.search(
+        r"\b(iva|irpf|factura|fiscal|hacienda|aeat|declaración|declaracion|retención|retencion)\b",
+        low,
+        re.I,
+    ):
+        return True
+    if re.search(r"modelo\s*3[0-9]{2}\b", low):
+        return True
+    return False
+
+
+def _needs_legal_context(message: str) -> bool:
+    """Frases claras; \\blegal\\b no coincide dentro de 'ilegal' (sin frontera antes de 'l')."""
+    low = message.lower()
+    if re.search(
+        r"\b(contrato|gdpr|rgpd|compliance|jurídico|juridico|litigio|demanda|abogado|notario|legal)\b",
+        low,
+        re.I,
+    ):
+        return True
+    if "privacidad de datos" in low or "política de privacidad" in low or "politica de privacidad" in low:
+        return True
+    if "términos y condiciones" in low or "terminos y condiciones" in low:
+        return True
+    return False
 
 
 class Perseo(BaseAgent):
@@ -52,13 +83,8 @@ class Perseo(BaseAgent):
         request_type = context.get("type", "general")
         user_message = context.get("message", context.get("user_message", ""))
         
-        # Detectar si necesita ayuda de otros agentes
-        needs_fiscal_help = any(kw in user_message.lower() for kw in [
-            "factura", "iva", "impuesto", "fiscal", "hacienda", "modelo", "declaración"
-        ])
-        needs_legal_help = any(kw in user_message.lower() for kw in [
-            "legal", "contrato", "gdpr", "privacidad", "términos", "política", "compliance"
-        ])
+        needs_fiscal_help = _needs_fiscal_context(user_message)
+        needs_legal_help = _needs_legal_context(user_message)
         
         # Si es comunicación entre agentes, procesar directamente
         if context.get("inter_agent_communication"):

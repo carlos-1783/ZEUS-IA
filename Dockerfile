@@ -46,6 +46,8 @@ FROM mirror.gcr.io/library/python:3.10-slim
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PORT=8000
+ENV WEB_CONCURRENCY=2
+ENV GUNICORN_TIMEOUT=120
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -81,5 +83,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=120s --retries=5 \
     CMD python -c "import os,urllib.request; p=os.getenv('PORT','8000'); urllib.request.urlopen(f'http://127.0.0.1:{p}/api/v1/health', timeout=5)"
 
-# Start command (PORT dinámico para Railway)
-CMD ["sh", "-c", "python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --log-config uvicorn_log_config.json"]
+# Gunicorn + UvicornWorker (2 workers por defecto). Para depurar: WEB_CONCURRENCY=1 o CMD con uvicorn.
+CMD ["sh", "-c", "gunicorn -c gunicorn.conf.py app.main:app"]

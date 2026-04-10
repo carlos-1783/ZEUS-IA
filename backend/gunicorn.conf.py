@@ -5,17 +5,17 @@ import os
 
 # Configuración básica
 bind = f"0.0.0.0:{os.getenv('PORT', '8000')}"
-# Railway/containers pequeños: empezar conservador y escalar con métricas.
-workers = int(os.getenv("WEB_CONCURRENCY", "1"))
+# Railway: 2 workers por defecto (WEB_CONCURRENCY=1 si RAM ajustada o WebSockets sin sticky).
+workers = int(os.getenv("WEB_CONCURRENCY", "2"))
 worker_class = "uvicorn.workers.UvicornWorker"
 worker_connections = 1000
 max_requests = 1000
 max_requests_jitter = 50
 
-# Timeouts
-timeout = int(os.getenv("GUNICORN_TIMEOUT", "90"))
+# Timeouts (LLM/chat pueden ser largos; subir GUNICORN_TIMEOUT en Railway si hace falta)
+timeout = int(os.getenv("GUNICORN_TIMEOUT", "120"))
 keepalive = 2
-graceful_timeout = int(os.getenv("GUNICORN_GRACEFUL_TIMEOUT", "90"))
+graceful_timeout = int(os.getenv("GUNICORN_GRACEFUL_TIMEOUT", "120"))
 
 # Logging
 accesslog = "-"  # stdout
@@ -59,13 +59,6 @@ secure_scheme_headers = {
     'X-FORWARDED-PROTO': 'https',
     'X-FORWARDED-SSL': 'on'
 }
-
-# Configuración de memoria
-worker_memory_limit = 512 * 1024 * 1024  # 512MB por worker
-
-# Configuración de WebSocket
-websocket_ping_interval = 20
-websocket_ping_timeout = 10
 
 # Configuración de reload (solo para desarrollo)
 reload = False

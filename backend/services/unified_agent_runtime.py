@@ -6,8 +6,9 @@ NO_RESPONSE_WITHOUT_MEMORY_WRITE.
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+import concurrent.futures
+import os
+from typing import Any, Dict, Optional
 
 from services.agent_memory_service import (
     load as memory_load,
@@ -19,11 +20,19 @@ from services.activity_logger import ActivityLogger
 from services.automation.handlers import resolve_handler
 from services.automation.utils import merge_dict
 
+# Ejecutor dedicado: timeouts de agente sin bloquear el event loop del worker.
+_AGENT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=min(8, max(2, (os.cpu_count() or 2) * 2)),
+    thread_name_prefix="zeus_agent",
+)
+
 
 def _get_agents():
-    """Use same agent instances as chat endpoint."""
-    from app.api.v1.endpoints.chat import AGENTS
-    return AGENTS
+    """Misma pila de agentes que el endpoint de chat (inicialización lazy por worker)."""
+    from app.api.v1.endpoints import chat as chat_mod
+
+    chat_mod.ensure_agent_stack()
+    return chat_mod.AGENTS
 
 
 def _company_from_context(context: Optional[Dict]) -> str:
@@ -66,8 +75,23 @@ def run_chat(
 
     buf.append({"role": "user", "content": message})
 
+    timeout_sec = float(os.getenv("ZEUS_AGENT_PROCESS_TIMEOUT", "180") or "180")
     try:
-        result = agent.process_request(ctx)
+        fut = _AGENT_EXECUTOR.submit(agent.process_request, ctx)
+        result = fut.result(timeout=max(5.0, timeout_sec))
+    except concurrent.futures.TimeoutError:
+        append_decision_log(
+            company_id,
+            agent_name,
+            thread_id,
+            "chat_timeout",
+            {"timeout_sec": timeout_sec},
+        )
+        msg = (
+            "El agente tardó demasiado en responder. "
+            "Reintenta con un mensaje más corto o revisa la carga del servicio."
+        )
+        return {"success": False, "error": "timeout", "message": msg}
     except Exception as e:
         append_decision_log(company_id, agent_name, thread_id, "chat_error", {"error": str(e)})
         return {"success": False, "error": str(e), "message": f"Error: {e}"}

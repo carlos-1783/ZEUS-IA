@@ -4,7 +4,8 @@ Endpoint para chat con agentes IA
 import logging
 import os
 import sys
-from typing import List, Optional
+import threading
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
@@ -30,87 +31,122 @@ from services.activity_logger import ActivityLogger
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Instancias de agentes
-try:
-    print("🔄 Inicializando ZEUS CORE...")
-    zeus = ZeusCore()
-    print("✅ ZEUS CORE OK")
-    zeus.set_teamflow_engine(teamflow_engine)
-    
-    print("🔄 Inicializando PERSEO...")
-    perseo = Perseo()
-    print("✅ PERSEO OK")
-    
-    print("🔄 Inicializando RAFAEL...")
-    rafael = Rafael()
-    print("✅ RAFAEL OK")
-    
-    print("🔄 Inicializando THALOS...")
-    thalos = Thalos()
-    print("✅ THALOS OK")
-    
-    print("🔄 Inicializando JUSTICIA...")
-    justicia = Justicia()
-    print("✅ JUSTICIA OK")
-    
-    print("🔄 Inicializando AFRODITA...")
-    afrodita = Afrodita()
-    print("✅ AFRODITA OK")
-    
-    # Registrar agentes en ZEUS y establecer referencias para comunicación
-    zeus.register_agent(perseo)
-    zeus.register_agent(rafael)
-    zeus.register_agent(thalos)
-    zeus.register_agent(justicia)
-    zeus.register_agent(afrodita)
-    
-    # Establecer referencia a ZEUS CORE en todos los agentes para comunicación entre ellos
-    perseo.set_zeus_core_ref(zeus)
-    rafael.set_zeus_core_ref(zeus)
-    thalos.set_zeus_core_ref(zeus)
-    justicia.set_zeus_core_ref(zeus)
-    afrodita.set_zeus_core_ref(zeus)
-    
-    # Evitar side-effects pesados en import (en algunos arranques se importa 2 veces).
-    # Solo activar explícitamente con ZEUS_AUTO_PRELAUNCH_PLAN=true.
-    if os.getenv("ZEUS_AUTO_PRELAUNCH_PLAN", "false").strip().lower() in ("1", "true", "yes", "on"):
+_agents_lock = threading.Lock()
+_agents_ready = False
+
+zeus: Optional[ZeusCore] = None
+perseo: Optional[Perseo] = None
+rafael: Optional[Rafael] = None
+thalos: Optional[Thalos] = None
+justicia: Optional[Justicia] = None
+afrodita: Optional[Afrodita] = None
+
+AGENTS: Dict[str, Any] = {}
+
+AGENT_ORDER_KEYS = (
+    "ZEUS CORE",
+    "PERSEO",
+    "RAFAEL",
+    "THALOS",
+    "JUSTICIA",
+    "AFRODITA",
+)
+
+
+def ensure_agent_stack() -> None:
+    """
+    Inicializa agentes y TPV una sola vez por proceso (Gunicorn worker).
+    Evita cargar modelos/pesos al importar el router → arranque Railway más rápido y menos RAM duplicada en import.
+    """
+    global zeus, perseo, rafael, thalos, justicia, afrodita, _agents_ready, AGENTS
+
+    with _agents_lock:
+        if _agents_ready:
+            return
+
         try:
-            plan_result = zeus.ensure_prelaunch_plan()
-            if plan_result.get("success"):
-                print("✅ Plan pre-lanzamiento preparado automáticamente.")
-        except Exception as prelaunch_error:
-            print(f"⚠️ No se pudo preparar el plan pre-lanzamiento automáticamente: {prelaunch_error}")
+            print("🔄 Inicializando ZEUS CORE...")
+            z = ZeusCore()
+            print("✅ ZEUS CORE OK")
+            z.set_teamflow_engine(teamflow_engine)
 
-    # Conectar TPV service con agentes
-    try:
-        from services.tpv_service import set_tpv_integrations
+            print("🔄 Inicializando PERSEO...")
+            p = Perseo()
+            print("✅ PERSEO OK")
 
-        set_tpv_integrations(
-            rafael=rafael,
-            justicia=justicia,
-            afrodita=afrodita,
-        )
-        print("✅ Integraciones TPV configuradas")
-    except Exception as tpv_error:
-        print(f"⚠️ Error configurando integraciones TPV: {tpv_error}")
+            print("🔄 Inicializando RAFAEL...")
+            r = Rafael()
+            print("✅ RAFAEL OK")
 
-    print("✅ Todos los agentes inicializados correctamente")
-except Exception as e:
-    print(f"❌ Error inicializando agentes: {e}")
-    import traceback
-    print("📋 Traceback completo:")
-    traceback.print_exc()
-    zeus = perseo = rafael = thalos = justicia = afrodita = None
+            print("🔄 Inicializando THALOS...")
+            t = Thalos()
+            print("✅ THALOS OK")
 
-# Mapeo de agentes
-AGENTS = {
-    "ZEUS CORE": zeus,
-    "PERSEO": perseo,
-    "RAFAEL": rafael,
-    "THALOS": thalos,
-    "JUSTICIA": justicia,
-    "AFRODITA": afrodita
-}
+            print("🔄 Inicializando JUSTICIA...")
+            j = Justicia()
+            print("✅ JUSTICIA OK")
+
+            print("🔄 Inicializando AFRODITA...")
+            a = Afrodita()
+            print("✅ AFRODITA OK")
+
+            z.register_agent(p)
+            z.register_agent(r)
+            z.register_agent(t)
+            z.register_agent(j)
+            z.register_agent(a)
+
+            p.set_zeus_core_ref(z)
+            r.set_zeus_core_ref(z)
+            t.set_zeus_core_ref(z)
+            j.set_zeus_core_ref(z)
+            a.set_zeus_core_ref(z)
+
+            if os.getenv("ZEUS_AUTO_PRELAUNCH_PLAN", "false").strip().lower() in ("1", "true", "yes", "on"):
+                try:
+                    plan_result = z.ensure_prelaunch_plan()
+                    if plan_result.get("success"):
+                        print("✅ Plan pre-lanzamiento preparado automáticamente.")
+                except Exception as prelaunch_error:
+                    print(f"⚠️ No se pudo preparar el plan pre-lanzamiento automáticamente: {prelaunch_error}")
+
+            try:
+                from services.tpv_service import set_tpv_integrations
+
+                set_tpv_integrations(
+                    rafael=r,
+                    justicia=j,
+                    afrodita=a,
+                )
+                print("✅ Integraciones TPV configuradas")
+            except Exception as tpv_error:
+                print(f"⚠️ Error configurando integraciones TPV: {tpv_error}")
+
+            zeus, perseo, rafael, thalos, justicia, afrodita = z, p, r, t, j, a
+            AGENTS.clear()
+            AGENTS.update(
+                {
+                    "ZEUS CORE": zeus,
+                    "PERSEO": perseo,
+                    "RAFAEL": rafael,
+                    "THALOS": thalos,
+                    "JUSTICIA": justicia,
+                    "AFRODITA": afrodita,
+                }
+            )
+            print("✅ Todos los agentes inicializados correctamente")
+        except Exception as e:
+            print(f"❌ Error inicializando agentes: {e}")
+            import traceback
+
+            print("📋 Traceback completo:")
+            traceback.print_exc()
+            zeus = perseo = rafael = thalos = justicia = afrodita = None
+            AGENTS.clear()
+            for k in AGENT_ORDER_KEYS:
+                AGENTS[k] = None
+        finally:
+            _agents_ready = True
 
 class ChatRequest(BaseModel):
     message: str
@@ -155,6 +191,8 @@ async def chat_with_agent(
     Returns:
         Respuesta del agente
     """
+    ensure_agent_stack()
+
     # Normalizar nombre del agente
     agent_name = agent_name.upper().replace("-", " ").replace("_", " ")
     
@@ -341,6 +379,7 @@ async def communicate_agents(request: AgentCommunicationRequest):
     Returns:
         Respuesta del agente destino
     """
+    ensure_agent_stack()
     if zeus is None:
         raise HTTPException(
             status_code=500,
@@ -367,6 +406,7 @@ async def coordinate_agents(request: MultiAgentTaskRequest):
     Returns:
         Resultados de todos los agentes
     """
+    ensure_agent_stack()
     if zeus is None:
         raise HTTPException(
             status_code=500,
@@ -383,21 +423,26 @@ async def coordinate_agents(request: MultiAgentTaskRequest):
 
 @router.get("/health")
 async def chat_health():
-    """Health check para el servicio de chat"""
+    """Health check para el servicio de chat (no fuerza carga de agentes si aún no se ha usado el stack)."""
+    if not _agents_ready:
+        return {
+            "status": "healthy",
+            "agents": {k: "lazy_pending" for k in AGENT_ORDER_KEYS},
+        }
     agents_status = {
         name: "initialized" if agent is not None else "error"
         for name, agent in AGENTS.items()
     }
-    
     return {
         "status": "healthy",
-        "agents": agents_status
+        "agents": agents_status,
     }
 
 
 @router.get("/panel/executions")
 async def executions_panel():
     """Panel de control consolidado de ZEUS CORE."""
+    ensure_agent_stack()
     if zeus is None:
         raise HTTPException(status_code=500, detail="ZEUS CORE no está disponible")
     return {

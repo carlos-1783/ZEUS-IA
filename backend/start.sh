@@ -33,11 +33,16 @@ if [ "${STARTUP_SELF_TEST:-false}" = "true" ]; then
 fi
 
 echo ""
-echo "🚀 Iniciando con Uvicorn (single process en Railway)..."
-echo "Puerto: ${PORT:-8000}"
-exec uvicorn app.main:app \
-    --host 0.0.0.0 \
-    --port ${PORT:-8000} \
-    --log-level info \
-    --log-config uvicorn_log_config.json \
-    --no-access-log
+if [ "${USE_UVICORN:-false}" = "true" ]; then
+  echo "🚀 Iniciando con Uvicorn (USE_UVICORN=true)..."
+  echo "Puerto: ${PORT:-8000}"
+  exec uvicorn app.main:app \
+      --host 0.0.0.0 \
+      --port ${PORT:-8000} \
+      --log-level info \
+      --log-config uvicorn_log_config.json \
+      --no-access-log
+else
+  echo "🚀 Iniciando con Gunicorn + UvicornWorker (WEB_CONCURRENCY=${WEB_CONCURRENCY:-2})..."
+  exec gunicorn -c gunicorn.conf.py app.main:app
+fi

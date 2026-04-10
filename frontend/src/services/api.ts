@@ -96,6 +96,19 @@ const request = async (endpoint: string, options: RequestOptions = {}): Promise<
     throw err;
   }
 
+  if (!response.ok && response.status === 429) {
+    const retryAfter = response.headers.get('Retry-After');
+    const err = new Error(
+      retryAfter
+        ? `Demasiadas peticiones. Espera ${retryAfter}s e inténtalo de nuevo.`
+        : 'Demasiadas peticiones (429). Espera unos segundos e inténtalo de nuevo.'
+    ) as any;
+    err.status = 429;
+    err.response = response;
+    err.retryAfter = retryAfter;
+    throw err;
+  }
+
   if (!response.ok && response.status === 401) {
     const canRetry =
       hadAuthHeader(options.headers) &&

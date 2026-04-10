@@ -19,12 +19,14 @@ if "sqlite" in settings.DATABASE_URL:
         poolclass=NullPool
     )
 else:
-    # Para PostgreSQL, usar pool con reintentos y timeout
+    # Pool por proceso: con Gunicorn (N workers) limitar para no agotar conexiones Postgres en Railway.
+    _pool = int(os.getenv("ZEUS_DB_POOL_SIZE", "3"))
+    _overflow = int(os.getenv("ZEUS_DB_MAX_OVERFLOW", "5"))
     engine = create_engine(
         SQLALCHEMY_DATABASE_URL,
         poolclass=QueuePool,
-        pool_size=5,
-        max_overflow=10,
+        pool_size=_pool,
+        max_overflow=_overflow,
         pool_pre_ping=True,  # Verificar conexiones antes de usarlas
         pool_recycle=3600,   # Reciclar conexiones cada hora
         connect_args={
@@ -32,7 +34,7 @@ else:
             "options": "-c statement_timeout=30000"  # Timeout de 30 segundos por query
         }
     )
-    logger.info(f"🔌 Engine PostgreSQL configurado con pool_size=5, max_overflow=10")
+    logger.info("🔌 Engine PostgreSQL pool_size=%s max_overflow=%s", _pool, _overflow)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

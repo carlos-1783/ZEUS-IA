@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from app.db.session import get_db
 from app.core.config import settings
 import psutil
@@ -29,13 +30,14 @@ async def detailed_health_check(db: Session = Depends(get_db)) -> Dict[str, Any]
     # Verificar base de datos
     db_status = "healthy"
     try:
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
     except Exception as e:
         db_status = f"unhealthy: {str(e)}"
     
     # Métricas del sistema
     system_metrics = {
-        "cpu_percent": psutil.cpu_percent(interval=1),
+        # No bloquear 1s por petición de healthcheck.
+        "cpu_percent": psutil.cpu_percent(interval=0.0),
         "memory_percent": psutil.virtual_memory().percent,
         "disk_percent": psutil.disk_usage('/').percent,
         "load_average": os.getloadavg() if hasattr(os, 'getloadavg') else None
@@ -63,7 +65,7 @@ async def readiness_check(db: Session = Depends(get_db)) -> Dict[str, Any]:
     """Readiness check para Kubernetes/Docker"""
     try:
         # Verificar base de datos
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         
         # Verificar variables críticas
         if not settings.DATABASE_URL or not settings.SECRET_KEY:

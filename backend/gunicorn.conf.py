@@ -1,21 +1,21 @@
 # Configuración de Gunicorn para ZEUS-IA - Producción
 # ===================================================
 
-import multiprocessing
 import os
 
 # Configuración básica
-bind = "0.0.0.0:8000"
-workers = multiprocessing.cpu_count() * 2 + 1
+bind = f"0.0.0.0:{os.getenv('PORT', '8000')}"
+# Railway/containers pequeños: empezar conservador y escalar con métricas.
+workers = int(os.getenv("WEB_CONCURRENCY", "1"))
 worker_class = "uvicorn.workers.UvicornWorker"
 worker_connections = 1000
 max_requests = 1000
 max_requests_jitter = 50
 
 # Timeouts
-timeout = 30
+timeout = int(os.getenv("GUNICORN_TIMEOUT", "90"))
 keepalive = 2
-graceful_timeout = 30
+graceful_timeout = int(os.getenv("GUNICORN_GRACEFUL_TIMEOUT", "90"))
 
 # Logging
 accesslog = "-"  # stdout
@@ -35,8 +35,8 @@ limit_request_line = 4094
 limit_request_fields = 100
 limit_request_field_size = 8190
 
-# Preload
-preload_app = True
+# Preload (desactivado para reducir presión de memoria en workers con estado mutable)
+preload_app = False
 
 # Configuración específica para FastAPI/Uvicorn
 worker_tmp_dir = "/dev/shm"

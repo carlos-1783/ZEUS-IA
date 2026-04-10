@@ -182,8 +182,20 @@ def _execute_zeus_launch_started():
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting ZEUS-IA backend")
-    create_tables()
-    ensure_initial_superuser()
+    startup_db_init = os.getenv("ZEUS_STARTUP_DB_INIT", "false").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    if startup_db_init:
+        create_tables()
+        ensure_initial_superuser()
+    else:
+        logger.info(
+            "Omitido create_tables/ensure_initial_superuser en startup "
+            "(ZEUS_STARTUP_DB_INIT=false)."
+        )
     await start_agent_automation()
     if _should_run_startup_launch_activity():
         _execute_zeus_launch_started()

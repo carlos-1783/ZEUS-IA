@@ -43,6 +43,6 @@ if [ "${USE_UVICORN:-false}" = "true" ]; then
       --log-config uvicorn_log_config.json \
       --no-access-log
 else
-  echo "🚀 Iniciando con Gunicorn + UvicornWorker (WEB_CONCURRENCY=${WEB_CONCURRENCY:-2})..."
+  echo "🚀 Iniciando con Gunicorn + UvicornWorker (WEB_CONCURRENCY=${WEB_CONCURRENCY:-1})..."
   exec gunicorn -c gunicorn.conf.py app.main:app
 fi

@@ -5,8 +5,9 @@ import os
 
 # Configuración básica
 bind = f"0.0.0.0:{os.getenv('PORT', '8000')}"
-# Railway: 2 workers por defecto (WEB_CONCURRENCY=1 si RAM ajustada o WebSockets sin sticky).
-workers = int(os.getenv("WEB_CONCURRENCY", "2"))
+# Railway hobby / 512MB: 1 worker evita SIGKILL OOM (cada worker = copia del proceso + agentes).
+# Más RAM o tráfico: WEB_CONCURRENCY=2 en variables de entorno.
+workers = int(os.getenv("WEB_CONCURRENCY", "1"))
 worker_class = "uvicorn.workers.UvicornWorker"
 worker_connections = 1000
 max_requests = 1000

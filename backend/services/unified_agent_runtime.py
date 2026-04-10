@@ -23,9 +23,18 @@ from services.automation.utils import merge_dict
 
 logger = logging.getLogger(__name__)
 
+def _agent_executor_max_workers() -> int:
+    # Contenedores pequeños: muchos hilos + numpy/moviepy = pico de RSS y OOM killer.
+    raw = (os.getenv("ZEUS_AGENT_THREAD_POOL_MAX") or "").strip()
+    if raw.isdigit():
+        return max(1, min(8, int(raw)))
+    cpu = os.cpu_count() or 2
+    return max(1, min(4, cpu))
+
+
 # Ejecutor dedicado: timeouts de agente sin bloquear el event loop del worker.
 _AGENT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
-    max_workers=min(8, max(2, (os.cpu_count() or 2) * 2)),
+    max_workers=_agent_executor_max_workers(),
     thread_name_prefix="zeus_agent",
 )
 

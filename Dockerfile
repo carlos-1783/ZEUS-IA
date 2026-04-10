@@ -46,9 +46,14 @@ FROM mirror.gcr.io/library/python:3.10-slim
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PORT=8000
-ENV WEB_CONCURRENCY=2
+# 1 worker: evita duplicar memoria (OpenAI + agentes + FastAPI) → OOM/SIGKILL en Railway pequeño.
+ENV WEB_CONCURRENCY=1
 ENV GUNICORN_TIMEOUT=300
 ENV GUNICORN_GRACEFUL_TIMEOUT=300
+# Menos fragmentación heap glibc en procesos multihilo (Python + executor).
+ENV MALLOC_ARENA_MAX=2
+# MoviePy/FFmpeg tras chat PERSEO dispara RAM; activar PERSEO_CHAT_AUTO_VIDEO=true solo con más memoria.
+ENV PERSEO_CHAT_AUTO_VIDEO=false
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -84,5 +89,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=120s --retries=5 \
     CMD python -c "import os,urllib.request; p=os.getenv('PORT','8000'); urllib.request.urlopen(f'http://127.0.0.1:{p}/api/v1/health', timeout=5)"
 
-# Gunicorn + UvicornWorker (2 workers por defecto). Para depurar: WEB_CONCURRENCY=1 o CMD con uvicorn.
+# Gunicorn + UvicornWorker. WEB_CONCURRENCY=2 solo si el plan Railway tiene RAM suficiente (p. ej. ≥1 GB).
 CMD ["sh", "-c", "gunicorn -c gunicorn.conf.py app.main:app"]

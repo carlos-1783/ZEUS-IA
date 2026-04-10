@@ -9,6 +9,8 @@ import type { PluginOption } from 'vite';
 export default defineConfig(({ command, mode }: ConfigEnv): UserConfig => {
   const isDev = mode === 'development';
   const env = loadEnv(mode, process.cwd(), '');
+  // Alias Create React App (Railway a veces define REACT_APP_*): misma prioridad que VITE_API_BASE_URL.
+  const buildTimeApiBase = env.VITE_API_BASE_URL || env.REACT_APP_API_URL || '';
   
   // Base configuration
   const base = '/';
@@ -198,10 +200,8 @@ export default defineConfig(({ command, mode }: ConfigEnv): UserConfig => {
       'import.meta.env.DEV': isDev,
       'import.meta.env.PROD': !isDev,
       'import.meta.env.SSR': false,
-      // API Base URL para Railway (producción)
-      'import.meta.env.VITE_API_BASE_URL': JSON.stringify(
-        env.VITE_API_BASE_URL || (isDev ? '' : '')
-      ),
+      // API base inyectada en build (VITE_* o REACT_APP_API_URL). Vacío → runtime usa origen o DEFAULT_PROD.
+      'import.meta.env.VITE_API_BASE_URL': JSON.stringify(buildTimeApiBase),
     },
     plugins,
     server,
@@ -230,7 +230,7 @@ export default defineConfig(({ command, mode }: ConfigEnv): UserConfig => {
     root: '.',
     publicDir: 'public',
     appType: 'spa',
-    envPrefix: 'VITE_',
+    envPrefix: ['VITE_', 'REACT_APP_'],
     assetsInclude: ['**/*.png', '**/*.jpg', '**/*.jpeg', '**/*.gif', '**/*.svg', '**/*.ico', '**/*.webp'],
     cacheDir: 'node_modules/.vite'
   };

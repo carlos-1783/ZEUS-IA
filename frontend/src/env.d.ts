@@ -62,10 +62,12 @@ declare interface Window {
   SpeechRecognition: typeof webkitSpeechRecognition;
 }
 
-// Add missing Vite env variables
 interface ImportMetaEnv {
-  readonly VITE_API_URL: string;
-  // Add other environment variables here
+  readonly VITE_API_URL?: string;
+  readonly VITE_API_BASE_URL?: string;
+  readonly VITE_RUNTIME_API_BASE?: string;
+  readonly VITE_WS_URL?: string;
+  readonly REACT_APP_API_URL?: string;
 }
 
 interface ImportMeta {

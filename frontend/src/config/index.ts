@@ -54,9 +54,14 @@ const deriveWsFromHttp = (url: string): string => {
 };
 
 const detectRuntimeApiBase = (): string => {
-  const envOverride = getEnvValue('VITE_RUNTIME_API_BASE', 'VITE_API_BASE_URL', 'VITE_API_URL');
+  const envOverride = getEnvValue(
+    'VITE_RUNTIME_API_BASE',
+    'VITE_API_BASE_URL',
+    'VITE_API_URL',
+    'REACT_APP_API_URL',
+  );
   if (envOverride) {
-    return normalize(envOverride);
+    return appendApiPath(normalize(envOverride));
   }
 
   if (runtimeWindow?.__ZEUS_API_BASE) {

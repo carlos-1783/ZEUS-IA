@@ -40,13 +40,13 @@
       style-src 'self' 'unsafe-inline' https:;
       font-src 'self' data: https:;
       img-src 'self' data: https: blob:;
-      connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 ws://localhost:8000 ws://127.0.0.1:8000 wss://localhost:8000 wss://127.0.0.1:8000 ws://localhost:5173 ws://127.0.0.1:5173 https://api.zeus-ia.com http://127.0.0.1:8000/api/v1 https://models.readyplayer.me https: blob: data:;
+      connect-src 'self' https://zeus-ia-production-16d8.up.railway.app wss://zeus-ia-production-16d8.up.railway.app https://*.up.railway.app wss://*.up.railway.app http://localhost:8000 http://127.0.0.1:8000 ws://localhost:8000 ws://127.0.0.1:8000 wss://localhost:8000 wss://127.0.0.1:8000 ws://localhost:5173 ws://127.0.0.1:5173 https://api.zeus-ia.com https://models.readyplayer.me https: blob: data:;
       frame-src 'self' https:;
       object-src 'self' data: blob:;
       base-uri 'self';
       form-action 'self';
       worker-src 'self' blob:;
-      media-src 'self' data: blob: http://localhost:8000 http://127.0.0.1:8000 https://zeus-ia-production-16d8.up.railway.app https://zeus-ia-production.up.railway.app;
+      media-src 'self' data: blob: http://localhost:8000 http://127.0.0.1:8000 https://zeus-ia-production-16d8.up.railway.app https://zeus-ia-production.up.railway.app https://*.up.railway.app;
       child-src 'self' blob:;">
     
     <!-- Deshabilitar COEP/COOP para desarrollo -->

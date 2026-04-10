@@ -1,6 +1,7 @@
 """
 Endpoint para chat con agentes IA
 """
+import asyncio
 import logging
 import os
 import sys
@@ -221,12 +222,15 @@ async def chat_with_agent(
         thread_id = request.thread_id or context.get("thread_id") or "main"
         company_id = context.get("company_id") or context.get("user_email")
 
-        result = run_chat(
-            agent_name=agent_name,
-            thread_id=thread_id,
-            message=request.message,
-            company_id=company_id,
-            context=context,
+        # CRÍTICO (Railway / Gunicorn): run_chat es síncrono y largo (LLM). Si se ejecuta en el event loop
+        # del worker, bloquea health checks y el proxy devuelve "Application failed to respond" (502).
+        result = await asyncio.to_thread(
+            run_chat,
+            agent_name,
+            thread_id,
+            request.message,
+            company_id,
+            context,
         )
 
         if result.get("success"):

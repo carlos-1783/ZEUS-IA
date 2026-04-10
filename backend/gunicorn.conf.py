@@ -12,10 +12,10 @@ worker_connections = 1000
 max_requests = 1000
 max_requests_jitter = 50
 
-# Timeouts (LLM/chat pueden ser largos; subir GUNICORN_TIMEOUT en Railway si hace falta)
-timeout = int(os.getenv("GUNICORN_TIMEOUT", "120"))
-keepalive = 2
-graceful_timeout = int(os.getenv("GUNICORN_GRACEFUL_TIMEOUT", "120"))
+# Timeouts: OpenAI + PERSEO pueden superar 120s; Railway suele tolerar hasta ~300s en HTTP.
+timeout = int(os.getenv("GUNICORN_TIMEOUT", "300"))
+keepalive = 5
+graceful_timeout = int(os.getenv("GUNICORN_GRACEFUL_TIMEOUT", "300"))
 
 # Logging
 accesslog = "-"  # stdout

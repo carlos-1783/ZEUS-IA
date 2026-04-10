@@ -6,8 +6,9 @@ import { API_BASE_URL } from '@/config';
  *
  * Timeout HTTP (LLM + tareas pesadas en background). Override: VITE_AGENT_CHAT_TIMEOUT_MS.
  */
+// Debe ser >= tiempo máximo LLM + colas (Railway/proxy). Default 5 min.
 export const AGENT_CHAT_TIMEOUT_MS = Number(
-  import.meta.env.VITE_AGENT_CHAT_TIMEOUT_MS || 180000,
+  import.meta.env.VITE_AGENT_CHAT_TIMEOUT_MS || 300000,
 );
 
 /**

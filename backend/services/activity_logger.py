@@ -10,7 +10,6 @@ from threading import Lock
 from app.models.agent_activity import AgentActivity
 from app.db.session import SessionLocal
 from app.db.base import create_tables
-import os
 
 
 _tables_initialized = False
@@ -26,16 +25,7 @@ def ensure_tables_initialized() -> None:
     with _tables_lock:
         if _tables_initialized:
             return
-        # En producción no ejecutar create_tables en ruta caliente.
-        # Debe hacerse en migración/release job o habilitar explícitamente.
-        if os.getenv("ZEUS_ACTIVITY_AUTO_CREATE_TABLES", "false").strip().lower() not in (
-            "1",
-            "true",
-            "yes",
-            "on",
-        ):
-            _tables_initialized = True
-            return
+        # Una sola vez por proceso: idempotente con startup. No marcar "listo" sin crear tablas.
         print("[ACTIVITY] Inicializando tablas (una sola vez)...")
         create_tables()
         _tables_initialized = True

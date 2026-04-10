@@ -182,19 +182,19 @@ def _execute_zeus_launch_started():
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting ZEUS-IA backend")
-    startup_db_init = os.getenv("ZEUS_STARTUP_DB_INIT", "false").strip().lower() in (
+    # Por defecto SÍ: sin tablas/superuser el API cae en cascada. Solo omitir si se pide explícitamente.
+    skip_db = os.getenv("ZEUS_SKIP_STARTUP_DB_INIT", "").strip().lower() in (
         "1",
         "true",
         "yes",
         "on",
     )
-    if startup_db_init:
+    if not skip_db:
         create_tables()
         ensure_initial_superuser()
     else:
-        logger.info(
-            "Omitido create_tables/ensure_initial_superuser en startup "
-            "(ZEUS_STARTUP_DB_INIT=false)."
+        logger.warning(
+            "ZEUS_SKIP_STARTUP_DB_INIT activo: no se ejecutan create_tables ni ensure_initial_superuser."
         )
     await start_agent_automation()
     if _should_run_startup_launch_activity():

@@ -192,7 +192,8 @@ async def chat_with_agent(
     Returns:
         Respuesta del agente
     """
-    ensure_agent_stack()
+    # Carga de agentes es pesada: no bloquear el event loop (evita 502 "connection closed" en el edge).
+    await asyncio.to_thread(ensure_agent_stack)
 
     # Normalizar nombre del agente
     agent_name = agent_name.upper().replace("-", " ").replace("_", " ")
@@ -392,7 +393,7 @@ async def communicate_agents(request: AgentCommunicationRequest):
     Returns:
         Respuesta del agente destino
     """
-    ensure_agent_stack()
+    await asyncio.to_thread(ensure_agent_stack)
     if zeus is None:
         raise HTTPException(
             status_code=500,
@@ -419,7 +420,7 @@ async def coordinate_agents(request: MultiAgentTaskRequest):
     Returns:
         Resultados de todos los agentes
     """
-    ensure_agent_stack()
+    await asyncio.to_thread(ensure_agent_stack)
     if zeus is None:
         raise HTTPException(
             status_code=500,
@@ -455,7 +456,7 @@ async def chat_health():
 @router.get("/panel/executions")
 async def executions_panel():
     """Panel de control consolidado de ZEUS CORE."""
-    ensure_agent_stack()
+    await asyncio.to_thread(ensure_agent_stack)
     if zeus is None:
         raise HTTPException(status_code=500, detail="ZEUS CORE no está disponible")
     return {

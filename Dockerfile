@@ -52,6 +52,7 @@ ENV GUNICORN_TIMEOUT=300
 ENV GUNICORN_GRACEFUL_TIMEOUT=300
 # Menos fragmentación heap glibc en procesos multihilo (Python + executor).
 ENV MALLOC_ARENA_MAX=2
+ENV GUNICORN_WORKER_TMPDIR=/tmp
 # MoviePy/FFmpeg tras chat PERSEO dispara RAM; activar PERSEO_CHAT_AUTO_VIDEO=true solo con más memoria.
 ENV PERSEO_CHAT_AUTO_VIDEO=false
 

@@ -39,8 +39,9 @@ limit_request_field_size = 8190
 # Preload (desactivado para reducir presión de memoria en workers con estado mutable)
 preload_app = False
 
-# Configuración específica para FastAPI/Uvicorn
-worker_tmp_dir = "/dev/shm"
+# Railway/contenedores mínimos: /dev/shm a veces es pequeño o problemático; /tmp es más fiable.
+_worker_tmp = os.getenv("GUNICORN_WORKER_TMPDIR", "/tmp").strip() or "/tmp"
+worker_tmp_dir = _worker_tmp
 
 # Variables de entorno
 raw_env = [

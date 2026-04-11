@@ -439,6 +439,24 @@ def _render_slide(
     return image
 
 
+def _ffmpeg_preset() -> str:
+    from app.core.config import settings
+
+    p = str(getattr(settings, "PERSEO_FFMPEG_PRESET", "veryfast") or "veryfast").strip()
+    allowed = (
+        "ultrafast",
+        "superfast",
+        "veryfast",
+        "faster",
+        "fast",
+        "medium",
+        "slow",
+        "slower",
+        "veryslow",
+    )
+    return p if p in allowed else "veryfast"
+
+
 def _write_mp4(
     frames: List[Image.Image], output_path: Path, fps: float, crf: int
 ) -> bool:
@@ -486,7 +504,8 @@ def _write_mp4(
         
         # Crear clip desde los frames
         clip = ImageSequenceClip(frame_arrays, fps=float(fps))
-        
+        preset = _ffmpeg_preset()
+
         # Escribir el archivo MP4
         clip.write_videofile(
             str(output_path),
@@ -494,7 +513,7 @@ def _write_mp4(
             audio=False,
             fps=float(fps),
             logger=None,
-            preset="slow",
+            preset=preset,
             ffmpeg_params=[
                 "-crf",
                 str(int(crf)),

@@ -22,8 +22,11 @@ def build_deliverable_from_chat_content(content: Dict[str, Any], title: str) -> 
     """Adapta el content del entregable workspace al formato de generate_marketing_video."""
     structure: List[Dict[str, str]] = []
     vs = content.get("video_script")
+    max_slides = 6
     if isinstance(vs, list):
         for item in vs:
+            if len(structure) >= max_slides:
+                break
             if not isinstance(item, dict):
                 continue
             seg = str(item.get("segment") or "Escena").strip() or "Escena"
@@ -32,10 +35,12 @@ def build_deliverable_from_chat_content(content: Dict[str, Any], title: str) -> 
                 structure.append({"segment": seg, "copy": copy})
     copy_text = str(content.get("copy") or content.get("body") or "").strip()
     if not structure and copy_text:
-        chunks = [c.strip() for c in copy_text.split("\n\n") if c.strip()][:8]
+        chunks = [c.strip() for c in copy_text.split("\n\n") if c.strip()][:max_slides]
         if not chunks:
             chunks = [copy_text[:1200]]
         for i, ch in enumerate(chunks):
+            if len(structure) >= max_slides:
+                break
             structure.append({"segment": f"Parte {i + 1}", "copy": ch[:950]})
     if not structure:
         structure = [

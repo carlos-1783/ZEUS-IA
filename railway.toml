@@ -4,6 +4,8 @@
 # Backend (Nixpacks sin Dockerfile): en Variables del servicio conviene definir:
 # OPENAI_TIMEOUT_SEC=52 OPENAI_MAX_RETRIES=1 ZEUS_AGENT_PROCESS_TIMEOUT=56
 # (el proxy HTTP público suele cortar ~60s; evita 502 "Application failed to respond" en chat LLM).
+# Vídeo automático PERSEO tras chat con imagen: PERSEO_CHAT_AUTO_VIDEO=true (default en Dockerfile raíz).
+# Si el servicio hace OOM al generar MP4: PERSEO_CHAT_AUTO_VIDEO=false o más RAM / PERSEO_VIDEO_WIDTH=960.
 
 # ============================================
 # BACKEND SERVICE - FastAPI + PostgreSQL

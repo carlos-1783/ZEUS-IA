@@ -58,13 +58,20 @@ ENV GUNICORN_GRACEFUL_TIMEOUT=300
 # Menos fragmentación heap glibc en procesos multihilo (Python + executor).
 ENV MALLOC_ARENA_MAX=2
 ENV GUNICORN_WORKER_TMPDIR=/tmp
-# MoviePy/FFmpeg tras chat PERSEO dispara RAM; activar PERSEO_CHAT_AUTO_VIDEO=true solo con más memoria.
-ENV PERSEO_CHAT_AUTO_VIDEO=false
+# Vídeo de presentación PERSEO (slides + copy). Si Railway marca OOM, poner PERSEO_CHAT_AUTO_VIDEO=false en Variables.
+ENV PERSEO_CHAT_AUTO_VIDEO=true
+# Encode más ligero que el default del código (1920 + preset slow).
+ENV PERSEO_VIDEO_WIDTH=1280
+ENV PERSEO_VIDEO_SECONDS_PER_SLIDE=3
+ENV PERSEO_FFMPEG_PRESET=veryfast
+ENV PERSEO_VIDEO_CROSSFADE_SEC=0.2
 
-# Install system dependencies
+# Install system dependencies (ffmpeg: MoviePy/libx264 más fiable en contenedor slim)
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
+    ffmpeg \
+    fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Set work directory

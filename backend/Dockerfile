@@ -23,6 +23,8 @@ RUN apt-get update && apt-get install -y \
     g++ \
     libpq-dev \
     curl \
+    ffmpeg \
+    fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar archivos de requisitos
@@ -71,6 +73,8 @@ RUN apt-get update && apt-get install -y \
     g++ \
     libpq-dev \
     curl \
+    ffmpeg \
+    fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar archivos de requisitos

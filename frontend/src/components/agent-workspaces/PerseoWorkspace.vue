@@ -107,9 +107,10 @@
             </header>
             <p class="card-description">
               La <strong>foto</strong> es <strong>referencia</strong> (no se sustituye por un cartel nuevo generado por
-              IA). El entregable útil es el <strong>copy</strong> en el bloque “Anuncio / copy generado”. Si solo
-              adjuntas imagen (no vídeo), el servidor puede generar un <strong>vídeo de presentación</strong> (slides +
-              texto) en MP4 o GIF; recarga en unos segundos.
+              IA). El entregable útil es el <strong>copy</strong> en el bloque “Anuncio / copy generado”. Con imagen en
+              el mismo mensaje de chat, el backend intenta un <strong>vídeo de presentación</strong> (slides + texto) en
+              MP4 o GIF en segundo plano; recarga el workspace en 30–90 s. Si no aparece, revisa variables
+              <code>PERSEO_CHAT_AUTO_VIDEO</code> y logs del servidor (FFmpeg / memoria).
             </p>
             <p v-if="workspaceVideoUrl" class="card-description subtle-expectation">
               Has adjuntado un vídeo: no se genera un segundo MP4 automático.

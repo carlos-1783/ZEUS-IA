@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 import threading
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -275,6 +276,9 @@ async def chat_with_agent(
                                 c = pl.get("content")
                                 if isinstance(c, dict):
                                     c["generated_video_status"] = "pending"
+                                    c["generated_video_started_at"] = (
+                                        datetime.now(timezone.utc).isoformat()
+                                    )
                                     pl["content"] = c
                                     wd.document_payload = pl
                                     db.add(wd)

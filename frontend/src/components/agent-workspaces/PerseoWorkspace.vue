@@ -108,9 +108,10 @@
             <p class="card-description">
               La <strong>foto</strong> es <strong>referencia</strong> (no se sustituye por un cartel nuevo generado por
               IA). El entregable útil es el <strong>copy</strong> en el bloque “Anuncio / copy generado”. Con imagen en
-              el mismo mensaje de chat, el backend intenta un <strong>vídeo de presentación</strong> (slides + texto) en
-              MP4 o GIF en segundo plano; recarga el workspace en 30–90 s. Si no aparece, revisa variables
-              <code>PERSEO_CHAT_AUTO_VIDEO</code> y logs del servidor (FFmpeg / memoria).
+              el mismo mensaje de chat, el backend intenta un <strong>vídeo de presentación</strong> (slides + texto +
+              H.264) en segundo plano; no equivale a un clip tipo <strong>Google Veo 3</strong> (movimiento/cámara
+              sintética), que requeriría integración con API de vídeo generativo. Recarga en 1–4 min o usa
+              <strong>Reintentar vídeo</strong> si se queda colgado.
             </p>
             <p v-if="workspaceVideoUrl" class="card-description subtle-expectation">
               Has adjuntado un vídeo: no se genera un segundo MP4 automático.
@@ -194,8 +195,29 @@
             <div v-if="generatedVideoPending" class="media-block media-pending">
               <h6 class="media-block-title">Vídeo de presentación</h6>
               <p class="pending-text">
-                Generando MP4 o GIF a partir del copy… Actualiza la página en unos segundos.
+                Generando MP4 o GIF (diapositivas + texto; no es vídeo generativo tipo
+                <strong>Veo 3</strong>). Suele tardar 1–4 min en el servidor.
               </p>
+              <p v-if="generatedVideoStartedAt" class="pending-meta">
+                Inicio: {{ generatedVideoStartedAt }}
+              </p>
+              <p v-if="isVideoPendingStale" class="pending-warn">
+                Lleva demasiado tiempo en “generando”. Puede haber fallado FFmpeg, falta de RAM o timeout.
+                Prueba <strong>Reintentar vídeo</strong> o revisa logs en Railway.
+              </p>
+              <div class="pending-actions">
+                <button type="button" class="btn ghost" :disabled="isLoadingDetails" @click="reload">
+                  Actualizar estado
+                </button>
+                <button
+                  type="button"
+                  class="btn ghost"
+                  :disabled="!workspaceDocId || videoRetryBusy"
+                  @click="retryPresentationVideo"
+                >
+                  {{ videoRetryBusy ? 'Encolando…' : 'Reintentar vídeo' }}
+                </button>
+              </div>
             </div>
             <div v-else-if="workspaceGeneratedVideoUrl" class="media-block">
               <h6 class="media-block-title">Vídeo generado (presentación)</h6>
@@ -223,8 +245,21 @@
             <div v-if="generatedVideoFailed" class="media-block media-failed">
               <h6 class="media-block-title">Vídeo automático</h6>
               <p class="failed-text">
-                No se pudo generar (¿MoviePy/FFmpeg en el servidor?). {{ generatedVideoErrorHint }}
+                No se pudo generar la presentación (slides). {{ generatedVideoErrorHint }}
               </p>
+              <div class="pending-actions">
+                <button type="button" class="btn ghost" :disabled="isLoadingDetails" @click="reload">
+                  Actualizar estado
+                </button>
+                <button
+                  type="button"
+                  class="btn ghost"
+                  :disabled="!workspaceDocId || videoRetryBusy"
+                  @click="retryPresentationVideo"
+                >
+                  {{ videoRetryBusy ? 'Encolando…' : 'Reintentar vídeo' }}
+                </button>
+              </div>
             </div>
           </section>
 
@@ -388,6 +423,7 @@
 import { onMounted, ref, computed, watch } from 'vue';
 import type { AutomationOutput } from '@/api/automationService';
 import { useAutomationDeliverables } from '@/composables/useAutomationDeliverables';
+import api from '@/services/api';
 import { resolveWorkspaceMediaUrl } from '@/utils/resolveWorkspaceMediaUrl';
 import PerseoToolsPanel from './PerseoToolsPanel.vue';
 
@@ -443,6 +479,30 @@ const generatedVideoErrorHint = computed(() => {
   const c = workspaceContent.value || {};
   return String(c.generated_video_error || '').trim() || 'Revisa logs del backend.';
 });
+
+const workspaceDocId = computed(() => {
+  const id = selectedId.value || '';
+  const m = id.match(/^ws:(\d+)$/);
+  return m ? parseInt(m[1], 10) : null;
+});
+
+const generatedVideoStartedAt = computed(() => {
+  const c = workspaceContent.value || {};
+  return String(c.generated_video_started_at || '').trim();
+});
+
+const isVideoPendingStale = computed(() => {
+  if (!generatedVideoPending.value || !generatedVideoStartedAt.value) {
+    return false;
+  }
+  const t = Date.parse(generatedVideoStartedAt.value);
+  if (Number.isNaN(t)) {
+    return true;
+  }
+  return Date.now() - t > 200_000;
+});
+
+const videoRetryBusy = ref(false);
 
 const workspaceMediaCardVisible = computed(() => {
   if (!currentDetails.value?.workspace_deliverable) {
@@ -635,6 +695,21 @@ const reload = async () => {
     await loadDetails();
   }
 };
+
+async function retryPresentationVideo() {
+  const id = workspaceDocId.value;
+  if (!id) return;
+  videoRetryBusy.value = true;
+  try {
+    await api.post('/api/v1/workspace/perseo-presentation-video/retry', { document_id: id });
+    await reload();
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e || 'No se pudo encolar el vídeo.');
+    window.alert(msg);
+  } finally {
+    videoRetryBusy.value = false;
+  }
+}
 
 const loadDetails = async () => {
   if (!currentDeliverable.value) {
@@ -1129,6 +1204,26 @@ onMounted(async () => {
   margin: 0;
   font-size: 14px;
   color: #1d4ed8;
+}
+
+.pending-meta {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.pending-warn {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #b45309;
+  line-height: 1.45;
+}
+
+.pending-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
 }
 
 .media-failed {

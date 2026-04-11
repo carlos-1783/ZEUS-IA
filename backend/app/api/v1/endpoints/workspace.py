@@ -4,7 +4,7 @@ Workspace: crear entregables estructurados persistidos (document_approvals).
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -14,6 +14,10 @@ from app.db.session import get_db
 from app.models.user import User
 from services.global_company_bootstrap import ensure_user_company_link_for_operations
 from services.legal_fiscal_firewall import DocumentStatus
+from services.perseo_chat_video_job import (
+    run_perseo_chat_video_generation_safe,
+    schedule_retry_from_api,
+)
 from services.workspace_deliverables import (
     WORKSPACE_DOCUMENT_TYPES,
     normalize_perseo_workspace_payload,
@@ -24,6 +28,10 @@ from services.workspace_deliverables import (
 _ALLOWED_WORKSPACE_STATUS = {s.value for s in DocumentStatus}
 
 router = APIRouter()
+
+
+class RetryPerseoPresentationVideoBody(BaseModel):
+    document_id: int = Field(..., ge=1, description="ID document_approvals (entregable PERSEO)")
 
 
 class WorkspaceCreateBody(BaseModel):
@@ -166,3 +174,37 @@ async def workspace_list(
         "limit": limit,
         "offset": offset,
     }
+
+
+@router.post("/perseo-presentation-video/retry")
+async def retry_perseo_presentation_video(
+    body: RetryPerseoPresentationVideoBody,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Re-encola la generación del vídeo de presentación (slides) para un entregable PERSEO con imagen.
+    Útil si el job quedó colgado o falló; no sustituye a un modelo generativo tipo Veo 3.
+    """
+    ensure_user_company_link_for_operations(db, current_user)
+    _ = db  # session requerida por Depends; schedule_retry abre su propia sesión para escribir
+    err = schedule_retry_from_api(body.document_id, current_user.id)
+    _errors: Dict[str, tuple[int, str]] = {
+        "documento_no_encontrado": (404, "Documento no encontrado o no pertenece a tu cuenta."),
+        "solo_perseo": (400, "Solo se puede generar vídeo automático en entregables del agente PERSEO."),
+        "sin_content": (400, "El entregable no tiene contenido estructurado."),
+        "sin_imagen_referencia": (400, "Falta image_url en el entregable (sube imagen en el mismo mensaje de chat)."),
+        "ya_en_cola": (429, "Hay una generación en curso; espera ~1 minuto y recarga."),
+        "ya_generado": (409, "Este entregable ya tiene un vídeo generado."),
+        "db_error": (500, "No se pudo actualizar el estado en base de datos."),
+    }
+    if err:
+        status, detail = _errors.get(err, (400, err))
+        raise HTTPException(status_code=status, detail=detail)
+    background_tasks.add_task(
+        run_perseo_chat_video_generation_safe,
+        body.document_id,
+        current_user.id,
+    )
+    return {"success": True, "message": "Generación de vídeo encolada. Recarga el workspace en ~1–3 minutos."}

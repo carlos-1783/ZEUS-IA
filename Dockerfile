@@ -65,6 +65,7 @@ ENV PERSEO_VIDEO_WIDTH=1280
 ENV PERSEO_VIDEO_SECONDS_PER_SLIDE=3
 ENV PERSEO_FFMPEG_PRESET=veryfast
 ENV PERSEO_VIDEO_CROSSFADE_SEC=0.2
+ENV PERSEO_VIDEO_JOB_TIMEOUT_SEC=300
 
 # Install system dependencies (ffmpeg: MoviePy/libx264 más fiable en contenedor slim)
 RUN apt-get update && apt-get install -y \

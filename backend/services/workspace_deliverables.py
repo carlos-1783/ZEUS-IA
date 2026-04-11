@@ -164,6 +164,7 @@ def normalize_perseo_workspace_payload(payload: Dict[str, Any]) -> Dict[str, Any
         "generated_video_format",
         "generated_video_asset",
         "generated_video_error",
+        "generated_video_started_at",
     )
     for key in _preserve:
         if key in content and content[key] is not None:

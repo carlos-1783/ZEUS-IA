@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     PERSEO_VIDEO_CRF: int = int(os.getenv("PERSEO_VIDEO_CRF", "20") or "20")
     # libx264 preset: veryfast/ultrafast ahorra CPU y RAM en Railway; "slow" solo con mucho recurso.
     PERSEO_FFMPEG_PRESET: str = os.getenv("PERSEO_FFMPEG_PRESET", "veryfast").strip() or "veryfast"
+    # Tiempo máximo (s) para la generación MP4/GIF en el job en background (evita pending infinito).
+    PERSEO_VIDEO_JOB_TIMEOUT_SEC: float = float(os.getenv("PERSEO_VIDEO_JOB_TIMEOUT_SEC", "240") or "240")
     IMAGE_STORAGE: str = os.getenv("IMAGE_STORAGE", "local")
     PERSEO_IMAGE_UPLOAD_DIR: str = os.getenv(
         "PERSEO_IMAGE_UPLOAD_DIR",

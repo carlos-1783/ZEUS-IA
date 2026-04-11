@@ -22,7 +22,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { getBackendLivenessUrl } from '@/utils/backendLivenessUrl'
 
 const props = defineProps<{
   error?: Error | null
@@ -38,37 +39,88 @@ const backendUrl = computed(() => {
   if (props.backendUrl) return props.backendUrl
   const envUrl = import.meta.env.VITE_API_BASE_URL
   if (envUrl) return envUrl
-  // En dev el proxy de Vite solo cubre /api; no usar /health en el origen 5173.
   if (import.meta.env.DEV) return 'http://localhost:8000 (vía proxy /api/v1)'
   return 'mismo origen que la app'
 })
 
-const checkBackend = async () => {
-  try {
-    const api = (await import('@/services/api')).default
-    await api.get('/api/v1/health')
-    showError.value = false
-    return true
-  } catch (err: any) {
-    showError.value = true
-    errorDetails.value = err.message || 'Error desconocido'
-    
-    if (err.message?.includes('fetch')) {
-      errorMessage.value = 'No se pudo conectar con el servidor. Verifica que el backend esté ejecutándose.'
-    } else if (err.status === 401) {
-      errorMessage.value = 'Sesión expirada. Por favor, inicia sesión nuevamente.'
-    } else {
-      errorMessage.value = `Error del servidor: ${err.message || 'Error desconocido'}`
+const LIVENESS_TIMEOUT_MS = 12000
+const RETRY_DELAYS_MS = [0, 1800, 3800, 6500]
+
+let pollId: ReturnType<typeof setInterval> | undefined
+
+/**
+ * Comprueba disponibilidad con reintentos (Railway: cold start + migraciones → 502 intermitente).
+ * No envía Authorization: el health no lo requiere y evita competir con refresh de token.
+ */
+const checkBackend = async (): Promise<boolean> => {
+  const url = getBackendLivenessUrl()
+  let lastDetail = ''
+
+  for (let i = 0; i < RETRY_DELAYS_MS.length; i++) {
+    const wait = RETRY_DELAYS_MS[i]
+    if (wait > 0 && (RETRY_DELAYS_MS[i - 1] ?? 0) < wait) {
+      await new Promise((r) => setTimeout(r, wait - (RETRY_DELAYS_MS[i - 1] ?? 0)))
     }
-    
-    return false
+    try {
+      const ac = new AbortController()
+      const timer = setTimeout(() => ac.abort(), LIVENESS_TIMEOUT_MS)
+      const res = await fetch(url, {
+        method: 'GET',
+        signal: ac.signal,
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      })
+      clearTimeout(timer)
+
+      if (res.ok) {
+        showError.value = false
+        return true
+      }
+
+      lastDetail = `HTTP ${res.status}`
+      try {
+        const j = await res.json()
+        lastDetail = (j?.detail as string) || (j?.message as string) || lastDetail
+      } catch {
+        /* ignore */
+      }
+
+      if (res.status === 401) {
+        showError.value = true
+        errorDetails.value = lastDetail
+        errorMessage.value = 'Sesión expirada. Por favor, inicia sesión nuevamente.'
+        return false
+      }
+    } catch (err: any) {
+      lastDetail =
+        err?.name === 'AbortError'
+          ? `Tiempo de espera (${LIVENESS_TIMEOUT_MS / 1000}s) en ${url}`
+          : err?.message || 'Error desconocido'
+    }
   }
+
+  showError.value = true
+  errorDetails.value = lastDetail
+
+  if (/abort|timeout|tiempo de espera/i.test(lastDetail)) {
+    errorMessage.value =
+      'El servidor tardó demasiado en responder (puede estar arrancando). Espera unos segundos y pulsa Reintentar.'
+  } else if (/502|503|504/i.test(lastDetail)) {
+    errorMessage.value =
+      'El servidor no respondió a tiempo (502/503). Suele pasar al despertar el servicio en Railway; reintenta en unos segundos.'
+  } else if (/failed to fetch|network|load failed/i.test(lastDetail)) {
+    errorMessage.value =
+      'No se pudo conectar con el servidor. Comprueba la red y que la URL del API sea correcta.'
+  } else {
+    errorMessage.value = `Error del servidor: ${lastDetail}`
+  }
+
+  return false
 }
 
 const retry = async () => {
   await checkBackend()
   if (!showError.value) {
-    // Recargar página si conexión exitosa
     window.location.reload()
   }
 }
@@ -78,11 +130,16 @@ const dismiss = () => {
 }
 
 onMounted(() => {
-  // Verificar backend al montar
-  checkBackend()
-  
-  // Verificar periódicamente (cada 30 segundos)
-  setInterval(checkBackend, 30000)
+  window.setTimeout(() => {
+    void checkBackend()
+  }, 600)
+  pollId = window.setInterval(() => {
+    void checkBackend()
+  }, 60000)
+})
+
+onUnmounted(() => {
+  if (pollId) window.clearInterval(pollId)
 })
 
 // Exponer método para verificación manual

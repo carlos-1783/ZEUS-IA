@@ -527,6 +527,12 @@ function formatChatFetchError(error) {
     return 'Tiempo de espera agotado. Si el mensaje era largo o hay imagen adjunta, reintenta en unos segundos.'
   }
   const m = String(error.message || error)
+  if (/application failed to respond|failed to respond/i.test(m)) {
+    return (
+      'El servidor tardó demasiado o estaba ocupado (límite del hosting ~60s). ' +
+      'Reintenta en unos segundos o acorta el mensaje.'
+    )
+  }
   if (/failed to fetch|networkerror|load failed/i.test(m)) {
     return 'No se pudo contactar con el API. Comprueba la red y que la URL del backend (VITE_API_BASE_URL / proxy) sea correcta.'
   }

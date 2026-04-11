@@ -192,7 +192,7 @@ async def chat_with_agent(
     Returns:
         Respuesta del agente
     """
-    # Carga de agentes es pesada: no bloquear el event loop (evita 502 "connection closed" en el edge).
+    # Carga de agentes antes de leer AGENTS (dict vacío hasta ensure).
     await asyncio.to_thread(ensure_agent_stack)
 
     # Normalizar nombre del agente
@@ -223,8 +223,7 @@ async def chat_with_agent(
         thread_id = request.thread_id or context.get("thread_id") or "main"
         company_id = context.get("company_id") or context.get("user_email")
 
-        # CRÍTICO (Railway / Gunicorn): run_chat es síncrono y largo (LLM). Si se ejecuta en el event loop
-        # del worker, bloquea health checks y el proxy devuelve "Application failed to respond" (502).
+        # CRÍTICO (Railway / Gunicorn): run_chat es síncrono y largo (LLM). No en el event loop.
         result = await asyncio.to_thread(
             run_chat,
             agent_name,

@@ -21,8 +21,11 @@ class Settings(BaseSettings):
     OPENAI_CONTEXT_LIMIT: int = int(os.getenv("OPENAI_CONTEXT_LIMIT", "0"))
     OPENAI_MAX_TOKENS: int = int(os.getenv("OPENAI_MAX_TOKENS", "2000"))
     OPENAI_TEMPERATURE: float = float(os.getenv("OPENAI_TEMPERATURE", "0.3"))
-    # Timeout por petición al API OpenAI (segundos). Chat + contexto largo puede superar 60s.
+    # Timeout por petición al API OpenAI (segundos). En Railway el edge HTTP suele cortar ~60s;
+    # en Docker producción se define OPENAI_TIMEOUT_SEC=52 por defecto (margen bajo el proxy).
     OPENAI_TIMEOUT_SEC: float = float(os.getenv("OPENAI_TIMEOUT_SEC", "120") or "120")
+    # Reintentos SDK OpenAI: 2 puede triplicar tiempo bajo latencia mala y disparar 502 del edge.
+    OPENAI_MAX_RETRIES: int = int(os.getenv("OPENAI_MAX_RETRIES", "2") or "2")
     
     # =============================================================================
     # DATABASE

@@ -1,5 +1,9 @@
 # Railway Configuration for ZEUS-IA Monorepo
 # Este archivo configura el despliegue del backend y frontend en Railway
+#
+# Backend (Nixpacks sin Dockerfile): en Variables del servicio conviene definir:
+# OPENAI_TIMEOUT_SEC=52 OPENAI_MAX_RETRIES=1 ZEUS_AGENT_PROCESS_TIMEOUT=56
+# (el proxy HTTP público suele cortar ~60s; evita 502 "Application failed to respond" en chat LLM).
 
 # ============================================
 # BACKEND SERVICE - FastAPI + PostgreSQL

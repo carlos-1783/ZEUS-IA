@@ -26,7 +26,7 @@ def get_openai_client() -> OpenAI:
             client = OpenAI(
                 api_key=settings.OPENAI_API_KEY,
                 timeout=float(getattr(settings, "OPENAI_TIMEOUT_SEC", 120) or 120),
-                max_retries=2,
+                max_retries=int(getattr(settings, "OPENAI_MAX_RETRIES", 2) or 2),
             )
             print(f"✅ OpenAI client initialized successfully")
         except TypeError as e:
@@ -36,6 +36,7 @@ def get_openai_client() -> OpenAI:
             client = OpenAI(
                 api_key=settings.OPENAI_API_KEY,
                 timeout=float(getattr(settings, "OPENAI_TIMEOUT_SEC", 120) or 120),
+                max_retries=int(getattr(settings, "OPENAI_MAX_RETRIES", 2) or 2),
             )
         
     return client

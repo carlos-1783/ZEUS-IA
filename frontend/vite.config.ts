@@ -202,6 +202,10 @@ export default defineConfig(({ command, mode }: ConfigEnv): UserConfig => {
       'import.meta.env.SSR': false,
       // API base inyectada en build (VITE_* o REACT_APP_API_URL). Vacío → runtime usa origen o DEFAULT_PROD.
       'import.meta.env.VITE_API_BASE_URL': JSON.stringify(buildTimeApiBase),
+      // CRA/Railway: mismo valor para código que solo lee REACT_APP_API_URL
+      'import.meta.env.REACT_APP_API_URL': JSON.stringify(
+        env.REACT_APP_API_URL || env.VITE_API_BASE_URL || '',
+      ),
     },
     plugins,
     server,

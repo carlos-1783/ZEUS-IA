@@ -5,28 +5,10 @@
  */
 
 import { useAuthStore } from '@/stores/auth';
+import { API_BASE_URL as CONFIG_API_BASE } from '@/config';
 
-// Obtener URL base del backend desde variable de entorno
-// En desarrollo: usa proxy de Vite o localhost:8000
-// En producción Railway: usa VITE_API_BASE_URL configurada
-const getApiBaseUrl = (): string => {
-  // Si hay variable de entorno, usarla
-  const envUrl = import.meta.env.VITE_API_BASE_URL;
-  if (envUrl) {
-    return envUrl.endsWith('/') ? envUrl.slice(0, -1) : envUrl;
-  }
-  
-  // En desarrollo, Vite proxy maneja /api -> localhost:8000
-  // En producción sin variable, asumir mismo origen (backend sirve frontend)
-  if (import.meta.env.DEV) {
-    return ''; // Proxy de Vite maneja esto
-  }
-  
-  // Producción sin VITE_API_BASE_URL: mismo origen
-  return '';
-};
-
-const API_BASE_URL = getApiBaseUrl();
+// Misma fuente que axios (`@/api`) y chat: VITE_* / REACT_APP_API_URL / runtime / DEFAULT_PROD
+const API_BASE_URL = (CONFIG_API_BASE || '').replace(/\/+$/, '');
 
 /**
  * Construir URL completa del endpoint
@@ -88,7 +70,9 @@ const request = async (endpoint: string, options: RequestOptions = {}): Promise<
   } catch (err: any) {
     if (err?.name === 'TypeError' && err?.message?.includes('fetch')) {
       const apiBase = API_BASE_URL || 'mismo origen';
-      const e = new Error(`No se pudo conectar con el servidor (${apiBase}). Verifica que el backend esté ejecutándose y que VITE_API_BASE_URL esté configurada correctamente.`) as any;
+      const e = new Error(
+        `No se pudo conectar con el servidor (${apiBase}). Verifica el backend y VITE_API_BASE_URL o REACT_APP_API_URL en el build.`,
+      ) as any;
       e.isConnectionError = true;
       e.url = url;
       throw e;

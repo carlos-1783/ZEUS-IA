@@ -25,6 +25,17 @@ const isLocalOrigin = (origin?: string): boolean => {
   return origin.includes('localhost') || origin.includes('127.0.0.1');
 };
 
+/** Evita bases localhost incrustadas en build de producción (Railway). */
+const isLocalHostUrl = (url: string): boolean =>
+  /localhost|127\.0\.0\.1/i.test(url);
+
+const sanitizeProdUrl = (url: string, fallback: string): string => {
+  if (!isDev && isLocalHostUrl(url)) {
+    return fallback;
+  }
+  return url;
+};
+
 const getEnvValue = (...keys: string[]): string | undefined => {
   for (const key of keys) {
     const value = env[key];
@@ -108,11 +119,15 @@ const detectRuntimeWsBase = (apiBase: string): string => {
   return isDev ? LOCAL_WS : DEFAULT_PROD_WS;
 };
 
-// API configuration
-export const API_BASE_URL = detectRuntimeApiBase();
+// API configuration (producción: nunca localhost si quedó mal inyectado en build)
+const _detectedApi = detectRuntimeApiBase();
+export const API_BASE_URL = sanitizeProdUrl(_detectedApi, DEFAULT_PROD_API);
 
 // WebSocket configuration
-export const WS_BASE_URL = detectRuntimeWsBase(API_BASE_URL);
+export const WS_BASE_URL = sanitizeProdUrl(
+  detectRuntimeWsBase(API_BASE_URL),
+  DEFAULT_PROD_WS,
+);
 
 // App configuration
 export const APP_NAME = 'ZEUS-IA';

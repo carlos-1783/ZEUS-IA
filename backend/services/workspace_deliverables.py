@@ -71,13 +71,29 @@ def _clean_marketing_text(raw: str) -> str:
     if m_desc:
         body = m_desc.group(1).strip().strip('"”')
         return body
-    # Fallback: primera parte útil (evitar párrafos de disclaimer largos)
+    # Fallback: no usar solo el 1.er párrafo (un saludo dejaba copy vacío y el workspace mostraba solo la imagen).
     parts = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+
+    def _looks_like_short_greeting(block: str) -> bool:
+        if len(block) > 220:
+            return False
+        low = block.lower()
+        if not re.match(r"^(¡\s*)?hola\b", low):
+            return False
+        if "€" in block or "euro" in low:
+            return False
+        return len(parts) > 1
+
+    while parts and _looks_like_short_greeting(parts[0]):
+        parts = parts[1:]
+
     if parts:
-        candidate = parts[0]
-        # Si viene enumerado (1. Inicio... 2. Medio...), mantener solo texto útil
-        candidate = re.sub(r"\b\d+\.\s*", "", candidate).strip()
-        return candidate
+        merged = "\n\n".join(parts)
+        merged = re.sub(r"\b\d+\.\s*", "", merged).strip()
+        max_body = 12000
+        if len(merged) > max_body:
+            merged = merged[: max_body - 1].rsplit(" ", 1)[0] + "…"
+        return merged
     return text
 
 

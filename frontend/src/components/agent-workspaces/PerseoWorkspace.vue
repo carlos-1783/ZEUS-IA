@@ -75,11 +75,13 @@
         <div class="details-grid">
           <section v-if="currentDetails?.workspace_deliverable" class="card workspace-persisted-card">
             <header class="card-header">
-              <h5>📌 Entregable en workspace (BD)</h5>
+              <h5>📌 Anuncio / copy generado por PERSEO</h5>
               <span class="badge">Chat / API</span>
             </header>
             <p class="card-description">
-              Persistido en base de datos; también aparece en Documentos pendientes. Incluye copia, adjuntos y metadatos.
+              El <strong>texto</strong> es el entregable principal. La foto que subiste es solo
+              <strong>referencia</strong>: PERSEO no sustituye esa imagen por un cartel nuevo (solo puede añadir un
+              vídeo de presentación si está activo en el servidor).
             </p>
             <div class="workspace-ad">
               <h6>{{ workspaceAdTitle }}</h6>
@@ -104,10 +106,10 @@
               <span class="badge">Qué hace este flujo</span>
             </header>
             <p class="card-description">
-              La <strong>foto</strong> que subes es <strong>referencia visual</strong> para la campaña (copy, CTA,
-              canales). Si solo adjuntas imagen (no vídeo), el servidor genera en segundo plano un
-              <strong>vídeo de presentación</strong> (diapositivas animadas con tu texto) en MP4 o GIF; recarga el
-              workspace en unos segundos para verlo. Para vídeos creativos tipo Runway/CapCut sigue usando el briefing.
+              La <strong>foto</strong> es <strong>referencia</strong> (no se sustituye por un cartel nuevo generado por
+              IA). El entregable útil es el <strong>copy</strong> en el bloque “Anuncio / copy generado”. Si solo
+              adjuntas imagen (no vídeo), el servidor puede generar un <strong>vídeo de presentación</strong> (slides +
+              texto) en MP4 o GIF; recarga en unos segundos.
             </p>
             <p v-if="workspaceVideoUrl" class="card-description subtle-expectation">
               Has adjuntado un vídeo: no se genera un segundo MP4 automático.
@@ -133,19 +135,30 @@
           </section>
 
           <section v-if="workspaceMediaCardVisible" class="card media-card">
-            <h5>🖼️ Medios del entregable</h5>
+            <h5>🖼️ Medios y referencias</h5>
             <p class="card-description">
-              Referencias que subiste al chat y, si aplica, el vídeo de presentación generado por PERSEO a partir del
-              copy.
+              El anuncio en texto está arriba. Aquí van la imagen que enviaste y, si aplica, un vídeo de presentación
+              generado a partir del copy.
             </p>
+            <div v-if="currentDetails?.workspace_deliverable" class="media-block media-generated-copy">
+              <h6 class="media-block-title">Texto del anuncio (mismo copy que arriba)</h6>
+              <p class="generated-copy-body">{{ workspaceAdCopy }}</p>
+              <p class="generated-copy-meta">
+                CTA: {{ workspaceAdCta }} · Canales: {{ workspaceAdPlatforms }}
+              </p>
+            </div>
             <div v-if="workspaceImageUrl" class="media-block">
-              <h6 class="media-block-title">Referencia visual</h6>
+              <h6 class="media-block-title">Tu imagen (referencia)</h6>
               <img
                 :src="workspaceImageDisplayUrl"
                 loading="lazy"
                 class="media-image"
-                alt="Referencia visual adjuntada"
+                alt="Imagen de referencia enviada al chat"
               />
+              <p class="media-ref-caption">
+                Es la misma foto que adjuntaste: sirve de contexto visual. No se convierte sola en un nuevo diseño
+                gráfico.
+              </p>
             </div>
             <div v-if="workspaceVideoUrl" class="media-block">
               <h6 class="media-block-title">Vídeo adjunto por ti</h6>
@@ -434,13 +447,16 @@ const workspaceMediaCardVisible = computed(() => {
   if (!currentDetails.value?.workspace_deliverable) {
     return false;
   }
+  const hasCopy =
+    Boolean(workspaceAdCopy.value) && workspaceAdCopy.value !== 'Sin copy disponible.';
   return Boolean(
     workspaceImageUrl.value ||
       workspaceVideoUrl.value ||
       workspacePdfUrl.value ||
       workspaceGeneratedVideoUrl.value ||
       generatedVideoPending.value ||
-      generatedVideoFailed.value
+      generatedVideoFailed.value ||
+      hasCopy
   );
 });
 
@@ -1057,6 +1073,35 @@ onMounted(async () => {
 
 .media-video-fallback p {
   margin: 0 0 12px;
+}
+
+.media-generated-copy {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  margin-bottom: 4px;
+}
+
+.generated-copy-body {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: #0f172a;
+  white-space: pre-wrap;
+}
+
+.generated-copy-meta {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #475569;
+}
+
+.media-ref-caption {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #64748b;
 }
 
 .media-block {

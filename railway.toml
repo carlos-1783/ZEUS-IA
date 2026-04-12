@@ -1,49 +1,16 @@
-# Railway Configuration for ZEUS-IA Monorepo
-# Este archivo configura el despliegue del backend y frontend en Railway
+# ZEUS-IA — despliegue en UN servicio (API + SPA desde el Dockerfile de la raíz).
+# El build multi-stage copia frontend/dist → backend/static en la imagen.
 #
-# Backend en un solo dominio: preferir Dockerfile en la RAÍZ (incluye build Vite → ./static).
-# Si usas solo `source=backend/` + Nixpacks, el dist del frontend NO se copia → / y /clear-pwa-cache fallan
-# salvo rutas embebidas; para SPA completo usa builder DOCKERFILE + source="." (abajo).
-#
-# Backend (Nixpacks solo carpeta backend — sin SPA): en Variables del servicio conviene definir:
-# OPENAI_TIMEOUT_SEC=52 OPENAI_MAX_RETRIES=1 ZEUS_AGENT_PROCESS_TIMEOUT=56
-# (el proxy HTTP público suele cortar ~60s; evita 502 "Application failed to respond" en chat LLM).
-# Vídeo automático PERSEO tras chat con imagen: PERSEO_CHAT_AUTO_VIDEO=true (default en Dockerfile raíz).
-# Si el servicio hace OOM al generar MP4: PERSEO_CHAT_AUTO_VIDEO=false o más RAM / PERSEO_VIDEO_WIDTH=960.
+# Si necesitas un segundo servicio solo para el SPA, créalo en el dashboard de Railway
+# (source: frontend/, build: npm ci && npm run build, start: npx serve dist -s).
 
-# ============================================
-# BACKEND SERVICE - FastAPI + PostgreSQL
-# ============================================
-[[services]]
-name = "zeus-ia-backend"
-# Raíz del repo: el Dockerfile copia frontend/dist a static/ del backend.
-source = "."
-
-[services.zeus-ia-backend.build]
+[build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
-[services.zeus-ia-backend.deploy]
+[deploy]
 startCommand = "gunicorn -c gunicorn.conf.py app.main:app"
 healthcheckPath = "/api/v1/health"
-healthcheckTimeout = 100
-restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 10
-
-# ============================================
-# FRONTEND SERVICE - Vite + Vue.js
-# ============================================
-[[services]]
-name = "zeus-ia-frontend"
-source = "frontend/"
-
-[services.zeus-ia-frontend.build]
-builder = "NIXPACKS"
-buildCommand = "npm ci && npm run build"
-
-[services.zeus-ia-frontend.deploy]
-startCommand = "npx serve dist -s -p $PORT"
-healthcheckPath = "/"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10

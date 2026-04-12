@@ -3,6 +3,11 @@
 
 import os
 
+# CWD fijo en contenedor / Railway si la variable está definida (evita "module not found" si el proceso no arranca en /app).
+_app_root = (os.getenv("ZEUS_APP_ROOT") or "").strip()
+if _app_root and os.path.isdir(_app_root):
+    os.chdir(_app_root)
+
 # Configuración básica
 bind = f"0.0.0.0:{os.getenv('PORT', '8000')}"
 # Railway hobby / 512MB: 1 worker evita SIGKILL OOM (cada worker = copia del proceso + agentes).

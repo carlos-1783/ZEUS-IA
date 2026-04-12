@@ -75,8 +75,9 @@ RUN apt-get update && apt-get install -y \
     fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
-# Set work directory
+# Set work directory (Gunicorn y rutas relativas a gunicorn.conf.py)
 WORKDIR /app
+ENV ZEUS_APP_ROOT=/app
 
 # Copy backend requirements
 COPY backend/requirements.txt ./

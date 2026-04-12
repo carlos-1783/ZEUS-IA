@@ -29,8 +29,8 @@ COPY frontend/ ./
 # FORZAR REBUILD LIMPIO - eliminar todo caché
 RUN rm -rf dist/ node_modules/.vite .vite/ .cache/ || true
 
-# Build frontend: URL del API (mismo servicio Railway o backend dedicado). Sobrescribible con --build-arg.
-ARG VITE_API_BASE_URL=https://zeus-ia-production-16d8.up.railway.app/api/v1
+# API: vacío = en runtime el SPA usa el mismo origen + /api/v1 (un solo servicio). Para API en otro host: --build-arg VITE_API_BASE_URL=https://api.ejemplo.com/api/v1
+ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 ARG REACT_APP_API_URL=
 ENV REACT_APP_API_URL=${REACT_APP_API_URL}

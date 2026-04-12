@@ -111,6 +111,18 @@ async def uncaught_exception_guard(request: Request, call_next):
 # Include API routes - IMPORTANTE: Debe estar ANTES del catch-all
 app.include_router(api_router, prefix="/api/v1")
 
+
+@app.get("/api/v1", include_in_schema=False)
+async def api_v1_prefix_probe():
+    """Confirma que el prefijo /api/v1 responde (no lo intercepta el fallback SPA)."""
+    return {
+        "ok": True,
+        "prefix": "/api/v1",
+        "health": "/api/v1/health",
+        "docs": "/api/docs",
+    }
+
+
 # Crear tablas al iniciar la aplicación
 logger = _configure_zeus_startup_logger()
 

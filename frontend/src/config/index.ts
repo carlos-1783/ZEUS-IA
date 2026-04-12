@@ -31,6 +31,10 @@ const isLocalHostUrl = (url: string): boolean =>
 
 const sanitizeProdUrl = (url: string, fallback: string): string => {
   if (!isDev && isLocalHostUrl(url)) {
+    // Build con localhost incrustado: mismo servicio → origen actual; si no hay window, fallback.
+    if (isBrowser && window.location.origin && !isLocalOrigin(window.location.origin)) {
+      return appendApiPath(window.location.origin);
+    }
     return fallback;
   }
   return url;
@@ -47,8 +51,11 @@ const getEnvValue = (...keys: string[]): string | undefined => {
 };
 
 const appendApiPath = (origin: string): string => {
-  const base = normalize(origin);
-  if (/\/api\/v\d$/i.test(base)) {
+  let base = normalize(origin);
+  if (base && !base.startsWith('http') && !base.startsWith('/')) {
+    base = `/${base.replace(/^\/+/, '')}`;
+  }
+  if (/\/api\/v\d+$/i.test(base)) {
     return base;
   }
   const suffix = base.endsWith('/api') ? '/v1' : '/api/v1';
@@ -93,6 +100,19 @@ const detectRuntimeApiBase = (): string => {
   return isDev ? LOCAL_API : DEFAULT_PROD_API;
 };
 
+/**
+ * Rutas tipo `/api/v1` (sin host) resuelven bien en fetch del mismo origen, pero axios y diagnósticos
+ * son más fiables con URL absoluta en el navegador.
+ */
+const absolutizeApiBaseInBrowser = (url: string): string => {
+  if (!isBrowser || !url) return url;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('/')) {
+    return `${window.location.origin}${url}`;
+  }
+  return url;
+};
+
 const detectRuntimeWsBase = (apiBase: string): string => {
   const envOverride = getEnvValue('VITE_RUNTIME_WS_BASE', 'VITE_WS_BASE_URL', 'VITE_WS_URL');
   if (envOverride) {
@@ -121,9 +141,10 @@ const detectRuntimeWsBase = (apiBase: string): string => {
 
 // API configuration (producción: nunca localhost si quedó mal inyectado en build)
 const _detectedApi = detectRuntimeApiBase();
-export const API_BASE_URL = sanitizeProdUrl(_detectedApi, DEFAULT_PROD_API);
+const _sanitizedApi = sanitizeProdUrl(_detectedApi, DEFAULT_PROD_API);
+export const API_BASE_URL = absolutizeApiBaseInBrowser(_sanitizedApi);
 
-// WebSocket configuration
+// WebSocket configuration (usa API ya absolutizada para derivar wss:// cuando toque)
 export const WS_BASE_URL = sanitizeProdUrl(
   detectRuntimeWsBase(API_BASE_URL),
   DEFAULT_PROD_WS,

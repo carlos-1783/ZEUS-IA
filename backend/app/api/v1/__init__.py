@@ -31,6 +31,7 @@ from app.api.v1.endpoints import (
     webhooks,
     payroll,
     public as public_site,
+    video_roce,
 )
 from app.api.v1.endpoints.websocket import websocket_endpoint
 
@@ -80,6 +81,9 @@ api_router.include_router(workspace_deliverables.router, prefix="/workspace", ta
 
 # Subida unificada (imagen / vídeo / PDF)
 api_router.include_router(upload_media.router, prefix="/upload", tags=["upload"])
+
+# ROCE — edición básica de vídeo (FFmpeg, async jobs)
+api_router.include_router(video_roce.router, prefix="/video", tags=["roce-video"])
 
 # TPV Universal Enterprise
 api_router.include_router(tpv.router, prefix="/tpv", tags=["tpv"])

@@ -112,6 +112,8 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         # No limitar health/static/service-worker para evitar falsos positivos
         if (
             path in ("/health", "/api/v1/health", "/service-worker.js")
+            or path.startswith("/api/v1/video/health")
+            or path.startswith("/api/video/health")
             or path.startswith("/assets/")
             or path.startswith("/static/")
         ):

@@ -267,6 +267,55 @@ def persist_workspace_deliverable(
     return doc
 
 
+def attach_roce_processed_video_to_document(
+    db: Session,
+    *,
+    document_id: int,
+    user_id: int,
+    public_url: str,
+    job_id: str,
+) -> bool:
+    """
+    Enlaza el vídeo procesado ROCE a un documento del workspace (content + audit).
+    No lanza: el caller puede ignorar fallos de enlace sin tumbar el job.
+    """
+    try:
+        doc = db.query(DocumentApproval).filter(DocumentApproval.id == int(document_id)).first()
+        if not doc:
+            logger.warning("roce attach: documento %s no existe", document_id)
+            return False
+        if int(doc.user_id) != int(user_id):
+            logger.warning("roce attach: user mismatch doc=%s", document_id)
+            return False
+        payload = dict(doc.document_payload or {})
+        content = payload.get("content")
+        if not isinstance(content, dict):
+            content = {"body": str(content or "")}
+            payload["content"] = content
+        content["roce_processed_video_url"] = public_url
+        content["roce_video_job_id"] = job_id
+        content["video_url"] = public_url
+        log = list(doc.audit_log or [])
+        log.append(
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "event": "roce_video_attached",
+                "job_id": job_id,
+                "video_url": public_url,
+            }
+        )
+        doc.document_payload = payload
+        doc.audit_log = log
+        db.add(doc)
+        db.commit()
+        logger.info("roce attach ok doc=%s job=%s", document_id, job_id)
+        return True
+    except Exception:
+        db.rollback()
+        logger.exception("roce attach failed doc=%s job=%s", document_id, job_id)
+        return False
+
+
 def persist_agent_chat_deliverable(
     db: Session,
     user: User,

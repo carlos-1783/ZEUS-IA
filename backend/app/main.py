@@ -15,6 +15,7 @@ from app.core.security_middleware import SecurityMiddleware
 # Import your existing app
 from app.core.config import settings
 from app.api.v1 import api_router
+from app.api.v1.endpoints import video_roce as video_roce_endpoints
 from app.db.base import create_tables
 from services.automation import start_agent_automation, stop_agent_automation
 from app.db.initial_superuser import ensure_initial_superuser
@@ -108,6 +109,9 @@ async def uncaught_exception_guard(request: Request, call_next):
 
 # Include API routes - IMPORTANTE: Debe estar ANTES del catch-all
 app.include_router(api_router, prefix="/api/v1")
+
+# ROCE: alias sin /v1 (spec /api/video/...) — mismos handlers que /api/v1/video/...
+app.include_router(video_roce_endpoints.router, prefix="/api/video", tags=["roce-video"])
 
 # Crear tablas al iniciar la aplicación
 logger = _configure_zeus_startup_logger()

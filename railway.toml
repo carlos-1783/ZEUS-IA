@@ -1,44 +1,14 @@
-# Railway Configuration for ZEUS-IA Monorepo
-# Este archivo configura el despliegue del backend y frontend en Railway
-#
-# Backend (Nixpacks sin Dockerfile): en Variables del servicio conviene definir:
-# OPENAI_TIMEOUT_SEC=52 OPENAI_MAX_RETRIES=1 ZEUS_AGENT_PROCESS_TIMEOUT=56
-# (el proxy HTTP público suele cortar ~60s; evita 502 "Application failed to respond" en chat LLM).
-# Vídeo automático PERSEO tras chat con imagen: PERSEO_CHAT_AUTO_VIDEO=true (default en Dockerfile raíz).
-# Si el servicio hace OOM al generar MP4: PERSEO_CHAT_AUTO_VIDEO=false o más RAM / PERSEO_VIDEO_WIDTH=960.
+# Producción: UN servicio con Dockerfile en la RAÍZ del repo (build Vite + FastAPI).
+# Si en Railway "Root Directory" está en `backend/`, el Dockerfile no se usa y NO hay SPA →
+# deja Root Directory vacío o "." para que exista el Dockerfile y la carpeta frontend/.
 
-# ============================================
-# BACKEND SERVICE - FastAPI + PostgreSQL
-# ============================================
-[[services]]
-name = "zeus-ia-backend"
-source = "backend/"
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
-[services.zeus-ia-backend.build]
-builder = "NIXPACKS"
-buildCommand = "pip install --upgrade pip && pip install -r requirements.txt"
-
-[services.zeus-ia-backend.deploy]
+[deploy]
 startCommand = "gunicorn -c gunicorn.conf.py app.main:app"
-healthcheckPath = "/health"
-healthcheckTimeout = 100
-restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 10
-
-# ============================================
-# FRONTEND SERVICE - Vite + Vue.js
-# ============================================
-[[services]]
-name = "zeus-ia-frontend"
-source = "frontend/"
-
-[services.zeus-ia-frontend.build]
-builder = "NIXPACKS"
-buildCommand = "npm ci && npm run build"
-
-[services.zeus-ia-frontend.deploy]
-startCommand = "npx serve dist -s -p $PORT"
-healthcheckPath = "/"
+healthcheckPath = "/api/v1/health"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10

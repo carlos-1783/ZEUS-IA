@@ -75,8 +75,9 @@ RUN apt-get update && apt-get install -y \
     fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
-# Set work directory
+# Set work directory (debe coincidir con resolución de STATIC_DIR en app/core/config.py)
 WORKDIR /app
+ENV ZEUS_APP_ROOT=/app
 
 # Copy backend requirements
 COPY backend/requirements.txt ./

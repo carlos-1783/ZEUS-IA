@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Limpiar caché PWA — ZEUS-IA</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 1rem; background: #0a0e1a; color: #fff; }
+    button { padding: 0.6rem 1rem; margin: 0.25rem; background: #2563eb; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
+    .ok { color: #34d399; } .err { color: #f87171; }
+  </style>
+</head>
+<body>
+  <h1>Limpiar caché PWA</h1>
+  <p>Sirve aunque el build de Vite no esté en el servidor.</p>
+  <button type="button" onclick="sw()">Desregistrar Service Workers</button>
+  <button type="button" onclick="cachesClear()">Borrar caches</button>
+  <button type="button" onclick="ls()">Limpiar localStorage (tokens demo)</button>
+  <pre id="out"></pre>
+  <script>
+    const o = document.getElementById('out');
+    function log(m, cls) {
+      const s = document.createElement('span');
+      if (cls) s.className = cls;
+      s.textContent = m + '\n';
+      o.appendChild(s);
+    }
+    async function sw() {
+      if (!('serviceWorker' in navigator)) { log('Sin SW', 'err'); return; }
+      const r = await navigator.serviceWorker.getRegistrations();
+      for (const x of r) await x.unregister();
+      log('SW desregistrados: ' + r.length, 'ok');
+    }
+    async function cachesClear() {
+      if (!('caches' in window)) { log('Sin Cache API', 'err'); return; }
+      const k = await caches.keys();
+      for (const n of k) await caches.delete(n);
+      log('Caches borrados: ' + k.length, 'ok');
+    }
+    function ls() {
+      try {
+        ['auth_token','refresh_token','zeus-pwa-installed'].forEach(k => localStorage.removeItem(k));
+        log('localStorage limpiado', 'ok');
+      } catch (e) { log(String(e), 'err'); }
+    }
+  </script>
+</body>
+</html>

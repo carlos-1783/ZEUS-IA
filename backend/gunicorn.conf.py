@@ -3,6 +3,10 @@
 
 import os
 
+_root = (os.getenv("ZEUS_APP_ROOT") or "").strip()
+if _root and os.path.isdir(_root):
+    os.chdir(_root)
+
 # Configuración básica
 bind = f"0.0.0.0:{os.getenv('PORT', '8000')}"
 # Railway hobby / 512MB: 1 worker evita SIGKILL OOM (cada worker = copia del proceso + agentes).

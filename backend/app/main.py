@@ -5,9 +5,11 @@
 import logging
 import sys
 import os
-from fastapi import FastAPI, Request
+from pathlib import Path
+
+from fastapi import FastAPI, Request, status
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.security_middleware import SecurityMiddleware
@@ -302,6 +304,23 @@ async def websocket_test():
     }
 
 
+_BUNDLED_CLEAR_PWA = Path(__file__).resolve().parent / "static_pages" / "clear_pwa_cache.html"
+
+
+@app.get("/clear-pwa-cache.html", include_in_schema=False)
+async def serve_clear_pwa_cache_bundled():
+    """PWA: siempre disponible (Nixpacks sin dist / caché rota)."""
+    try:
+        if _BUNDLED_CLEAR_PWA.is_file():
+            return HTMLResponse(_BUNDLED_CLEAR_PWA.read_text(encoding="utf-8"))
+    except OSError:
+        pass
+    return HTMLResponse(
+        "<!DOCTYPE html><html><body><p>Limpiar caché: usa herramientas del navegador (borrar datos del sitio).</p></body></html>",
+        status_code=200,
+    )
+
+
 @app.get("/railway-ws-diagnostic")
 async def railway_ws_diagnostic():
     import platform
@@ -321,13 +340,23 @@ async def railway_ws_diagnostic():
     }
 
 
+def _frontend_missing_html(full_path: str) -> str:
+    return f"""<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"/><title>ZEUS-IA</title></head>
+<body style="font-family:system-ui,sans-serif;max-width:36rem;margin:2rem auto;padding:1rem;">
+<h1>API activa; SPA no encontrado</h1>
+<p>No hay <code>index.html</code> en <code>{static_root}</code>. En Railway usa el <strong>Dockerfile de la raíz</strong>
+(Root directory del servicio = raíz del repo, no solo <code>backend/</code>).</p>
+<p>Ruta: <code>/{full_path}</code></p>
+<p><a href="/api/docs">API docs</a> · <a href="/api/v1/health">Health</a> ·
+<a href="/clear-pwa-cache.html">Limpiar PWA</a></p>
+</body></html>"""
+
+
 @app.get("/{full_path:path}")
 async def serve_frontend(request: Request, full_path: str):
     """SPA fallback; no debe interceptar /static (montaje anterior)."""
     if full_path.startswith("api/"):
-        from fastapi.responses import JSONResponse
-        from fastapi import status
-
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={
@@ -344,7 +373,18 @@ async def serve_frontend(request: Request, full_path: str):
     index_path = os.path.join(static_root, "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
-    return {"error": "Frontend not built", "path": full_path}
+
+    accept = (request.headers.get("accept") or "").lower()
+    if "text/html" in accept:
+        return HTMLResponse(_frontend_missing_html(full_path), status_code=200)
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": "Frontend not built",
+            "path": full_path,
+            "hint": "Deploy with root Dockerfile; Railway root dir must be repo root, not backend/ only.",
+        },
+    )
 
 
 if __name__ == "__main__":

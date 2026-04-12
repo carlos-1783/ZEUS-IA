@@ -241,10 +241,10 @@ async def startup_event():
 async def shutdown_event():
     await stop_agent_automation()
 
-# Serve static files: misma ruta absoluta que upload.py (settings.STATIC_DIR).
-# Antes se usaba directory="static" relativo al CWD; si uvicorn no arranca desde /app/backend,
-# las subidas escribían en un sitio y /static leía otro → 404 en vídeos/imágenes.
+# Subidas + URL /static → volumen opcional (ZEUS_STATIC_DIR, p. ej. /data/static).
+# SPA (index.html, /assets de Vite) → SPA_STATIC_DIR (imagen Docker /app/static si hay volumen).
 static_root = os.path.abspath(settings.STATIC_DIR)
+spa_root = os.path.abspath(getattr(settings, "SPA_STATIC_DIR", static_root))
 os.makedirs(static_root, exist_ok=True)
 for _sub in ("images", "videos", "documents", "media"):
     os.makedirs(os.path.join(static_root, "uploads", _sub), exist_ok=True)
@@ -256,7 +256,8 @@ if settings.ENVIRONMENT.lower() in ("production", "staging"):
         static_root,
     )
 
-print(f"[DEBUG] Serving /static from: {static_root}")
+print(f"[DEBUG] Serving /static (uploads) from: {static_root}")
+print(f"[DEBUG] SPA (Vue dist) from: {spa_root}")
 try:
     print(f"[DEBUG] Static top-level: {os.listdir(static_root)[:20]}")
 except OSError:
@@ -264,10 +265,14 @@ except OSError:
 
 app.mount("/static", StaticFiles(directory=static_root), name="static")
 
-assets_dir = os.path.join(static_root, "assets")
-if os.path.isdir(assets_dir):
-    app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
-    print("[DEBUG] Assets mounted at /assets")
+assets_spa = os.path.join(spa_root, "assets")
+assets_vol = os.path.join(static_root, "assets")
+if os.path.isdir(assets_spa):
+    app.mount("/assets", StaticFiles(directory=assets_spa), name="assets")
+    print("[DEBUG] Assets mounted at /assets (SPA_STATIC_DIR)")
+elif os.path.isdir(assets_vol):
+    app.mount("/assets", StaticFiles(directory=assets_vol), name="assets")
+    print("[DEBUG] Assets mounted at /assets (STATIC_DIR)")
 
 
 @app.get("/health")
@@ -287,6 +292,7 @@ async def debug_info():
         "websocket_support": "ENABLED",
         "cors_origins": settings.BACKEND_CORS_ORIGINS,
         "static_dir": static_root,
+        "spa_static_dir": spa_root,
     }
 
 
@@ -345,8 +351,8 @@ def _frontend_missing_html(full_path: str) -> str:
 <html lang="es"><head><meta charset="utf-8"/><title>ZEUS-IA</title></head>
 <body style="font-family:system-ui,sans-serif;max-width:36rem;margin:2rem auto;padding:1rem;">
 <h1>API activa; SPA no encontrado</h1>
-<p>No hay <code>index.html</code> en <code>{static_root}</code>. En Railway usa el <strong>Dockerfile de la raíz</strong>
-(Root directory del servicio = raíz del repo, no solo <code>backend/</code>).</p>
+<p>No hay <code>index.html</code> en <code>{spa_root}</code> (SPA empaquetado). Subidas/volumen: <code>{static_root}</code>.</p>
+<p>Si usas volumen en <code>ZEUS_STATIC_DIR</code>, el Vue debe seguir en la imagen; opcional <code>ZEUS_SPA_STATIC_DIR</code>.</p>
 <p>Ruta: <code>/{full_path}</code></p>
 <p><a href="/api/docs">API docs</a> · <a href="/api/v1/health">Health</a> ·
 <a href="/clear-pwa-cache.html">Limpiar PWA</a></p>
@@ -355,8 +361,8 @@ def _frontend_missing_html(full_path: str) -> str:
 
 @app.get("/", include_in_schema=False)
 async def serve_spa_root():
-    """Raíz: sirve index.html del build Vite (static/) si existe."""
-    idx = os.path.join(static_root, "index.html")
+    """Raíz: index.html del build Vite (SPA_STATIC_DIR, no el volumen de subidas)."""
+    idx = os.path.join(spa_root, "index.html")
     if os.path.isfile(idx):
         return FileResponse(idx)
     return HTMLResponse(_frontend_missing_html(""), status_code=200)
@@ -370,13 +376,13 @@ async def frontend_deploy_status():
     """
     if os.getenv("ZEUS_FRONTEND_STATUS", "").lower() not in ("1", "true", "yes", "on"):
         raise HTTPException(status_code=404, detail="not_found")
-    idx = os.path.join(static_root, "index.html")
-    assets = os.path.join(static_root, "assets")
+    idx = os.path.join(spa_root, "index.html")
+    assets = os.path.join(spa_root, "assets")
     return {
         "framework": "vue3+vite",
         "vite_out_dir": "dist",
-        "served_from": "static_root",
-        "static_dir": static_root,
+        "static_dir_uploads": static_root,
+        "spa_static_dir": spa_root,
         "index_html": os.path.isfile(idx),
         "index_bytes": os.path.getsize(idx) if os.path.isfile(idx) else 0,
         "assets_dir": os.path.isdir(assets),
@@ -396,11 +402,11 @@ async def serve_frontend(request: Request, full_path: str):
             },
         )
 
-    static_path = os.path.join(static_root, full_path)
+    static_path = os.path.join(spa_root, full_path)
     if os.path.isfile(static_path):
         return FileResponse(static_path)
 
-    index_path = os.path.join(static_root, "index.html")
+    index_path = os.path.join(spa_root, "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
 

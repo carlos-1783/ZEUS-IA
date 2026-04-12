@@ -8,6 +8,27 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger("zeus.config")
 
+# Build Vite en imagen: /app/static con ZEUS_APP_ROOT=/app (Dockerfile); local sin env → …/backend/static.
+_app_root = (os.getenv("ZEUS_APP_ROOT") or "").strip()
+if _app_root:
+    _PKG_STATIC_DIR = os.path.abspath(os.path.join(_app_root, "static"))
+else:
+    _PKG_STATIC_DIR = os.path.abspath(
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "static")
+    )
+# Volumen persistente (p. ej. Railway /data/static): subidas, sin index.html del SPA.
+_ENV_VOLATILE_STATIC = (os.getenv("ZEUS_STATIC_DIR") or os.getenv("STATIC_DIR") or "").strip()
+_RESOLVED_STATIC_DIR = os.path.abspath(_ENV_VOLATILE_STATIC) if _ENV_VOLATILE_STATIC else _PKG_STATIC_DIR
+_SPA_OVERRIDE = (os.getenv("ZEUS_SPA_STATIC_DIR") or "").strip()
+if _SPA_OVERRIDE:
+    _RESOLVED_SPA_STATIC_DIR = os.path.abspath(_SPA_OVERRIDE)
+elif _ENV_VOLATILE_STATIC:
+    # STATIC_DIR apunta a volumen: el Vue sigue en la imagen bajo _PKG_STATIC_DIR.
+    _RESOLVED_SPA_STATIC_DIR = _PKG_STATIC_DIR
+else:
+    _RESOLVED_SPA_STATIC_DIR = _RESOLVED_STATIC_DIR
+
+
 class Settings(BaseSettings):
     # Application
     PROJECT_NAME: str = "ZEUS-IA"
@@ -21,13 +42,11 @@ class Settings(BaseSettings):
     PORT: int = int(os.getenv("PORT", "8000"))
     RELOAD: bool = DEBUG
     
-    # Static files (ZEUS_STATIC_DIR / STATIC_DIR = volumen persistente en Railway)
+    # STATIC_DIR: subidas y /static (puede ser volumen, p. ej. /data/static).
+    # SPA_STATIC_DIR: index.html + assets del build Vite (imagen Docker); si hay volumen, sigue siendo _PKG_STATIC_DIR salvo ZEUS_SPA_STATIC_DIR.
     STATIC_URL: str = "/static"
-    STATIC_DIR: str = os.path.abspath(
-        os.getenv("ZEUS_STATIC_DIR")
-        or os.getenv("STATIC_DIR")
-        or os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "static")
-    )
+    STATIC_DIR: str = _RESOLVED_STATIC_DIR
+    SPA_STATIC_DIR: str = _RESOLVED_SPA_STATIC_DIR
     # Origen público del API (sin barra final). Subidas: URL absoluta del vídeo/imagen. Ej. https://tu-app.up.railway.app
     PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
     PERSEO_IMAGES_ENABLED: bool = os.getenv("PERSEO_IMAGES_ENABLED", "true").lower() in ("true", "1", "yes")
@@ -241,6 +260,23 @@ def ensure_secret_key_format(secret_key: str) -> str:
 
 # Crear instancia de configuración
 settings = Settings()
+
+
+def _spa_index_exists(path: str) -> bool:
+    try:
+        return os.path.isfile(os.path.join(os.path.abspath(path), "index.html"))
+    except OSError:
+        return False
+
+
+# Railway: si ZEUS_SPA_STATIC_DIR apunta al volumen (sin index) o Pydantic dejó SPA mal, usar el dist empaquetado.
+if not _spa_index_exists(settings.SPA_STATIC_DIR) and _spa_index_exists(_PKG_STATIC_DIR):
+    logger.warning(
+        "SPA_STATIC_DIR=%s no contiene index.html; usando build empaquetado %s",
+        settings.SPA_STATIC_DIR,
+        _PKG_STATIC_DIR,
+    )
+    settings.SPA_STATIC_DIR = _PKG_STATIC_DIR
 
 # Extender dinámicamente orígenes CORS si existen variables adicionales
 extra_cors = os.getenv("ZEUS_ADDITIONAL_CORS_ORIGINS")

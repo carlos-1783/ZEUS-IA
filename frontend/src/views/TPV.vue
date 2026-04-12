@@ -1294,10 +1294,9 @@ const loadTPVConfig = async () => {
     businessProfile.value = data.business_profile
     tpvConfig.value = data.config || {}
     console.log('✅ Configuración TPV cargada:', businessProfile.value, tpvConfig.value)
-    
-    // Si no hay business_profile, mostrar configuración inicial
+    // El backend asigna perfil por defecto (p. ej. otros); no bloquear la UI si el campo viene vacío por compat.
     if (!businessProfile.value) {
-      errorMessage.value = 'Por favor, configura el tipo de negocio antes de usar el TPV'
+      console.warn('TPV: business_profile vacío en respuesta; se continúa con catálogo y configuración por defecto.')
     }
   } catch (err) {
     console.error('Error cargando configuración TPV:', err)

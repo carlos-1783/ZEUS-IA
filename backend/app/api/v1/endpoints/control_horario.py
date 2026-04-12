@@ -2,7 +2,7 @@
 Endpoints para el módulo de Control Horario Universal
 """
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
@@ -20,8 +20,10 @@ from services.control_horario_service import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Instancia singleton del servicio
-control_horario_service = ControlHorarioService()
+
+def _new_control_horario_service() -> ControlHorarioService:
+    """Una instancia por petición: evita mezclar estado entre usuarios (Railway multi-worker)."""
+    return ControlHorarioService()
 
 
 # Modelos Pydantic
@@ -51,53 +53,45 @@ class CalculateHoursRequest(BaseModel):
     end_date: str  # ISO format
 
 
-async def _get_control_horario_info(current_user: User):
-    """Función auxiliar para obtener información del Control Horario"""
-    from sqlalchemy.orm import Session
-    from app.db.base import SessionLocal
-    
-    is_superuser = getattr(current_user, 'is_superuser', False)
-    
-    # Cargar business_profile del usuario
-    db: Session = SessionLocal()
+def _hydrate_control_horario_service(db: Session, current_user: User, svc: ControlHorarioService) -> Dict[str, Any]:
+    """Carga perfil en `svc` (instancia por petición) y devuelve el payload raíz."""
+    is_superuser = getattr(current_user, "is_superuser", False)
+
     try:
         user = db.query(User).filter(User.id == current_user.id).first()
         if user:
             user_data = {
                 "id": user.id,
-                "control_horario_business_profile": getattr(user, 'control_horario_business_profile', None),
-                "tpv_business_profile": getattr(user, 'tpv_business_profile', None),
-                "company_name": getattr(user, 'company_name', None)
+                "control_horario_business_profile": getattr(user, "control_horario_business_profile", None),
+                "tpv_business_profile": getattr(user, "tpv_business_profile", None),
+                "company_name": getattr(user, "company_name", None),
             }
             try:
-                control_horario_service.load_user_profile(user_data)
+                svc.load_user_profile(user_data)
             except Exception as e:
-                logger.warning(f"Error cargando perfil de usuario: {e}")
-                if not control_horario_service.business_profile and not is_superuser:
-                    control_horario_service.set_business_profile(HorarioBusinessProfile.OFICINA)
-                elif not control_horario_service.business_profile and is_superuser:
-                    control_horario_service.set_business_profile(HorarioBusinessProfile.OFICINA)
+                logger.warning("Error cargando perfil de usuario: %s", e)
+                if not svc.business_profile and not is_superuser:
+                    svc.set_business_profile(HorarioBusinessProfile.OFICINA)
+                elif not svc.business_profile and is_superuser:
+                    svc.set_business_profile(HorarioBusinessProfile.OFICINA)
         else:
-            if not control_horario_service.business_profile:
+            if not svc.business_profile:
                 user_data = {
                     "id": current_user.id,
-                    "company_name": getattr(current_user, 'company_name', None)
+                    "company_name": getattr(current_user, "company_name", None),
                 }
-                control_horario_service.load_user_profile(user_data)
-                if not control_horario_service.business_profile and not is_superuser:
-                    control_horario_service.set_business_profile(HorarioBusinessProfile.OFICINA)
-                elif not control_horario_service.business_profile and is_superuser:
-                    control_horario_service.set_business_profile(HorarioBusinessProfile.OFICINA)
+                svc.load_user_profile(user_data)
+                if not svc.business_profile and not is_superuser:
+                    svc.set_business_profile(HorarioBusinessProfile.OFICINA)
+                elif not svc.business_profile and is_superuser:
+                    svc.set_business_profile(HorarioBusinessProfile.OFICINA)
     except Exception as e:
-        logger.error(f"Error cargando perfil de usuario: {e}")
-        if not control_horario_service.business_profile:
-            control_horario_service.set_business_profile(HorarioBusinessProfile.OFICINA)
-    finally:
-        db.close()
-    
-    config = control_horario_service.config if control_horario_service.business_profile else {}
-    
-    # Para superusuarios, asegurar configuración completa
+        logger.error("Error cargando perfil de usuario: %s", e)
+        if not svc.business_profile:
+            svc.set_business_profile(HorarioBusinessProfile.OFICINA)
+
+    config = svc.config if svc.business_profile else {}
+
     if is_superuser and not config:
         config = {
             "strict_check_in": True,
@@ -110,9 +104,9 @@ async def _get_control_horario_info(current_user: User):
             "location_tracking": False,
             "remote_allowed": True,
             "flexible_hours": True,
-            "superuser_override": True
+            "superuser_override": True,
         }
-    
+
     return {
         "success": True,
         "service": "Control Horario Universal Enterprise",
@@ -120,50 +114,48 @@ async def _get_control_horario_info(current_user: User):
         "user": {
             "email": current_user.email,
             "is_superuser": is_superuser,
-            "is_active": current_user.is_active
+            "is_active": current_user.is_active,
         },
-        "business_profile": control_horario_service.business_profile.value if control_horario_service.business_profile else None,
+        "business_profile": svc.business_profile.value if svc.business_profile else None,
         "config": config,
-        "active_records_count": len(control_horario_service.active_records),
-        "employees_count": len(control_horario_service.employees),
+        "active_records_count": len(svc.active_records),
+        "employees_count": len(svc.employees),
         "integrations": {
-            "afrodita": control_horario_service.afrodita_integration is not None,
-            "rafael": control_horario_service.rafael_integration is not None,
-            "tpv": control_horario_service.tpv_integration is not None
-        }
+            "afrodita": svc.afrodita_integration is not None,
+            "rafael": svc.rafael_integration is not None,
+            "tpv": svc.tpv_integration is not None,
+        },
     }
 
 
 @router.get("", include_in_schema=True)
 @router.get("/", include_in_schema=True)
 async def get_control_horario_root(
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """Endpoint raíz del Control Horario - Devuelve información básica"""
-    return await _get_control_horario_info(current_user)
+    svc = _new_control_horario_service()
+    return _hydrate_control_horario_service(db, current_user, svc)
 
 
 @router.get("/status")
 async def get_control_horario_status(
     employee_id: Optional[str] = Query(None, description="ID del empleado (opcional)"),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """Obtener estado actual del Control Horario"""
-    is_superuser = getattr(current_user, 'is_superuser', False)
-    
-    # Cargar perfil si no está cargado
-    if not control_horario_service.business_profile:
-        await _get_control_horario_info(current_user)
-    
-    # Obtener estado
-    status_data = control_horario_service.get_current_status(employee_id)
-    
+    is_superuser = getattr(current_user, "is_superuser", False)
+    svc = _new_control_horario_service()
+    _hydrate_control_horario_service(db, current_user, svc)
+    status_data = svc.get_current_status(employee_id)
     return {
         "success": True,
-        "business_profile": control_horario_service.business_profile.value if control_horario_service.business_profile else None,
-        "config": control_horario_service.config if control_horario_service.business_profile else {},
+        "business_profile": svc.business_profile.value if svc.business_profile else None,
+        "config": svc.config if svc.business_profile else {},
         "status": status_data,
-        "is_superuser": is_superuser
+        "is_superuser": is_superuser,
     }
 
 
@@ -175,10 +167,9 @@ async def check_in(
 ):
     """Registrar entrada de un empleado"""
     try:
-        # Cargar perfil si no está cargado
-        if not control_horario_service.business_profile:
-            await _get_control_horario_info(current_user)
-        
+        svc = _new_control_horario_service()
+        _hydrate_control_horario_service(db, current_user, svc)
+
         # Validar método
         try:
             method = CheckInMethod(request.method.lower())
@@ -187,26 +178,24 @@ async def check_in(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Método inválido: {request.method}. Métodos válidos: face, qr, code, location, remote"
             )
-        
-        # Registrar check-in
-        result = control_horario_service.check_in(
+
+        result = svc.check_in(
             employee_id=request.employee_id,
             method=method,
             location=request.location,
             latitude=request.latitude,
             longitude=request.longitude,
-            user_id=current_user.id
+            user_id=current_user.id,
         )
-        
+
         if not result.get("success"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=result.get("error", "Error al registrar entrada")
+                detail=result.get("error", "Error al registrar entrada"),
             )
-        
-        # Sincronizar con AFRODITA si está disponible
-        if control_horario_service.afrodita_integration:
-            control_horario_service.sync_with_afrodita(request.employee_id, result["record"])
+
+        if svc.afrodita_integration:
+            svc.sync_with_afrodita(request.employee_id, result["record"])
         
         logger.info(f"✅ Check-in registrado: {request.employee_id}")
         
@@ -225,15 +214,14 @@ async def check_in(
 @router.post("/check-out")
 async def check_out(
     request: CheckOutRequest,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """Registrar salida de un empleado"""
     try:
-        # Cargar perfil si no está cargado
-        if not control_horario_service.business_profile:
-            await _get_control_horario_info(current_user)
-        
-        # Validar método si se proporciona
+        svc = _new_control_horario_service()
+        _hydrate_control_horario_service(db, current_user, svc)
+
         method = None
         if request.method:
             try:
@@ -241,38 +229,35 @@ async def check_out(
             except ValueError:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Método inválido: {request.method}"
+                    detail=f"Método inválido: {request.method}",
                 )
-        
-        # Registrar check-out
-        result = control_horario_service.check_out(
+
+        result = svc.check_out(
             employee_id=request.employee_id,
             method=method,
             location=request.location,
             latitude=request.latitude,
-            longitude=request.longitude
+            longitude=request.longitude,
         )
-        
+
         if not result.get("success"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=result.get("error", "Error al registrar salida")
+                detail=result.get("error", "Error al registrar salida"),
             )
-        
-        # Sincronizar con RAFAEL para cálculo de nóminas
-        if control_horario_service.rafael_integration and result.get("hours_worked"):
-            control_horario_service.sync_with_rafael(
+
+        if svc.rafael_integration and result.get("hours_worked"):
+            svc.sync_with_rafael(
                 request.employee_id,
                 {
                     "hours_worked": result.get("hours_worked"),
                     "date": datetime.utcnow().date().isoformat(),
-                    "record": result.get("record")
-                }
+                    "record": result.get("record"),
+                },
             )
-        
-        # Sincronizar con AFRODITA
-        if control_horario_service.afrodita_integration:
-            control_horario_service.sync_with_afrodita(request.employee_id, result["record"])
+
+        if svc.afrodita_integration:
+            svc.sync_with_afrodita(request.employee_id, result["record"])
         
         logger.info(f"✅ Check-out registrado: {request.employee_id} - {result.get('hours_worked', 0)}h")
         
@@ -290,19 +275,18 @@ async def check_out(
 
 @router.get("/employees")
 async def get_employees(
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """Listar empleados con estado actual"""
     try:
-        if not control_horario_service.business_profile:
-            await _get_control_horario_info(current_user)
-        
-        status_data = control_horario_service.get_current_status()
-        
+        svc = _new_control_horario_service()
+        _hydrate_control_horario_service(db, current_user, svc)
+        status_data = svc.get_current_status()
         return {
             "success": True,
             "employees": status_data.get("employees", {}),
-            "total_active": status_data.get("total_active", 0)
+            "total_active": status_data.get("total_active", 0),
         }
         
     except Exception as e:
@@ -316,20 +300,19 @@ async def get_employees(
 @router.post("/calculate-hours")
 async def calculate_hours(
     request: CalculateHoursRequest,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """Calcular horas trabajadas en un período"""
     try:
-        if not control_horario_service.business_profile:
-            await _get_control_horario_info(current_user)
-        
-        start_date = datetime.fromisoformat(request.start_date.replace('Z', '+00:00'))
-        end_date = datetime.fromisoformat(request.end_date.replace('Z', '+00:00'))
-        
-        result = control_horario_service.calculate_hours(
+        svc = _new_control_horario_service()
+        _hydrate_control_horario_service(db, current_user, svc)
+        start_date = datetime.fromisoformat(request.start_date.replace("Z", "+00:00"))
+        end_date = datetime.fromisoformat(request.end_date.replace("Z", "+00:00"))
+        result = svc.calculate_hours(
             employee_id=request.employee_id,
             start_date=start_date,
-            end_date=end_date
+            end_date=end_date,
         )
         
         return result
@@ -371,14 +354,14 @@ async def set_business_profile(
                 logger.warning(f"Error actualizando control_horario_business_profile: {e}")
                 db.rollback()
         
-        # Actualizar servicio
-        control_horario_service.set_business_profile(profile, current_user.id)
-        
+        svc = _new_control_horario_service()
+        _hydrate_control_horario_service(db, current_user, svc)
+        svc.set_business_profile(profile, current_user.id)
         return {
             "success": True,
             "message": f"Business profile actualizado a: {profile.value}",
             "business_profile": profile.value,
-            "config": control_horario_service.config
+            "config": svc.config,
         }
         
     except HTTPException:
@@ -396,24 +379,20 @@ async def get_reports(
     employee_id: Optional[str] = Query(None),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """Obtener reportes de asistencia"""
     try:
-        if not control_horario_service.business_profile:
-            await _get_control_horario_info(current_user)
-        
-        # Por ahora, devolver datos básicos
-        # En producción, consultaría la base de datos
-        
-        status_data = control_horario_service.get_current_status(employee_id)
-        
+        svc = _new_control_horario_service()
+        _hydrate_control_horario_service(db, current_user, svc)
+        status_data = svc.get_current_status(employee_id)
         return {
             "success": True,
             "reports": {
                 "current_status": status_data,
-                "active_records": len(control_horario_service.active_records)
-            }
+                "active_records": len(svc.active_records),
+            },
         }
         
     except Exception as e:

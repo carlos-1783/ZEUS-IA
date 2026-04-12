@@ -130,6 +130,8 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             return ("documents_pending_poll", 600 if is_auth else 180)
         if path.startswith("/api/v1/tpv/tables") and method == "GET":
             return ("tpv_tables_poll", 600 if is_auth else 180)
+        if path.startswith("/api/v1/control-horario") and method == "GET":
+            return ("control_horario_poll", 600 if is_auth else 180)
 
         # Auth sensible: mantener estricto
         if path.startswith("/api/v1/auth/login"):

@@ -232,6 +232,10 @@ const attendanceRate = computed(() => {
 
 // Métodos
 const goToDashboard = () => {
+  if (authStore.isEmployee) {
+    router.push('/tpv')
+    return
+  }
   router.push('/dashboard')
 }
 

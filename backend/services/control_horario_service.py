@@ -600,6 +600,9 @@ class ControlHorarioService:
         day_of_week = check_time.weekday()
         
         schedules = self.schedules.get(employee_id, [])
+        # Sin calendario cargado (típico hasta integrar BD): no bloquear fichaje en producción.
+        if not schedules:
+            return {"valid": True}
         for schedule in schedules:
             if schedule.get("day_of_week") == day_of_week:
                 # Validar horario

@@ -418,6 +418,20 @@ export const useAuthStore = defineStore('auth', () => {
 
         // Update user data from new token
         updateUserFromToken(response.access_token);
+        try {
+          const profile = await api.getCurrentUser();
+          const data = profile as any;
+          user.value = {
+            id: String(data.id),
+            email: data.email,
+            name: data.full_name || data.email,
+            is_active: data.is_active,
+            is_superuser: data.is_superuser,
+            role: String(data.role || 'owner').toLowerCase(),
+          };
+        } catch {
+          /* mantener claims del JWT */
+        }
 
         return true;
       } else {

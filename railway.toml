@@ -1,6 +1,8 @@
 # Producción: UN servicio con Dockerfile en la RAÍZ del repo (build Vite + FastAPI).
 # Si en Railway "Root Directory" está en `backend/`, el Dockerfile no se usa y NO hay SPA →
 # deja Root Directory vacío o "." para que exista el Dockerfile y la carpeta frontend/.
+#
+# Variable opcional: ZEUS_FRONTEND_STATUS=1 → GET /_zeus/frontend-status (JSON: index_html, static_dir).
 
 [build]
 builder = "DOCKERFILE"

@@ -9,6 +9,7 @@
     "dev:start": "powershell -ExecutionPolicy Bypass -File start-dev.ps1",
     "dev:clean-sw": "powershell -ExecutionPolicy Bypass -File scripts/cleanup-sw.ps1",
     "build": "vite build",
+    "build:production": "vite build --mode production",
     "preview": "vite preview",
     "serve": "serve dist -s -p $PORT",
     "type-check": "vue-tsc --noEmit",

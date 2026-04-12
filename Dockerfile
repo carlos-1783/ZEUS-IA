@@ -16,12 +16,12 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app/frontend
 
-# Copy frontend package files
-COPY frontend/package*.json ./
+# Lockfile + manifest (npm ci = build reproducible en Railway)
+COPY frontend/package.json frontend/package-lock.json ./
 
 # Install dependencies (limpiar cache primero)
 RUN npm cache clean --force || true
-RUN npm install --legacy-peer-deps --no-optional
+RUN npm ci --legacy-peer-deps --no-audit --fund=false || (echo "npm ci falló; intentando npm install" && npm install --legacy-peer-deps --no-optional)
 
 # Copy frontend source
 COPY frontend/ ./
@@ -34,10 +34,15 @@ ARG VITE_API_BASE_URL=https://zeus-ia-production-16d8.up.railway.app/api/v1
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 ARG REACT_APP_API_URL=
 ENV REACT_APP_API_URL=${REACT_APP_API_URL}
-# Build frontend con forzado
+# Build frontend con forzado (Vite → carpeta dist/)
 ENV NODE_ENV=production
 ENV VITE_FORCE_BUILD=true
 RUN npm run build -- --force
+
+# Fallar el build de imagen si no hay SPA (evita desplegar backend “ciego”)
+RUN test -f dist/index.html && test -s dist/index.html \
+    && test -d dist/assets \
+    && echo "OK: Vite dist/index.html + dist/assets presentes"
 
 # Debug: Show build output
 RUN echo "=== BUILD OUTPUT ===" && ls -la dist/
@@ -91,8 +96,12 @@ RUN find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 RUN find . -type f -name "*.pyc" -delete 2>/dev/null || true
 RUN find . -type f -name "*.pyo" -delete 2>/dev/null || true
 
-# Copy built frontend from stage 1
+# Copy built frontend from stage 1 (Vite outDir = dist → backend static/)
 COPY --from=frontend-builder /app/frontend/dist ./static
+
+# Imagen inválida si el SPA no quedó copiado
+RUN test -f static/index.html && test -s static/index.html \
+    && echo "OK: static/index.html presente para FastAPI"
 
 # Create logs directory
 RUN mkdir -p logs

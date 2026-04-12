@@ -7,7 +7,7 @@ import sys
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -351,6 +351,36 @@ def _frontend_missing_html(full_path: str) -> str:
 <p><a href="/api/docs">API docs</a> · <a href="/api/v1/health">Health</a> ·
 <a href="/clear-pwa-cache.html">Limpiar PWA</a></p>
 </body></html>"""
+
+
+@app.get("/", include_in_schema=False)
+async def serve_spa_root():
+    """Raíz: sirve index.html del build Vite (static/) si existe."""
+    idx = os.path.join(static_root, "index.html")
+    if os.path.isfile(idx):
+        return FileResponse(idx)
+    return HTMLResponse(_frontend_missing_html(""), status_code=200)
+
+
+@app.get("/_zeus/frontend-status", include_in_schema=False)
+async def frontend_deploy_status():
+    """
+    Diagnóstico despliegue: activar con ZEUS_FRONTEND_STATUS=1 en variables Railway.
+    No exponer en producción sin esa variable.
+    """
+    if os.getenv("ZEUS_FRONTEND_STATUS", "").lower() not in ("1", "true", "yes", "on"):
+        raise HTTPException(status_code=404, detail="not_found")
+    idx = os.path.join(static_root, "index.html")
+    assets = os.path.join(static_root, "assets")
+    return {
+        "framework": "vue3+vite",
+        "vite_out_dir": "dist",
+        "served_from": "static_root",
+        "static_dir": static_root,
+        "index_html": os.path.isfile(idx),
+        "index_bytes": os.path.getsize(idx) if os.path.isfile(idx) else 0,
+        "assets_dir": os.path.isdir(assets),
+    }
 
 
 @app.get("/{full_path:path}")

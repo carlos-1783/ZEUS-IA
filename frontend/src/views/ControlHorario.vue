@@ -245,28 +245,26 @@ const checkStatus = async () => {
       throw new Error('No hay token de autenticación')
     }
 
-    // Obtener información del sistema
+    // Carga inicial optimizada: evita 3 requests secuenciales.
     const api = (await import('@/services/api')).default
-    const infoData = await api.get('/api/v1/control-horario', token)
-    
+    const bootstrap = await api.get('/api/v1/control-horario/bootstrap', token)
+    const infoData = bootstrap?.info || {}
+    const statusData = bootstrap?.status || {}
+    const employeesData = Array.isArray(bootstrap?.employees) ? bootstrap.employees : []
+
     businessProfile.value = infoData.business_profile
     config.value = infoData.config || {}
-    
-    // Obtener estado de empleados
-    const statusData = await api.get('/api/v1/control-horario/status', token)
-    
-    // Obtener lista de empleados
-    const employeesData = await api.get('/api/v1/control-horario/employees', token)
-    
+
     // Actualizar empleados con estado
     const employeesMap = {}
-    if (employeesData.employees) {
-      Object.keys(employeesData.employees).forEach(empId => {
+    if (employeesData.length > 0) {
+      employeesData.forEach((emp) => {
+        const empId = String(emp.id)
         employeesMap[empId] = {
           id: empId,
-          name: empId, // En producción, buscaría el nombre real
-          status: employeesData.employees[empId].status || 'outside',
-          check_in_time: employeesData.employees[empId].check_in_time
+          name: emp.name || empId, // fallback de compatibilidad
+          status: emp.status || 'outside',
+          check_in_time: emp.check_in_time
         }
       })
     }

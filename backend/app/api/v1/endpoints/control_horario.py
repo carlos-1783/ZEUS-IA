@@ -51,15 +51,16 @@ class CalculateHoursRequest(BaseModel):
     end_date: str  # ISO format
 
 
-async def _get_control_horario_info(current_user: User):
+async def _get_control_horario_info(current_user: User, db: Optional[Session] = None):
     """Función auxiliar para obtener información del Control Horario"""
-    from sqlalchemy.orm import Session
-    from app.db.base import SessionLocal
-    
     is_superuser = getattr(current_user, 'is_superuser', False)
-    
-    # Cargar business_profile del usuario
-    db: Session = SessionLocal()
+
+    # Cargar business_profile del usuario (reusar sesión del request si existe).
+    own_db = False
+    if db is None:
+        from app.db.base import SessionLocal
+        db = SessionLocal()
+        own_db = True
     try:
         user = db.query(User).filter(User.id == current_user.id).first()
         if user:
@@ -93,7 +94,8 @@ async def _get_control_horario_info(current_user: User):
         if not control_horario_service.business_profile:
             control_horario_service.set_business_profile(HorarioBusinessProfile.OFICINA)
     finally:
-        db.close()
+        if own_db:
+            db.close()
     
     config = control_horario_service.config if control_horario_service.business_profile else {}
     
@@ -137,23 +139,51 @@ async def _get_control_horario_info(current_user: User):
 @router.get("", include_in_schema=True)
 @router.get("/", include_in_schema=True)
 async def get_control_horario_root(
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """Endpoint raíz del Control Horario - Devuelve información básica"""
-    return await _get_control_horario_info(current_user)
+    return await _get_control_horario_info(current_user, db)
+
+
+@router.get("/bootstrap")
+async def get_control_horario_bootstrap(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Carga inicial optimizada del módulo: evita 3 requests secuenciales desde frontend.
+    Devuelve info + status + employees en una sola respuesta.
+    """
+    info = await _get_control_horario_info(current_user, db)
+    status_data = control_horario_service.get_current_status()
+    employees_payload = status_data.get("employees", {})
+    if isinstance(employees_payload, dict):
+        employees_payload = [
+            {"id": emp_id, **(emp or {})}
+            for emp_id, emp in employees_payload.items()
+        ]
+    return {
+        "success": True,
+        "info": info,
+        "status": status_data,
+        "employees": employees_payload,
+        "total_active": status_data.get("total_active", 0),
+    }
 
 
 @router.get("/status")
 async def get_control_horario_status(
     employee_id: Optional[str] = Query(None, description="ID del empleado (opcional)"),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """Obtener estado actual del Control Horario"""
     is_superuser = getattr(current_user, 'is_superuser', False)
     
     # Cargar perfil si no está cargado
     if not control_horario_service.business_profile:
-        await _get_control_horario_info(current_user)
+        await _get_control_horario_info(current_user, db)
     
     # Obtener estado
     status_data = control_horario_service.get_current_status(employee_id)
@@ -290,12 +320,13 @@ async def check_out(
 
 @router.get("/employees")
 async def get_employees(
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """Listar empleados con estado actual"""
     try:
         if not control_horario_service.business_profile:
-            await _get_control_horario_info(current_user)
+            await _get_control_horario_info(current_user, db)
         
         status_data = control_horario_service.get_current_status()
         

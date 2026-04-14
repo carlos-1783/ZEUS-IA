@@ -251,6 +251,7 @@ const checkStatus = async () => {
     const infoData = bootstrap?.info || {}
     const statusData = bootstrap?.status || {}
     const employeesData = Array.isArray(bootstrap?.employees) ? bootstrap.employees : []
+    const employeesSource = bootstrap?.employees_source || 'memory'
 
     businessProfile.value = infoData.business_profile
     config.value = infoData.config || {}
@@ -269,23 +270,28 @@ const checkStatus = async () => {
       })
     }
     
-    // Por ahora, usar lista básica si no hay empleados
+    // Demo solo si el backend no envía roster real (ZEUS_CONTROL_HORARIO_DB_EMPLOYEES)
     if (Object.keys(employeesMap).length === 0) {
-      employees.value = [
-        { id: 'emp1', name: 'Empleado 1', status: 'outside' },
-        { id: 'emp2', name: 'Empleado 2', status: 'outside' }
-      ]
+      if (employeesSource === 'database') {
+        employees.value = []
+      } else {
+        employees.value = [
+          { id: 'emp1', name: 'Empleado 1', status: 'outside' },
+          { id: 'emp2', name: 'Empleado 2', status: 'outside' }
+        ]
+      }
     } else {
       employees.value = Object.values(employeesMap)
     }
     
-    // Actualizar estado según status
-    if (statusData.status && statusData.status.employees) {
-      Object.keys(statusData.status.employees).forEach(empId => {
+    // Sincronizar con status del servicio (misma forma que devuelve get_current_status)
+    const statusEmployees = statusData?.employees
+    if (statusEmployees && typeof statusEmployees === 'object' && !Array.isArray(statusEmployees)) {
+      Object.keys(statusEmployees).forEach(empId => {
         const emp = employees.value.find(e => e.id === empId)
         if (emp) {
-          emp.status = statusData.status.employees[empId].status
-          emp.check_in_time = statusData.status.employees[empId].check_in_time
+          emp.status = statusEmployees[empId].status
+          emp.check_in_time = statusEmployees[empId].check_in_time
         }
       })
     }

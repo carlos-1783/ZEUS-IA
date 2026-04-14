@@ -2,7 +2,7 @@
 Endpoints para el módulo de Control Horario Universal
 """
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
@@ -10,7 +10,10 @@ import logging
 
 from app.db.session import get_db
 from app.core.auth import get_current_active_user
+from app.core.config import settings
 from app.models.user import User
+from app.models.company import UserCompany
+from app.models.company_employee import CompanyEmployee
 from services.control_horario_service import (
     ControlHorarioService,
     HorarioBusinessProfile,
@@ -22,6 +25,59 @@ logger = logging.getLogger(__name__)
 
 # Instancia singleton del servicio
 control_horario_service = ControlHorarioService()
+
+
+def _company_ids_for_control_horario(db: Session, user: User) -> List[int]:
+    rows = db.query(UserCompany.company_id).filter(UserCompany.user_id == user.id).all()
+    return [r[0] for r in rows]
+
+
+def _employees_roster_from_db(db: Session, user: User) -> Optional[List[Dict[str, Any]]]:
+    """
+    None = mantener comportamiento anterior (solo empleados con estado en memoria).
+    Lista (vacía o no) = roster desde company_employees para empresas vinculadas al usuario.
+    """
+    if not settings.CONTROL_HORARIO_DB_EMPLOYEES:
+        return None
+    company_ids = _company_ids_for_control_horario(db, user)
+    if not company_ids:
+        return None
+    rows = (
+        db.query(CompanyEmployee)
+        .filter(
+            CompanyEmployee.company_id.in_(company_ids),
+            CompanyEmployee.is_active.is_(True),
+        )
+        .order_by(CompanyEmployee.full_name.asc())
+        .all()
+    )
+    return [
+        {
+            "id": str(r.employee_code),
+            "name": r.full_name,
+            "role_title": r.role_title or "",
+            "source": (r.source or "database"),
+        }
+        for r in rows
+    ]
+
+
+def _merge_roster_with_status(
+    roster: List[Dict[str, Any]],
+    status_employees: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for row in roster:
+        emp_id = str(row["id"])
+        st = status_employees.get(emp_id) or {}
+        out.append(
+            {
+                **row,
+                "status": st.get("status", "outside"),
+                "check_in_time": st.get("check_in_time"),
+            }
+        )
+    return out
 
 
 # Modelos Pydantic
@@ -157,18 +213,30 @@ async def get_control_horario_bootstrap(
     """
     info = await _get_control_horario_info(current_user, db)
     status_data = control_horario_service.get_current_status()
-    employees_payload = status_data.get("employees", {})
-    if isinstance(employees_payload, dict):
-        employees_payload = [
-            {"id": emp_id, **(emp or {})}
-            for emp_id, emp in employees_payload.items()
-        ]
+    raw_status_employees = status_data.get("employees") or {}
+    if not isinstance(raw_status_employees, dict):
+        raw_status_employees = {}
+
+    db_roster = _employees_roster_from_db(db, current_user)
+    if db_roster is not None:
+        employees_payload = _merge_roster_with_status(db_roster, raw_status_employees)
+        employees_source = "database"
+    else:
+        employees_payload = raw_status_employees
+        if isinstance(employees_payload, dict):
+            employees_payload = [
+                {"id": emp_id, **(emp or {})}
+                for emp_id, emp in employees_payload.items()
+            ]
+        employees_source = "memory"
+
     return {
         "success": True,
         "info": info,
         "status": status_data,
         "employees": employees_payload,
         "total_active": status_data.get("total_active", 0),
+        "employees_source": employees_source,
     }
 
 
@@ -255,13 +323,14 @@ async def check_in(
 @router.post("/check-out")
 async def check_out(
     request: CheckOutRequest,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """Registrar salida de un empleado"""
     try:
         # Cargar perfil si no está cargado
         if not control_horario_service.business_profile:
-            await _get_control_horario_info(current_user)
+            await _get_control_horario_info(current_user, db)
         
         # Validar método si se proporciona
         method = None
@@ -329,11 +398,33 @@ async def get_employees(
             await _get_control_horario_info(current_user, db)
         
         status_data = control_horario_service.get_current_status()
-        
+        raw = status_data.get("employees") or {}
+        if not isinstance(raw, dict):
+            raw = {}
+        db_roster = _employees_roster_from_db(db, current_user)
+        if db_roster is not None:
+            merged = _merge_roster_with_status(db_roster, raw)
+            employees_out = {
+                e["id"]: {
+                    "status": e["status"],
+                    "check_in_time": e.get("check_in_time"),
+                    "name": e["name"],
+                    "role_title": e.get("role_title", ""),
+                    "source": e.get("source"),
+                }
+                for e in merged
+            }
+            return {
+                "success": True,
+                "employees": employees_out,
+                "total_active": status_data.get("total_active", 0),
+                "employees_source": "database",
+            }
         return {
             "success": True,
-            "employees": status_data.get("employees", {}),
-            "total_active": status_data.get("total_active", 0)
+            "employees": raw,
+            "total_active": status_data.get("total_active", 0),
+            "employees_source": "memory",
         }
         
     except Exception as e:
@@ -347,12 +438,13 @@ async def get_employees(
 @router.post("/calculate-hours")
 async def calculate_hours(
     request: CalculateHoursRequest,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """Calcular horas trabajadas en un período"""
     try:
         if not control_horario_service.business_profile:
-            await _get_control_horario_info(current_user)
+            await _get_control_horario_info(current_user, db)
         
         start_date = datetime.fromisoformat(request.start_date.replace('Z', '+00:00'))
         end_date = datetime.fromisoformat(request.end_date.replace('Z', '+00:00'))
@@ -427,12 +519,13 @@ async def get_reports(
     employee_id: Optional[str] = Query(None),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """Obtener reportes de asistencia"""
     try:
         if not control_horario_service.business_profile:
-            await _get_control_horario_info(current_user)
+            await _get_control_horario_info(current_user, db)
         
         # Por ahora, devolver datos básicos
         # En producción, consultaría la base de datos

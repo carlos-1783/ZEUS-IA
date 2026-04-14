@@ -64,6 +64,8 @@ class Settings(BaseSettings):
     PERSEO_FFMPEG_PRESET: str = os.getenv("PERSEO_FFMPEG_PRESET", "veryfast").strip() or "veryfast"
     # Tiempo máximo (s) para la generación MP4/GIF en el job en background (evita pending infinito).
     PERSEO_VIDEO_JOB_TIMEOUT_SEC: float = float(os.getenv("PERSEO_VIDEO_JOB_TIMEOUT_SEC", "240") or "240")
+    # Control horario: si true, lista de empleados desde company_employees (empresas del usuario); por defecto igual que antes.
+    CONTROL_HORARIO_DB_EMPLOYEES: bool = False
     IMAGE_STORAGE: str = os.getenv("IMAGE_STORAGE", "local")
     PERSEO_IMAGE_UPLOAD_DIR: str = os.getenv(
         "PERSEO_IMAGE_UPLOAD_DIR",

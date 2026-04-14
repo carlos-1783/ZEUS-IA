@@ -34,11 +34,13 @@ def _company_ids_for_control_horario(db: Session, user: User) -> List[int]:
 
 def _employees_roster_from_db(db: Session, user: User) -> Optional[List[Dict[str, Any]]]:
     """
-    None = mantener comportamiento anterior (solo empleados con estado en memoria).
-    Lista (vacía o no) = roster desde company_employees para empresas vinculadas al usuario.
+    None = modo memoria (lista vacía → el front puede mostrar demo emp1/emp2).
+    Lista = roster desde company_employees (empresas del usuario vía user_companies).
+
+    - Si hay al menos un company_employee activo para esas empresas → siempre se devuelve
+      lista (dueño/CEO ve nombres reales sin variable de entorno).
+    - Si no hay filas: con CONTROL_HORARIO_DB_EMPLOYEES=true → []; con false → None (compat. demo).
     """
-    if not settings.CONTROL_HORARIO_DB_EMPLOYEES:
-        return None
     company_ids = _company_ids_for_control_horario(db, user)
     if not company_ids:
         return None
@@ -51,6 +53,9 @@ def _employees_roster_from_db(db: Session, user: User) -> Optional[List[Dict[str
         .order_by(CompanyEmployee.full_name.asc())
         .all()
     )
+    env_empty_roster = bool(settings.CONTROL_HORARIO_DB_EMPLOYEES)
+    if not rows and not env_empty_roster:
+        return None
     return [
         {
             "id": str(r.employee_code),

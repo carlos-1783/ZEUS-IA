@@ -378,6 +378,15 @@
               >
                 <span class="tpv-icon tpv-icon-ui">🏷️</span> Descuento
               </button>
+              <button
+                v-if="tpvConfig.supports_tickets !== false"
+                @click="printTicket"
+                class="action-btn secondary-btn"
+                :disabled="cart.length === 0"
+                :title="cart.length === 0 ? 'Añade productos al carrito para generar ticket' : 'Imprimir comanda cocina/barra'"
+              >
+                <span class="tpv-icon tpv-icon-ui">🖨️</span> Imprimir Comanda
+              </button>
             </template>
             
             <!-- Estado PAYMENT: Mostrar botones de pago o cancelar -->

@@ -522,6 +522,11 @@ import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
 import { useNotifications } from '@/composables/useNotifications'
 import { jwtDecode } from 'jwt-decode'
+import {
+  buildKitchenBarTickets,
+  buildPlainTextTickets,
+  printTicketViaBluetooth,
+} from '@/services/tpvKitchenBarService'
 
 const router = useRouter()
 const route = useRoute()
@@ -1924,50 +1929,48 @@ const printTicket = async () => {
     warning('El carrito está vacío')
     return
   }
-  
+
   try {
-    // En una implementación completa, esto generaría y descargaría/imprimiría el ticket
-    // Por ahora, mostramos un mensaje informativo
-    const ticketData = {
-      items: cart.value,
-      subtotal: subtotal.value,
-      iva: ivaTotal.value,
-      total: total.value,
-      date: new Date().toISOString()
+    const tableLabel =
+      selectedTable.value?.name ||
+      (selectedTable.value?.number ? `Mesa ${selectedTable.value.number}` : null)
+    const tickets = buildKitchenBarTickets(cart.value, tableLabel)
+    if (!tickets.length) {
+      warning('No hay líneas válidas para cocina/barra')
+      return
     }
-    
-    // Crear contenido del ticket
-    const ticketText = `
-TICKET DE VENTA
-${new Date().toLocaleString('es-ES')}
 
-${cart.value.map(item => 
-  `${item.name || item.product?.name || 'Producto'} x${item.quantity || 1} - €${formatPrice(item.total || item.subtotal_with_iva || 0)}`
-).join('\n')}
+    let printedStations = 0
+    for (const tk of tickets) {
+      try {
+        await printTicketViaBluetooth(tk)
+        printedStations += 1
+      } catch (bleErr) {
+        console.warn(`No se pudo imprimir por Bluetooth en ${tk.station}:`, bleErr)
+      }
+    }
 
----
-Subtotal: €${formatPrice(subtotal.value)}
-IVA: €${formatPrice(ivaTotal.value)}
-TOTAL: €${formatPrice(total.value)}
+    if (printedStations > 0) {
+      success(`Comanda enviada por Bluetooth (${printedStations}/${tickets.length} estación(es)).`)
+    }
 
-Gracias por su compra
-    `.trim()
-    
-    // Descargar como archivo de texto
-    const blob = new Blob([ticketText], { type: 'text/plain' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `ticket-${new Date().toISOString().split('T')[0]}.txt`
-    document.body.appendChild(a)
-    a.click()
-    window.URL.revokeObjectURL(url)
-    document.body.removeChild(a)
-    
-    console.log('✅ Ticket generado')
+    if (printedStations < tickets.length) {
+      // Fallback no destructivo: TXT por si una impresora BLE no responde.
+      const ticketText = buildPlainTextTickets(tickets)
+      const blob = new Blob([ticketText], { type: 'text/plain' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `comanda-cocina-barra-${new Date().toISOString().split('T')[0]}.txt`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      info('Se descargó una copia TXT de cocina/barra para estaciones sin conexión Bluetooth.')
+    }
   } catch (err) {
-    console.error('Error generando ticket:', err)
-    error('Error al generar el ticket: ' + err.message)
+    console.error('Error generando ticket cocina/barra:', err)
+    error('Error al generar la comanda de cocina/barra: ' + (err?.message || err))
   }
 }
 

@@ -5,6 +5,10 @@ si el email aún no existe. Útil para alinear usuarios de producción con SQLit
 Uso (desde la carpeta backend, con el venv activado):
   python scripts/dev_add_user.py correo@ejemplo.com "Password1a" --full-name "Nombre" --phone 600123456
 
+Empleado de una empresa ya creada (solo TPV + control horario en la app):
+  python scripts/dev_add_user.py ana@empresa.com "Password1a" --full-name "Ana" --phone 662000000 \\
+    --role employee --link-company-id 5 --employee-code CKR-ANA-01
+
 La contraseña debe cumplir las mismas reglas que el registro (≥8, mayúscula, minúscula, número).
 """
 
@@ -22,6 +26,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.security import get_password_hash
 from app.db.session import SessionLocal
 from app.models.company import Company, UserCompany  # noqa: F401 — mapper User.user_companies
+from app.models.company_employee import CompanyEmployee
 from app.models.user import User
 
 
@@ -107,6 +112,25 @@ def main() -> int:
     parser.add_argument("--full-name", default="Usuario local", dest="full_name")
     parser.add_argument("--phone", default="600000000")
     parser.add_argument("--superuser", action="store_true", help="Marcar como superusuario")
+    parser.add_argument(
+        "--role",
+        choices=("owner", "employee"),
+        default="owner",
+        help="owner = acceso completo; employee = solo TPV + control horario (front)",
+    )
+    parser.add_argument(
+        "--link-company-id",
+        type=int,
+        default=None,
+        dest="link_company_id",
+        help="Vincular a esta empresa existente (no crea Company nueva). Típico con --role employee.",
+    )
+    parser.add_argument(
+        "--employee-code",
+        default=None,
+        dest="employee_code",
+        help="Con --link-company-id: asignar user_id en company_employees para este código (fichaje/TPV).",
+    )
     args = parser.parse_args()
 
     ok, msg = _password_ok(args.password)
@@ -133,19 +157,67 @@ def main() -> int:
             hashed_password=get_password_hash(args.password),
             is_active=True,
             is_superuser=args.superuser,
-            role="owner",
+            role=str(args.role).strip().lower() or "owner",
         )
         db.add(u)
         db.commit()
         db.refresh(u)
 
-        try:
-            cid = _ensure_default_company_local(db, u)
-            print(f"OK empresa company_id={cid}")
-        except Exception as e:
-            print(f"Aviso empresa: {repr(e)}")
+        if args.link_company_id is not None:
+            co = db.query(Company).filter(Company.id == args.link_company_id).first()
+            if not co:
+                print(f"Empresa id={args.link_company_id} no existe.")
+                return 1
+            uc = (
+                db.query(UserCompany)
+                .filter(
+                    UserCompany.user_id == u.id,
+                    UserCompany.company_id == co.id,
+                )
+                .first()
+            )
+            if not uc:
+                uc_role = "member" if u.role == "employee" else "company_admin"
+                db.add(
+                    UserCompany(
+                        user_id=u.id,
+                        company_id=co.id,
+                        role=uc_role,
+                    )
+                )
+                db.commit()
+            else:
+                uc_role = uc.role
+            if co.company_name and not (u.company_name or "").strip():
+                u.company_name = co.company_name[:255]
+                db.add(u)
+                db.commit()
+            if args.employee_code:
+                code = str(args.employee_code).strip()
+                ce = (
+                    db.query(CompanyEmployee)
+                    .filter(
+                        CompanyEmployee.company_id == co.id,
+                        CompanyEmployee.employee_code == code,
+                    )
+                    .first()
+                )
+                if ce:
+                    ce.user_id = u.id
+                    db.add(ce)
+                    db.commit()
+                    print(f"OK company_employees.user_id para código {code}")
+                else:
+                    print(f"Aviso: no hay company_employees {code} en company_id={co.id}")
+            print(f"OK vinculado user_id={u.id} a company_id={co.id} user_companies.role={uc_role}")
+        else:
+            try:
+                cid = _ensure_default_company_local(db, u)
+                print(f"OK empresa company_id={cid}")
+            except Exception as e:
+                print(f"Aviso empresa: {repr(e)}")
 
-        print(f"OK creado user_id={u.id} email={email} superuser={args.superuser}")
+        print(f"OK creado user_id={u.id} email={email} superuser={args.superuser} role={u.role}")
         return 0
     except IntegrityError:
         db.rollback()

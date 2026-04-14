@@ -12,6 +12,10 @@ Uso (desde backend/, venv y DATABASE_URL):
   # Primero dejar stack listo (empleado, TPV demo, fiscal), luego rellenar nombres:
   python scripts/apply_pilot_company_data.py --company-id 2 --remediate --pilot --json datos_piloto.json
 
+JSON opcional:
+  - user.role: owner | employee (dueño piloto → owner)
+  - company_employees_extra: [{ employee_code, full_name, phone?, role_title? }, ...]
+
 No sustituye al cliente: ejecútalo tú donde apunte DATABASE_URL.
 """
 
@@ -69,6 +73,7 @@ def main() -> int:
     user_patch: Dict[str, Any] = {}
     company_patch: Dict[str, Any] = {}
     owner_patch: Dict[str, Any] = {}
+    blob: Dict[str, Any] = {}
 
     if args.json_path:
         blob = _load_json(args.json_path)
@@ -158,6 +163,11 @@ def main() -> int:
             if "phone" in user_patch and user_patch["phone"] is not None:
                 user.phone = str(user_patch["phone"]).strip()[:32] or None
                 report["applied"].append("user.phone")
+            if "role" in user_patch and user_patch.get("role") is not None:
+                r = str(user_patch["role"]).strip().lower()
+                if r in ("owner", "employee"):
+                    user.role = r
+                    report["applied"].append("user.role")
             db.add(user)
 
         allowed_co = {"company_name", "sector", "pilot_company", "country", "currency"}
@@ -216,6 +226,48 @@ def main() -> int:
             report["warning"] = (
                 f"No hay fila titular ({owner_code}); ejecuta --remediate o audit --backfill-owner."
             )
+
+        extras = blob.get("company_employees_extra") if isinstance(blob.get("company_employees_extra"), list) else []
+        for row in extras:
+            if not isinstance(row, dict):
+                continue
+            code = str(row.get("employee_code") or "").strip()
+            if not code or code == owner_code:
+                continue
+            fn = str(row.get("full_name") or "").strip()[:255]
+            if not fn:
+                continue
+            phone_e = str(row["phone"]).strip()[:32] if row.get("phone") else None
+            rt = str(row["role_title"]).strip()[:100] if row.get("role_title") else None
+            ex = (
+                db.query(CompanyEmployee)
+                .filter(
+                    CompanyEmployee.company_id == args.company_id,
+                    CompanyEmployee.employee_code == code,
+                )
+                .first()
+            )
+            if ex:
+                ex.full_name = fn
+                ex.phone = phone_e
+                ex.role_title = rt
+                ex.is_active = True
+                db.add(ex)
+                report["applied"].append(f"company_employees.update:{code}")
+            else:
+                db.add(
+                    CompanyEmployee(
+                        company_id=args.company_id,
+                        user_id=None,
+                        full_name=fn,
+                        role_title=rt,
+                        employee_code=code,
+                        phone=phone_e,
+                        is_active=True,
+                        source="pilot_seed_json",
+                    )
+                )
+                report["applied"].append(f"company_employees.insert:{code}")
 
         if args.dry_run:
             db.rollback()

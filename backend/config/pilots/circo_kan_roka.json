@@ -1,0 +1,51 @@
+{
+  "remediate": {
+    "business_type": "restaurant",
+    "set_pilot": true
+  },
+  "company": {
+    "company_name": "Circo de Kan Roka",
+    "sector": "restaurante",
+    "pilot_company": true,
+    "country": "ES",
+    "currency": "EUR"
+  },
+  "user": {
+    "full_name": "Carmelo Martin Garcia",
+    "phone": "604173491",
+    "role": "owner"
+  },
+  "owner_employee": {
+    "full_name": "Carmelo Martin Garcia",
+    "phone": "604173491",
+    "role_title": "Director general / Dueño"
+  },
+  "company_employees_extra": [
+    {
+      "employee_code": "CKR-ANA-01",
+      "full_name": "Ana Martin Garcia",
+      "phone": "662675311",
+      "role_title": "Equipo"
+    },
+    {
+      "employee_code": "CKR-CARLOS-01",
+      "full_name": "Carlos Perez Martin",
+      "phone": "624363349",
+      "role_title": "Equipo"
+    }
+  ],
+  "employee_logins": [
+    {
+      "email": "ana.martin.circokanroka.piloto@example.com",
+      "full_name": "Ana Martin Garcia",
+      "phone": "662675311",
+      "employee_code": "CKR-ANA-01"
+    },
+    {
+      "email": "carlos.perez.circokanroka.piloto@example.com",
+      "full_name": "Carlos Perez Martin",
+      "phone": "624363349",
+      "employee_code": "CKR-CARLOS-01"
+    }
+  ]
+}

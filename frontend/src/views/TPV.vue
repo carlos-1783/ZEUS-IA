@@ -326,6 +326,14 @@
           <!-- Bloque 3: Acciones -->
           <div class="cart-block cart-block-actions">
           <div class="action-buttons">
+            <button
+              @click="printTicket"
+              class="action-btn secondary-btn"
+              :disabled="cart.length === 0"
+              :title="cart.length === 0 ? 'Añade productos al carrito para generar comanda' : 'Enviar comanda a cocina/barra'"
+            >
+              <span class="tpv-icon tpv-icon-ui">🖨️</span> Imprimir Comanda
+            </button>
             <!-- Estado CART: Mostrar botón para revisar y pagar -->
             <template v-if="tpvState === TPV_STATES.CART">
               <button 
@@ -335,15 +343,6 @@
                 :title="(!Array.isArray(cart) || cart.length === 0) ? 'Añade productos al carrito para continuar' : 'Revisar y proceder al pago'"
               >
                 <span class="tpv-icon tpv-icon-primary">💳</span> REVISAR Y PAGAR €{{ formatPrice(total) }}
-              </button>
-              <button 
-                v-if="tpvConfig.supports_tickets !== false"
-                @click="printTicket" 
-                class="action-btn secondary-btn" 
-                :disabled="cart.length === 0"
-                :title="cart.length === 0 ? 'Añade productos al carrito para generar ticket' : 'Generar e imprimir ticket'"
-              >
-                <span class="tpv-icon tpv-icon-ui">🖨️</span> {{ tpvConfig.supports_invoices && cart.length > 0 ? 'Generar Ticket/Factura' : 'Imprimir Ticket' }}
               </button>
               <button 
                 @click="openDiscount" 
@@ -377,15 +376,6 @@
                 title="Aplicar descuento al carrito"
               >
                 <span class="tpv-icon tpv-icon-ui">🏷️</span> Descuento
-              </button>
-              <button
-                v-if="tpvConfig.supports_tickets !== false"
-                @click="printTicket"
-                class="action-btn secondary-btn"
-                :disabled="cart.length === 0"
-                :title="cart.length === 0 ? 'Añade productos al carrito para generar ticket' : 'Imprimir comanda cocina/barra'"
-              >
-                <span class="tpv-icon tpv-icon-ui">🖨️</span> Imprimir Comanda
               </button>
             </template>
             
@@ -513,6 +503,14 @@
               placeholder="Dejar vacío si no aplica"
               class="form-input"
             />
+          </div>
+          <div class="form-group">
+            <label>Estación de preparación</label>
+            <select v-model="productForm.station" class="form-input">
+              <option value="kitchen">Cocina</option>
+              <option value="bar">Barra</option>
+            </select>
+            <p class="form-hint">Se usa para enrutar comandas a impresora de cocina o barra.</p>
           </div>
         </div>
         <div class="modal-footer">
@@ -681,7 +679,8 @@ const productForm = ref({
   iva_rate: 21.0,
   stock: null,
   image: null,
-  icon: null
+  icon: null,
+  station: 'kitchen'
 })
 
 // Refs para manejo de imágenes
@@ -2033,7 +2032,8 @@ const openProducts = async () => {
       iva_rate: tpvConfig.value.default_iva_rate || 21.0,
       stock: null,
       image: null,
-      icon: null
+      icon: null,
+      station: 'kitchen'
     }
     imageFile.value = null
     imagePreview.value = null
@@ -2146,7 +2146,11 @@ const editProduct = (product) => {
     iva_rate: product.iva_rate || 21.0,
     stock: product.stock || null,
     image: product.image || null,
-    icon: product.icon || null
+    icon: product.icon || null,
+    station:
+      (product.metadata && typeof product.metadata.station === 'string' && product.metadata.station) ||
+      (product.metadata_ && typeof product.metadata_.station === 'string' && product.metadata_.station) ||
+      'kitchen'
   }
   imageFile.value = null
   imagePreview.value = product.image || null
@@ -2295,7 +2299,10 @@ const saveProduct = async () => {
       iva_rate: parseFloat(productForm.value.iva_rate) || 21.0,
       stock: productForm.value.stock ? parseInt(productForm.value.stock) : null,
       image: imageUrl,
-      icon: productForm.value.icon || null
+      icon: productForm.value.icon || null,
+      metadata: {
+        station: productForm.value.station === 'bar' ? 'bar' : 'kitchen',
+      },
     }
     
     try {

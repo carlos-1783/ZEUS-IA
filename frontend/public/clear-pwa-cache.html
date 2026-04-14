@@ -1,154 +1,310 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Limpiar Cache PWA - ZEUS-IA</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 50px auto;
-            padding: 20px;
-            background: #0a0e1a;
-            color: #fff;
-        }
-        button {
-            padding: 12px 24px;
-            margin: 10px 5px;
-            background: #3b82f6;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        button:hover {
-            background: #2563eb;
-        }
-        .success {
-            color: #10b981;
-            margin: 10px 0;
-        }
-        .error {
-            color: #ef4444;
-            margin: 10px 0;
-        }
-        .info {
-            background: #1a1f2e;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 20px 0;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0a0e1a" />
+  <title>Limpiar caché PWA — ZEUS-IA</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+      max-width: 42rem;
+      margin: 0 auto;
+      padding: 1rem 1rem 2.5rem;
+      background: #0a0e1a;
+      color: #e2e8f0;
+      line-height: 1.45;
+    }
+    h1 { font-size: 1.35rem; margin-top: 0; }
+    p.lead { color: #94a3b8; font-size: 0.95rem; }
+    .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
+    button {
+      padding: 0.55rem 1rem;
+      background: #2563eb;
+      color: #fff;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    button:hover { background: #1d4ed8; }
+    button.secondary { background: #334155; }
+    button.secondary:hover { background: #475569; }
+    button.danger { background: #b91c1c; }
+    button.danger:hover { background: #991b1b; }
+    .info {
+      background: #111827;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 0.85rem 1rem;
+      font-size: 0.9rem;
+      color: #cbd5e1;
+    }
+    .info ol { margin: 0.4rem 0 0 1.1rem; padding: 0; }
+    pre#out {
+      background: #020617;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      min-height: 4rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.8rem;
+      color: #a5b4fc;
+    }
+    .links { margin-top: 1rem; font-size: 0.9rem; }
+    .links a { color: #60a5fa; }
+    .ok { color: #34d399; }
+    .err { color: #f87171; }
+  </style>
 </head>
 <body>
-    <h1>🧹 Limpiar Cache PWA - ZEUS-IA</h1>
-    
-    <div class="info">
-        <h3>Instrucciones:</h3>
-        <ol>
-            <li>Haz clic en "Desregistrar Service Workers"</li>
-            <li>Haz clic en "Limpiar Cache"</li>
-            <li>Haz clic en "Limpiar LocalStorage"</li>
-            <li>Recarga la página principal (Ctrl+F5)</li>
-        </ol>
-    </div>
+  <h1>Limpiar caché PWA</h1>
+  <p class="lead">
+    En producción la misma página está en <code>/clear-pwa-cache.html</code> (servida por el API).
+    Aquí en Vite suele ser <code>/clear-pwa-cache.html</code> desde <code>public/</code>.
+  </p>
 
-    <div>
-        <button onclick="unregisterSW()">1. Desregistrar Service Workers</button>
-        <button onclick="clearCache()">2. Limpiar Cache</button>
-        <button onclick="clearLocalStorage()">3. Limpiar LocalStorage</button>
-        <button onclick="checkStatus()">Verificar Estado</button>
-    </div>
+  <div class="info">
+    <strong>Recomendado</strong> (móvil o PC):
+    <ol>
+      <li>Pulsa <strong>Limpiar todo</strong>.</li>
+      <li>Cierra pestañas de este sitio y vuelve a abrir la URL, o fuerza recarga en el navegador.</li>
+      <li>Si sigue fallando (sobre todo iPhone): Ajustes → Safari → Avanzado → Datos de sitios web → busca tu dominio y bórralo.</li>
+    </ol>
+  </div>
 
-    <div id="status"></div>
+  <div class="actions">
+    <button type="button" id="btn-all">Limpiar todo</button>
+    <button type="button" class="secondary" id="btn-sw">1. Desregistrar Service Workers</button>
+    <button type="button" class="secondary" id="btn-cache">2. Borrar caches</button>
+    <button type="button" class="secondary" id="btn-ls">3. Limpiar almacenamiento ZEUS</button>
+    <button type="button" class="secondary" id="btn-status">Ver estado</button>
+    <button type="button" class="danger" id="btn-reload">Ir al inicio y recargar</button>
+  </div>
 
-    <script>
-        const statusDiv = document.getElementById('status');
+  <pre id="out"></pre>
 
-        async function unregisterSW() {
-            if ('serviceWorker' in navigator) {
-                const registrations = await navigator.serviceWorker.getRegistrations();
-                statusDiv.innerHTML = `<p>Encontrados ${registrations.length} Service Worker(s)</p>`;
-                
-                for (let registration of registrations) {
-                    const result = await registration.unregister();
-                    statusDiv.innerHTML += `<p class="${result ? 'success' : 'error'}">Service Worker desregistrado: ${result ? '✅' : '❌'}</p>`;
-                }
-                
-                if (registrations.length === 0) {
-                    statusDiv.innerHTML += '<p class="success">✅ No hay Service Workers registrados</p>';
-                }
-            } else {
-                statusDiv.innerHTML = '<p class="error">❌ Service Workers no soportados</p>';
-            }
+  <div class="links">
+    <a href="/">Inicio</a>
+    · <a href="/login">Login</a>
+  </div>
+
+  <script>
+(function () {
+  const out = document.getElementById('out');
+  function log(msg, cls) {
+    const line = document.createElement('div');
+    if (cls) line.className = cls;
+    line.textContent = msg;
+    out.appendChild(line);
+  }
+  function clearOut() { out.textContent = ''; }
+
+  function clearZeusLocalStorage() {
+    const exact = new Set([
+      'auth_token',
+      'refresh_token',
+      'refresh_timeout',
+      'zeus-pwa-installed',
+      'zeus_locale',
+      'zeus_theme',
+      'zeus_session_timeout',
+      'zeus_admin_settings',
+      'zeus_notification_settings',
+      'zeus-tpv-comanda-share-id',
+      'zeus-tpv-tables-state',
+      'zeus-tpv-ble-printer-bindings-v1',
+      'audioEnabled',
+    ]);
+    const removed = [];
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (exact.has(k) || k.startsWith('zeus-') || k.startsWith('zeus_')) {
+        localStorage.removeItem(k);
+        removed.push(k);
+      }
+    }
+    return removed;
+  }
+
+  function clearZeusSessionStorage() {
+    const removed = [];
+    try {
+      for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const k = sessionStorage.key(i);
+        if (!k) continue;
+        if (k.startsWith('zeus-') || k.startsWith('zeus_')) {
+          sessionStorage.removeItem(k);
+          removed.push(k);
         }
+      }
+    } catch (e) {
+      removed.push('(sessionStorage: ' + String(e) + ')');
+    }
+    return removed;
+  }
 
-        async function clearCache() {
-            if ('caches' in window) {
-                const cacheNames = await caches.keys();
-                statusDiv.innerHTML = `<p>Encontrados ${cacheNames.length} cache(s)</p>`;
-                
-                for (let cacheName of cacheNames) {
-                    const deleted = await caches.delete(cacheName);
-                    statusDiv.innerHTML += `<p class="${deleted ? 'success' : 'error'}">Cache "${cacheName}": ${deleted ? '✅ Eliminado' : '❌ Error'}</p>`;
-                }
-                
-                if (cacheNames.length === 0) {
-                    statusDiv.innerHTML += '<p class="success">✅ No hay caches</p>';
-                }
-            } else {
-                statusDiv.innerHTML = '<p class="error">❌ Cache API no soportada</p>';
-            }
+  async function unregisterSW() {
+    if (!('serviceWorker' in navigator)) {
+      log('Service Workers no disponibles en este navegador.', 'err');
+      return 0;
+    }
+    const regs = await navigator.serviceWorker.getRegistrations();
+    let n = 0;
+    for (const r of regs) {
+      const ok = await r.unregister();
+      if (ok) n++;
+    }
+    log('Service Workers desregistrados: ' + regs.length + ' (éxito ' + n + ')', 'ok');
+    return regs.length;
+  }
+
+  async function clearCaches() {
+    if (!('caches' in window)) {
+      log('Cache API no disponible.', 'err');
+      return 0;
+    }
+    const names = await caches.keys();
+    let n = 0;
+    for (const name of names) {
+      if (await caches.delete(name)) n++;
+    }
+    log('Caches borrados: ' + names.length + ' → ' + n + ' eliminados', 'ok');
+    return names.length;
+  }
+
+  async function clearIndexedDB() {
+    if (!window.indexedDB || typeof indexedDB.databases !== 'function') {
+      log('indexedDB.databases() no soportado; omite BD locales.', 'err');
+      return [];
+    }
+    const list = await indexedDB.databases();
+    const names = [];
+    for (const d of list) {
+      if (d && d.name) {
+        indexedDB.deleteDatabase(d.name);
+        names.push(d.name);
+      }
+    }
+    if (names.length) log('IndexedDB solicitado borrado: ' + names.join(', '), 'ok');
+    else log('Sin bases IndexedDB listadas (o ninguna).', 'ok');
+    return names;
+  }
+
+  function clearCookiesPath() {
+    try {
+      const raw = document.cookie || '';
+      if (!raw.trim()) {
+        log('Sin cookies en este documento.', 'ok');
+        return;
+      }
+      const parts = raw.split(';');
+      for (const p of parts) {
+        const name = (p.split('=')[0] || '').trim();
+        if (!name) continue;
+        document.cookie =
+          name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+      }
+      log('Cookies de path=/ invalidadas (si las había).', 'ok');
+    } catch (e) {
+      log('Cookies: ' + String(e), 'err');
+    }
+  }
+
+  function clearStorageOnly() {
+    const ls = clearZeusLocalStorage();
+    const ss = clearZeusSessionStorage();
+    log('localStorage claves quitadas (' + ls.length + '): ' + (ls.slice(0, 12).join(', ') || '—') + (ls.length > 12 ? '…' : ''), 'ok');
+    log('sessionStorage (prefijo zeus): ' + (ss.length ? ss.join(', ') : 'ninguna'), 'ok');
+  }
+
+  async function status() {
+    clearOut();
+    if ('serviceWorker' in navigator) {
+      const r = await navigator.serviceWorker.getRegistrations();
+      log('Service Workers activos: ' + r.length, r.length ? 'err' : 'ok');
+      r.forEach(function (x, i) {
+        log('  [' + (i + 1) + '] scope: ' + x.scope);
+      });
+    }
+    if ('caches' in window) {
+      const k = await caches.keys();
+      log('Caches: ' + k.length, k.length ? 'err' : 'ok');
+      k.forEach(function (n) {
+        log('  - ' + n);
+      });
+    }
+    try {
+      const z = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (
+          key &&
+          (key === 'auth_token' ||
+            key === 'refresh_token' ||
+            key.startsWith('zeus'))
+        ) {
+          z.push(key);
         }
+      }
+      log('localStorage (auth/zeus): ' + z.length + ' claves', z.length ? 'err' : 'ok');
+    } catch (e) {
+      log('localStorage: ' + String(e), 'err');
+    }
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      log('Modo: PWA / pantalla completa (instalada)', 'ok');
+    } else {
+      log('Modo: navegador (pestaña normal)');
+    }
+  }
 
-        function clearLocalStorage() {
-            try {
-                localStorage.removeItem('zeus-pwa-installed');
-                statusDiv.innerHTML = '<p class="success">✅ LocalStorage limpiado (zeus-pwa-installed)</p>';
-            } catch (e) {
-                statusDiv.innerHTML = `<p class="error">❌ Error: ${e.message}</p>`;
-            }
-        }
+  async function clearAll() {
+    clearOut();
+    log('— Limpiar todo —');
+    await unregisterSW();
+    await clearCaches();
+    clearStorageOnly();
+    await clearIndexedDB();
+    clearCookiesPath();
+    log('Listo. Cierra otras pestañas de este sitio y recarga.', 'ok');
+  }
 
-        async function checkStatus() {
-            let html = '<h3>Estado Actual:</h3>';
-            
-            // Service Workers
-            if ('serviceWorker' in navigator) {
-                const registrations = await navigator.serviceWorker.getRegistrations();
-                html += `<p>Service Workers: ${registrations.length}</p>`;
-                registrations.forEach((reg, i) => {
-                    html += `<p>  - SW ${i+1}: ${reg.scope}</p>`;
-                });
-            }
-            
-            // Caches
-            if ('caches' in window) {
-                const cacheNames = await caches.keys();
-                html += `<p>Caches: ${cacheNames.length}</p>`;
-                cacheNames.forEach(name => {
-                    html += `<p>  - ${name}</p>`;
-                });
-            }
-            
-            // LocalStorage
-            const installed = localStorage.getItem('zeus-pwa-installed');
-            html += `<p>LocalStorage 'zeus-pwa-installed': ${installed || 'no existe'}</p>`;
-            
-            // Display mode
-            if (window.matchMedia('(display-mode: standalone)').matches) {
-                html += '<p class="success">✅ App ejecutándose en modo standalone (instalada)</p>';
-            } else {
-                html += '<p>App ejecutándose en navegador (no instalada)</p>';
-            }
-            
-            statusDiv.innerHTML = html;
-        }
+  document.getElementById('btn-all').addEventListener('click', function () {
+    clearAll().catch(function (e) {
+      log(String(e), 'err');
+    });
+  });
+  document.getElementById('btn-sw').addEventListener('click', function () {
+    clearOut();
+    unregisterSW().catch(function (e) {
+      log(String(e), 'err');
+    });
+  });
+  document.getElementById('btn-cache').addEventListener('click', function () {
+    clearOut();
+    clearCaches().catch(function (e) {
+      log(String(e), 'err');
+    });
+  });
+  document.getElementById('btn-ls').addEventListener('click', function () {
+    clearOut();
+    clearStorageOnly();
+    clearCookiesPath();
+  });
+  document.getElementById('btn-status').addEventListener('click', function () {
+    status().catch(function (e) {
+      log(String(e), 'err');
+    });
+  });
+  document.getElementById('btn-reload').addEventListener('click', function () {
+    window.location.href = '/?nocache=' + Date.now();
+  });
 
-        // Auto-check al cargar
-        checkStatus();
-    </script>
+  status().catch(function () {});
+})();
+  </script>
 </body>
 </html>

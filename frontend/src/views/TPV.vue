@@ -1047,31 +1047,40 @@ const showCartFeedback = (message, type = 'added') => {
   }, 2000)
 }
 
+const normalizeCategory = (value) => {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
 const getProductIcon = (category) => {
-  // Iconos más genéricos que funcionan para cualquier tipo de negocio
-  const icons = {
-    'Bebidas': '🥤',
-    'Bebidas Alcohólicas': '🍷',
-    'Comida': '🍽️',
-    'Postres': '🍰',
-    'Entrantes': '🥗',
-    'Platos': '🍛',
-    'Pizzas': '🍕',
-    'Hamburguesas': '🍔',
-    'Café': '☕',
-    'Servicios': '💼',
-    'Productos': '📦',
-    'Consultas': '🏥',
-    'Tratamientos': '✨',
-    'Cortes': '✂️',
-    'Repuestos': '🔧',
-    'Envíos': '📦',
-    'Entradas': '🎫',
-    'Medicamentos': '💊',
-    'General': '📦',
-    'Otros': '📦'
-  }
-  return icons[category] || '📦'
+  const key = normalizeCategory(category)
+  if (!key) return '📦'
+
+  // Detección por palabras clave para evitar depender de mayúsculas/acentos exactos.
+  const rules = [
+    { terms: ['bebida', 'refresco', 'zumo', 'agua'], icon: '🥤' },
+    { terms: ['alcohol', 'cerveza', 'vino', 'licor', 'cocktail', 'coctel'], icon: '🍷' },
+    { terms: ['cafe', 'infusion', 'te'], icon: '☕' },
+    { terms: ['bocadillo', 'sandwich', 'hamburguesa'], icon: '🥪' },
+    { terms: ['pizza'], icon: '🍕' },
+    { terms: ['tapa', 'plato', 'comida', 'menu', 'especialidad', 'sugerencia'], icon: '🍽️' },
+    { terms: ['postre', 'dulce'], icon: '🍰' },
+    { terms: ['entrante', 'ensalada'], icon: '🥗' },
+    { terms: ['servicio'], icon: '💼' },
+    { terms: ['consulta'], icon: '🏥' },
+    { terms: ['tratamiento'], icon: '✨' },
+    { terms: ['corte'], icon: '✂️' },
+    { terms: ['repuesto'], icon: '🔧' },
+    { terms: ['entrada', 'ticket'], icon: '🎫' },
+    { terms: ['medicamento'], icon: '💊' },
+    { terms: ['envio'], icon: '📦' },
+  ]
+
+  const matched = rules.find((rule) => rule.terms.some((term) => key.includes(term)))
+  return matched?.icon || '📦'
 }
 
 // Obtener emoji según icono predefinido

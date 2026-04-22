@@ -126,16 +126,13 @@ const finishSetup = async () => {
     if (!token) {
       throw new Error('Sesión expirada. Vuelve a iniciar sesión.')
     }
-
-    await api.post('/api/v1/auth/onboarding/questionnaire', {
-      employees_count: form.employees_count,
-      uses_tpv: !!form.uses_tpv,
-      business_hours: String(form.business_hours || '').trim(),
-    }, token)
     await api.post('/api/v1/auth/onboarding/profile', {
       social_channels: form.social_channels,
       whatsapp_number: form.whatsapp_number || null,
       control_horario_policy: form.control_horario_policy || null,
+      employees_count: form.employees_count,
+      uses_tpv: !!form.uses_tpv,
+      business_hours: String(form.business_hours || '').trim(),
     }, token)
     success.value = 'Configuración guardada. Redirigiendo al dashboard...'
     setTimeout(() => {

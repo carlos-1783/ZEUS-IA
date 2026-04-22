@@ -523,10 +523,37 @@ def onboarding_profile(
     op["control_horario_policy"] = (body.control_horario_policy or "").strip() or None
     op["updated_at"] = datetime.now(timezone.utc).isoformat()
 
+    # Permitir completar onboarding base desde este endpoint (fallback robusto si questionnaire falla en un entorno).
+    if body.employees_count is not None or body.uses_tpv is not None or body.business_hours:
+        q = meta.get("onboarding_questionnaire") if isinstance(meta.get("onboarding_questionnaire"), dict) else {}
+        if body.employees_count is not None:
+            q["employees_count"] = int(body.employees_count)
+            try:
+                setattr(current_user, "employees", int(body.employees_count))
+            except Exception:
+                logger.warning("onboarding_profile: no se pudo setear user.employees")
+        if body.uses_tpv is not None:
+            q["uses_tpv"] = bool(body.uses_tpv)
+            try:
+                raw = getattr(current_user, "tpv_config", None) or "{}"
+                cfg = json.loads(raw) if isinstance(raw, str) else dict(raw or {})
+                cfg["tables_enabled"] = bool(body.uses_tpv)
+                cfg["products_enabled"] = bool(body.uses_tpv)
+                current_user.tpv_config = json.dumps(cfg, ensure_ascii=False)
+            except Exception:
+                logger.warning("onboarding_profile: no se pudo actualizar tpv_config")
+        if body.business_hours:
+            q["business_hours"] = str(body.business_hours).strip()
+        q["completed_at"] = datetime.now(timezone.utc).isoformat()
+        q["saved_via"] = "onboarding_profile"
+        meta["onboarding_questionnaire"] = q
+        meta["onboarding_questionnaire_completed"] = True
+
     meta["operational_profile"] = op
     meta["onboarding_operational_profile_completed"] = True
     company.metadata_ = meta
     db.add(company)
+    db.add(current_user)
     db.commit()
 
     return {"success": True, "company_id": company.id, "operational_profile": op}

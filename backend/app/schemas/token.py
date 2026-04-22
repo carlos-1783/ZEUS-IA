@@ -146,6 +146,9 @@ class OnboardingProfileRequest(BaseModel):
         max_length=4000,
         description="Política/observaciones de control horario",
     )
+    employees_count: Optional[int] = Field(default=None, ge=0, le=100_000)
+    uses_tpv: Optional[bool] = Field(default=None)
+    business_hours: Optional[str] = Field(default=None, min_length=1, max_length=4000)
 
 
 class ResetPasswordRequest(BaseModel):

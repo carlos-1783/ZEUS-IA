@@ -1,6 +1,6 @@
 import re
 from datetime import datetime, timedelta
-from typing import Optional, List, Literal, Union
+from typing import Optional, List, Literal, Union, Dict
 from pydantic import BaseModel, Field, ConfigDict, field_validator, EmailStr, validator
 
 class TokenPayload(BaseModel):
@@ -140,6 +140,7 @@ class OnboardingProfileRequest(BaseModel):
     """Datos operativos adicionales para activar automatizaciones iniciales."""
 
     social_channels: Optional[List[str]] = Field(default=None, description="Canales sociales activos")
+    social_links: Optional[Dict[str, str]] = Field(default=None, description="URL por canal social")
     whatsapp_number: Optional[str] = Field(default=None, description="WhatsApp principal del negocio")
     control_horario_policy: Optional[str] = Field(
         default=None,

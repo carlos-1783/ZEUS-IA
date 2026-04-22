@@ -40,6 +40,16 @@
             {{ c }}
           </label>
         </div>
+        <div v-if="form.social_channels.length" class="social-links">
+          <label v-for="c in form.social_channels" :key="`link-${c}`">
+            URL de {{ c }}
+            <input
+              v-model.trim="form.social_links[c]"
+              type="text"
+              :placeholder="`https://.../${c}`"
+            />
+          </label>
+        </div>
 
         <label>WhatsApp del negocio</label>
         <input v-model.trim="form.whatsapp_number" type="text" placeholder="+34600111222" />
@@ -58,6 +68,7 @@
           <li><strong>TPV:</strong> {{ form.uses_tpv ? 'Sí' : 'No' }}</li>
           <li><strong>Horario:</strong> {{ form.business_hours || '—' }}</li>
           <li><strong>Redes:</strong> {{ form.social_channels.join(', ') || '—' }}</li>
+          <li><strong>Enlaces redes:</strong> {{ socialLinksSummary || '—' }}</li>
           <li><strong>WhatsApp:</strong> {{ form.whatsapp_number || '—' }}</li>
         </ul>
       </section>
@@ -74,7 +85,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
@@ -92,8 +103,23 @@ const form = reactive({
   uses_tpv: true,
   business_hours: '',
   social_channels: ['instagram', 'facebook'] as string[],
+  social_links: {
+    instagram: '',
+    facebook: '',
+    tiktok: '',
+    google: '',
+    youtube: '',
+    linkedin: '',
+  } as Record<string, string>,
   whatsapp_number: '',
   control_horario_policy: '',
+})
+
+const socialLinksSummary = computed(() => {
+  const entries = form.social_channels
+    .map((c) => `${c}: ${String(form.social_links[c] || '').trim()}`)
+    .filter((row) => !row.endsWith(': '))
+  return entries.join(' · ')
 })
 
 onMounted(async () => {
@@ -120,6 +146,15 @@ const nextStep = (): void => {
       return
     }
   }
+  if (step.value === 2) {
+    for (const c of form.social_channels) {
+      const url = String(form.social_links[c] || '').trim()
+      if (!url) {
+        error.value = `Falta la URL de ${c}`
+        return
+      }
+    }
+  }
   step.value += 1
 }
 
@@ -134,6 +169,11 @@ const finishSetup = async () => {
     }
     await api.post('/api/v1/auth/onboarding/profile', {
       social_channels: form.social_channels,
+      social_links: Object.fromEntries(
+        form.social_channels
+          .map((c) => [c, String(form.social_links[c] || '').trim()])
+          .filter(([, v]) => !!v)
+      ),
       whatsapp_number: form.whatsapp_number || null,
       control_horario_policy: form.control_horario_policy || null,
       employees_count: form.employees_count,

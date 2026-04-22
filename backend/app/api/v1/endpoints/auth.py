@@ -519,6 +519,16 @@ def onboarding_profile(
         if s and s not in channels_norm:
             channels_norm.append(s)
     op["social_channels"] = channels_norm
+    links_raw = body.social_links or {}
+    links_norm: Dict[str, str] = {}
+    for ch in channels_norm:
+        v = str(links_raw.get(ch) or "").strip()
+        if not v:
+            continue
+        if not (v.startswith("http://") or v.startswith("https://")):
+            v = f"https://{v}"
+        links_norm[ch] = v
+    op["social_links"] = links_norm
     op["whatsapp_number"] = (body.whatsapp_number or "").strip() or None
     op["control_horario_policy"] = (body.control_horario_policy or "").strip() or None
     op["updated_at"] = datetime.now(timezone.utc).isoformat()

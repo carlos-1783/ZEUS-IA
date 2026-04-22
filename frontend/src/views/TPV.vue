@@ -101,7 +101,7 @@
                 <span 
                   v-else-if="product.icon" 
                   class="product-icon"
-                >{{ getIconEmoji(product.icon) }}</span>
+                >{{ getIconEmoji(product.icon, product.category) }}</span>
                 <span 
                   v-else 
                   class="product-icon"
@@ -1084,7 +1084,8 @@ const getProductIcon = (category) => {
 }
 
 // Obtener emoji según icono predefinido
-const getIconEmoji = (icon) => {
+const getIconEmoji = (icon, category) => {
+  const key = normalizeCategory(icon)
   const iconMap = {
     'coffee': '☕',
     'food': '🍽️',
@@ -1092,7 +1093,10 @@ const getIconEmoji = (icon) => {
     'house': '🏠',
     'default': '📦'
   }
-  return iconMap[icon] || '📦'
+  const mapped = iconMap[key]
+  if (mapped && mapped !== '📦') return mapped
+  // Si icon viene como "default" o desconocido, caer al icono por categoría
+  return getProductIcon(category)
 }
 
 // Manejar error al cargar imagen

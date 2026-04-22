@@ -42,6 +42,7 @@ const Terminos = () => import('../views/legal/Terminos.vue')
 const Privacidad = () => import('../views/legal/Privacidad.vue')
 const LandingPage = () => import('../views/LandingPage.vue')
 const PublicStore = () => import('../views/public/PublicStore.vue')
+const OnboardingSetup = () => import('../views/OnboardingSetup.vue')
 
 // Routes that don't require authentication
 const publicRoutes = [
@@ -214,6 +215,15 @@ const router = createRouter({
       meta: { 
         title: 'El Olimpo - Panel de Zeus',
         titleKey: 'navigation.dashboard',
+        requiresAuth: true
+      }
+    },
+    {
+      path: '/onboarding-setup',
+      name: 'OnboardingSetup',
+      component: OnboardingSetup,
+      meta: {
+        title: 'Configuración inicial - ZEUS-IA',
         requiresAuth: true
       }
     },

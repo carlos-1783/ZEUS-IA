@@ -121,6 +121,7 @@ const form = ref({
 const error = ref('');
 const isLoading = ref(false);
 const redirectTo = (route.query.redirect as string) || '/dashboard';
+const justRegistered = String(route.query.registered || '').toLowerCase() === 'true';
 
 const normalizeErrorMessage = (err: unknown, fallbackKey: string) => {
   if (err instanceof Error) {
@@ -203,9 +204,24 @@ const handleSubmit = async () => {
         return;
       }
       
-      // Performance: Redirección inmediata sin delays
-      console.log('🚀 Redirigiendo a:', redirectTo);
-      window.location.href = redirectTo;
+      // Si acaba de registrarse, guiarlo por setup inicial cuando corresponda.
+      let target = redirectTo;
+      if (justRegistered) {
+        try {
+          const api = (await import('@/services/api')).default;
+          const status = await api.get('/api/v1/auth/onboarding/status', token);
+          const questionnaireCompleted = !!status?.questionnaire_completed;
+          const valid = !!status?.validation?.valid;
+          if (!questionnaireCompleted || !valid) {
+            target = '/onboarding-setup';
+          }
+        } catch (e) {
+          console.warn('No se pudo consultar onboarding/status; fallback dashboard.', e);
+        }
+      }
+
+      console.log('🚀 Redirigiendo a:', target);
+      window.location.href = target;
       
     } else {
       // Performance: Solo mostrar error en UI, sin alerts

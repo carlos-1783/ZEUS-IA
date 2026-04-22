@@ -27,6 +27,7 @@ from app.schemas.token import (
     ResetPasswordRequest,
     NewPasswordRequest,
     OnboardingQuestionnaireRequest,
+    OnboardingProfileRequest,
 )
 from services.email_service import email_service
 from app.schemas.user import User as UserSchema
@@ -400,6 +401,53 @@ def onboarding_status(
         "validation": v,
         "questionnaire_completed": questionnaire_completed,
     }
+
+
+@router.post(
+    "/onboarding/profile",
+    summary="Perfil operativo post-registro",
+    description="Guarda canales sociales y datos operativos base en metadata de la empresa.",
+)
+def onboarding_profile(
+    body: OnboardingProfileRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    from app.models.company import Company, UserCompany
+
+    link = (
+        db.query(UserCompany)
+        .filter(UserCompany.user_id == current_user.id)
+        .order_by(UserCompany.id.asc())
+        .first()
+    )
+    if not link:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Usuario sin empresa vinculada")
+    company = db.query(Company).filter(Company.id == link.company_id).first()
+    if not company:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Empresa no encontrada")
+
+    meta = company.metadata_ if isinstance(company.metadata_, dict) else {}
+    op = meta.get("operational_profile") if isinstance(meta.get("operational_profile"), dict) else {}
+
+    channels = body.social_channels or []
+    channels_norm = []
+    for c in channels:
+        s = str(c).strip().lower()
+        if s and s not in channels_norm:
+            channels_norm.append(s)
+    op["social_channels"] = channels_norm
+    op["whatsapp_number"] = (body.whatsapp_number or "").strip() or None
+    op["control_horario_policy"] = (body.control_horario_policy or "").strip() or None
+    op["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    meta["operational_profile"] = op
+    meta["onboarding_operational_profile_completed"] = True
+    company.metadata_ = meta
+    db.add(company)
+    db.commit()
+
+    return {"success": True, "company_id": company.id, "operational_profile": op}
 
 
 # Tiempo de validez del token de reset (1 hora)

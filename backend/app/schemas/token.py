@@ -136,6 +136,18 @@ class OnboardingQuestionnaireRequest(BaseModel):
     )
 
 
+class OnboardingProfileRequest(BaseModel):
+    """Datos operativos adicionales para activar automatizaciones iniciales."""
+
+    social_channels: Optional[List[str]] = Field(default=None, description="Canales sociales activos")
+    whatsapp_number: Optional[str] = Field(default=None, description="WhatsApp principal del negocio")
+    control_horario_policy: Optional[str] = Field(
+        default=None,
+        max_length=4000,
+        description="Política/observaciones de control horario",
+    )
+
+
 class ResetPasswordRequest(BaseModel):
     email: EmailStr
 

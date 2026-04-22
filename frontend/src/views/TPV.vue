@@ -1058,6 +1058,7 @@ const normalizeCategory = (value) => {
 const getProductIcon = (category) => {
   const key = normalizeCategory(category)
   if (!key) return '📦'
+  const words = new Set(key.split(/[^a-z0-9]+/).filter(Boolean))
 
   // Detección por palabras clave para evitar depender de mayúsculas/acentos exactos.
   const rules = [
@@ -1079,7 +1080,15 @@ const getProductIcon = (category) => {
     { terms: ['envio'], icon: '📦' },
   ]
 
-  const matched = rules.find((rule) => rule.terms.some((term) => key.includes(term)))
+  const matched = rules.find((rule) =>
+    rule.terms.some((term) => {
+      const t = normalizeCategory(term)
+      if (!t) return false
+      // Evitar falsos positivos por subcadenas muy cortas (ej: "te" en "calientes").
+      if (t.length <= 2) return words.has(t)
+      return key.includes(t)
+    })
+  )
   return matched?.icon || '📦'
 }
 

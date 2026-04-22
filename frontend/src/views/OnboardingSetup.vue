@@ -74,11 +74,13 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/services/api'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const step = ref(1)
 const saving = ref(false)
 const error = ref('')
@@ -92,6 +94,18 @@ const form = reactive({
   social_channels: ['instagram', 'facebook'] as string[],
   whatsapp_number: '',
   control_horario_policy: '',
+})
+
+onMounted(async () => {
+  try {
+    if (!authStore.isAuthenticated && authStore.initialize) {
+      await authStore.initialize()
+    }
+  } catch (_) {}
+  const token = authStore.getToken ? authStore.getToken() : (authStore as any).token
+  if (!token) {
+    window.location.href = '/auth/login?redirect=/onboarding-setup'
+  }
 })
 
 const nextStep = () => {
@@ -108,16 +122,21 @@ const finishSetup = async () => {
   success.value = ''
   saving.value = true
   try {
+    const token = authStore.getToken ? authStore.getToken() : (authStore as any).token
+    if (!token) {
+      throw new Error('Sesión expirada. Vuelve a iniciar sesión.')
+    }
+
     await api.post('/api/v1/auth/onboarding/questionnaire', {
       employees_count: form.employees_count,
       uses_tpv: !!form.uses_tpv,
       business_hours: String(form.business_hours || '').trim(),
-    })
+    }, token)
     await api.post('/api/v1/auth/onboarding/profile', {
       social_channels: form.social_channels,
       whatsapp_number: form.whatsapp_number || null,
       control_horario_policy: form.control_horario_policy || null,
-    })
+    }, token)
     success.value = 'Configuración guardada. Redirigiendo al dashboard...'
     setTimeout(() => {
       window.location.href = '/dashboard'

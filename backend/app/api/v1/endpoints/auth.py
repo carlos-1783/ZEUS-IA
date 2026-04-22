@@ -373,6 +373,8 @@ async def onboarding_questionnaire(
         if result.get("success"):
             return {"success": True, "company_id": result.get("company_id")}
         logger.warning("onboarding_questionnaire apply_questionnaire_answers=%s", result)
+        # Forzar fallback si el motor devuelve success=False sin lanzar excepción.
+        raise RuntimeError(result.get("error") or "apply_questionnaire_answers returned success=False")
     except Exception as e:
         logger.exception("onboarding_questionnaire primary path failed: %s", e)
 

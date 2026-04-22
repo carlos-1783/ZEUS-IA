@@ -363,10 +363,10 @@ async def onboarding_questionnaire(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    from app.models.company import Company, UserCompany
-
-    # Ruta principal (motor onboarding). Si falla por diferencias de esquema/datos, aplicar fallback robusto.
     try:
+        from app.models.company import Company, UserCompany
+
+        # Ruta principal (motor onboarding). Si falla por diferencias de esquema/datos, aplicar fallback robusto.
         from services.onboarding_engine import apply_questionnaire_answers
 
         result = apply_questionnaire_answers(db, current_user, body)
@@ -376,57 +376,65 @@ async def onboarding_questionnaire(
     except Exception as e:
         logger.exception("onboarding_questionnaire primary path failed: %s", e)
 
-    # Fallback compatible producción: guardar metadata mínima + tpv_config sin romper por columnas faltantes.
-    link = (
-        db.query(UserCompany)
-        .filter(UserCompany.user_id == current_user.id)
-        .order_by(UserCompany.id.asc())
-        .first()
-    )
-    if not link:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Usuario sin empresa vinculada")
-    company = db.query(Company).filter(Company.id == link.company_id).first()
-    if not company:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Empresa no encontrada")
+        # Fallback compatible producción: guardar metadata mínima + tpv_config sin romper por columnas faltantes.
+        link = (
+            db.query(UserCompany)
+            .filter(UserCompany.user_id == current_user.id)
+            .order_by(UserCompany.id.asc())
+            .first()
+        )
+        if not link:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Usuario sin empresa vinculada")
+        company = db.query(Company).filter(Company.id == link.company_id).first()
+        if not company:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Empresa no encontrada")
 
-    meta = company.metadata_ if isinstance(company.metadata_, dict) else {}
-    meta["onboarding_questionnaire"] = {
-        "employees_count": body.employees_count,
-        "uses_tpv": body.uses_tpv,
-        "business_hours": body.business_hours,
-        "completed_at": datetime.now(timezone.utc).isoformat(),
-        "fallback_mode": True,
-    }
-    meta["onboarding_questionnaire_completed"] = True
-    company.metadata_ = meta
-    db.add(company)
+        meta = company.metadata_ if isinstance(company.metadata_, dict) else {}
+        meta["onboarding_questionnaire"] = {
+            "employees_count": body.employees_count,
+            "uses_tpv": body.uses_tpv,
+            "business_hours": body.business_hours,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "fallback_mode": True,
+        }
+        meta["onboarding_questionnaire_completed"] = True
+        company.metadata_ = meta
+        db.add(company)
 
-    # Intento best-effort de persistir empleados/tpv_config.
-    try:
-        setattr(current_user, "employees", body.employees_count)
-    except Exception:
-        logger.warning("onboarding_questionnaire: no se pudo setear user.employees (schema antiguo)")
-    try:
-        raw = getattr(current_user, "tpv_config", None) or "{}"
-        cfg = json.loads(raw) if isinstance(raw, str) else dict(raw or {})
-        cfg["tables_enabled"] = bool(body.uses_tpv)
-        cfg["products_enabled"] = bool(body.uses_tpv)
-        current_user.tpv_config = json.dumps(cfg, ensure_ascii=False)
-    except Exception:
-        logger.warning("onboarding_questionnaire: no se pudo actualizar tpv_config")
-    db.add(current_user)
+        # Intento best-effort de persistir empleados/tpv_config.
+        try:
+            setattr(current_user, "employees", body.employees_count)
+        except Exception:
+            logger.warning("onboarding_questionnaire: no se pudo setear user.employees (schema antiguo)")
+        try:
+            raw = getattr(current_user, "tpv_config", None) or "{}"
+            cfg = json.loads(raw) if isinstance(raw, str) else dict(raw or {})
+            cfg["tables_enabled"] = bool(body.uses_tpv)
+            cfg["products_enabled"] = bool(body.uses_tpv)
+            current_user.tpv_config = json.dumps(cfg, ensure_ascii=False)
+        except Exception:
+            logger.warning("onboarding_questionnaire: no se pudo actualizar tpv_config")
+        db.add(current_user)
 
-    try:
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        logger.exception("onboarding_questionnaire fallback commit failed: %s", e)
+        try:
+            db.commit()
+        except Exception as commit_err:
+            db.rollback()
+            logger.exception("onboarding_questionnaire fallback commit failed: %s", commit_err)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No se pudo guardar el cuestionario en este entorno. Revisa migraciones de BD.",
+            )
+
+        return {"success": True, "company_id": company.id, "fallback_mode": True}
+    except HTTPException:
+        raise
+    except Exception as fatal_err:
+        logger.exception("onboarding_questionnaire fatal: %s", fatal_err)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No se pudo guardar el cuestionario en este entorno. Revisa migraciones de BD.",
+            detail="No se pudo guardar el cuestionario. Revisa configuración de la empresa.",
         )
-
-    return {"success": True, "company_id": company.id, "fallback_mode": True}
 
 
 @router.get(

@@ -270,9 +270,10 @@ const checkStatus = async () => {
       })
     }
     
-    // Demo solo si el backend no envía roster real (ZEUS_CONTROL_HORARIO_DB_EMPLOYEES)
+    // En producción no usar empleados demo: mostrar vacío para forzar configuración real.
+    const isProd = import.meta.env.PROD
     if (Object.keys(employeesMap).length === 0) {
-      if (employeesSource === 'database') {
+      if (employeesSource === 'database' || isProd) {
         employees.value = []
       } else {
         employees.value = [

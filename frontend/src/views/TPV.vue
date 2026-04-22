@@ -1067,7 +1067,9 @@ const getProductIcon = (category) => {
     { terms: ['cafe', 'infusion', 'te'], icon: '☕' },
     { terms: ['bocadillo', 'bocadillos', 'sandwich', 'hamburguesa'], icon: '🥪' },
     { terms: ['pizza'], icon: '🍕' },
-    { terms: ['tapa', 'plato', 'comida', 'menu', 'especialidad', 'sugerencia'], icon: '🍽️' },
+    // Tapas / pintxos: icono tipo pincho (brocheta), antes de la regla genérica de comida
+    { terms: ['tapa', 'tapas', 'pintxo', 'pintxos', 'pincho', 'pinchos'], icon: '🍢' },
+    { terms: ['plato', 'comida', 'menu', 'especialidad', 'sugerencia'], icon: '🍽️' },
     { terms: ['postre', 'dulce'], icon: '🍰' },
     { terms: ['entrante', 'ensalada'], icon: '🥗' },
     { terms: ['servicio'], icon: '💼' },

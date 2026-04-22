@@ -1064,7 +1064,7 @@ const getProductIcon = (category) => {
     { terms: ['bebida', 'refresco', 'zumo', 'agua'], icon: '🥤' },
     { terms: ['alcohol', 'cerveza', 'vino', 'licor', 'cocktail', 'coctel'], icon: '🍷' },
     { terms: ['cafe', 'infusion', 'te'], icon: '☕' },
-    { terms: ['bocadillo', 'sandwich', 'hamburguesa'], icon: '🥪' },
+    { terms: ['bocadillo', 'bocadillos', 'sandwich', 'hamburguesa'], icon: '🥪' },
     { terms: ['pizza'], icon: '🍕' },
     { terms: ['tapa', 'plato', 'comida', 'menu', 'especialidad', 'sugerencia'], icon: '🍽️' },
     { terms: ['postre', 'dulce'], icon: '🍰' },
@@ -1085,6 +1085,10 @@ const getProductIcon = (category) => {
 
 // Obtener emoji según icono predefinido
 const getIconEmoji = (icon, category) => {
+  const categoryIcon = getProductIcon(category)
+  // Si la categoría ya tiene icono específico, priorizarla sobre iconos heredados del producto.
+  if (categoryIcon !== '📦') return categoryIcon
+
   const key = normalizeCategory(icon)
   const iconMap = {
     'coffee': '☕',
@@ -1095,8 +1099,7 @@ const getIconEmoji = (icon, category) => {
   }
   const mapped = iconMap[key]
   if (mapped && mapped !== '📦') return mapped
-  // Si icon viene como "default" o desconocido, caer al icono por categoría
-  return getProductIcon(category)
+  return '📦'
 }
 
 // Manejar error al cargar imagen

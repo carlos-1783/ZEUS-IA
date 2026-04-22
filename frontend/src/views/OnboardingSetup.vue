@@ -108,11 +108,17 @@ onMounted(async () => {
   }
 })
 
-const nextStep = () => {
+const nextStep = (): void => {
   error.value = ''
   if (step.value === 1) {
-    if (form.employees_count < 0) return (error.value = 'Empleados inválido')
-    if (!String(form.business_hours || '').trim()) return (error.value = 'Indica el horario del negocio')
+    if (form.employees_count < 0) {
+      error.value = 'Empleados inválido'
+      return
+    }
+    if (!String(form.business_hours || '').trim()) {
+      error.value = 'Indica el horario del negocio'
+      return
+    }
   }
   step.value += 1
 }

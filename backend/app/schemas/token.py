@@ -142,6 +142,7 @@ class OnboardingProfileRequest(BaseModel):
     class EmployeeInput(BaseModel):
         full_name: str = Field(..., min_length=1, max_length=255, description="Nombre del empleado")
         phone: Optional[str] = Field(default=None, max_length=32, description="Teléfono del empleado")
+        role_title: Optional[str] = Field(default=None, max_length=100, description="Rol del empleado")
 
     social_channels: Optional[List[str]] = Field(default=None, description="Canales sociales activos")
     social_links: Optional[Dict[str, str]] = Field(default=None, description="URL por canal social")

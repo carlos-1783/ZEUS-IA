@@ -557,6 +557,7 @@ def onboarding_profile(
             for idx, row in enumerate(employees_rows, start=1):
                 full_name = str(getattr(row, "full_name", "") or "").strip()
                 phone = str(getattr(row, "phone", "") or "").strip() or None
+                role_title = str(getattr(row, "role_title", "") or "").strip() or "employee"
                 if not full_name:
                     continue
                 employee_code = f"ONB-{idx:03d}"
@@ -573,7 +574,7 @@ def onboarding_profile(
                         company_id=company.id,
                         user_id=None,
                         full_name=full_name[:255],
-                        role_title="employee",
+                        role_title=role_title[:100],
                         employee_code=employee_code,
                         phone=phone[:32] if phone else None,
                         is_active=True,
@@ -582,7 +583,7 @@ def onboarding_profile(
                 else:
                     ce.full_name = full_name[:255]
                     ce.phone = phone[:32] if phone else None
-                    ce.role_title = ce.role_title or "employee"
+                    ce.role_title = role_title[:100]
                     ce.is_active = True
                     ce.source = ce.source or "onboarding_profile"
                 db.add(ce)

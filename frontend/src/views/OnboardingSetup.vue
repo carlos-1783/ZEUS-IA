@@ -23,6 +23,9 @@
           <label v-for="(emp, idx) in form.employees" :key="`emp-${idx}`">
             Empleado {{ idx + 1 }} - Nombre
             <input v-model.trim="emp.full_name" type="text" placeholder="Nombre y apellidos" />
+            <select v-model="emp.role_title">
+              <option v-for="role in employeeRoles" :key="`role-${idx}-${role}`" :value="role">{{ role }}</option>
+            </select>
             <input v-model.trim="emp.phone" type="text" placeholder="+34600111222" />
           </label>
         </div>
@@ -105,7 +108,8 @@ const step = ref(1)
 const saving = ref(false)
 const error = ref('')
 const success = ref('')
-type EmployeeRow = { full_name: string; phone: string }
+type EmployeeRow = { full_name: string; phone: string; role_title: string }
+const employeeRoles = ['camarero', 'cocina', 'encargado', 'caja', 'limpieza', 'reparto', 'administración']
 
 const availableChannels = ['instagram', 'facebook', 'tiktok', 'google', 'youtube', 'linkedin']
 const form = reactive({
@@ -123,7 +127,7 @@ const form = reactive({
   } as Record<string, string>,
   whatsapp_number: '',
   control_horario_policy: '',
-  employees: [{ full_name: '', phone: '' }] as EmployeeRow[],
+  employees: [{ full_name: '', phone: '', role_title: 'camarero' }] as EmployeeRow[],
 })
 
 const socialLinksSummary = computed(() => {
@@ -135,7 +139,12 @@ const socialLinksSummary = computed(() => {
 
 const employeeSummary = computed(() =>
   form.employees
-    .map((e) => `${String(e.full_name || '').trim()}${String(e.phone || '').trim() ? ` (${String(e.phone).trim()})` : ''}`)
+    .map((e) => {
+      const name = String(e.full_name || '').trim()
+      const role = String(e.role_title || '').trim()
+      const phone = String(e.phone || '').trim()
+      return `${name}${role ? ` - ${role}` : ''}${phone ? ` (${phone})` : ''}`
+    })
     .filter((x) => !!x)
     .join(' · ')
 )
@@ -149,7 +158,7 @@ watch(
       return
     }
     while (form.employees.length < count) {
-      form.employees.push({ full_name: '', phone: '' })
+      form.employees.push({ full_name: '', phone: '', role_title: 'camarero' })
     }
     if (form.employees.length > count) {
       form.employees = form.employees.slice(0, count)
@@ -193,6 +202,10 @@ const nextStep = (): void => {
           error.value = `Falta el teléfono del empleado ${i + 1}`
           return
         }
+        if (!String(e.role_title || '').trim()) {
+          error.value = `Falta el rol del empleado ${i + 1}`
+          return
+        }
       }
     }
   }
@@ -231,6 +244,7 @@ const finishSetup = async () => {
         .map((e) => ({
           full_name: String(e.full_name || '').trim(),
           phone: String(e.phone || '').trim(),
+          role_title: String(e.role_title || '').trim() || 'employee',
         }))
         .filter((e) => !!e.full_name),
       uses_tpv: !!form.uses_tpv,
@@ -264,7 +278,7 @@ const finishSetup = async () => {
 .stepper span { opacity: .6; }
 .stepper .active { opacity: 1; font-weight: 700; }
 .section { display: grid; gap: 8px; }
-input, textarea { width: 100%; background: #0a1228; color: #fff; border: 1px solid #2b3a66; border-radius: 8px; padding: 10px; }
+input, textarea, select { width: 100%; background: #0a1228; color: #fff; border: 1px solid #2b3a66; border-radius: 8px; padding: 10px; }
 .check { display: flex; align-items: center; gap: 8px; }
 .check input { width: auto; }
 .channels { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }

@@ -534,28 +534,14 @@ def onboarding_profile(
         op["control_horario_policy"] = (body.control_horario_policy or "").strip() or None
         op["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-        # Permitir completar onboarding base desde este endpoint (fallback robusto si questionnaire falla en un entorno).
-        user_mutated = False
+        # Permitir completar onboarding base desde este endpoint.
+        # Importante: evitar escribir en User aquí para no romper por drift de esquema entre entornos.
         if body.employees_count is not None or body.uses_tpv is not None or body.business_hours:
             q = meta.get("onboarding_questionnaire") if isinstance(meta.get("onboarding_questionnaire"), dict) else {}
             if body.employees_count is not None:
                 q["employees_count"] = int(body.employees_count)
-                try:
-                    setattr(current_user, "employees", int(body.employees_count))
-                    user_mutated = True
-                except Exception:
-                    logger.warning("onboarding_profile: no se pudo setear user.employees")
             if body.uses_tpv is not None:
                 q["uses_tpv"] = bool(body.uses_tpv)
-                try:
-                    raw = getattr(current_user, "tpv_config", None) or "{}"
-                    cfg = json.loads(raw) if isinstance(raw, str) else dict(raw or {})
-                    cfg["tables_enabled"] = bool(body.uses_tpv)
-                    cfg["products_enabled"] = bool(body.uses_tpv)
-                    current_user.tpv_config = json.dumps(cfg, ensure_ascii=False)
-                    user_mutated = True
-                except Exception:
-                    logger.warning("onboarding_profile: no se pudo actualizar tpv_config")
             if body.business_hours:
                 q["business_hours"] = str(body.business_hours).strip()
             q["completed_at"] = datetime.now(timezone.utc).isoformat()
@@ -567,8 +553,6 @@ def onboarding_profile(
         meta["onboarding_operational_profile_completed"] = True
         company.metadata_ = meta
         db.add(company)
-        if user_mutated:
-            db.add(current_user)
 
         try:
             db.commit()

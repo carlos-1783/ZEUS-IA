@@ -534,12 +534,14 @@ def onboarding_profile(
     op["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     # Permitir completar onboarding base desde este endpoint (fallback robusto si questionnaire falla en un entorno).
+    user_mutated = False
     if body.employees_count is not None or body.uses_tpv is not None or body.business_hours:
         q = meta.get("onboarding_questionnaire") if isinstance(meta.get("onboarding_questionnaire"), dict) else {}
         if body.employees_count is not None:
             q["employees_count"] = int(body.employees_count)
             try:
                 setattr(current_user, "employees", int(body.employees_count))
+                user_mutated = True
             except Exception:
                 logger.warning("onboarding_profile: no se pudo setear user.employees")
         if body.uses_tpv is not None:
@@ -550,6 +552,7 @@ def onboarding_profile(
                 cfg["tables_enabled"] = bool(body.uses_tpv)
                 cfg["products_enabled"] = bool(body.uses_tpv)
                 current_user.tpv_config = json.dumps(cfg, ensure_ascii=False)
+                user_mutated = True
             except Exception:
                 logger.warning("onboarding_profile: no se pudo actualizar tpv_config")
         if body.business_hours:
@@ -563,8 +566,36 @@ def onboarding_profile(
     meta["onboarding_operational_profile_completed"] = True
     company.metadata_ = meta
     db.add(company)
-    db.add(current_user)
-    db.commit()
+    if user_mutated:
+        db.add(current_user)
+
+    try:
+        db.commit()
+    except Exception as commit_err:
+        db.rollback()
+        logger.exception("onboarding_profile commit failed; retrying metadata-only fallback: %s", commit_err)
+
+        # Fallback: persistir solo metadata de empresa para no bloquear la finalización por diferencias de esquema en User.
+        company_retry = db.query(Company).filter(Company.id == link.company_id).first()
+        if not company_retry:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Empresa no encontrada")
+        company_retry.metadata_ = meta
+        db.add(company_retry)
+        try:
+            db.commit()
+            return {
+                "success": True,
+                "company_id": company_retry.id,
+                "operational_profile": op,
+                "fallback_mode": True,
+            }
+        except Exception as fallback_err:
+            db.rollback()
+            logger.exception("onboarding_profile metadata-only fallback failed: %s", fallback_err)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No se pudo guardar la configuración en este entorno. Revisa migraciones de BD.",
+            )
 
     return {"success": True, "company_id": company.id, "operational_profile": op}
 

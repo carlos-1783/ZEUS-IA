@@ -124,7 +124,8 @@ const socialLinksSummary = computed(() => {
 
 onMounted(async () => {
   try {
-    if (!authStore.isAuthenticated && authStore.initialize) {
+    // Siempre inicializar para validar expiración/estado real del token.
+    if (authStore.initialize) {
       await authStore.initialize()
     }
   } catch (_) {}
@@ -185,7 +186,15 @@ const finishSetup = async () => {
       window.location.href = '/dashboard'
     }, 700)
   } catch (e: any) {
-    error.value = e?.message || 'No se pudo guardar la configuración'
+    const msg = String(e?.message || '')
+    if (msg.toLowerCase().includes('unauthorized')) {
+      error.value = 'Sesión expirada o inválida. Inicia sesión de nuevo.'
+      setTimeout(() => {
+        window.location.href = '/auth/login?redirect=/onboarding-setup'
+      }, 700)
+      return
+    }
+    error.value = msg || 'No se pudo guardar la configuración'
   } finally {
     saving.value = false
   }

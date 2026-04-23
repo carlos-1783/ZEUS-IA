@@ -139,6 +139,10 @@ class OnboardingQuestionnaireRequest(BaseModel):
 class OnboardingProfileRequest(BaseModel):
     """Datos operativos adicionales para activar automatizaciones iniciales."""
 
+    class EmployeeInput(BaseModel):
+        full_name: str = Field(..., min_length=1, max_length=255, description="Nombre del empleado")
+        phone: Optional[str] = Field(default=None, max_length=32, description="Teléfono del empleado")
+
     social_channels: Optional[List[str]] = Field(default=None, description="Canales sociales activos")
     social_links: Optional[Dict[str, str]] = Field(default=None, description="URL por canal social")
     whatsapp_number: Optional[str] = Field(default=None, description="WhatsApp principal del negocio")
@@ -148,6 +152,7 @@ class OnboardingProfileRequest(BaseModel):
         description="Política/observaciones de control horario",
     )
     employees_count: Optional[int] = Field(default=None, ge=0, le=100_000)
+    employees: Optional[List[EmployeeInput]] = Field(default=None, description="Plantilla inicial de empleados")
     uses_tpv: Optional[bool] = Field(default=None)
     business_hours: Optional[str] = Field(default=None, min_length=1, max_length=4000)
 

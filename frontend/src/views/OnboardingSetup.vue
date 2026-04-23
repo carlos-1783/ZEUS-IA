@@ -19,6 +19,14 @@
         <label>Empleados</label>
         <input v-model.number="form.employees_count" type="number" min="0" max="100000" />
 
+        <div v-if="form.employees_count > 0" class="employees-grid">
+          <label v-for="(emp, idx) in form.employees" :key="`emp-${idx}`">
+            Empleado {{ idx + 1 }} - Nombre
+            <input v-model.trim="emp.full_name" type="text" placeholder="Nombre y apellidos" />
+            <input v-model.trim="emp.phone" type="text" placeholder="+34600111222" />
+          </label>
+        </div>
+
         <label class="check">
           <input v-model="form.uses_tpv" type="checkbox" />
           Usamos TPV en el local
@@ -65,6 +73,7 @@
       <section v-if="step === 3" class="section">
         <ul>
           <li><strong>Empleados:</strong> {{ form.employees_count }}</li>
+          <li><strong>Plantilla inicial:</strong> {{ employeeSummary || '—' }}</li>
           <li><strong>TPV:</strong> {{ form.uses_tpv ? 'Sí' : 'No' }}</li>
           <li><strong>Horario:</strong> {{ form.business_hours || '—' }}</li>
           <li><strong>Redes:</strong> {{ form.social_channels.join(', ') || '—' }}</li>
@@ -85,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
@@ -96,6 +105,7 @@ const step = ref(1)
 const saving = ref(false)
 const error = ref('')
 const success = ref('')
+type EmployeeRow = { full_name: string; phone: string }
 
 const availableChannels = ['instagram', 'facebook', 'tiktok', 'google', 'youtube', 'linkedin']
 const form = reactive({
@@ -113,6 +123,7 @@ const form = reactive({
   } as Record<string, string>,
   whatsapp_number: '',
   control_horario_policy: '',
+  employees: [{ full_name: '', phone: '' }] as EmployeeRow[],
 })
 
 const socialLinksSummary = computed(() => {
@@ -121,6 +132,31 @@ const socialLinksSummary = computed(() => {
     .filter((row) => !row.endsWith(': '))
   return entries.join(' · ')
 })
+
+const employeeSummary = computed(() =>
+  form.employees
+    .map((e) => `${String(e.full_name || '').trim()}${String(e.phone || '').trim() ? ` (${String(e.phone).trim()})` : ''}`)
+    .filter((x) => !!x)
+    .join(' · ')
+)
+
+watch(
+  () => form.employees_count,
+  (countRaw) => {
+    const count = Math.max(0, Number(countRaw) || 0)
+    if (count === 0) {
+      form.employees = []
+      return
+    }
+    while (form.employees.length < count) {
+      form.employees.push({ full_name: '', phone: '' })
+    }
+    if (form.employees.length > count) {
+      form.employees = form.employees.slice(0, count)
+    }
+  },
+  { immediate: true }
+)
 
 onMounted(async () => {
   try {
@@ -145,6 +181,19 @@ const nextStep = (): void => {
     if (!String(form.business_hours || '').trim()) {
       error.value = 'Indica el horario del negocio'
       return
+    }
+    if (form.employees_count > 0) {
+      for (let i = 0; i < form.employees.length; i += 1) {
+        const e = form.employees[i]
+        if (!String(e.full_name || '').trim()) {
+          error.value = `Falta el nombre del empleado ${i + 1}`
+          return
+        }
+        if (!String(e.phone || '').trim()) {
+          error.value = `Falta el teléfono del empleado ${i + 1}`
+          return
+        }
+      }
     }
   }
   if (step.value === 2) {
@@ -178,6 +227,12 @@ const finishSetup = async () => {
       whatsapp_number: form.whatsapp_number || null,
       control_horario_policy: form.control_horario_policy || null,
       employees_count: form.employees_count,
+      employees: form.employees
+        .map((e) => ({
+          full_name: String(e.full_name || '').trim(),
+          phone: String(e.phone || '').trim(),
+        }))
+        .filter((e) => !!e.full_name),
       uses_tpv: !!form.uses_tpv,
       business_hours: String(form.business_hours || '').trim(),
     }, token)
@@ -213,6 +268,8 @@ input, textarea { width: 100%; background: #0a1228; color: #fff; border: 1px sol
 .check { display: flex; align-items: center; gap: 8px; }
 .check input { width: auto; }
 .channels { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
+.employees-grid { display: grid; gap: 10px; margin: 6px 0 8px; }
+.employees-grid label { display: grid; gap: 6px; }
 .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 button { background: #4f46e5; color: #fff; border: 0; border-radius: 8px; padding: 10px 14px; cursor: pointer; }
 button.ghost { background: #243056; }

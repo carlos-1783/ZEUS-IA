@@ -496,6 +496,7 @@ def onboarding_profile(
     current_user: User = Depends(get_current_active_user),
 ):
     from app.models.company import Company, UserCompany
+    from app.models.company_employee import CompanyEmployee
 
     try:
         link = (
@@ -548,6 +549,47 @@ def onboarding_profile(
             q["saved_via"] = "onboarding_profile"
             meta["onboarding_questionnaire"] = q
             meta["onboarding_questionnaire_completed"] = True
+
+        # Crear/actualizar empleados iniciales para Control Horario y TPV (sin tocar el titular U{user.id}-OWNER).
+        employees_rows = body.employees or []
+        if employees_rows:
+            seeded = 0
+            for idx, row in enumerate(employees_rows, start=1):
+                full_name = str(getattr(row, "full_name", "") or "").strip()
+                phone = str(getattr(row, "phone", "") or "").strip() or None
+                if not full_name:
+                    continue
+                employee_code = f"ONB-{idx:03d}"
+                ce = (
+                    db.query(CompanyEmployee)
+                    .filter(
+                        CompanyEmployee.company_id == company.id,
+                        CompanyEmployee.employee_code == employee_code,
+                    )
+                    .first()
+                )
+                if not ce:
+                    ce = CompanyEmployee(
+                        company_id=company.id,
+                        user_id=None,
+                        full_name=full_name[:255],
+                        role_title="employee",
+                        employee_code=employee_code,
+                        phone=phone[:32] if phone else None,
+                        is_active=True,
+                        source="onboarding_profile",
+                    )
+                else:
+                    ce.full_name = full_name[:255]
+                    ce.phone = phone[:32] if phone else None
+                    ce.role_title = ce.role_title or "employee"
+                    ce.is_active = True
+                    ce.source = ce.source or "onboarding_profile"
+                db.add(ce)
+                seeded += 1
+
+            if isinstance(meta.get("onboarding_questionnaire"), dict):
+                meta["onboarding_questionnaire"]["employees_seeded"] = seeded
 
         meta["operational_profile"] = op
         meta["onboarding_operational_profile_completed"] = True

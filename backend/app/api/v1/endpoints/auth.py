@@ -497,107 +497,117 @@ def onboarding_profile(
 ):
     from app.models.company import Company, UserCompany
 
-    link = (
-        db.query(UserCompany)
-        .filter(UserCompany.user_id == current_user.id)
-        .order_by(UserCompany.id.asc())
-        .first()
-    )
-    if not link:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Usuario sin empresa vinculada")
-    company = db.query(Company).filter(Company.id == link.company_id).first()
-    if not company:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Empresa no encontrada")
-
-    meta = company.metadata_ if isinstance(company.metadata_, dict) else {}
-    op = meta.get("operational_profile") if isinstance(meta.get("operational_profile"), dict) else {}
-
-    channels = body.social_channels or []
-    channels_norm = []
-    for c in channels:
-        s = str(c).strip().lower()
-        if s and s not in channels_norm:
-            channels_norm.append(s)
-    op["social_channels"] = channels_norm
-    links_raw = body.social_links or {}
-    links_norm: Dict[str, str] = {}
-    for ch in channels_norm:
-        v = str(links_raw.get(ch) or "").strip()
-        if not v:
-            continue
-        if not (v.startswith("http://") or v.startswith("https://")):
-            v = f"https://{v}"
-        links_norm[ch] = v
-    op["social_links"] = links_norm
-    op["whatsapp_number"] = (body.whatsapp_number or "").strip() or None
-    op["control_horario_policy"] = (body.control_horario_policy or "").strip() or None
-    op["updated_at"] = datetime.now(timezone.utc).isoformat()
-
-    # Permitir completar onboarding base desde este endpoint (fallback robusto si questionnaire falla en un entorno).
-    user_mutated = False
-    if body.employees_count is not None or body.uses_tpv is not None or body.business_hours:
-        q = meta.get("onboarding_questionnaire") if isinstance(meta.get("onboarding_questionnaire"), dict) else {}
-        if body.employees_count is not None:
-            q["employees_count"] = int(body.employees_count)
-            try:
-                setattr(current_user, "employees", int(body.employees_count))
-                user_mutated = True
-            except Exception:
-                logger.warning("onboarding_profile: no se pudo setear user.employees")
-        if body.uses_tpv is not None:
-            q["uses_tpv"] = bool(body.uses_tpv)
-            try:
-                raw = getattr(current_user, "tpv_config", None) or "{}"
-                cfg = json.loads(raw) if isinstance(raw, str) else dict(raw or {})
-                cfg["tables_enabled"] = bool(body.uses_tpv)
-                cfg["products_enabled"] = bool(body.uses_tpv)
-                current_user.tpv_config = json.dumps(cfg, ensure_ascii=False)
-                user_mutated = True
-            except Exception:
-                logger.warning("onboarding_profile: no se pudo actualizar tpv_config")
-        if body.business_hours:
-            q["business_hours"] = str(body.business_hours).strip()
-        q["completed_at"] = datetime.now(timezone.utc).isoformat()
-        q["saved_via"] = "onboarding_profile"
-        meta["onboarding_questionnaire"] = q
-        meta["onboarding_questionnaire_completed"] = True
-
-    meta["operational_profile"] = op
-    meta["onboarding_operational_profile_completed"] = True
-    company.metadata_ = meta
-    db.add(company)
-    if user_mutated:
-        db.add(current_user)
-
     try:
-        db.commit()
-    except Exception as commit_err:
-        db.rollback()
-        logger.exception("onboarding_profile commit failed; retrying metadata-only fallback: %s", commit_err)
-
-        # Fallback: persistir solo metadata de empresa para no bloquear la finalización por diferencias de esquema en User.
-        company_retry = db.query(Company).filter(Company.id == link.company_id).first()
-        if not company_retry:
+        link = (
+            db.query(UserCompany)
+            .filter(UserCompany.user_id == current_user.id)
+            .order_by(UserCompany.id.asc())
+            .first()
+        )
+        if not link:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Usuario sin empresa vinculada")
+        company = db.query(Company).filter(Company.id == link.company_id).first()
+        if not company:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Empresa no encontrada")
-        company_retry.metadata_ = meta
-        db.add(company_retry)
+
+        meta = company.metadata_ if isinstance(company.metadata_, dict) else {}
+        op = meta.get("operational_profile") if isinstance(meta.get("operational_profile"), dict) else {}
+
+        channels = body.social_channels or []
+        channels_norm = []
+        for c in channels:
+            s = str(c).strip().lower()
+            if s and s not in channels_norm:
+                channels_norm.append(s)
+        op["social_channels"] = channels_norm
+        links_raw = body.social_links or {}
+        links_norm: Dict[str, str] = {}
+        for ch in channels_norm:
+            v = str(links_raw.get(ch) or "").strip()
+            if not v:
+                continue
+            if not (v.startswith("http://") or v.startswith("https://")):
+                v = f"https://{v}"
+            links_norm[ch] = v
+        op["social_links"] = links_norm
+        op["whatsapp_number"] = (body.whatsapp_number or "").strip() or None
+        op["control_horario_policy"] = (body.control_horario_policy or "").strip() or None
+        op["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+        # Permitir completar onboarding base desde este endpoint (fallback robusto si questionnaire falla en un entorno).
+        user_mutated = False
+        if body.employees_count is not None or body.uses_tpv is not None or body.business_hours:
+            q = meta.get("onboarding_questionnaire") if isinstance(meta.get("onboarding_questionnaire"), dict) else {}
+            if body.employees_count is not None:
+                q["employees_count"] = int(body.employees_count)
+                try:
+                    setattr(current_user, "employees", int(body.employees_count))
+                    user_mutated = True
+                except Exception:
+                    logger.warning("onboarding_profile: no se pudo setear user.employees")
+            if body.uses_tpv is not None:
+                q["uses_tpv"] = bool(body.uses_tpv)
+                try:
+                    raw = getattr(current_user, "tpv_config", None) or "{}"
+                    cfg = json.loads(raw) if isinstance(raw, str) else dict(raw or {})
+                    cfg["tables_enabled"] = bool(body.uses_tpv)
+                    cfg["products_enabled"] = bool(body.uses_tpv)
+                    current_user.tpv_config = json.dumps(cfg, ensure_ascii=False)
+                    user_mutated = True
+                except Exception:
+                    logger.warning("onboarding_profile: no se pudo actualizar tpv_config")
+            if body.business_hours:
+                q["business_hours"] = str(body.business_hours).strip()
+            q["completed_at"] = datetime.now(timezone.utc).isoformat()
+            q["saved_via"] = "onboarding_profile"
+            meta["onboarding_questionnaire"] = q
+            meta["onboarding_questionnaire_completed"] = True
+
+        meta["operational_profile"] = op
+        meta["onboarding_operational_profile_completed"] = True
+        company.metadata_ = meta
+        db.add(company)
+        if user_mutated:
+            db.add(current_user)
+
         try:
             db.commit()
-            return {
-                "success": True,
-                "company_id": company_retry.id,
-                "operational_profile": op,
-                "fallback_mode": True,
-            }
-        except Exception as fallback_err:
+            return {"success": True, "company_id": company.id, "operational_profile": op}
+        except Exception as commit_err:
             db.rollback()
-            logger.exception("onboarding_profile metadata-only fallback failed: %s", fallback_err)
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No se pudo guardar la configuración en este entorno. Revisa migraciones de BD.",
-            )
+            logger.exception("onboarding_profile commit failed; retrying metadata-only fallback: %s", commit_err)
 
-    return {"success": True, "company_id": company.id, "operational_profile": op}
+            # Fallback: persistir solo metadata de empresa para no bloquear la finalización por diferencias de esquema en User.
+            company_retry = db.query(Company).filter(Company.id == link.company_id).first()
+            if not company_retry:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Empresa no encontrada")
+            company_retry.metadata_ = meta
+            db.add(company_retry)
+            try:
+                db.commit()
+                return {
+                    "success": True,
+                    "company_id": company_retry.id,
+                    "operational_profile": op,
+                    "fallback_mode": True,
+                }
+            except Exception as fallback_err:
+                db.rollback()
+                logger.exception("onboarding_profile metadata-only fallback failed: %s", fallback_err)
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No se pudo guardar la configuración en este entorno. Revisa migraciones de BD.",
+                )
+    except HTTPException:
+        raise
+    except Exception as fatal_err:
+        # Evita que el middleware global devuelva el 500 genérico en este flujo.
+        db.rollback()
+        logger.exception("onboarding_profile fatal unexpected error: %s", fatal_err)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se pudo completar la configuración inicial. Revisa el estado de la empresa y vuelve a intentar.",
+        )
 
 
 # Tiempo de validez del token de reset (1 hora)

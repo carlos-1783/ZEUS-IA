@@ -168,6 +168,48 @@ def _load_schedules_into_runtime(db: Session, user: User) -> None:
     control_horario_service.schedules = schedules_map
 
 
+def _backfill_default_schedules_if_missing(db: Session, user: User) -> None:
+    """
+    Autorreparación para empleados antiguos sin turnos: crea L-V 09:00-17:00.
+    """
+    company_ids = _company_ids_for_control_horario(db, user)
+    if not company_ids:
+        return
+    employees = (
+        db.query(CompanyEmployee)
+        .filter(
+            CompanyEmployee.company_id.in_(company_ids),
+            CompanyEmployee.is_active.is_(True),
+        )
+        .all()
+    )
+    created = 0
+    for emp in employees:
+        code = str(emp.employee_code)
+        has_any = (
+            db.query(EmployeeSchedule)
+            .filter(EmployeeSchedule.employee_id == code)
+            .first()
+        )
+        if has_any:
+            continue
+        for dow in range(5):  # L-V
+            db.add(
+                EmployeeSchedule(
+                    employee_id=code,
+                    user_id=user.id,
+                    day_of_week=dow,
+                    start_time="09:00",
+                    end_time="17:00",
+                    shift_type="completo",
+                    is_active=True,
+                )
+            )
+            created += 1
+    if created > 0:
+        db.commit()
+
+
 # Modelos Pydantic
 class CheckInRequest(BaseModel):
     employee_id: str = Field(..., description="ID del empleado")
@@ -228,6 +270,7 @@ async def _get_control_horario_info(current_user: User, db: Optional[Session] = 
             current = control_horario_service.business_profile
             if inferred and (current is None or current == HorarioBusinessProfile.OFICINA):
                 control_horario_service.set_business_profile(inferred, user.id)
+            _backfill_default_schedules_if_missing(db, user)
             _load_schedules_into_runtime(db, user)
         else:
             if not control_horario_service.business_profile:

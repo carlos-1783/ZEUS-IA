@@ -12,8 +12,10 @@ from app.db.session import get_db
 from app.core.auth import get_current_active_user
 from app.core.config import settings
 from app.models.user import User
-from app.models.company import UserCompany
+from app.models.company import Company, UserCompany
 from app.models.company_employee import CompanyEmployee
+from app.models.time_tracking import EmployeeSchedule
+from app.models.tpv_table import TPVTable
 from services.control_horario_service import (
     ControlHorarioService,
     HorarioBusinessProfile,
@@ -85,6 +87,87 @@ def _merge_roster_with_status(
     return out
 
 
+def _infer_profile_from_company_context(db: Session, user: User) -> Optional[HorarioBusinessProfile]:
+    """
+    Inferencia defensiva para entornos donde user.control_horario_business_profile no está poblado.
+    Prioriza tpv_business_profile y sector/nombre de empresa.
+    """
+    tpv = str(getattr(user, "tpv_business_profile", "") or "").strip().lower()
+    if tpv in ("restaurante", "bar"):
+        return HorarioBusinessProfile.RESTAURANTE
+    if tpv in ("tienda_minorista", "farmacia"):
+        return HorarioBusinessProfile.TIENDA
+    if tpv in ("peluquería", "centro_estético", "taller", "clínica", "servicios"):
+        return HorarioBusinessProfile.SERVICIOS
+
+    link = (
+        db.query(UserCompany)
+        .filter(UserCompany.user_id == user.id)
+        .order_by(UserCompany.id.asc())
+        .first()
+    )
+    company = db.query(Company).filter(Company.id == link.company_id).first() if link else None
+    if company and isinstance(company.metadata_, dict):
+        bt = str(company.metadata_.get("business_type", "") or "").strip().lower()
+        if bt in ("restaurant", "restaurante", "bar"):
+            return HorarioBusinessProfile.RESTAURANTE
+        if bt in ("retail", "tienda"):
+            return HorarioBusinessProfile.TIENDA
+        if bt in ("services", "servicios"):
+            return HorarioBusinessProfile.SERVICIOS
+
+    # Si existen mesas TPV, es hostelería casi seguro.
+    try:
+        if company and db.query(TPVTable).filter(TPVTable.company_id == company.id).count() > 0:
+            return HorarioBusinessProfile.RESTAURANTE
+    except Exception:
+        pass
+
+    sector = str(getattr(company, "sector", "") or "").strip().lower()
+    cname = str(getattr(company, "company_name", "") or "").strip().lower()
+    haystack = f"{sector} {cname}"
+    if any(k in haystack for k in ("restaurante", "bar", "cafeter")):
+        return HorarioBusinessProfile.RESTAURANTE
+    if any(k in haystack for k in ("tienda", "retail", "comercio")):
+        return HorarioBusinessProfile.TIENDA
+    if any(k in haystack for k in ("servicio", "oficina", "asesor", "consult")):
+        return HorarioBusinessProfile.SERVICIOS
+    return None
+
+
+def _load_schedules_into_runtime(db: Session, user: User) -> None:
+    """
+    Carga horarios desde BD al runtime del servicio para validación strict_check_in.
+    """
+    company_ids = _company_ids_for_control_horario(db, user)
+    if not company_ids:
+        control_horario_service.schedules = {}
+        return
+
+    rows = (
+        db.query(CompanyEmployee, EmployeeSchedule)
+        .join(EmployeeSchedule, EmployeeSchedule.employee_id == CompanyEmployee.employee_code)
+        .filter(
+            CompanyEmployee.company_id.in_(company_ids),
+            CompanyEmployee.is_active.is_(True),
+            EmployeeSchedule.is_active.is_(True),
+        )
+        .all()
+    )
+    schedules_map: Dict[str, List[Dict[str, Any]]] = {}
+    for _, sch in rows:
+        emp_id = str(sch.employee_id)
+        schedules_map.setdefault(emp_id, []).append(
+            {
+                "day_of_week": int(sch.day_of_week),
+                "start_time": str(sch.start_time),
+                "end_time": str(sch.end_time),
+                "shift_type": str(sch.shift_type or "completo"),
+            }
+        )
+    control_horario_service.schedules = schedules_map
+
+
 # Modelos Pydantic
 class CheckInRequest(BaseModel):
     employee_id: str = Field(..., description="ID del empleado")
@@ -139,6 +222,13 @@ async def _get_control_horario_info(current_user: User, db: Optional[Session] = 
                     control_horario_service.set_business_profile(HorarioBusinessProfile.OFICINA)
                 elif not control_horario_service.business_profile and is_superuser:
                     control_horario_service.set_business_profile(HorarioBusinessProfile.OFICINA)
+
+            # Corrección automática: si quedó en oficina por datos incompletos, inferir perfil real de negocio.
+            inferred = _infer_profile_from_company_context(db, user)
+            current = control_horario_service.business_profile
+            if inferred and (current is None or current == HorarioBusinessProfile.OFICINA):
+                control_horario_service.set_business_profile(inferred, user.id)
+            _load_schedules_into_runtime(db, user)
         else:
             if not control_horario_service.business_profile:
                 user_data = {
@@ -280,7 +370,7 @@ async def check_in(
     try:
         # Cargar perfil si no está cargado
         if not control_horario_service.business_profile:
-            await _get_control_horario_info(current_user)
+            await _get_control_horario_info(current_user, db)
         
         # Validar método
         try:

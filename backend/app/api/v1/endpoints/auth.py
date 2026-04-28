@@ -12,6 +12,7 @@ from app.core.auth import get_current_active_user, resolve_user_scopes
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import inspect
 
 from app.core import security
 from app.core.jwt_auth import create_access_token, create_refresh_token as create_jwt_refresh_token, get_current_user
@@ -497,6 +498,7 @@ def onboarding_profile(
 ):
     from app.models.company import Company, UserCompany
     from app.models.company_employee import CompanyEmployee
+    from app.models.time_tracking import EmployeeSchedule
 
     try:
         link = (
@@ -554,6 +556,12 @@ def onboarding_profile(
         employees_rows = body.employees or []
         if employees_rows:
             seeded = 0
+            schedules_seeded = 0
+            has_employee_schedules = False
+            try:
+                has_employee_schedules = inspect(db.get_bind()).has_table("employee_schedules")
+            except Exception:
+                has_employee_schedules = False
             for idx, row in enumerate(employees_rows, start=1):
                 full_name = str(getattr(row, "full_name", "") or "").strip()
                 phone = str(getattr(row, "phone", "") or "").strip() or None
@@ -589,8 +597,34 @@ def onboarding_profile(
                 db.add(ce)
                 seeded += 1
 
+                if has_employee_schedules:
+                    for dow in range(5):  # L-V
+                        ex = (
+                            db.query(EmployeeSchedule)
+                            .filter(
+                                EmployeeSchedule.employee_id == employee_code,
+                                EmployeeSchedule.day_of_week == dow,
+                            )
+                            .first()
+                        )
+                        if ex:
+                            continue
+                        db.add(
+                            EmployeeSchedule(
+                                employee_id=employee_code,
+                                user_id=current_user.id,
+                                day_of_week=dow,
+                                start_time="09:00",
+                                end_time="17:00",
+                                shift_type="completo",
+                                is_active=True,
+                            )
+                        )
+                        schedules_seeded += 1
+
             if isinstance(meta.get("onboarding_questionnaire"), dict):
                 meta["onboarding_questionnaire"]["employees_seeded"] = seeded
+                meta["onboarding_questionnaire"]["employee_schedules_seeded"] = schedules_seeded
 
         meta["operational_profile"] = op
         meta["onboarding_operational_profile_completed"] = True

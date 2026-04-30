@@ -362,8 +362,7 @@ def compute_hours_with_break_events(
             open_break = None
     if open_break is not None:
         break_h += max(0.0, (check_out_time - open_break).total_seconds() / 3600.0)
-    if break_h <= 0 and fallback_break_hours > 0:
-        break_h = fallback_break_hours
+    # Evitar restar pausas "por defecto": solo descontar pausas reales por eventos.
     net = max(0.0, gross - break_h)
     u = db.query(User).filter(User.id == user_id).first()
     exp = expected_hours_today_for_employee(db, u, str(record.employee_id)) if u else 8.0

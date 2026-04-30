@@ -485,9 +485,10 @@ class ControlHorarioService:
             time_diff = check_out_time - check_in_time
             hours_worked = time_diff.total_seconds() / 3600.0
             
-            # Aplicar pausa si está configurada
-            break_duration = self.config.get("break_duration_min", 0) / 60.0  # Convertir a horas
-            hours_worked = max(0, hours_worked - break_duration)
+            # La pausa se descuenta en la capa smart solo cuando hay eventos break-start/break-end.
+            # No aplicar descuento fijo por configuración para evitar false negatives (ej. 1h -> 0h).
+            break_duration = 0.0
+            hours_worked = max(0, hours_worked)
             
             # Actualizar registro
             record["check_out_time"] = check_out_time

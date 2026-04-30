@@ -885,7 +885,7 @@ async def check_out(
             .order_by(TimeTrackingRecord.id.desc())
             .first()
         )
-        fallback_break = float(rec.get("break_duration") or 0)
+        fallback_break = 0.0
         if active:
             net, brk, extra = sm.compute_hours_with_break_events(
                 db,

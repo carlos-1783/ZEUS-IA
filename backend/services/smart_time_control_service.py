@@ -33,6 +33,15 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """Normaliza datetime naive/aware a UTC aware para evitar restas inválidas."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def _today_range_utc() -> Tuple[datetime, datetime]:
     now = _utc_now()
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -201,9 +210,12 @@ def derive_work_status(
     if not active_row:
         return "outside"
     start, end = _today_range_utc()
-    if active_row.check_in_time < start or active_row.check_in_time >= end:
+    check_in_time = _ensure_utc(active_row.check_in_time)
+    if check_in_time is None:
+        return "outside"
+    if check_in_time < start or check_in_time >= end:
         return "inside" if active_row.status == RecordStatus.ACTIVE else "outside"
-    evs = events_for_record(db, user_id, active_row.id, active_row.check_in_time, end)
+    evs = events_for_record(db, user_id, active_row.id, check_in_time, end)
     last_type = "check-in"
     for e in evs:
         last_type = e.event_type
@@ -331,20 +343,22 @@ def compute_hours_with_break_events(
     """
     Retorna (hours_worked_neto, break_hours, extra_hours).
     """
-    cin = record.check_in_time
-    if cin.tzinfo is None:
-        cin = cin.replace(tzinfo=timezone.utc)
-    if check_out_time.tzinfo is None:
-        check_out_time = check_out_time.replace(tzinfo=timezone.utc)
+    cin = _ensure_utc(record.check_in_time)
+    check_out_time = _ensure_utc(check_out_time)
+    if cin is None or check_out_time is None:
+        return 0.0, 0.0, 0.0
     gross = max(0.0, (check_out_time - cin).total_seconds() / 3600.0)
     evs = events_for_record(db, user_id, record.id, cin, check_out_time)
     break_h = 0.0
     open_break: Optional[datetime] = None
     for e in evs:
+        ev_at = _ensure_utc(e.occurred_at)
+        if ev_at is None:
+            continue
         if e.event_type == "break-start":
-            open_break = e.occurred_at
+            open_break = ev_at
         elif e.event_type == "break-end" and open_break is not None:
-            break_h += max(0.0, (e.occurred_at - open_break).total_seconds() / 3600.0)
+            break_h += max(0.0, (ev_at - open_break).total_seconds() / 3600.0)
             open_break = None
     if open_break is not None:
         break_h += max(0.0, (check_out_time - open_break).total_seconds() / 3600.0)
@@ -536,10 +550,9 @@ def evaluate_alerts(
             .first()
         )
         if active and active.check_in_time:
-            if active.check_in_time.tzinfo is None:
-                ci = active.check_in_time.replace(tzinfo=timezone.utc)
-            else:
-                ci = active.check_in_time
+            ci = _ensure_utc(active.check_in_time)
+            if ci is None:
+                continue
             hours_open = (now - ci).total_seconds() / 3600.0
             if hours_open > max_hours_soft:
                 persist_alert(

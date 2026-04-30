@@ -5,12 +5,25 @@ Integración automática con AFRODITA, RAFAEL y TPV
 """
 
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta, time, timezone
 from enum import Enum
 import json
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_utc(dt: Any) -> datetime:
+    """
+    Normaliza datetimes naive/aware a UTC-aware para evitar restas inválidas.
+    """
+    if isinstance(dt, str):
+        dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+    if not isinstance(dt, datetime):
+        return datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 class HorarioBusinessProfile(str, Enum):
@@ -466,11 +479,8 @@ class ControlHorarioService:
             record = self.active_records[employee_id]
             
             # Calcular horas trabajadas
-            check_out_time = datetime.utcnow()
-            check_in_time = record["check_in_time"]
-            
-            if isinstance(check_in_time, str):
-                check_in_time = datetime.fromisoformat(check_in_time.replace('Z', '+00:00'))
+            check_out_time = datetime.now(timezone.utc)
+            check_in_time = _ensure_utc(record.get("check_in_time"))
             
             time_diff = check_out_time - check_in_time
             hours_worked = time_diff.total_seconds() / 3600.0

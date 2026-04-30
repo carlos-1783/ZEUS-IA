@@ -67,6 +67,19 @@ class Settings(BaseSettings):
     # Control horario: si true y hay user_companies pero 0 filas en company_employees, roster vacío (sin demo en front).
     # Si false, el roster BD se usa igualmente cuando exista al menos un empleado en BD para las empresas del usuario.
     CONTROL_HORARIO_DB_EMPLOYEES: bool = False
+    # Control horario inteligente (geofencing opcional, ratios TPV, alertas)
+    CONTROL_HORARIO_OFFICE_LAT: str = os.getenv("CONTROL_HORARIO_OFFICE_LAT", "").strip()
+    CONTROL_HORARIO_OFFICE_LON: str = os.getenv("CONTROL_HORARIO_OFFICE_LON", "").strip()
+    CONTROL_HORARIO_OFFICE_RADIUS_M: str = os.getenv("CONTROL_HORARIO_OFFICE_RADIUS_M", "").strip()
+    CONTROL_HORARIO_FAIL_IF_OUTSIDE_ZONE: bool = os.getenv(
+        "CONTROL_HORARIO_FAIL_IF_OUTSIDE_ZONE", "false"
+    ).lower() in ("true", "1", "yes")
+    CONTROL_HORARIO_ALERT_GRACE_MINUTES: int = int(os.getenv("CONTROL_HORARIO_ALERT_GRACE_MINUTES", "15") or "15")
+    CONTROL_HORARIO_TPV_HIGH_RATIO: float = float(os.getenv("CONTROL_HORARIO_TPV_HIGH_RATIO", "1.35") or "1.35")
+    CONTROL_HORARIO_TPV_LOW_RATIO: float = float(os.getenv("CONTROL_HORARIO_TPV_LOW_RATIO", "0.65") or "0.65")
+    SMART_TIME_CONTROL_LOG_AFRODITA: bool = os.getenv(
+        "SMART_TIME_CONTROL_LOG_AFRODITA", "true"
+    ).lower() in ("true", "1", "yes")
     IMAGE_STORAGE: str = os.getenv("IMAGE_STORAGE", "local")
     PERSEO_IMAGE_UPLOAD_DIR: str = os.getenv(
         "PERSEO_IMAGE_UPLOAD_DIR",

@@ -56,7 +56,8 @@ def create_tables():
             _migrate_user_columns()
             _migrate_document_approvals_columns()
             _migrate_tpv_company_columns()
-            
+            _migrate_smart_time_control_tables()
+
             # Importar modelos aquí para evitar importación circular
             from app.models.user import User, RefreshToken, PasswordResetToken
             from app.models.company import Company, UserCompany
@@ -71,6 +72,13 @@ def create_tables():
             from app.models.tpv_comanda_share import TPVComandaShare
             from app.models.tpv_table import TPVTable
             from app.models.company_employee import CompanyEmployee
+            from app.models.time_tracking import (
+                TimeTrackingRecord,
+                EmployeeSchedule,
+                AttendanceReport,
+                TimeControlEvent,
+                TimeControlAlert,
+            )
 
             Base.metadata.create_all(bind=engine)
             print("[DATABASE] [OK] Tablas creadas correctamente")
@@ -79,6 +87,7 @@ def create_tables():
             _migrate_user_columns()
             _migrate_document_approvals_columns()
             _migrate_tpv_company_columns()
+            _migrate_smart_time_control_tables()
             return  # Éxito, salir de la función
             
         except Exception as e:
@@ -362,6 +371,46 @@ def _migrate_tpv_company_columns():
         print(f"[MIGRATION] [WARN] No se pudo verificar tpv company_id: {e}")
         import traceback
         traceback.print_exc()
+
+
+def _migrate_smart_time_control_tables():
+    """Columna extra_hours y tablas time_control_* si faltan (SQLite / Postgres sin alembic)."""
+    from sqlalchemy import inspect, text
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+
+    try:
+        inspector = inspect(engine)
+        tables = set(inspector.get_table_names())
+        is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
+
+        if "time_tracking_records" in tables:
+            cols = {c["name"] for c in inspector.get_columns("time_tracking_records")}
+            if "extra_hours" not in cols:
+                try:
+                    with engine.begin() as conn:
+                        if is_postgres:
+                            conn.execute(
+                                text(
+                                    'ALTER TABLE time_tracking_records '
+                                    'ADD COLUMN IF NOT EXISTS "extra_hours" DOUBLE PRECISION'
+                                )
+                            )
+                        else:
+                            conn.execute(text("ALTER TABLE time_tracking_records ADD COLUMN extra_hours FLOAT"))
+                    print("[MIGRATION] [OK] time_tracking_records.extra_hours agregada")
+                except (OperationalError, ProgrammingError) as e:
+                    em = str(e).lower()
+                    if "duplicate column" in em or "already exists" in em:
+                        print("[MIGRATION] [INFO] extra_hours ya existe")
+                    else:
+                        print(f"[MIGRATION] [WARN] extra_hours: {e}")
+
+        if "time_control_events" not in tables:
+            print("[MIGRATION] [INFO] time_control_events se creará vía create_all si el modelo está importado")
+        if "time_control_alerts" not in tables:
+            print("[MIGRATION] [INFO] time_control_alerts se creará vía create_all si el modelo está importado")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] smart time control migrate: {e}")
 
 
 def _migrate_firewall_columns_legacy():

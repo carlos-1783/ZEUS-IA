@@ -57,6 +57,7 @@ class TimeTrackingRecord(Base):
     # Horas trabajadas
     hours_worked = Column(Float, nullable=True)  # Horas calculadas
     break_duration = Column(Float, default=0.0)  # Duración de pausas en horas
+    extra_hours = Column(Float, nullable=True)  # Por encima del turno teórico (ROCE / nómina)
     
     # Estado y validación
     status = Column(SQLEnum(RecordStatus), default=RecordStatus.ACTIVE, index=True, nullable=False)
@@ -123,6 +124,54 @@ class EmployeeSchedule(Base):
 
     def __repr__(self):
         return f"<EmployeeSchedule {self.employee_id} {self.day_of_week}>"
+
+
+class TimeControlEventType(str, enum.Enum):
+    """Eventos de línea de tiempo para control horario inteligente (compatible API: kebab-case)."""
+
+    CHECK_IN = "check-in"
+    CHECK_OUT = "check-out"
+    BREAK_START = "break-start"
+    BREAK_END = "break-end"
+
+
+class TimeControlEvent(Base):
+    """
+    Evento atómico de fichaje (auditoría, pausas, tiempo real).
+    No sustituye TimeTrackingRecord; lo complementa.
+    """
+
+    __tablename__ = "time_control_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    employee_id = Column(String(100), index=True, nullable=False)
+    record_id = Column(Integer, ForeignKey("time_tracking_records.id"), nullable=True, index=True)
+    event_type = Column(String(32), nullable=False, index=True)
+    occurred_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    location = Column(String(255), nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    device = Column(String(512), nullable=True)
+    payload = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class TimeControlAlert(Base):
+    """Alertas operativas (empleado sin fichar, exceso horas, staffing TPV, etc.)."""
+
+    __tablename__ = "time_control_alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    employee_id = Column(String(100), nullable=True, index=True)
+    alert_kind = Column(String(64), nullable=False, index=True)
+    message = Column(Text, nullable=False)
+    severity = Column(String(20), nullable=False, default="warning")  # info, warning, critical
+    details = Column(JSON, nullable=True)
+    notify_targets = Column(JSON, nullable=True)  # ["admin","manager"]
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    acknowledged_at = Column(DateTime(timezone=True), nullable=True)
 
 
 class AttendanceReport(Base):

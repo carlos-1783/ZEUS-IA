@@ -74,3 +74,43 @@ def emit_user_registered(
         )
     except Exception as e:
         logger.warning("event_user_registered activity log failed: %s", e)
+
+
+def emit_time_control_event(
+    *,
+    user_id: int,
+    user_email: Optional[str],
+    company_id: Optional[int],
+    employee_id: str,
+    event_type: str,
+    record_id: Optional[int],
+    details: Optional[Dict[str, Any]] = None,
+    db: Optional[Session] = None,
+) -> None:
+    """Trazabilidad Afrodita / RR.HH. a través del feed de actividades (no bloquea fichaje)."""
+    _ = db
+    payload: Dict[str, Any] = {
+        "user_id": user_id,
+        "company_id": company_id,
+        "employee_id": employee_id,
+        "event_type": event_type,
+        "record_id": record_id,
+    }
+    if details:
+        payload["details"] = details
+    logger.info("event time_control %s", payload)
+    try:
+        from services.activity_logger import ActivityLogger
+
+        ActivityLogger.log_activity(
+            agent_name="AFRODITA",
+            action_type="event_time_control",
+            action_description=f"Control horario: {event_type} ({employee_id})",
+            details=payload,
+            user_email=user_email,
+            status="completed",
+            priority="normal",
+            visible_to_client=True,
+        )
+    except Exception as e:
+        logger.warning("event_time_control activity log failed: %s", e)

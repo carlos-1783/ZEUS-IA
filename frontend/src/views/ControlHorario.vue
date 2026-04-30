@@ -78,8 +78,42 @@
             >
               🚪 {{ $t('controlHorario.checkOut') }}
             </button>
+            <button
+              type="button"
+              @click="handleBreakStart"
+              :disabled="!selectedEmployee || checking"
+              class="btn-break-start"
+            >
+              ☕ {{ $t('controlHorario.breakStart') }}
+            </button>
+            <button
+              type="button"
+              @click="handleBreakEnd"
+              :disabled="!selectedEmployee || checking"
+              class="btn-break-end"
+            >
+              ▶️ {{ $t('controlHorario.breakEnd') }}
+            </button>
           </div>
         </div>
+      </div>
+
+      <div v-if="smartAlerts.length" class="alerts-panel">
+        <h3>{{ $t('controlHorario.smartAlerts') }}</h3>
+        <ul class="alerts-list">
+          <li v-for="a in smartAlerts" :key="a.id" :class="'sev-' + (a.severity || 'warning')">
+            <span class="alert-kind">{{ a.kind }}</span>
+            {{ a.message }}
+          </li>
+        </ul>
+      </div>
+
+      <div v-if="smartTpv && smartTpv.ok" class="tpv-hint-panel">
+        <h3>{{ $t('controlHorario.tpvStaffing') }}</h3>
+        <p class="tpv-hint-text">
+          {{ $t('controlHorario.tpvWindow') }}: {{ smartTpv.window_sales_total }} € —
+          {{ staffingHintLabel(smartTpv.staffing_hint) }}
+        </p>
       </div>
 
       <!-- Panel de Estado Actual -->
@@ -92,7 +126,11 @@
             v-for="employee in employees"
             :key="employee.id"
             class="employee-status-card"
-            :class="{ 'status-inside': employee.status === 'inside', 'status-outside': employee.status === 'outside' }"
+            :class="{
+              'status-inside': employee.status === 'inside',
+              'status-outside': employee.status === 'outside',
+              'status-break': employee.status === 'on_break'
+            }"
           >
             <div class="employee-avatar">
               <span>{{ getInitials(employee.name) }}</span>
@@ -105,11 +143,17 @@
               <span v-if="employee.status === 'inside'" class="status-badge inside">
                 ✅ {{ $t('controlHorario.inside') }}
               </span>
+              <span v-else-if="employee.status === 'on_break'" class="status-badge break">
+                ☕ {{ $t('controlHorario.onBreak') }}
+              </span>
               <span v-else class="status-badge outside">
                 🚪 {{ $t('controlHorario.outside') }}
               </span>
               <p v-if="employee.check_in_time" class="check-in-time">
                 {{ formatTime(employee.check_in_time) }}
+              </p>
+              <p v-if="todayHoursFor(employee.id) != null" class="today-hours">
+                {{ $t('controlHorario.completedToday') }}: {{ todayHoursFor(employee.id) }}h
               </p>
             </div>
           </div>
@@ -131,11 +175,14 @@
           >
             <div class="history-icon">
               <span v-if="record.type === 'check-in'">✅</span>
-              <span v-else>🚪</span>
+              <span v-else-if="record.type === 'check-out'">🚪</span>
+              <span v-else-if="record.type === 'break-start'">☕</span>
+              <span v-else-if="record.type === 'break-end'">▶️</span>
+              <span v-else>📋</span>
             </div>
             <div class="history-info">
               <p class="history-employee">{{ getEmployeeName(record.employee_id) }}</p>
-              <p class="history-type">{{ record.type === 'check-in' ? $t('controlHorario.checkIn') : $t('controlHorario.checkOut') }}</p>
+              <p class="history-type">{{ historyTypeLabel(record.type) }}</p>
               <p class="history-time">{{ formatTime(record.time) }}</p>
             </div>
             <div class="history-method">
@@ -190,7 +237,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
@@ -210,6 +257,10 @@ const selectedEmployee = ref('')
 const selectedMethod = ref('qr')
 const todayRecords = ref([])
 const currentLocation = ref({ latitude: null, longitude: null })
+const smartAlerts = ref([])
+const smartTpv = ref(null)
+const todayHoursByEmployee = ref({})
+let refreshTimer = null
 
 // Métodos disponibles
 const availableMethods = computed(() => [
@@ -222,7 +273,9 @@ const availableMethods = computed(() => [
 
 // Computed
 const employeesInside = computed(() => {
-  return employees.value.filter(emp => emp.status === 'inside').length
+  return employees.value.filter(
+    (emp) => emp.status === 'inside' || emp.status === 'on_break'
+  ).length
 })
 
 const attendanceRate = computed(() => {
@@ -314,6 +367,14 @@ const checkStatus = async () => {
     }
 
     todayRecords.value = recordsData
+
+    const smart = bootstrap?.smart || {}
+    smartAlerts.value = Array.isArray(smart.alerts) ? smart.alerts : []
+    smartTpv.value = smart.tpv && typeof smart.tpv === 'object' ? smart.tpv : null
+    todayHoursByEmployee.value =
+      smart.today_completed_hours_by_employee && typeof smart.today_completed_hours_by_employee === 'object'
+        ? smart.today_completed_hours_by_employee
+        : {}
     
   } catch (err) {
     console.error('Error cargando estado:', err)
@@ -348,6 +409,80 @@ const handleCheckIn = async () => {
     
   } catch (err) {
     console.error('Error en check-in:', err)
+    alert(`❌ ${err.message}`)
+  } finally {
+    checking.value = false
+  }
+}
+
+const todayHoursFor = (empId) => {
+  const v = todayHoursByEmployee.value[String(empId)]
+  if (v == null || Number.isNaN(Number(v))) return null
+  return Math.round(Number(v) * 100) / 100
+}
+
+const staffingHintLabel = (hint) => {
+  if (hint === 'increase_staffing') return t('controlHorario.tpvHintIncrease')
+  if (hint === 'reduce_staffing') return t('controlHorario.tpvHintReduce')
+  return t('controlHorario.tpvHintSteady')
+}
+
+const historyTypeLabel = (type) => {
+  if (type === 'check-in') return t('controlHorario.checkIn')
+  if (type === 'check-out') return t('controlHorario.checkOut')
+  if (type === 'break-start') return t('controlHorario.breakStart')
+  if (type === 'break-end') return t('controlHorario.breakEnd')
+  return type || ''
+}
+
+const handleBreakStart = async () => {
+  if (!selectedEmployee.value) return
+  checking.value = true
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) throw new Error('No hay token')
+    const api = (await import('@/services/api')).default
+    const data = await api.post(
+      '/api/v1/control-horario/break-start',
+      {
+        employee_id: selectedEmployee.value,
+        location: currentLocation.value.latitude ? 'GPS Location' : null,
+        latitude: currentLocation.value.latitude,
+        longitude: currentLocation.value.longitude
+      },
+      token
+    )
+    alert(`✅ ${data.message || 'OK'}`)
+    await checkStatus()
+  } catch (err) {
+    console.error(err)
+    alert(`❌ ${err.message}`)
+  } finally {
+    checking.value = false
+  }
+}
+
+const handleBreakEnd = async () => {
+  if (!selectedEmployee.value) return
+  checking.value = true
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) throw new Error('No hay token')
+    const api = (await import('@/services/api')).default
+    const data = await api.post(
+      '/api/v1/control-horario/break-end',
+      {
+        employee_id: selectedEmployee.value,
+        location: currentLocation.value.latitude ? 'GPS Location' : null,
+        latitude: currentLocation.value.latitude,
+        longitude: currentLocation.value.longitude
+      },
+      token
+    )
+    alert(`✅ ${data.message || 'OK'}`)
+    await checkStatus()
+  } catch (err) {
+    console.error(err)
     alert(`❌ ${err.message}`)
   } finally {
     checking.value = false
@@ -454,6 +589,16 @@ const getMethodLabel = (method) => {
 
 onMounted(() => {
   checkStatus()
+  refreshTimer = window.setInterval(() => {
+    if (!loading.value && !checking.value) checkStatus()
+  }, 45000)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
 })
 </script>
 
@@ -608,13 +753,20 @@ onMounted(() => {
 }
 
 .check-buttons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
+.check-buttons > button {
+  flex: 1 1 42%;
+  min-width: 140px;
+}
+
 .btn-check-in,
-.btn-check-out {
+.btn-check-out,
+.btn-break-start,
+.btn-break-end {
   padding: 16px;
   border: none;
   border-radius: 8px;
@@ -642,10 +794,88 @@ onMounted(() => {
   background: #dc2626;
 }
 
+.btn-break-start {
+  background: #f59e0b;
+  color: white;
+}
+
+.btn-break-start:hover:not(:disabled) {
+  background: #d97706;
+}
+
+.btn-break-end {
+  background: #6366f1;
+  color: white;
+}
+
+.btn-break-end:hover:not(:disabled) {
+  background: #4f46e5;
+}
+
 .btn-check-in:disabled,
-.btn-check-out:disabled {
+.btn-check-out:disabled,
+.btn-break-start:disabled,
+.btn-break-end:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.alerts-panel,
+.tpv-hint-panel {
+  grid-column: 1 / -1;
+  background: white;
+  padding: 20px 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.alerts-panel h3,
+.tpv-hint-panel h3 {
+  margin: 0 0 12px;
+  color: #1f2937;
+}
+
+.alerts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.alerts-list li {
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: #374151;
+}
+
+.alerts-list li.sev-critical {
+  background: #fef2f2;
+  border-left: 4px solid #dc2626;
+}
+
+.alerts-list li.sev-warning {
+  background: #fffbeb;
+  border-left: 4px solid #f59e0b;
+}
+
+.alerts-list li.sev-info {
+  background: #eff6ff;
+  border-left: 4px solid #3b82f6;
+}
+
+.alert-kind {
+  display: inline-block;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-right: 8px;
+}
+
+.tpv-hint-text {
+  margin: 0;
+  color: #4b5563;
+  font-size: 15px;
 }
 
 .status-panel,
@@ -685,6 +915,17 @@ onMounted(() => {
 
 .employee-status-card.status-outside {
   border-color: #e5e7eb;
+}
+
+.employee-status-card.status-break {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.today-hours {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #6b7280;
 }
 
 .employee-avatar {
@@ -729,6 +970,11 @@ onMounted(() => {
 .status-badge.outside {
   background: #fee2e2;
   color: #991b1b;
+}
+
+.status-badge.break {
+  background: #fef3c7;
+  color: #92400e;
 }
 
 .check-in-time {
@@ -833,7 +1079,10 @@ onMounted(() => {
   }
   
   .check-buttons {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+  .check-buttons > button {
+    flex: 1 1 100%;
   }
 }
 </style>

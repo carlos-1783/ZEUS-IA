@@ -1,7 +1,7 @@
 """
 Endpoints para el módulo de Control Horario Universal
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
@@ -16,6 +16,7 @@ from app.models.company import Company, UserCompany
 from app.models.company_employee import CompanyEmployee
 from app.models.time_tracking import EmployeeSchedule
 from app.models.tpv_table import TPVTable
+from app.models.time_tracking import TimeTrackingRecord, RecordStatus
 from services.control_horario_service import (
     ControlHorarioService,
     HorarioBusinessProfile,
@@ -84,6 +85,74 @@ def _merge_roster_with_status(
                 "check_in_time": st.get("check_in_time"),
             }
         )
+    return out
+
+
+def _today_range_utc() -> tuple[datetime, datetime]:
+    now = datetime.now(timezone.utc)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=1)
+    return start, end
+
+
+def _active_status_from_db(db: Session, user: User) -> Dict[str, Any]:
+    start, end = _today_range_utc()
+    rows = (
+        db.query(TimeTrackingRecord)
+        .filter(
+            TimeTrackingRecord.user_id == user.id,
+            TimeTrackingRecord.status == RecordStatus.ACTIVE,
+            TimeTrackingRecord.check_in_time >= start,
+            TimeTrackingRecord.check_in_time < end,
+        )
+        .all()
+    )
+    employees = {
+        str(r.employee_id): {
+            "status": "inside",
+            "check_in_time": r.check_in_time.isoformat() if r.check_in_time else None,
+            "check_in_method": str(r.check_in_method.value if hasattr(r.check_in_method, "value") else r.check_in_method),
+        }
+        for r in rows
+    }
+    return {"success": True, "employees": employees, "total_active": len(rows)}
+
+
+def _today_records_from_db(db: Session, user: User) -> List[Dict[str, Any]]:
+    start, end = _today_range_utc()
+    rows = (
+        db.query(TimeTrackingRecord)
+        .filter(
+            TimeTrackingRecord.user_id == user.id,
+            TimeTrackingRecord.check_in_time >= start,
+            TimeTrackingRecord.check_in_time < end,
+        )
+        .order_by(TimeTrackingRecord.check_in_time.desc())
+        .limit(100)
+        .all()
+    )
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        out.append(
+            {
+                "id": f"in-{r.id}",
+                "employee_id": str(r.employee_id),
+                "type": "check-in",
+                "time": r.check_in_time.isoformat() if r.check_in_time else None,
+                "method": str(r.check_in_method.value if hasattr(r.check_in_method, "value") else (r.check_in_method or "code")),
+            }
+        )
+        if r.check_out_time:
+            out.append(
+                {
+                    "id": f"out-{r.id}",
+                    "employee_id": str(r.employee_id),
+                    "type": "check-out",
+                    "time": r.check_out_time.isoformat(),
+                    "method": str(r.check_out_method.value if hasattr(r.check_out_method, "value") else (r.check_out_method or "code")),
+                }
+            )
+    out.sort(key=lambda x: str(x.get("time") or ""), reverse=True)
     return out
 
 
@@ -350,7 +419,7 @@ async def get_control_horario_bootstrap(
     Devuelve info + status + employees en una sola respuesta.
     """
     info = await _get_control_horario_info(current_user, db)
-    status_data = control_horario_service.get_current_status()
+    status_data = _active_status_from_db(db, current_user)
     raw_status_employees = status_data.get("employees") or {}
     if not isinstance(raw_status_employees, dict):
         raw_status_employees = {}
@@ -372,6 +441,7 @@ async def get_control_horario_bootstrap(
         "success": True,
         "info": info,
         "status": status_data,
+        "today_records": _today_records_from_db(db, current_user),
         "employees": employees_payload,
         "total_active": status_data.get("total_active", 0),
         "employees_source": employees_source,
@@ -392,7 +462,15 @@ async def get_control_horario_status(
         await _get_control_horario_info(current_user, db)
     
     # Obtener estado
-    status_data = control_horario_service.get_current_status(employee_id)
+    status_data = _active_status_from_db(db, current_user)
+    if employee_id:
+        emps = status_data.get("employees", {}) or {}
+        status_data = {
+            "success": True,
+            "employee_id": employee_id,
+            "status": emps.get(employee_id, {}).get("status", "outside"),
+            "check_in_time": emps.get(employee_id, {}).get("check_in_time"),
+        }
     
     return {
         "success": True,
@@ -439,6 +517,52 @@ async def check_in(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=result.get("error", "Error al registrar entrada")
             )
+
+        # Persistencia en BD para soportar reinicios y historial real.
+        rec = result.get("record", {}) or {}
+        check_in_time = rec.get("check_in_time")
+        if isinstance(check_in_time, str):
+            check_in_time = datetime.fromisoformat(check_in_time.replace("Z", "+00:00"))
+        if not isinstance(check_in_time, datetime):
+            check_in_time = datetime.now(timezone.utc)
+
+        existing = (
+            db.query(TimeTrackingRecord)
+            .filter(
+                TimeTrackingRecord.user_id == current_user.id,
+                TimeTrackingRecord.employee_id == request.employee_id,
+                TimeTrackingRecord.status == RecordStatus.ACTIVE,
+            )
+            .order_by(TimeTrackingRecord.id.desc())
+            .first()
+        )
+        if existing:
+            existing.check_in_time = check_in_time
+            existing.check_in_method = rec.get("check_in_method", request.method)
+            existing.check_in_location = rec.get("check_in_location") or request.location
+            existing.check_in_latitude = rec.get("check_in_latitude") or request.latitude
+            existing.check_in_longitude = rec.get("check_in_longitude") or request.longitude
+            existing.irregularities = rec.get("irregularities") or []
+            existing.irregularities_count = int(rec.get("irregularities_count") or 0)
+            existing.is_late_check_in = bool(rec.get("is_late_check_in") or False)
+            db.add(existing)
+        else:
+            db.add(
+                TimeTrackingRecord(
+                    employee_id=request.employee_id,
+                    user_id=current_user.id,
+                    check_in_time=check_in_time,
+                    check_in_method=rec.get("check_in_method", request.method),
+                    check_in_location=rec.get("check_in_location") or request.location,
+                    check_in_latitude=rec.get("check_in_latitude") or request.latitude,
+                    check_in_longitude=rec.get("check_in_longitude") or request.longitude,
+                    status=RecordStatus.ACTIVE,
+                    irregularities=rec.get("irregularities") or [],
+                    irregularities_count=int(rec.get("irregularities_count") or 0),
+                    is_late_check_in=bool(rec.get("is_late_check_in") or False),
+                )
+            )
+        db.commit()
         
         # Sincronizar con AFRODITA si está disponible
         if control_horario_service.afrodita_integration:
@@ -495,6 +619,55 @@ async def check_out(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=result.get("error", "Error al registrar salida")
             )
+
+        # Cierre persistente en BD para estado/historial consistente.
+        rec = result.get("record", {}) or {}
+        check_out_time = rec.get("check_out_time")
+        if isinstance(check_out_time, str):
+            check_out_time = datetime.fromisoformat(check_out_time.replace("Z", "+00:00"))
+        if not isinstance(check_out_time, datetime):
+            check_out_time = datetime.now(timezone.utc)
+
+        active = (
+            db.query(TimeTrackingRecord)
+            .filter(
+                TimeTrackingRecord.user_id == current_user.id,
+                TimeTrackingRecord.employee_id == request.employee_id,
+                TimeTrackingRecord.status == RecordStatus.ACTIVE,
+            )
+            .order_by(TimeTrackingRecord.id.desc())
+            .first()
+        )
+        if active:
+            active.check_out_time = check_out_time
+            active.check_out_method = rec.get("check_out_method", request.method or "code")
+            active.check_out_location = rec.get("check_out_location") or request.location
+            active.check_out_latitude = rec.get("check_out_latitude") or request.latitude
+            active.check_out_longitude = rec.get("check_out_longitude") or request.longitude
+            active.hours_worked = float(result.get("hours_worked") or rec.get("hours_worked") or 0)
+            active.break_duration = float(rec.get("break_duration") or 0)
+            active.status = RecordStatus.COMPLETED
+            active.irregularities = rec.get("irregularities") or []
+            active.irregularities_count = int(rec.get("irregularities_count") or 0)
+            active.is_early_check_out = bool(rec.get("is_early_check_out") or False)
+            db.add(active)
+        else:
+            db.add(
+                TimeTrackingRecord(
+                    employee_id=request.employee_id,
+                    user_id=current_user.id,
+                    check_in_time=datetime.now(timezone.utc) - timedelta(hours=float(result.get("hours_worked") or 0)),
+                    check_out_time=check_out_time,
+                    check_in_method="code",
+                    check_out_method=rec.get("check_out_method", request.method or "code"),
+                    status=RecordStatus.COMPLETED,
+                    hours_worked=float(result.get("hours_worked") or 0),
+                    break_duration=float(rec.get("break_duration") or 0),
+                    irregularities=rec.get("irregularities") or [],
+                    irregularities_count=int(rec.get("irregularities_count") or 0),
+                )
+            )
+        db.commit()
         
         # Sincronizar con RAFAEL para cálculo de nóminas
         if control_horario_service.rafael_integration and result.get("hours_worked"):
@@ -668,13 +841,14 @@ async def get_reports(
         # Por ahora, devolver datos básicos
         # En producción, consultaría la base de datos
         
-        status_data = control_horario_service.get_current_status(employee_id)
+        status_data = _active_status_from_db(db, current_user)
         
         return {
             "success": True,
             "reports": {
                 "current_status": status_data,
-                "active_records": len(control_horario_service.active_records)
+                "active_records": status_data.get("total_active", 0),
+                "today_records": _today_records_from_db(db, current_user),
             }
         }
         

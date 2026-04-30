@@ -36,7 +36,7 @@
               @click="selectedMethod = method.id"
               class="method-btn"
               :class="{ active: selectedMethod === method.id }"
-              :disabled="!config.methods_enabled || !config.methods_enabled.includes(method.id)"
+              :disabled="!isMethodEnabled(method.id)"
             >
               <span class="method-icon">{{ method.icon }}</span>
               <span class="method-label">{{ method.label }}</span>
@@ -230,6 +230,14 @@ const attendanceRate = computed(() => {
   return Math.round((employeesInside.value / employees.value.length) * 100)
 })
 
+const isMethodEnabled = (methodId) => {
+  const enabled = Array.isArray(config.value?.methods_enabled) ? config.value.methods_enabled : []
+  if (enabled.includes(methodId)) return true
+  // Compatibilidad backend: on_site equivale a location en UI.
+  if (methodId === 'location' && enabled.includes('on_site')) return true
+  return false
+}
+
 // Métodos
 const goToDashboard = () => {
   router.push('/dashboard')
@@ -252,9 +260,17 @@ const checkStatus = async () => {
     const statusData = bootstrap?.status || {}
     const employeesData = Array.isArray(bootstrap?.employees) ? bootstrap.employees : []
     const employeesSource = bootstrap?.employees_source || 'memory'
+    const recordsData = Array.isArray(bootstrap?.today_records) ? bootstrap.today_records : []
 
     businessProfile.value = infoData.business_profile
     config.value = infoData.config || {}
+    if (!isMethodEnabled(selectedMethod.value)) {
+      const enabled = Array.isArray(config.value?.methods_enabled) ? config.value.methods_enabled : []
+      const normalized = enabled.includes('on_site')
+        ? enabled.map((m) => (m === 'on_site' ? 'location' : m))
+        : enabled
+      selectedMethod.value = normalized[0] || 'qr'
+    }
 
     // Actualizar empleados con estado
     const employeesMap = {}
@@ -296,6 +312,8 @@ const checkStatus = async () => {
         }
       })
     }
+
+    todayRecords.value = recordsData
     
   } catch (err) {
     console.error('Error cargando estado:', err)

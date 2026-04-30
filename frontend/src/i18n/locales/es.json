@@ -256,6 +256,8 @@
     "retry": "Reintentar",
     "selectMethod": "Selecciona método de fichaje",
     "employee": "Empleado",
+    "employeePhone": "Móvil del empleado",
+    "employeePhonePlaceholder": "Ej. 600123123",
     "selectEmployee": "Selecciona un empleado",
     "checkIn": "Entrada",
     "checkOut": "Salida",

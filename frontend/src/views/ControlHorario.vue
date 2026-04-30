@@ -55,6 +55,15 @@
               </option>
             </select>
           </div>
+          <div class="employee-selector">
+            <label>{{ $t('controlHorario.employeePhone') }}</label>
+            <input
+              v-model="employeePhone"
+              type="tel"
+              class="employee-select"
+              :placeholder="$t('controlHorario.employeePhonePlaceholder')"
+            />
+          </div>
 
           <div v-if="selectedMethod === 'location' && config.gps_required" class="location-info">
             <p>📍 {{ $t('controlHorario.gpsRequired') }}</p>
@@ -254,6 +263,7 @@ const businessProfile = ref(null)
 const config = ref({})
 const employees = ref([])
 const selectedEmployee = ref('')
+const employeePhone = ref('')
 const selectedMethod = ref('qr')
 const todayRecords = ref([])
 const currentLocation = ref({ latitude: null, longitude: null })
@@ -395,6 +405,7 @@ const handleCheckIn = async () => {
     const api = (await import('@/services/api')).default
     const data = await api.post('/api/v1/control-horario/check-in', {
       employee_id: selectedEmployee.value,
+      employee_phone: employeePhone.value,
       method: selectedMethod.value,
       location: currentLocation.value.latitude ? 'GPS Location' : null,
       latitude: currentLocation.value.latitude,
@@ -446,6 +457,7 @@ const handleBreakStart = async () => {
       '/api/v1/control-horario/break-start',
       {
         employee_id: selectedEmployee.value,
+        employee_phone: employeePhone.value,
         location: currentLocation.value.latitude ? 'GPS Location' : null,
         latitude: currentLocation.value.latitude,
         longitude: currentLocation.value.longitude
@@ -473,6 +485,7 @@ const handleBreakEnd = async () => {
       '/api/v1/control-horario/break-end',
       {
         employee_id: selectedEmployee.value,
+        employee_phone: employeePhone.value,
         location: currentLocation.value.latitude ? 'GPS Location' : null,
         latitude: currentLocation.value.latitude,
         longitude: currentLocation.value.longitude
@@ -500,6 +513,7 @@ const handleCheckOut = async () => {
     const api = (await import('@/services/api')).default
     const data = await api.post('/api/v1/control-horario/check-out', {
       employee_id: selectedEmployee.value,
+      employee_phone: employeePhone.value,
       method: selectedMethod.value || 'code',
       location: currentLocation.value.latitude ? 'GPS Location' : null,
       latitude: currentLocation.value.latitude,

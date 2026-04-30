@@ -9,6 +9,7 @@ from decimal import Decimal
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 import logging
+import re
 from pathlib import Path
 from datetime import datetime, date, timedelta, timezone
 import secrets
@@ -19,6 +20,7 @@ from app.core.auth import get_current_active_user, get_current_active_superuser
 from app.core.config import settings
 from app.models.user import User
 from app.models.company import UserCompany
+from app.models.company_employee import CompanyEmployee
 from app.models.erp import TPVProduct, FiscalProfile, TPVSale, TPVSaleItem
 from app.models.reservation import Reservation
 from app.models.tpv_comanda_share import TPVComandaShare
@@ -87,6 +89,56 @@ def _primary_company_id(db: Session, user: User) -> Optional[int]:
         .first()
     )
     return uc.company_id if uc else None
+
+
+def _normalize_phone(phone: Optional[str]) -> str:
+    return re.sub(r"\D+", "", str(phone or ""))
+
+
+def _tpv_requires_phone_verification(current_user: User, svc: TPVService) -> bool:
+    profile_raw = str(getattr(current_user, "tpv_business_profile", "") or "").strip().lower()
+    if profile_raw in {"bar", "restaurante", "restaurant"}:
+        return True
+    return str(getattr(svc.business_profile, "value", "")).lower() in {"restaurante", "bar", "restaurant"}
+
+
+def _verify_tpv_employee_phone_or_raise(
+    db: Session,
+    *,
+    current_user: User,
+    employee_id: Optional[str],
+    employee_phone: Optional[str],
+    svc: TPVService,
+) -> None:
+    if not _tpv_requires_phone_verification(current_user, svc):
+        return
+    if not employee_id:
+        raise HTTPException(status_code=400, detail="En bar/restaurante debe indicar employee_id en TPV.")
+    phone = _normalize_phone(employee_phone)
+    if not phone:
+        raise HTTPException(
+            status_code=400,
+            detail="En bar/restaurante debe validar el móvil del empleado para operar TPV.",
+        )
+    company_ids = _company_ids_for_user(db, current_user)
+    if not company_ids:
+        raise HTTPException(status_code=400, detail="No hay empresas vinculadas al usuario.")
+    emp = (
+        db.query(CompanyEmployee)
+        .filter(
+            CompanyEmployee.company_id.in_(company_ids),
+            CompanyEmployee.employee_code == str(employee_id),
+            CompanyEmployee.is_active.is_(True),
+        )
+        .first()
+    )
+    if not emp:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado para esta empresa.")
+    db_phone = _normalize_phone(emp.phone)
+    if not db_phone:
+        raise HTTPException(status_code=400, detail="Empleado sin móvil registrado en RRHH.")
+    if phone != db_phone:
+        raise HTTPException(status_code=403, detail="Verificación de empleado fallida: móvil incorrecto.")
 
 
 def _can_manage_tpv_tables(user: User) -> bool:
@@ -168,6 +220,7 @@ class AddToCartRequest(BaseModel):
 class ProcessSaleRequest(BaseModel):
     payment_method: str  # efectivo, tarjeta, bizum, transferencia
     employee_id: Optional[str] = None
+    employee_phone: Optional[str] = None
     terminal_id: Optional[str] = None
     customer_data: Optional[Dict[str, Any]] = None
     cart_items: Optional[List[Dict[str, Any]]] = None  # Carrito del frontend (opcional)
@@ -182,6 +235,7 @@ class GenerateInvoiceRequest(BaseModel):
 class CloseRegisterRequest(BaseModel):
     terminal_id: str
     employee_id: str
+    employee_phone: Optional[str] = None
     initial_cash: float
     final_cash: float
 
@@ -896,6 +950,13 @@ async def process_sale(
             raise HTTPException(status_code=400, detail=str(e))
 
     svc = _tpv_service_for_user(db, current_user)
+    _verify_tpv_employee_phone_or_raise(
+        db,
+        current_user=current_user,
+        employee_id=request.employee_id,
+        employee_phone=request.employee_phone,
+        svc=svc,
+    )
     logger.info(
         "TPV venta intento user_id=%s email=%s company_ids=%s lineas=%s",
         current_user.id,
@@ -980,6 +1041,13 @@ async def close_register(
 ):
     """Cerrar caja del terminal"""
     svc = _tpv_service_for_user(db, current_user)
+    _verify_tpv_employee_phone_or_raise(
+        db,
+        current_user=current_user,
+        employee_id=request.employee_id,
+        employee_phone=request.employee_phone,
+        svc=svc,
+    )
     result = svc.close_register(
         terminal_id=request.terminal_id,
         employee_id=request.employee_id,

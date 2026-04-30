@@ -256,6 +256,8 @@
     "retry": "Retry",
     "selectMethod": "Select check-in method",
     "employee": "Employee",
+    "employeePhone": "Employee mobile",
+    "employeePhonePlaceholder": "e.g. 600123123",
     "selectEmployee": "Select an employee",
     "checkIn": "Check In",
     "checkOut": "Check Out",

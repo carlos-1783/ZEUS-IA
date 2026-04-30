@@ -2,6 +2,7 @@
 Endpoints para el módulo de Control Horario Universal
 """
 from datetime import datetime, timedelta, timezone
+import re
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
@@ -35,6 +36,66 @@ control_horario_service = ControlHorarioService()
 def _company_ids_for_control_horario(db: Session, user: User) -> List[int]:
     rows = db.query(UserCompany.company_id).filter(UserCompany.user_id == user.id).all()
     return [r[0] for r in rows]
+
+
+def _normalize_phone(phone: Optional[str]) -> str:
+    return re.sub(r"\D+", "", str(phone or ""))
+
+
+def _requires_phone_verification(user: User) -> bool:
+    tpv_profile = str(getattr(user, "tpv_business_profile", "") or "").strip().lower()
+    if tpv_profile in {"bar", "restaurante", "restaurant"}:
+        return True
+    current = control_horario_service.business_profile
+    return current == HorarioBusinessProfile.RESTAURANTE
+
+
+def _verify_employee_phone_or_raise(
+    db: Session,
+    *,
+    user: User,
+    employee_id: str,
+    employee_phone: Optional[str],
+) -> None:
+    if not _requires_phone_verification(user):
+        return
+    phone = _normalize_phone(employee_phone)
+    if not phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verificación requerida: indique el móvil del empleado.",
+        )
+    company_ids = _company_ids_for_control_horario(db, user)
+    if not company_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No hay empresas asociadas al usuario para validar empleados.",
+        )
+    emp = (
+        db.query(CompanyEmployee)
+        .filter(
+            CompanyEmployee.company_id.in_(company_ids),
+            CompanyEmployee.is_active.is_(True),
+            CompanyEmployee.employee_code == str(employee_id),
+        )
+        .first()
+    )
+    if not emp:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Empleado no encontrado para esta empresa.",
+        )
+    db_phone = _normalize_phone(emp.phone)
+    if not db_phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Empleado {employee_id} sin móvil registrado. Configúralo en RRHH.",
+        )
+    if phone != db_phone:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Verificación de identidad fallida: móvil no coincide.",
+        )
 
 
 def _employees_roster_from_db(db: Session, user: User) -> Optional[List[Dict[str, Any]]]:
@@ -324,6 +385,7 @@ def _backfill_default_schedules_if_missing(db: Session, user: User) -> None:
 class CheckInRequest(BaseModel):
     employee_id: str = Field(..., description="ID del empleado")
     method: str = Field(..., description="Método de fichaje: face, qr, code, location, remote")
+    employee_phone: Optional[str] = Field(None, description="Móvil del empleado para verificación")
     location: Optional[str] = Field(None, description="Ubicación del fichaje")
     latitude: Optional[float] = Field(None, description="Latitud GPS")
     longitude: Optional[float] = Field(None, description="Longitud GPS")
@@ -332,6 +394,7 @@ class CheckInRequest(BaseModel):
 class CheckOutRequest(BaseModel):
     employee_id: str = Field(..., description="ID del empleado")
     method: Optional[str] = Field(None, description="Método de fichaje: face, qr, code, location, remote")
+    employee_phone: Optional[str] = Field(None, description="Móvil del empleado para verificación")
     location: Optional[str] = Field(None, description="Ubicación del fichaje")
     latitude: Optional[float] = Field(None, description="Latitud GPS")
     longitude: Optional[float] = Field(None, description="Longitud GPS")
@@ -339,6 +402,7 @@ class CheckOutRequest(BaseModel):
 
 class BreakToggleRequest(BaseModel):
     employee_id: str = Field(..., description="ID del empleado")
+    employee_phone: Optional[str] = Field(None, description="Móvil del empleado para verificación")
     location: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -569,6 +633,12 @@ async def check_in(
     try:
         if not control_horario_service.business_profile:
             await _get_control_horario_info(current_user, db)
+        _verify_employee_phone_or_raise(
+            db,
+            user=current_user,
+            employee_id=request.employee_id,
+            employee_phone=request.employee_phone,
+        )
 
         sm.sync_runtime_active_records(db, current_user, control_horario_service)
 
@@ -762,6 +832,12 @@ async def check_out(
     try:
         if not control_horario_service.business_profile:
             await _get_control_horario_info(current_user, db)
+        _verify_employee_phone_or_raise(
+            db,
+            user=current_user,
+            employee_id=request.employee_id,
+            employee_phone=request.employee_phone,
+        )
 
         sm.sync_runtime_active_records(db, current_user, control_horario_service)
 
@@ -924,6 +1000,12 @@ async def break_start(
     try:
         if not control_horario_service.business_profile:
             await _get_control_horario_info(current_user, db)
+        _verify_employee_phone_or_raise(
+            db,
+            user=current_user,
+            employee_id=request.employee_id,
+            employee_phone=request.employee_phone,
+        )
         sm.sync_runtime_active_records(db, current_user, control_horario_service)
         active = (
             db.query(TimeTrackingRecord)
@@ -987,6 +1069,12 @@ async def break_end(
     try:
         if not control_horario_service.business_profile:
             await _get_control_horario_info(current_user, db)
+        _verify_employee_phone_or_raise(
+            db,
+            user=current_user,
+            employee_id=request.employee_id,
+            employee_phone=request.employee_phone,
+        )
         sm.sync_runtime_active_records(db, current_user, control_horario_service)
         active = (
             db.query(TimeTrackingRecord)

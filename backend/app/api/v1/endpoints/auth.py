@@ -21,6 +21,8 @@ from app.core.security import get_password_hash, verify_password
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.user import User, RefreshToken, PasswordResetToken
+from app.models.company_employee import CompanyEmployee
+from app.models.company import UserCompany
 from app.schemas.token import (
     Token,
     TokenRefresh,
@@ -852,6 +854,25 @@ async def read_current_user(
         # role: owner = due?o (n?minas, todo); employee = solo TPV + control horario
         role = getattr(current_user, "role", None) or "owner"
 
+        company_ids = [
+            r[0]
+            for r in db.query(UserCompany.company_id)
+            .filter(UserCompany.user_id == current_user.id)
+            .all()
+        ]
+        ce = None
+        if company_ids:
+            ce = (
+                db.query(CompanyEmployee)
+                .filter(
+                    CompanyEmployee.user_id == current_user.id,
+                    CompanyEmployee.company_id.in_(company_ids),
+                    CompanyEmployee.is_active.is_(True),
+                )
+                .order_by(CompanyEmployee.id.asc())
+                .first()
+            )
+
         # Devolver en el formato esperado por el frontend
         return {
             "status": "success",
@@ -862,7 +883,14 @@ async def read_current_user(
                 "is_active": current_user.is_active,
                 "is_superuser": current_user.is_superuser,
                 "role": role,
-                "created_at": current_user.created_at.isoformat() if current_user.created_at else None
+                "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+                "company_employee": None
+                if not ce
+                else {
+                    "employee_code": ce.employee_code,
+                    "full_name": ce.full_name,
+                    "role_title": ce.role_title,
+                },
             }
         }
     except Exception as e:

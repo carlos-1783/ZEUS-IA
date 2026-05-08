@@ -126,6 +126,8 @@
     "tablesMode": "Tables Mode",
     "viewProducts": "View Products",
     "refresh": "Refresh",
+    "operatorSession": "Operator",
+    "changeOperator": "Log out",
     "backToDashboard": "Back to Dashboard",
     "categories": {
       "all": "All"

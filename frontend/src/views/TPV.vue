@@ -32,6 +32,13 @@
         <button @click="checkStatus" class="header-btn">
           🔄 {{ $t('tpv.refresh') }}
         </button>
+        <div v-if="tpvOperatorDisplay" class="tpv-operator-badge" :title="tpvOperatorCode || undefined">
+          <span class="tpv-operator-badge__k">{{ $t('tpv.operatorSession') }}</span>
+          <span class="tpv-operator-badge__n">{{ tpvOperatorDisplay }}</span>
+        </div>
+        <button type="button" class="header-btn" @click="logoutTpvSession">
+          {{ $t('tpv.changeOperator') }}
+        </button>
         <div v-if="businessProfile" class="business-profile-badge">
           🏢 {{ getBusinessProfileLabel(businessProfile) }}
         </div>
@@ -430,51 +437,6 @@
             ></textarea>
           </div>
 
-          <div
-            v-if="(tpvState === TPV_STATES.PRE_PAYMENT || tpvState === TPV_STATES.PAYMENT) && requiresEmployeeForSale"
-            class="tpv-employee-verify"
-          >
-            <h4 class="tpv-employee-verify__title">Empleado que cobra</h4>
-            <p v-if="requiresEmployeePhoneVerification" class="tpv-employee-verify__hint">
-              Obligatorio en hostelería: el <strong>móvil</strong> debe coincidir con el registrado en RRHH para este empleado.
-            </p>
-            <div class="tpv-employee-verify__row">
-              <label for="tpv-emp-select">Seleccionar</label>
-              <select
-                id="tpv-emp-select"
-                v-model="tpvPaymentEmployeeId"
-                class="tpv-employee-verify__select"
-              >
-                <option value="">— Elegir o escribir código —</option>
-                <option v-for="e in tpvEmployeeList" :key="e.id" :value="e.id">
-                  {{ e.name }} ({{ e.id }})
-                </option>
-              </select>
-            </div>
-            <div class="tpv-employee-verify__row">
-              <label for="tpv-emp-code">Código empleado</label>
-              <input
-                id="tpv-emp-code"
-                v-model="tpvPaymentEmployeeId"
-                type="text"
-                class="tpv-employee-verify__input"
-                placeholder="Ej. EMP-001"
-                autocomplete="off"
-              />
-            </div>
-            <div v-if="requiresEmployeePhoneVerification" class="tpv-employee-verify__row">
-              <label for="tpv-emp-phone">Móvil del empleado</label>
-              <input
-                id="tpv-emp-phone"
-                v-model="tpvPaymentEmployeePhone"
-                type="tel"
-                inputmode="tel"
-                class="tpv-employee-verify__input"
-                placeholder="Mismo número que en RRHH"
-                autocomplete="off"
-              />
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -615,10 +577,8 @@ const paymentNote = ref('') // Nota adicional para el pago
 const cartFeedback = ref(null) // Feedback visual del carrito
 const cartFeedbackTimeout = ref(null) // Timeout para ocultar feedback
 const lastSaleTicketId = ref(null) // ID del último ticket vendido
-/** Listado empleados (control horario) para selector en cobro bar/restaurante */
-const tpvEmployeeList = ref([])
-const tpvPaymentEmployeeId = ref('')
-const tpvPaymentEmployeePhone = ref('')
+/** Operador según sesión + RRHH (GET /api/v1/tpv → tpv_operator) */
+const tpvOperator = ref(null)
 
 // TPV Configuration from backend
 const businessProfile = ref(null)
@@ -759,20 +719,22 @@ const filteredProducts = computed(() => {
   return products.value.filter(p => p.category === selectedCategory.value)
 })
 
-/** Misma regla que backend `_tpv_requires_phone_verification` + config.requires_employee */
-const normalizePhoneDigits = (s) => String(s || '').replace(/\D/g, '')
-
-const requiresEmployeePhoneVerification = computed(() => {
-  if (typeof tpvConfig.value?.requires_employee_phone_verification === 'boolean') {
-    return tpvConfig.value.requires_employee_phone_verification
+const tpvOperatorDisplay = computed(() => {
+  const o = tpvOperator.value
+  if (o?.full_name) {
+    return o.employee_code ? `${o.full_name} · ${o.employee_code}` : o.full_name
   }
-  const p = String(businessProfile.value || '').toLowerCase().trim()
-  return p === 'bar' || p === 'restaurante' || p === 'restaurant'
+  const u = authStore.user
+  if (u?.full_name) return u.full_name
+  if (u?.email) return u.email
+  return ''
 })
 
-const requiresEmployeeForSale = computed(
-  () => requiresEmployeePhoneVerification.value || !!tpvConfig.value?.requires_employee
-)
+const tpvOperatorCode = computed(() => {
+  const o = tpvOperator.value
+  if (o?.employee_code) return String(o.employee_code)
+  return ''
+})
 
 const safeNumber = (value) => {
   const n = typeof value === 'number' ? value : Number(value)
@@ -941,6 +903,15 @@ const loginRedirectPath = () => {
     ? route.fullPath
     : '/tpv'
   return `/login?redirect=${encodeURIComponent(p)}`
+}
+
+const logoutTpvSession = async () => {
+  try {
+    await authStore.logout()
+  } catch (e) {
+    console.warn('TPV logout:', e)
+  }
+  router.push(loginRedirectPath())
 }
 
 const normalizeUserMe = (raw) => {
@@ -1374,25 +1345,6 @@ const checkStatus = async () => {
   }
 }
 
-const loadTpvEmployees = async () => {
-  try {
-    const token = await getAuthToken()
-    if (!token) return
-    const api = (await import('@/services/api')).default
-    const data = await api.get('/api/v1/control-horario/bootstrap', token)
-    const list = Array.isArray(data?.employees) ? data.employees : []
-    tpvEmployeeList.value = list
-      .map((e) => ({
-        id: String(e.id ?? '').trim(),
-        name: (e.name || e.id || '').trim(),
-      }))
-      .filter((e) => e.id)
-  } catch (e) {
-    console.warn('TPV: lista de empleados no disponible', e)
-    tpvEmployeeList.value = []
-  }
-}
-
 const loadTPVConfig = async () => {
   try {
     const token = await getAuthToken()
@@ -1416,13 +1368,12 @@ const loadTPVConfig = async () => {
     const data = await api.get('/api/v1/tpv', token)
     
     businessProfile.value = data.business_profile
+    tpvOperator.value = data.tpv_operator || null
     tpvConfig.value = {
       ...(data.config || {}),
       requires_employee_phone_verification: !!data.requires_employee_phone_verification,
     }
     console.log('✅ Configuración TPV cargada:', businessProfile.value, tpvConfig.value)
-
-    await loadTpvEmployees()
     
     // Si no hay business_profile, mostrar configuración inicial
     if (!businessProfile.value) {
@@ -1750,8 +1701,6 @@ const resetTPV = () => {
   cart.value = []
   tpvState.value = TPV_STATES.CART
   paymentNote.value = ''
-  tpvPaymentEmployeeId.value = ''
-  tpvPaymentEmployeePhone.value = ''
   selectedTable.value = null
   lastSaleTicketId.value = null
   cartFeedback.value = null
@@ -1968,21 +1917,6 @@ const processPayment = async () => {
       return
     }
     
-    // Validar según configuración (bar/restaurante: employee_id + móvil obligatorios en API)
-    const empId = String(tpvPaymentEmployeeId.value || '').trim()
-    const phoneDigits = normalizePhoneDigits(tpvPaymentEmployeePhone.value)
-
-    if (requiresEmployeeForSale.value && !empId) {
-      warning('Indica el empleado que cobra (código o selección).')
-      return
-    }
-    if (requiresEmployeePhoneVerification.value) {
-      if (!phoneDigits || phoneDigits.length < 9) {
-        warning('Indica el móvil del empleado (debe coincidir con RRHH).')
-        return
-      }
-    }
-
     let customerData = null
     if (tpvConfig.value.requires_customer_data) {
       const customerName = prompt('Nombre del cliente (requerido):')
@@ -2001,8 +1935,6 @@ const processPayment = async () => {
     
     const saleData = {
       payment_method: 'efectivo', // Por defecto, se puede cambiar después
-      employee_id: empId || null,
-      employee_phone: requiresEmployeePhoneVerification.value ? phoneDigits : undefined,
       customer_data: customerData,
       terminal_id: null,
       note: paymentNote.value || null, // Añadir nota si existe
@@ -2620,6 +2552,8 @@ onUnmounted(() => {
 
 .header-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
 }
 
@@ -3286,57 +3220,35 @@ onUnmounted(() => {
   color: rgba(255, 255, 255, 0.4);
 }
 
-.tpv-employee-verify {
-  margin-top: 14px;
-  padding: 12px;
-  border-radius: 10px;
-  background: rgba(15, 23, 42, 0.55);
-  border: 1px solid rgba(148, 163, 184, 0.35);
-}
-
-.tpv-employee-verify__title {
-  margin: 0 0 8px;
-  font-size: 0.95rem;
-  color: rgba(255, 255, 255, 0.92);
-}
-
-.tpv-employee-verify__hint {
-  margin: 0 0 10px;
-  font-size: 0.78rem;
-  line-height: 1.35;
-  color: rgba(226, 232, 240, 0.85);
-}
-
-.tpv-employee-verify__row {
-  margin-bottom: 10px;
-}
-
-.tpv-employee-verify__row:last-child {
-  margin-bottom: 0;
-}
-
-.tpv-employee-verify__row label {
-  display: block;
-  margin-bottom: 4px;
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.65);
-}
-
-.tpv-employee-verify__select,
-.tpv-employee-verify__input {
-  width: 100%;
-  padding: 8px 10px;
+.tpv-operator-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 6px 14px;
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid rgba(16, 185, 129, 0.45);
   border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  background: rgba(255, 255, 255, 0.96);
-  color: #0f172a;
-  font-size: 0.9rem;
+  color: #fff;
+  margin-left: 8px;
+  max-width: min(280px, 40vw);
 }
 
-.tpv-employee-verify__select:focus,
-.tpv-employee-verify__input:focus {
-  outline: none;
-  border-color: rgba(59, 130, 246, 0.8);
+.tpv-operator-badge__k {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(226, 232, 240, 0.85);
+  font-weight: 600;
+}
+
+.tpv-operator-badge__n {
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 /* Barra "Mesa X" cuando hay mesa seleccionada para anotar */

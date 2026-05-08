@@ -9,7 +9,6 @@ from decimal import Decimal
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 import logging
-import re
 from pathlib import Path
 from datetime import datetime, date, timedelta, timezone
 import secrets
@@ -20,13 +19,18 @@ from app.core.auth import get_current_active_user, get_current_active_superuser
 from app.core.config import settings
 from app.models.user import User
 from app.models.company import UserCompany
-from app.models.company_employee import CompanyEmployee
 from app.models.erp import TPVProduct, FiscalProfile, TPVSale, TPVSaleItem
 from app.models.reservation import Reservation
 from app.models.tpv_comanda_share import TPVComandaShare
 from app.models.tpv_table import TPVTable
 from services.tpv_service import BusinessProfile, PaymentMethod, TPVService, create_tpv_service
 from services.global_company_bootstrap import ensure_user_company_link_for_operations
+from services.tpv_operator_context import (
+    company_ids_for_user as _company_ids_for_user,
+    primary_company_id as _primary_company_id,
+    resolve_tpv_operator_employee_code,
+    tpv_operator_badge_payload,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -74,71 +78,6 @@ def _users_share_company(db: Session, user_a_id: int, user_b_id: int) -> bool:
     ca = {r[0] for r in db.query(UserCompany.company_id).filter(UserCompany.user_id == user_a_id).all()}
     cb = {r[0] for r in db.query(UserCompany.company_id).filter(UserCompany.user_id == user_b_id).all()}
     return bool(ca & cb)
-
-
-def _company_ids_for_user(db: Session, user: User) -> List[int]:
-    rows = db.query(UserCompany.company_id).filter(UserCompany.user_id == user.id).all()
-    return [r[0] for r in rows]
-
-
-def _primary_company_id(db: Session, user: User) -> Optional[int]:
-    uc = (
-        db.query(UserCompany)
-        .filter(UserCompany.user_id == user.id)
-        .order_by(UserCompany.id.asc())
-        .first()
-    )
-    return uc.company_id if uc else None
-
-
-def _normalize_phone(phone: Optional[str]) -> str:
-    return re.sub(r"\D+", "", str(phone or ""))
-
-
-def _tpv_requires_phone_verification(current_user: User, svc: TPVService) -> bool:
-    profile_raw = str(getattr(current_user, "tpv_business_profile", "") or "").strip().lower()
-    if profile_raw in {"bar", "restaurante", "restaurant"}:
-        return True
-    return str(getattr(svc.business_profile, "value", "")).lower() in {"restaurante", "bar", "restaurant"}
-
-
-def _verify_tpv_employee_phone_or_raise(
-    db: Session,
-    *,
-    current_user: User,
-    employee_id: Optional[str],
-    employee_phone: Optional[str],
-    svc: TPVService,
-) -> None:
-    if not _tpv_requires_phone_verification(current_user, svc):
-        return
-    if not employee_id:
-        raise HTTPException(status_code=400, detail="En bar/restaurante debe indicar employee_id en TPV.")
-    phone = _normalize_phone(employee_phone)
-    if not phone:
-        raise HTTPException(
-            status_code=400,
-            detail="En bar/restaurante debe validar el móvil del empleado para operar TPV.",
-        )
-    company_ids = _company_ids_for_user(db, current_user)
-    if not company_ids:
-        raise HTTPException(status_code=400, detail="No hay empresas vinculadas al usuario.")
-    emp = (
-        db.query(CompanyEmployee)
-        .filter(
-            CompanyEmployee.company_id.in_(company_ids),
-            CompanyEmployee.employee_code == str(employee_id),
-            CompanyEmployee.is_active.is_(True),
-        )
-        .first()
-    )
-    if not emp:
-        raise HTTPException(status_code=404, detail="Empleado no encontrado para esta empresa.")
-    db_phone = _normalize_phone(emp.phone)
-    if not db_phone:
-        raise HTTPException(status_code=400, detail="Empleado sin móvil registrado en RRHH.")
-    if phone != db_phone:
-        raise HTTPException(status_code=403, detail="Verificación de empleado fallida: móvil incorrecto.")
 
 
 def _can_manage_tpv_tables(user: User) -> bool:
@@ -219,8 +158,6 @@ class AddToCartRequest(BaseModel):
 
 class ProcessSaleRequest(BaseModel):
     payment_method: str  # efectivo, tarjeta, bizum, transferencia
-    employee_id: Optional[str] = None
-    employee_phone: Optional[str] = None
     terminal_id: Optional[str] = None
     customer_data: Optional[Dict[str, Any]] = None
     cart_items: Optional[List[Dict[str, Any]]] = None  # Carrito del frontend (opcional)
@@ -234,8 +171,6 @@ class GenerateInvoiceRequest(BaseModel):
 
 class CloseRegisterRequest(BaseModel):
     terminal_id: str
-    employee_id: str
-    employee_phone: Optional[str] = None
     initial_cash: float
     final_cash: float
 
@@ -278,10 +213,9 @@ async def _get_tpv_info(db: Session, current_user: User):
         "success": True,
         "service": "TPV Universal Enterprise",
         "version": "1.0.0",
-        # Debe coincidir con _verify_tpv_employee_phone_or_raise en POST /sale (bar/restaurante).
-        "requires_employee_phone_verification": _tpv_requires_phone_verification(
-            current_user, svc
-        ),
+        # Hostelería: el móvil se valida en servidor (ficha RRHH); no entrada manual en cliente.
+        "requires_employee_phone_verification": False,
+        "tpv_operator": tpv_operator_badge_payload(db, current_user, svc),
         "user": {
             "email": current_user.email,
             "is_superuser": is_superuser,
@@ -954,25 +888,20 @@ async def process_sale(
             raise HTTPException(status_code=400, detail=str(e))
 
     svc = _tpv_service_for_user(db, current_user)
-    _verify_tpv_employee_phone_or_raise(
-        db,
-        current_user=current_user,
-        employee_id=request.employee_id,
-        employee_phone=request.employee_phone,
-        svc=svc,
-    )
+    effective_employee_id = resolve_tpv_operator_employee_code(db, current_user, svc)
     logger.info(
-        "TPV venta intento user_id=%s email=%s company_ids=%s lineas=%s",
+        "TPV venta intento user_id=%s email=%s company_ids=%s lineas=%s employee_code=%s",
         current_user.id,
         getattr(current_user, "email", None),
         company_ids,
         len(cart_lines),
+        effective_employee_id,
     )
     try:
         result = svc.process_sale(
             payment_method=payment_method,
             cart_lines=cart_lines,
-            employee_id=request.employee_id,
+            employee_id=effective_employee_id,
             terminal_id=request.terminal_id,
             customer_data=request.customer_data,
             user_id=current_user.id,
@@ -1045,16 +974,10 @@ async def close_register(
 ):
     """Cerrar caja del terminal"""
     svc = _tpv_service_for_user(db, current_user)
-    _verify_tpv_employee_phone_or_raise(
-        db,
-        current_user=current_user,
-        employee_id=request.employee_id,
-        employee_phone=request.employee_phone,
-        svc=svc,
-    )
+    effective_employee_id = resolve_tpv_operator_employee_code(db, current_user, svc)
     result = svc.close_register(
         terminal_id=request.terminal_id,
-        employee_id=request.employee_id,
+        employee_id=effective_employee_id,
         initial_cash=request.initial_cash,
         final_cash=request.final_cash,
     )

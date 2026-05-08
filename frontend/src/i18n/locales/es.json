@@ -126,6 +126,8 @@
     "tablesMode": "Modo Mesas",
     "viewProducts": "Ver Productos",
     "refresh": "Actualizar",
+    "operatorSession": "Operador",
+    "changeOperator": "Cerrar sesión",
     "backToDashboard": "Volver al Dashboard",
     "categories": {
       "all": "Todos"

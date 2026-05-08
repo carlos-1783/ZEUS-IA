@@ -307,3 +307,56 @@ body {
 .col-8 { flex: 0 0 66.666667%; }
 .col-9 { flex: 0 0 75%; }
 .col-12 { flex: 0 0 100%; }
+
+// ---------------------------------------------------------------------------
+// Paneles de herramientas de agentes (Afrodita, Perseo, Rafael, Justicia, Thalos)
+// Contraste explícito: sin esto, inputs/herencia pueden dejar texto ilegible en prod.
+// Solo afecta a section.tools-panel (único en esos 5 componentes).
+// ---------------------------------------------------------------------------
+.tools-panel .tool-card input:not([type='checkbox']):not([type='radio']),
+.tools-panel .tool-card textarea,
+.tools-panel .tool-card select {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+  caret-color: #0f172a;
+}
+
+.tools-panel .tool-card input::placeholder,
+.tools-panel .tool-card textarea::placeholder {
+  color: #475569 !important;
+  opacity: 1 !important;
+}
+
+.tools-panel .tool-card select option {
+  color: #0f172a;
+  background-color: #ffffff;
+}
+
+.tools-panel .tool-card textarea {
+  /* spellcheck subrayado sigue visible; el texto debe ser oscuro sobre blanco */
+  -webkit-text-fill-color: #0f172a;
+}
+
+.tools-panel .tool-card input:-webkit-autofill,
+.tools-panel .tool-card textarea:-webkit-autofill,
+.tools-panel .tool-card select:-webkit-autofill {
+  -webkit-text-fill-color: #0f172a !important;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+}
+
+/* Títulos / labels: misma herencia color:#fff del dashboard sobre fondos claros */
+.tools-panel header h4,
+.tools-panel header p {
+  color: #0f172a !important;
+}
+
+.tools-panel .tool-card h5,
+.tools-panel .tool-card label {
+  color: #0f172a !important;
+}
+
+.tools-panel .tool-card input::selection,
+.tools-panel .tool-card textarea::selection {
+  background: #93c5fd;
+  color: #0f172a;
+}

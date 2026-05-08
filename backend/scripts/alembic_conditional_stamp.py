@@ -8,12 +8,36 @@ Bases nuevas (sin `users`): no toca nada; las migraciones crean el esquema con n
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
-import sys
+
+# No usar `python -m alembic`: en /app la carpeta local `alembic/` (migraciones) oculta el paquete
+# instalado y Python no encuentra __main__.py.
+
+
+def _alembic_cwd() -> str:
+    """Directorio con alembic.ini (WORKDIR del contenedor = backend)."""
+    env_root = (os.environ.get("ZEUS_APP_ROOT") or "").strip()
+    if env_root and os.path.isfile(os.path.join(env_root, "alembic.ini")):
+        return env_root
+    cwd = os.getcwd()
+    if os.path.isfile(os.path.join(cwd, "alembic.ini")):
+        return cwd
+    # Si el script se lanza desde otro cwd
+    here = os.path.dirname(os.path.abspath(__file__))
+    backend_root = os.path.dirname(here)
+    if os.path.isfile(os.path.join(backend_root, "alembic.ini")):
+        return backend_root
+    return cwd
 
 
 def _run_stamp_head() -> int:
-    return subprocess.call([sys.executable, "-m", "alembic", "stamp", "head"])
+    exe = shutil.which("alembic")
+    if not exe:
+        print("alembic_conditional_stamp: no hay ejecutable 'alembic' en PATH")
+        return 1
+    cwd = _alembic_cwd()
+    return subprocess.call([exe, "stamp", "head"], cwd=cwd)
 
 
 def main() -> int:

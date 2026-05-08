@@ -2639,13 +2639,13 @@ onUnmounted(() => {
   border-color: rgba(59, 130, 246, 0.6);
 }
 
-/* ZEUS_TPV_CART_ULTRA_MINIMAL_003: 4fr 1fr, terminal bancaria */
+/* Carrito prioridad: ~48% ancho mín; productos compactos a la izquierda */
 .tpv-main-interface {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 4fr minmax(0, 300px);
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) minmax(380px, 1.08fr);
+  gap: 10px;
   margin: 0;
   overflow: hidden;
 }
@@ -2688,15 +2688,15 @@ onUnmounted(() => {
 
 .products-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 15px;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 12px;
 }
 
 .product-card {
   background: rgba(255, 255, 255, 0.05);
   border: 2px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
-  padding: 15px;
+  padding: 12px;
   transition: all 0.3s;
   text-align: center;
   user-select: none;
@@ -2755,7 +2755,7 @@ onUnmounted(() => {
 
 .product-image-file {
   width: 100%;
-  height: 120px;
+  height: 110px;
   object-fit: cover;
   border-radius: 8px;
   margin-bottom: 8px;
@@ -2780,43 +2780,6 @@ onUnmounted(() => {
   color: #fca5a5;
   padding: 6px 12px;
   border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.85rem;
-  transition: all 0.2s;
-}
-
-.btn-remove-image:hover {
-  background: rgba(239, 68, 68, 0.5);
-  transform: scale(1.05);
-}
-
-.product-image-file {
-  width: 100%;
-  height: 150px;
-  object-fit: cover;
-  border-radius: 8px;
-  margin-bottom: 10px;
-}
-
-.image-preview {
-  margin-top: 10px;
-  text-align: center;
-}
-
-.image-preview img {
-  max-width: 200px;
-  max-height: 200px;
-  border-radius: 8px;
-  border: 2px solid rgba(59, 130, 246, 0.5);
-  margin-bottom: 10px;
-}
-
-.btn-remove-image {
-  padding: 6px 12px;
-  background: rgba(239, 68, 68, 0.3);
-  border: 1px solid rgba(239, 68, 68, 0.5);
-  border-radius: 6px;
-  color: #fca5a5;
   cursor: pointer;
   font-size: 0.85rem;
   transition: all 0.2s;
@@ -2865,19 +2828,18 @@ onUnmounted(() => {
   margin-top: 5px;
 }
 
-/* ZEUS_TPV_CART_ULTRA_MINIMAL_003: carrito máx 300px, gap 6px */
+/* Panel cobro: ancho según grid (sin cap 300px); scroll interno */
 .tpv-right-panel {
   min-height: 0;
   min-width: 0;
   width: 100%;
-  max-width: 300px;
+  max-width: none;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   overflow: hidden;
 }
 
-/* ZEUS_TPV_CART_ULTRA_MINIMAL_003: padding 10px, gap 6px, radius 8px */
 .cart-panel {
   flex: 1;
   min-height: 0;
@@ -2886,11 +2848,11 @@ onUnmounted(() => {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-left: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  padding: 10px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 6px;
+  gap: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   overflow: hidden;
 }

@@ -80,8 +80,8 @@
 
       <div class="metrics-mini">
         <div class="metric-item">
-          <div class="metric-value">98%</div>
-          <div class="metric-label">System Health</div>
+          <div class="metric-value">{{ backendHealthLabel }}</div>
+          <div class="metric-label">{{ backendHealthDetail }}</div>
         </div>
         <div class="metric-item">
           <div class="metric-value">{{ agentsData.length }}</div>
@@ -338,6 +338,10 @@ const props = defineProps({
 
 const emit = defineEmits(['agentClicked'])
 
+/** Estado backend/BD desde GET /api/v1/health/detailed (sin números inventados). */
+const backendHealthLabel = ref('…')
+const backendHealthDetail = ref('API / BD')
+
 const selectedAgent = ref(null)
 const currentView = ref('dashboard')
 const sidebarOpen = ref(false)
@@ -590,6 +594,21 @@ const shouldShowAdmin = computed(() => {
   return availableModules.value.admin
 })
 
+const loadBackendHealth = async () => {
+  try {
+    const api = (await import('@/services/api')).default
+    const data = await api.get('/api/v1/health/detailed')
+    const ok =
+      data?.status === 'healthy' &&
+      (data?.database === 'healthy' || String(data?.database || '').startsWith('healthy'))
+    backendHealthLabel.value = ok ? 'OK' : '!'
+    backendHealthDetail.value = ok ? 'API + BD' : 'Revisar BD'
+  } catch {
+    backendHealthLabel.value = '!'
+    backendHealthDetail.value = 'Sin diagnóstico'
+  }
+}
+
 // Cargar datos unificados del dashboard desde endpoint unificado
 const loadDashboardMetrics = async () => {
   try {
@@ -764,6 +783,7 @@ onMounted(async () => {
   
   loadSavedSettings()
   loadDashboardMetrics()
+  loadBackendHealth()
   loadAgentsActivities()
   
   // Cargar configuraciones guardadas
@@ -780,8 +800,9 @@ onMounted(async () => {
     }
   }
   
-  // Refresh dashboard metrics cada 30 segundos
+  // Refresh dashboard metrics cada 30 segundos; salud API/BD cada minuto
   setInterval(loadDashboardMetrics, 30000)
+  setInterval(loadBackendHealth, 60000)
   
   // Refresh actividades de agentes cada minuto
   setInterval(loadAgentsActivities, 60000)

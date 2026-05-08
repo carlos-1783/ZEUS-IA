@@ -278,6 +278,10 @@ async def _get_tpv_info(db: Session, current_user: User):
         "success": True,
         "service": "TPV Universal Enterprise",
         "version": "1.0.0",
+        # Debe coincidir con _verify_tpv_employee_phone_or_raise en POST /sale (bar/restaurante).
+        "requires_employee_phone_verification": _tpv_requires_phone_verification(
+            current_user, svc
+        ),
         "user": {
             "email": current_user.email,
             "is_superuser": is_superuser,

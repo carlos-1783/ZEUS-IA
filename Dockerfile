@@ -113,5 +113,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=120s --retries=5 \
     CMD python -c "import os,urllib.request; p=os.getenv('PORT','8000'); urllib.request.urlopen(f'http://127.0.0.1:{p}/api/v1/health', timeout=5)"
 
-# Gunicorn + UvicornWorker. WEB_CONCURRENCY=2 solo si el plan Railway tiene RAM suficiente (p. ej. ≥1 GB).
-CMD ["sh", "-c", "gunicorn -c gunicorn.conf.py app.main:app"]
+# Gunicorn + UvicornWorker. Migraciones: en Railway usar railway.toml startCommand;
+# imagen local / otros hosts: mismo comando (SKIP_DB_MIGRATE=1 para saltar).
+CMD ["sh", "-c", "if [ \"${SKIP_DB_MIGRATE}\" != \"1\" ] && [ \"${SKIP_DB_MIGRATE}\" != \"true\" ]; then alembic upgrade head; fi && exec gunicorn -c gunicorn.conf.py app.main:app"]

@@ -32,6 +32,9 @@
         <button @click="checkStatus" class="header-btn">
           🔄 {{ $t('tpv.refresh') }}
         </button>
+        <div v-if="authStore.isEmployee && tpvJornada" class="tpv-jornada-badge" :class="{ on: tpvJornada.in_turno }">
+          {{ tpvJornada.in_turno ? $t('controlHorario.enTurno') : $t('controlHorario.fueraTurno') }}
+        </div>
         <div v-if="tpvOperatorDisplay" class="tpv-operator-badge" :title="tpvOperatorCode || undefined">
           <span class="tpv-operator-badge__k">{{ $t('tpv.operatorSession') }}</span>
           <span class="tpv-operator-badge__n">{{ tpvOperatorDisplay }}</span>
@@ -579,6 +582,8 @@ const cartFeedbackTimeout = ref(null) // Timeout para ocultar feedback
 const lastSaleTicketId = ref(null) // ID del último ticket vendido
 /** Operador según sesión + RRHH (GET /api/v1/tpv → tpv_operator) */
 const tpvOperator = ref(null)
+/** Jornada (empleado); mismo payload que /auth/me → jornada */
+const tpvJornada = ref(null)
 
 // TPV Configuration from backend
 const businessProfile = ref(null)
@@ -1369,6 +1374,7 @@ const loadTPVConfig = async () => {
     
     businessProfile.value = data.business_profile
     tpvOperator.value = data.tpv_operator || null
+    tpvJornada.value = data.jornada || null
     tpvConfig.value = {
       ...(data.config || {}),
       requires_employee_phone_verification: !!data.requires_employee_phone_verification,
@@ -2405,6 +2411,14 @@ const saveProduct = async () => {
   }
 }
 
+const onTpvBeforeUnload = (e) => {
+  const j = tpvJornada.value || authStore.user?.jornada
+  if (authStore.isEmployee && j?.in_turno) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+}
+
 // Cargar al montar
 onMounted(async () => {
   // Asegurar que el estado inicial sea CART
@@ -2427,6 +2441,8 @@ onMounted(async () => {
     router.push(loginRedirectPath())
     return
   }
+
+  window.addEventListener('beforeunload', onTpvBeforeUnload)
 
   // Recuperar sesión (mesa abierta, carrito, modo mesas) antes de cargar API
   hydrateTpvSessionFromStorage()
@@ -2465,6 +2481,7 @@ onBeforeUnmount(async () => {
 })
 
 onUnmounted(() => {
+  window.removeEventListener('beforeunload', onTpvBeforeUnload)
   if (comandaPollTimer) {
     clearInterval(comandaPollTimer)
     comandaPollTimer = null
@@ -3249,6 +3266,23 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+}
+
+.tpv-jornada-badge {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin-left: 8px;
+  background: rgba(148, 163, 184, 0.25);
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  color: rgba(226, 232, 240, 0.95);
+}
+
+.tpv-jornada-badge.on {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #ecfdf5;
 }
 
 /* Barra "Mesa X" cuando hay mesa seleccionada para anotar */

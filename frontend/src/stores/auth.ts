@@ -310,7 +310,9 @@ export const useAuthStore = defineStore('auth', () => {
             name: data.full_name || data.email,
             is_active: data.is_active,
             is_superuser: data.is_superuser,
-            role: String(data.role || 'owner').toLowerCase()
+            role: String(data.role || 'owner').toLowerCase(),
+            jornada: data.jornada ?? null,
+            company_employee: data.company_employee ?? null,
           };
         } catch (_) {
           // mantener user desde token
@@ -511,7 +513,9 @@ export const useAuthStore = defineStore('auth', () => {
             name: data.full_name || data.email,
             is_active: data.is_active,
             is_superuser: data.is_superuser,
-            role: String(data.role || 'owner').toLowerCase()
+            role: String(data.role || 'owner').toLowerCase(),
+            jornada: data.jornada ?? null,
+            company_employee: data.company_employee ?? null,
           };
         } catch (_) { /* mantener user desde token */ }
         console.log('[AuthStore] Initialization successful');

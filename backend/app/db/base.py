@@ -72,6 +72,7 @@ def create_tables():
             from app.models.tpv_comanda_share import TPVComandaShare
             from app.models.tpv_table import TPVTable
             from app.models.company_employee import CompanyEmployee
+            from app.models.employee_work_session import EmployeeWorkSession
             from app.models.time_tracking import (
                 TimeTrackingRecord,
                 EmployeeSchedule,

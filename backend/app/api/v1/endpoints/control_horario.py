@@ -18,19 +18,8 @@ from app.models.company_employee import CompanyEmployee
 from app.models.time_tracking import EmployeeSchedule
 from app.models.tpv_table import TPVTable
 from app.models.time_tracking import TimeTrackingRecord, RecordStatus
-from services.control_horario_service import (
-    ControlHorarioService,
-    HorarioBusinessProfile,
-    CheckInMethod,
-)
-from services import smart_time_control_service as sm
-from services.event_bus import emit_time_control_event
-
-router = APIRouter()
-logger = logging.getLogger(__name__)
-
-# Instancia singleton del servicio
-control_horario_service = ControlHorarioService()
+from services.control_horario_service import HorarioBusinessProfile, CheckInMethod
+from services.control_horario_singleton import control_horario_service
 
 
 def _company_ids_for_control_horario(db: Session, user: User) -> List[int]:
@@ -421,7 +410,7 @@ class CalculateHoursRequest(BaseModel):
 async def _get_control_horario_info(current_user: User, db: Optional[Session] = None):
     """Función auxiliar para obtener información del Control Horario"""
     is_superuser = getattr(current_user, 'is_superuser', False)
-
+    
     # Cargar business_profile del usuario (reusar sesión del request si existe).
     own_db = False
     if db is None:
@@ -470,7 +459,7 @@ async def _get_control_horario_info(current_user: User, db: Optional[Session] = 
             control_horario_service.set_business_profile(HorarioBusinessProfile.OFICINA)
     finally:
         if own_db:
-            db.close()
+        db.close()
     
     config = control_horario_service.config if control_horario_service.business_profile else {}
     
@@ -716,7 +705,7 @@ async def check_in(
             longitude=request.longitude,
             user_id=current_user.id,
         )
-
+        
         if not result.get("success"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -807,10 +796,10 @@ async def check_in(
 
         if control_horario_service.afrodita_integration:
             control_horario_service.sync_with_afrodita(request.employee_id, result["record"])
-
+        
         logger.info("Check-in registrado: %s", request.employee_id)
         return result
-
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -850,7 +839,7 @@ async def check_out(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Método inválido: {request.method}",
                 )
-
+        
         result = control_horario_service.check_out(
             employee_id=request.employee_id,
             method=method,
@@ -858,7 +847,7 @@ async def check_out(
             latitude=request.latitude,
             longitude=request.longitude,
         )
-
+        
         if not result.get("success"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -970,15 +959,15 @@ async def check_out(
 
         if control_horario_service.afrodita_integration:
             control_horario_service.sync_with_afrodita(request.employee_id, result["record"])
-
+        
         logger.info(
             "Check-out registrado: %s — %sh",
             request.employee_id,
             result.get("hours_worked", 0),
         )
-
+        
         return result
-
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -1154,8 +1143,8 @@ async def get_employees(
                 }
                 for e in merged
             }
-            return {
-                "success": True,
+        return {
+            "success": True,
                 "employees": employees_out,
                 "total_active": status_data.get("total_active", 0),
                 "employees_source": "database",

@@ -77,6 +77,7 @@ def persist_fiscal_sale(
     fiscal_items: List[Dict[str, Any]],
     consumption_type: Optional[str] = None,
     company_id: Optional[int] = None,
+    work_session_id: Optional[int] = None,
 ) -> int:
     """
     Persistir venta fiscal en tpv_sales y tpv_sale_items (snapshot inmutable).
@@ -99,6 +100,7 @@ def persist_fiscal_sale(
             tax_amount=tax_total,
             recargo_amount=recargo_total if recargo_total else None,
             total=total,
+            work_session_id=work_session_id,
         )
         db.add(sale)
         db.flush()

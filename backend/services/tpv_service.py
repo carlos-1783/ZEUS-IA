@@ -569,6 +569,7 @@ class TPVService:
         db: Optional[Any] = None,
         consumption_type: Optional[str] = None,
         company_id: Optional[int] = None,
+        work_session_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Procesar venta y generar ticket
@@ -660,6 +661,7 @@ class TPVService:
                 fiscal_items=fiscal_items,
                 consumption_type=ct,
                 company_id=company_id,
+                work_session_id=work_session_id,
             )
             ticket["fiscal_snapshot_id"] = tpv_sale_id
         

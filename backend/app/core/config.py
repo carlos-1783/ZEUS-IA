@@ -118,6 +118,9 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))  # 7 días por defecto
     REFRESH_TOKEN_GRACE_PERIOD_DAYS: int = 7  # Grace period for token reuse detection
     
+    # Jornada laboral (empleado): cierre automático por inactividad en API TPV
+    WORK_SESSION_IDLE_MINUTES: int = int(os.getenv("WORK_SESSION_IDLE_MINUTES", "30"))
+    
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'zeus.db')}")
     

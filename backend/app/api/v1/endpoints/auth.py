@@ -98,6 +98,15 @@ async def create_tokens(db: Session, user: User) -> Dict[str, Any]:
         db.add(db_refresh_token)
         db.commit()
         db.refresh(db_refresh_token)
+
+        jornada: Dict[str, Any] = {}
+        try:
+            from services.employee_work_session_service import begin_work_session_on_login
+
+            jornada = begin_work_session_on_login(db, user)
+        except Exception as e:
+            logger.exception("begin_work_session_on_login: %s", e)
+            jornada = {"error": str(e)}
         
         return {
             "access_token": access_token,
@@ -110,6 +119,7 @@ async def create_tokens(db: Session, user: User) -> Dict[str, Any]:
             "is_active": is_active,
             "is_superuser": is_superuser,
             "scopes": user_scopes,
+            "jornada": jornada,
         }
     except Exception as e:
         db.rollback()
@@ -822,6 +832,14 @@ async def logout(
     ).first()
     
     if db_token:
+        user = db.query(User).filter(User.id == db_token.user_id).first()
+        if user:
+            try:
+                from services.employee_work_session_service import end_work_session_on_logout
+
+                end_work_session_on_logout(db, user)
+            except Exception:
+                logger.exception("end_work_session_on_logout")
         db_token.is_active = False
         db_token.updated_at = datetime.utcnow()
         db.commit()
@@ -873,6 +891,10 @@ async def read_current_user(
                 .first()
             )
 
+        from services.employee_work_session_service import get_jornada_status
+
+        jornada = get_jornada_status(db, current_user)
+
         # Devolver en el formato esperado por el frontend
         return {
             "status": "success",
@@ -891,6 +913,7 @@ async def read_current_user(
                     "full_name": ce.full_name,
                     "role_title": ce.role_title,
                 },
+                "jornada": jornada,
             }
         }
     except Exception as e:

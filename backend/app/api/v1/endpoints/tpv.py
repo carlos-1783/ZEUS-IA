@@ -36,6 +36,19 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _ensure_employee_tpv_jornada(db: Session, user: User) -> None:
+    """Empleados: jornada activa obligatoria para usar el TPV; actualiza actividad anti-idle."""
+    from services.employee_work_session_service import (
+        apply_idle_timeout_if_needed,
+        assert_employee_jornada_for_tpv,
+        touch_work_session_activity,
+    )
+
+    apply_idle_timeout_if_needed(db, user)
+    assert_employee_jornada_for_tpv(db, user)
+    touch_work_session_activity(db, user)
+
+
 def _tpv_service_for_user(db: Session, current_user: User):
     """Instancia TPV por petición + perfil desde BD (sin estado de carrito compartido)."""
     svc = create_tpv_service()
@@ -188,6 +201,8 @@ class FiscalProfileCreate(BaseModel):
 
 async def _get_tpv_info(db: Session, current_user: User):
     """Información del TPV; perfil y conteos por usuario (sin carrito en servidor)."""
+    from services.employee_work_session_service import get_jornada_status
+
     is_superuser = getattr(current_user, "is_superuser", False)
     svc = _tpv_service_for_user(db, current_user)
     config = svc.config if svc.business_profile else {}
@@ -209,6 +224,7 @@ async def _get_tpv_info(db: Session, current_user: User):
         else 0
     )
     company_ids = _company_ids_for_user(db, current_user)
+    jornada = get_jornada_status(db, current_user)
     return {
         "success": True,
         "service": "TPV Universal Enterprise",
@@ -216,6 +232,7 @@ async def _get_tpv_info(db: Session, current_user: User):
         # Hostelería: el móvil se valida en servidor (ficha RRHH); no entrada manual en cliente.
         "requires_employee_phone_verification": False,
         "tpv_operator": tpv_operator_badge_payload(db, current_user, svc),
+        "jornada": jornada,
         "user": {
             "email": current_user.email,
             "is_superuser": is_superuser,
@@ -249,6 +266,7 @@ async def get_tpv_root(
     db: Session = Depends(get_db),
 ):
     """Endpoint raíz del TPV - Devuelve información básica y endpoints disponibles"""
+    _ensure_employee_tpv_jornada(db, current_user)
     return await _get_tpv_info(db, current_user)
 
 
@@ -363,6 +381,7 @@ async def list_products(
     db: Session = Depends(get_db)
 ):
     """Listar productos del usuario y catálogo compartido por empresa (multi-tenant)."""
+    _ensure_employee_tpv_jornada(db, current_user)
     company_ids = _company_ids_for_user(db, current_user)
     if company_ids:
         db_products = (
@@ -415,6 +434,7 @@ async def upsert_comanda_share(
     - Crear share nuevo: solo dueño/superusuario.
     - Actualizar share existente: dueño o cualquier usuario con acceso al share (p.ej. empleado con enlace).
     """
+    _ensure_employee_tpv_jornada(db, current_user)
     now = datetime.now(timezone.utc)
     ttl = timedelta(days=7)
 
@@ -454,6 +474,7 @@ async def get_comanda_share(
     db: Session = Depends(get_db),
 ):
     """Obtener instantánea si el usuario es dueño o empleado de la misma empresa."""
+    _ensure_employee_tpv_jornada(db, current_user)
     row = db.query(TPVComandaShare).filter(TPVComandaShare.id == share_id.strip()).first()
     if not row:
         raise HTTPException(status_code=404, detail="Comanda no encontrada")
@@ -496,6 +517,7 @@ async def list_tpv_tables(
     """
     # Dueños sin fila user_companies (registro antiguo) reciben empresa mínima para poder usar TPV.
     ensure_user_company_link_for_operations(db, current_user)
+    _ensure_employee_tpv_jornada(db, current_user)
     cids = _company_ids_for_user(db, current_user)
     if not cids:
         return {"success": True, "tables": []}
@@ -566,6 +588,7 @@ async def patch_tpv_table(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
+    _ensure_employee_tpv_jornada(db, current_user)
     row = db.query(TPVTable).filter(TPVTable.id == table_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Mesa no encontrada")
@@ -783,6 +806,7 @@ async def add_to_cart(
 ):
     """Valida producto del usuario y devuelve línea + total de esa línea (no persiste carrito en servidor)."""
     ensure_user_company_link_for_operations(db, current_user)
+    _ensure_employee_tpv_jornada(db, current_user)
     db_product = (
         db.query(TPVProduct)
         .filter(
@@ -851,6 +875,10 @@ async def process_sale(
         )
 
     ensure_user_company_link_for_operations(db, current_user)
+    _ensure_employee_tpv_jornada(db, current_user)
+    from services.employee_work_session_service import get_active_work_session_id_for_sale
+
+    work_sid = get_active_work_session_id_for_sale(db, current_user)
     company_ids = _company_ids_for_user(db, current_user)
     primary_cid = _primary_company_id(db, current_user)
     if not request.cart_items:
@@ -908,6 +936,7 @@ async def process_sale(
             db=db,
             consumption_type=request.consumption_type,
             company_id=primary_cid,
+            work_session_id=work_sid,
         )
     except Exception:
         logger.exception(
@@ -973,6 +1002,7 @@ async def close_register(
     db: Session = Depends(get_db),
 ):
     """Cerrar caja del terminal"""
+    _ensure_employee_tpv_jornada(db, current_user)
     svc = _tpv_service_for_user(db, current_user)
     effective_employee_id = resolve_tpv_operator_employee_code(db, current_user, svc)
     result = svc.close_register(
@@ -1212,6 +1242,7 @@ async def get_reservations(
     db: Session = Depends(get_db),
 ):
     """Lista reservas del día (o de la fecha indicada) para el negocio del usuario."""
+    _ensure_employee_tpv_jornada(db, current_user)
     if date_param:
         try:
             day = date.fromisoformat(date_param)
@@ -1260,6 +1291,7 @@ async def seat_reservation(
     db: Session = Depends(get_db),
 ):
     """Marca la reserva como sentada y asigna mesa (abrir como mesa en TPV)."""
+    _ensure_employee_tpv_jornada(db, current_user)
     r = db.query(Reservation).filter(
         Reservation.id == reservation_id,
         Reservation.user_id == current_user.id,

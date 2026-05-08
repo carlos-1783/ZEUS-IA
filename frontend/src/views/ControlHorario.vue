@@ -25,8 +25,19 @@
     <!-- Interfaz Principal -->
     <div class="control-horario-main-interface" v-if="!loading && !error">
       
-      <!-- Panel de Check-In/Check-Out Principal -->
-      <div class="check-in-out-panel">
+      <!-- Empleado: jornada = login/logout (sin fichaje manual en pantalla) -->
+      <div v-if="authStore.isEmployee" class="jornada-employee-panel">
+        <p class="jornada-intro">{{ $t('controlHorario.jornadaEmployeeIntro') }}</p>
+        <div class="jornada-status" :class="{ active: jornadaActiva }">
+          <span class="jornada-dot" aria-hidden="true" />
+          <strong>{{ jornadaActiva ? $t('controlHorario.enTurno') : $t('controlHorario.fueraTurno') }}</strong>
+          <span v-if="jornadaActiva && entradaLabel" class="jornada-time">{{ $t('controlHorario.entrada') }}: {{ entradaLabel }}</span>
+        </div>
+        <button type="button" class="btn-close-shift" @click="cerrarJornada">{{ $t('controlHorario.closeShift') }}</button>
+      </div>
+
+      <!-- Panel de fichaje manual (dueño / administrador) -->
+      <div v-if="!authStore.isEmployee" class="check-in-out-panel">
         <div class="method-selector">
           <h3>{{ $t('controlHorario.selectMethod') }}</h3>
           <div class="methods-grid">
@@ -293,6 +304,18 @@ const attendanceRate = computed(() => {
   return Math.round((employeesInside.value / employees.value.length) * 100)
 })
 
+const jornadaActiva = computed(() => !!(authStore.user && authStore.user.jornada && authStore.user.jornada.in_turno))
+
+const entradaLabel = computed(() => {
+  const j = authStore.user?.jornada
+  if (!j?.check_in_time) return ''
+  try {
+    return new Date(j.check_in_time).toLocaleString()
+  } catch {
+    return ''
+  }
+})
+
 const isMethodEnabled = (methodId) => {
   const enabled = Array.isArray(config.value?.methods_enabled) ? config.value.methods_enabled : []
   if (enabled.includes(methodId)) return true
@@ -306,11 +329,32 @@ const goToDashboard = () => {
   router.push('/dashboard')
 }
 
+const refreshProfileFromMe = async () => {
+  try {
+    const api = (await import('@/api/index')).default
+    const data = await api.getCurrentUser()
+    if (data && authStore.user) {
+      Object.assign(authStore.user, {
+        jornada: data.jornada,
+        company_employee: data.company_employee,
+      })
+    }
+  } catch (_) {
+    /* mantener perfil actual */
+  }
+}
+
+const cerrarJornada = async () => {
+  await authStore.logout()
+  router.push(`/login?redirect=${encodeURIComponent('/control-horario')}`)
+}
+
 const checkStatus = async () => {
   loading.value = true
   error.value = null
   
   try {
+    await refreshProfileFromMe()
     const token = authStore.getToken ? authStore.getToken() : authStore.token
     if (!token) {
       throw new Error('No hay token de autenticación')
@@ -601,14 +645,23 @@ const getMethodLabel = (method) => {
   return labels[method] || method
 }
 
+const onBeforeUnloadJornada = (e) => {
+  if (authStore.isEmployee && jornadaActiva.value) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+}
+
 onMounted(() => {
   checkStatus()
+  window.addEventListener('beforeunload', onBeforeUnloadJornada)
   refreshTimer = window.setInterval(() => {
     if (!loading.value && !checking.value) checkStatus()
   }, 45000)
 })
 
 onUnmounted(() => {
+  window.removeEventListener('beforeunload', onBeforeUnloadJornada)
   if (refreshTimer) {
     clearInterval(refreshTimer)
     refreshTimer = null
@@ -1098,5 +1151,56 @@ onUnmounted(() => {
   .check-buttons > button {
     flex: 1 1 100%;
   }
+}
+
+.jornada-employee-panel {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.jornada-intro {
+  margin: 0 0 12px;
+  color: #475569;
+  font-size: 0.95rem;
+}
+
+.jornada-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.jornada-status.active .jornada-dot {
+  background: #10b981;
+}
+
+.jornada-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.jornada-time {
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+.btn-close-shift {
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-close-shift:hover {
+  background: #e2e8f0;
 }
 </style>

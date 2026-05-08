@@ -9,8 +9,9 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-# Migraciones antes del servidor (Railway usa esta orden y omite CMD del Dockerfile si coincide).
-startCommand = "sh -c 'alembic upgrade head && exec gunicorn -c gunicorn.conf.py app.main:app'"
+# Stamp condicional (legacy: tablas sin fila en alembic_version) y luego upgrade.
+# SKIP_DB_MIGRATE=1 salta migraciones pero arranca Gunicorn.
+startCommand = "sh -c 'if [ \"${SKIP_DB_MIGRATE}\" != \"1\" ] && [ \"${SKIP_DB_MIGRATE}\" != \"true\" ]; then python scripts/alembic_conditional_stamp.py && alembic upgrade head; fi && exec gunicorn -c gunicorn.conf.py app.main:app'"
 healthcheckPath = "/api/v1/health"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"

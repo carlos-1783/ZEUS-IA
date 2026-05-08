@@ -20,6 +20,11 @@ from app.models.tpv_table import TPVTable
 from app.models.time_tracking import TimeTrackingRecord, RecordStatus
 from services.control_horario_service import HorarioBusinessProfile, CheckInMethod
 from services.control_horario_singleton import control_horario_service
+from services import smart_time_control_service as sm
+from services.event_bus import emit_time_control_event
+
+router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _company_ids_for_control_horario(db: Session, user: User) -> List[int]:
@@ -459,8 +464,8 @@ async def _get_control_horario_info(current_user: User, db: Optional[Session] = 
             control_horario_service.set_business_profile(HorarioBusinessProfile.OFICINA)
     finally:
         if own_db:
-        db.close()
-    
+            db.close()
+
     config = control_horario_service.config if control_horario_service.business_profile else {}
     
     # Para superusuarios, asegurar configuración completa

@@ -3,7 +3,7 @@
 """
 
 from fastapi import APIRouter, HTTPException, Depends, File, UploadFile, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from decimal import Decimal
 from sqlalchemy import func, or_
@@ -14,12 +14,15 @@ from datetime import datetime, date, timedelta, timezone
 import secrets
 import uuid
 
+from app.core.security import pwd_context
 from app.db.session import get_db
 from app.core.auth import get_current_active_user, get_current_active_superuser
 from app.core.config import settings
 from app.models.user import User
 from app.models.company import UserCompany
+from app.models.company_employee import CompanyEmployee
 from app.models.erp import TPVProduct, FiscalProfile, TPVSale, TPVSaleItem
+from app.models.tpv_operator_session import TPVOperatorSession
 from app.models.reservation import Reservation
 from app.models.tpv_comanda_share import TPVComandaShare
 from app.models.tpv_table import TPVTable
@@ -188,6 +191,14 @@ class CloseRegisterRequest(BaseModel):
     final_cash: float
 
 
+class EmployeeSwitchBody(BaseModel):
+    """Cambiar operador TPV sin cerrar sesión empresa: código RRHH + PIN."""
+
+    employee_code: str = Field(..., min_length=1)
+    pin: str = Field(..., min_length=1)
+    company_id: Optional[int] = Field(None, description="Obligatorio si el código existe en más de una empresa")
+
+
 class SetBusinessProfileRequest(BaseModel):
     business_profile: str
 
@@ -246,6 +257,7 @@ async def _get_tpv_info(db: Session, current_user: User):
             "invoice": "/api/v1/tpv/invoice",
             "close_register": "/api/v1/tpv/close-register",
             "detect_business_type": "/api/v1/tpv/detect-business-type",
+            "employee_switch": "/api/v1/tpv/employee/switch",
         },
         "business_profile": svc.business_profile.value if svc.business_profile else None,
         "config": config,
@@ -257,6 +269,107 @@ async def _get_tpv_info(db: Session, current_user: User):
             "afrodita": svc.afrodita_integration is not None,
         },
     }
+
+
+def _verify_operator_pin_for_switch(ce: CompanyEmployee, pin: str) -> None:
+    """Si hay hash en RRHH, valida con bcrypt; si no, el PIN por defecto es el código de empleado."""
+    pin_stripped = (pin or "").strip()
+    if not pin_stripped:
+        raise HTTPException(status_code=400, detail="PIN requerido")
+    hash_val = getattr(ce, "tpv_pin_hash", None)
+    if hash_val:
+        if not pwd_context.verify(pin_stripped, hash_val):
+            raise HTTPException(status_code=403, detail="PIN incorrecto")
+    else:
+        if pin_stripped != str(ce.employee_code).strip():
+            raise HTTPException(
+                status_code=403,
+                detail="PIN incorrecto. Si no hay PIN en RRHH, introduce el mismo código de empleado como PIN.",
+            )
+
+
+def _resolve_switch_company_employee(
+    db: Session,
+    current_user: User,
+    employee_code: str,
+    company_id: Optional[int],
+) -> CompanyEmployee:
+    ensure_user_company_link_for_operations(db, current_user)
+    cids = _company_ids_for_user(db, current_user)
+    if not cids:
+        raise HTTPException(status_code=403, detail="Sin empresa asociada")
+    code = employee_code.strip()
+    q = db.query(CompanyEmployee).filter(
+        CompanyEmployee.employee_code == code,
+        CompanyEmployee.company_id.in_(cids),
+        CompanyEmployee.is_active.is_(True),
+    )
+    if company_id is not None:
+        if company_id not in cids:
+            raise HTTPException(status_code=403, detail="Empresa no permitida")
+        q = q.filter(CompanyEmployee.company_id == company_id)
+    matches = q.all()
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) == 0:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado en tu empresa")
+    pcid = _primary_company_id(db, current_user)
+    if pcid is not None:
+        for m in matches:
+            if m.company_id == pcid:
+                return m
+    raise HTTPException(
+        status_code=400,
+        detail="Hay varios empleados con ese código; indica company_id",
+    )
+
+
+@router.post("/employee/switch")
+async def tpv_post_employee_switch(
+    body: EmployeeSwitchBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Cambiar operador TPV (cobrador) sin cerrar la sesión de la empresa.
+    Valida PIN / código empleado y persiste la selección para tickets y fiscal.
+    """
+    ce = _resolve_switch_company_employee(db, current_user, body.employee_code, body.company_id)
+    _verify_operator_pin_for_switch(ce, body.pin)
+    now = datetime.now(timezone.utc)
+    row = db.query(TPVOperatorSession).filter(TPVOperatorSession.user_id == current_user.id).first()
+    if row:
+        row.company_id = ce.company_id
+        row.employee_code = ce.employee_code
+        row.updated_at = now
+    else:
+        db.add(
+            TPVOperatorSession(
+                user_id=current_user.id,
+                company_id=ce.company_id,
+                employee_code=ce.employee_code,
+            )
+        )
+    db.commit()
+    svc = _tpv_service_for_user(db, current_user)
+    return {
+        "success": True,
+        "tpv_operator": tpv_operator_badge_payload(db, current_user, svc),
+        "employee_id": ce.employee_code,
+        "full_name": ce.full_name,
+    }
+
+
+@router.delete("/employee/switch")
+async def tpv_delete_employee_switch(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Quitar override de operador; vuelve al operador por defecto (ficha vinculada o usuario)."""
+    db.query(TPVOperatorSession).filter(TPVOperatorSession.user_id == current_user.id).delete()
+    db.commit()
+    svc = _tpv_service_for_user(db, current_user)
+    return {"success": True, "tpv_operator": tpv_operator_badge_payload(db, current_user, svc)}
 
 
 @router.get("", include_in_schema=True)

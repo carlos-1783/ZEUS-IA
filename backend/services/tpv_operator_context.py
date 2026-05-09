@@ -47,6 +47,48 @@ def session_company_employee(db: Session, user: User) -> Optional[CompanyEmploye
     )
 
 
+def active_operator_company_employee(db: Session, user: User) -> Optional[CompanyEmployee]:
+    """
+    Empleado efectivo para tickets / insignia TPV: override por cambiar operador, o ficha vinculada al usuario.
+    """
+    from app.models.tpv_operator_session import TPVOperatorSession
+
+    row = (
+        db.query(TPVOperatorSession)
+        .filter(TPVOperatorSession.user_id == user.id)
+        .first()
+    )
+    if row:
+        ce = (
+            db.query(CompanyEmployee)
+            .filter(
+                CompanyEmployee.company_id == row.company_id,
+                CompanyEmployee.employee_code == row.employee_code,
+                CompanyEmployee.is_active.is_(True),
+            )
+            .first()
+        )
+        if ce:
+            return ce
+    return session_company_employee(db, user)
+
+
+def tpv_operator_switch_session_matches(db: Session, user: User, ce: Optional[CompanyEmployee]) -> bool:
+    """True si el operador activo viene de una sesión explícita de cambio de operador."""
+    from app.models.tpv_operator_session import TPVOperatorSession
+
+    if not ce:
+        return False
+    row = (
+        db.query(TPVOperatorSession)
+        .filter(TPVOperatorSession.user_id == user.id)
+        .first()
+    )
+    if not row:
+        return False
+    return row.company_id == ce.company_id and str(row.employee_code) == str(ce.employee_code)
+
+
 def tpv_requires_phone_verification(current_user: User, svc: Any) -> bool:
     profile_raw = str(getattr(current_user, "tpv_business_profile", "") or "").strip().lower()
     if profile_raw in {"bar", "restaurante", "restaurant"}:
@@ -60,9 +102,9 @@ def tpv_requires_phone_verification(current_user: User, svc: Any) -> bool:
 
 def resolve_tpv_operator_employee_code(db: Session, current_user: User, svc: Any) -> str:
     """
-    Código de empleado en ticket / cierre: ficha RRHH vinculada a la sesión, o id de usuario.
+    Código de empleado en ticket / cierre: override TPV, ficha RRHH vinculada a la sesión, o id de usuario.
     """
-    ce = session_company_employee(db, current_user)
+    ce = active_operator_company_employee(db, current_user)
     role = (getattr(current_user, "role", None) or "owner").strip().lower()
     hosteleria = tpv_requires_phone_verification(current_user, svc)
     req_emp = bool(getattr(svc, "config", None) and svc.config.get("requires_employee"))
@@ -86,13 +128,18 @@ def resolve_tpv_operator_employee_code(db: Session, current_user: User, svc: Any
 
 
 def tpv_operator_badge_payload(db: Session, current_user: User, svc: Any) -> Dict[str, Any]:
-    ce = session_company_employee(db, current_user)
+    ce = active_operator_company_employee(db, current_user)
     if ce:
+        src = (
+            "tpv_operator_switch"
+            if tpv_operator_switch_session_matches(db, current_user, ce)
+            else "company_employee"
+        )
         return {
             "employee_code": ce.employee_code,
             "full_name": ce.full_name,
             "role_title": ce.role_title or "",
-            "source": "company_employee",
+            "source": src,
         }
     role = (getattr(current_user, "role", None) or "owner").strip().lower()
     return {

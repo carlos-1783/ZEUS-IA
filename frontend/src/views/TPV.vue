@@ -39,7 +39,7 @@
           <span class="tpv-operator-badge__k">{{ $t('tpv.operatorSession') }}</span>
           <span class="tpv-operator-badge__n">{{ tpvOperatorDisplay }}</span>
         </div>
-        <button type="button" class="header-btn" @click="logoutTpvSession">
+        <button type="button" class="header-btn" @click="openOperatorSwitchModal">
           {{ $t('tpv.changeOperator') }}
         </button>
         <div v-if="businessProfile" class="business-profile-badge">
@@ -530,6 +530,44 @@
         </div>
       </div>
     </div>
+
+    <!-- Cambiar operador: PIN empleado (sin logout empresa / sin redirección) -->
+    <div v-if="showOperatorSwitchModal" class="modal-overlay" @click.self="showOperatorSwitchModal = false">
+      <div class="modal-content operator-switch-modal" role="dialog" aria-modal="true" aria-labelledby="operator-switch-title">
+        <div class="modal-header">
+          <h3 id="operator-switch-title">{{ $t('tpv.changeOperatorTitle') }}</h3>
+          <button type="button" class="modal-close" @click="showOperatorSwitchModal = false">✕</button>
+        </div>
+        <p class="modal-hint operator-switch-hint">{{ $t('tpv.changeOperatorHint') }}</p>
+        <label class="form-label" for="operator-code-input">{{ $t('tpv.employeeCode') }}</label>
+        <input
+          id="operator-code-input"
+          v-model="operatorSwitchCode"
+          type="text"
+          class="form-input"
+          autocomplete="username"
+          @keyup.enter="submitOperatorSwitch"
+        />
+        <label class="form-label" for="operator-pin-input">{{ $t('tpv.operatorPin') }}</label>
+        <input
+          id="operator-pin-input"
+          v-model="operatorSwitchPin"
+          type="password"
+          class="form-input"
+          autocomplete="current-password"
+          @keyup.enter="submitOperatorSwitch"
+        />
+        <div class="modal-footer operator-switch-footer">
+          <button type="button" class="btn-cancel" @click="showOperatorSwitchModal = false">{{ $t('common.cancel') }}</button>
+          <button type="button" class="btn-secondary" :disabled="operatorSwitchLoading" @click="clearOperatorOverride">
+            {{ $t('tpv.resetOperator') }}
+          </button>
+          <button type="button" class="btn-save" :disabled="operatorSwitchLoading" @click="submitOperatorSwitch">
+            {{ operatorSwitchLoading ? '…' : $t('tpv.confirmOperator') }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -686,6 +724,10 @@ const canEditProducts = computed(() => {
 
 // Estado del modal de producto
 const showProductModal = ref(false)
+const showOperatorSwitchModal = ref(false)
+const operatorSwitchCode = ref('')
+const operatorSwitchPin = ref('')
+const operatorSwitchLoading = ref(false)
 const editingProduct = ref(null)
 const productForm = ref({
   name: '',
@@ -910,13 +952,75 @@ const loginRedirectPath = () => {
   return `/login?redirect=${encodeURIComponent(p)}`
 }
 
-const logoutTpvSession = async () => {
-  try {
-    await authStore.logout()
-  } catch (e) {
-    console.warn('TPV logout:', e)
+const openOperatorSwitchModal = () => {
+  operatorSwitchCode.value = ''
+  operatorSwitchPin.value = ''
+  showOperatorSwitchModal.value = true
+  nextTick(() => {
+    try {
+      document.getElementById('operator-code-input')?.focus()
+    } catch (_) {}
+  })
+}
+
+const submitOperatorSwitch = async () => {
+  const code = String(operatorSwitchCode.value || '').trim()
+  const pin = String(operatorSwitchPin.value || '').trim()
+  if (!code || !pin) {
+    warning(t('tpv.operatorSwitchFillBoth'))
+    return
   }
-  router.push(loginRedirectPath())
+  operatorSwitchLoading.value = true
+  try {
+    const token = await getAuthToken()
+    if (!token) {
+      errorMessage.value = t('tpv.sessionExpired')
+      showOperatorSwitchModal.value = false
+      setTimeout(() => router.push(loginRedirectPath()), 2000)
+      return
+    }
+    const api = (await import('@/services/api')).default
+    const res = await api.post(
+      '/api/v1/tpv/employee/login',
+      { employee_code: code, pin },
+      token
+    )
+    if (res?.tpv_operator) {
+      tpvOperator.value = res.tpv_operator
+    } else {
+      await loadTPVConfig()
+    }
+    showOperatorSwitchModal.value = false
+    success(t('tpv.operatorSwitchOk'))
+  } catch (err) {
+    const msg = err?.message || t('tpv.operatorSwitchError')
+    error(typeof msg === 'string' ? msg : t('tpv.operatorSwitchError'))
+  } finally {
+    operatorSwitchLoading.value = false
+  }
+}
+
+const clearOperatorOverride = async () => {
+  operatorSwitchLoading.value = true
+  try {
+    const token = await getAuthToken()
+    if (!token) {
+      warning(t('tpv.sessionExpired'))
+      return
+    }
+    const api = (await import('@/services/api')).default
+    const res = await api.post('/api/v1/tpv/employee/logout', {}, token)
+    if (res?.tpv_operator) {
+      tpvOperator.value = res.tpv_operator
+    } else {
+      await loadTPVConfig()
+    }
+    success(t('tpv.operatorResetOk'))
+  } catch (err) {
+    error(t('tpv.operatorResetError'))
+  } finally {
+    operatorSwitchLoading.value = false
+  }
 }
 
 const normalizeUserMe = (raw) => {
@@ -3805,6 +3909,34 @@ onUnmounted(() => {
   animation: slideUp 0.3s;
 }
 
+.operator-switch-modal {
+  max-width: 440px;
+}
+
+.operator-switch-hint {
+  margin: 0 20px 12px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.operator-switch-modal .form-label {
+  display: block;
+  margin: 8px 20px 6px;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 600;
+}
+
+.operator-switch-modal .form-input {
+  margin: 0 20px 14px;
+  width: calc(100% - 40px);
+  box-sizing: border-box;
+}
+
+.operator-switch-footer {
+  flex-wrap: wrap;
+}
+
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -3816,6 +3948,12 @@ onUnmounted(() => {
 .modal-header h2 {
   margin: 0;
   font-size: 1.5rem;
+  color: #fff;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
   color: #fff;
 }
 
@@ -3904,6 +4042,26 @@ onUnmounted(() => {
 
 .btn-cancel:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-secondary {
+  padding: 12px 24px;
+  background: rgba(59, 130, 246, 0.25);
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  border-radius: 8px;
+  color: #e0f2fe;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.4);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn-save {

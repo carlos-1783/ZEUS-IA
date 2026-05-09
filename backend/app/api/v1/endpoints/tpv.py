@@ -12,6 +12,7 @@ import logging
 from pathlib import Path
 from datetime import datetime, date, timedelta, timezone
 import secrets
+import time
 import uuid
 
 from app.core.security import pwd_context
@@ -37,6 +38,36 @@ from services.tpv_operator_context import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# Rate limit intentos PIN por usuario (TPV; proceso único por worker — suficiente para endurecer abuso básico)
+_PIN_FAIL_TIMES: Dict[int, List[float]] = {}
+_PIN_WINDOW_SEC = int(getattr(settings, "TPV_PIN_RATE_WINDOW_SEC", 900))
+_PIN_MAX_FAIL = int(getattr(settings, "TPV_PIN_MAX_FAILURES", 10))
+
+
+def _pin_rate_check_or_raise(user_id: int) -> None:
+    now = time.monotonic()
+    lst = _PIN_FAIL_TIMES.get(user_id, [])
+    lst = [t for t in lst if now - t < _PIN_WINDOW_SEC]
+    _PIN_FAIL_TIMES[user_id] = lst
+    if len(lst) >= _PIN_MAX_FAIL:
+        logger.warning("tpv_pin_rate_limited user_id=%s fails=%s", user_id, len(lst))
+        raise HTTPException(
+            status_code=429,
+            detail="Demasiados intentos fallidos de PIN. Espera unos minutos e inténtalo de nuevo.",
+        )
+
+
+def _pin_rate_record_failure(user_id: int) -> None:
+    now = time.monotonic()
+    lst = _PIN_FAIL_TIMES.get(user_id, [])
+    lst = [t for t in lst if now - t < _PIN_WINDOW_SEC]
+    lst.append(now)
+    _PIN_FAIL_TIMES[user_id] = lst
+
+
+def _pin_rate_clear(user_id: int) -> None:
+    _PIN_FAIL_TIMES.pop(user_id, None)
 
 
 def _ensure_employee_tpv_jornada(db: Session, user: User) -> None:
@@ -258,6 +289,9 @@ async def _get_tpv_info(db: Session, current_user: User):
             "close_register": "/api/v1/tpv/close-register",
             "detect_business_type": "/api/v1/tpv/detect-business-type",
             "employee_switch": "/api/v1/tpv/employee/switch",
+            "employee_login": "/api/v1/tpv/employee/login",
+            "employee_logout": "/api/v1/tpv/employee/logout",
+            "session_validate": "/api/v1/tpv/session/validate",
         },
         "business_profile": svc.business_profile.value if svc.business_profile else None,
         "config": config,
@@ -324,18 +358,27 @@ def _resolve_switch_company_employee(
     )
 
 
-@router.post("/employee/switch")
-async def tpv_post_employee_switch(
+async def _tpv_employee_switch_impl(
     body: EmployeeSwitchBody,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
-    """
-    Cambiar operador TPV (cobrador) sin cerrar la sesión de la empresa.
-    Valida PIN / código empleado y persiste la selección para tickets y fiscal.
-    """
+    db: Session,
+    current_user: User,
+) -> Dict[str, Any]:
+    """Login operativo TPV (misma sesión empresa): código RRHH + PIN."""
+    _pin_rate_check_or_raise(current_user.id)
     ce = _resolve_switch_company_employee(db, current_user, body.employee_code, body.company_id)
-    _verify_operator_pin_for_switch(ce, body.pin)
+    try:
+        _verify_operator_pin_for_switch(ce, body.pin)
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            _pin_rate_record_failure(current_user.id)
+            logger.warning(
+                "employee_login_fail user_id=%s employee_code=%s detail=%s",
+                current_user.id,
+                body.employee_code,
+                getattr(exc, "detail", ""),
+            )
+        raise
+    _pin_rate_clear(current_user.id)
     now = datetime.now(timezone.utc)
     row = db.query(TPVOperatorSession).filter(TPVOperatorSession.user_id == current_user.id).first()
     if row:
@@ -351,6 +394,12 @@ async def tpv_post_employee_switch(
             )
         )
     db.commit()
+    logger.info(
+        "employee_login_success user_id=%s employee_code=%s company_id=%s",
+        current_user.id,
+        ce.employee_code,
+        ce.company_id,
+    )
     svc = _tpv_service_for_user(db, current_user)
     return {
         "success": True,
@@ -360,16 +409,62 @@ async def tpv_post_employee_switch(
     }
 
 
+@router.post("/employee/switch")
+@router.post("/employee/login")
+async def tpv_post_employee_switch(
+    body: EmployeeSwitchBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Establece el operador TPV (cobrador) sin cerrar la sesión de la empresa.
+    Alias: POST /employee/login (JWT empresa + PIN empleado).
+    """
+    return await _tpv_employee_switch_impl(body, db, current_user)
+
+
+def _tpv_clear_operator_session(db: Session, current_user: User) -> Dict[str, Any]:
+    db.query(TPVOperatorSession).filter(TPVOperatorSession.user_id == current_user.id).delete()
+    db.commit()
+    logger.info("tpv_employee_logout user_id=%s", current_user.id)
+    svc = _tpv_service_for_user(db, current_user)
+    return {"success": True, "tpv_operator": tpv_operator_badge_payload(db, current_user, svc)}
+
+
 @router.delete("/employee/switch")
 async def tpv_delete_employee_switch(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
     """Quitar override de operador; vuelve al operador por defecto (ficha vinculada o usuario)."""
-    db.query(TPVOperatorSession).filter(TPVOperatorSession.user_id == current_user.id).delete()
-    db.commit()
-    svc = _tpv_service_for_user(db, current_user)
-    return {"success": True, "tpv_operator": tpv_operator_badge_payload(db, current_user, svc)}
+    return _tpv_clear_operator_session(db, current_user)
+
+
+@router.post("/employee/logout")
+async def tpv_post_employee_logout(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Cierra solo la sesión operativa de empleado en el TPV (no cierra sesión empresa)."""
+    return _tpv_clear_operator_session(db, current_user)
+
+
+@router.get("/session/validate")
+async def tpv_session_validate(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Valida sesión empresa + operador/jornada (respuesta reducida)."""
+    _ensure_employee_tpv_jornada(db, current_user)
+    info = await _get_tpv_info(db, current_user)
+    return {
+        "valid": True,
+        "tpv_operator": info["tpv_operator"],
+        "jornada": info["jornada"],
+        "business_profile": info["business_profile"],
+        "config": info["config"],
+        "company_ids": info["company_ids"],
+    }
 
 
 @router.get("", include_in_schema=True)

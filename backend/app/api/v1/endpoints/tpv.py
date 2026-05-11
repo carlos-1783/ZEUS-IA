@@ -400,12 +400,25 @@ async def _tpv_employee_switch_impl(
         ce.employee_code,
         ce.company_id,
     )
+    from services.employee_work_session_service import (
+        ensure_active_shift_for_tpv_operator_login,
+        get_jornada_status,
+    )
+
+    try:
+        shift_info = ensure_active_shift_for_tpv_operator_login(db, current_user, ce)
+    except Exception:
+        logger.exception("ensure_active_shift_for_tpv_operator_login")
+        shift_info = {"error": True}
     svc = _tpv_service_for_user(db, current_user)
+    jornada = get_jornada_status(db, current_user)
     return {
         "success": True,
         "tpv_operator": tpv_operator_badge_payload(db, current_user, svc),
         "employee_id": ce.employee_code,
         "full_name": ce.full_name,
+        "employee_session": shift_info,
+        "jornada": jornada,
     }
 
 
@@ -424,11 +437,49 @@ async def tpv_post_employee_switch(
 
 
 def _tpv_clear_operator_session(db: Session, current_user: User) -> Dict[str, Any]:
+    row = db.query(TPVOperatorSession).filter(TPVOperatorSession.user_id == current_user.id).first()
+    emp_code = str(row.employee_code) if row and row.employee_code is not None else None
+
     db.query(TPVOperatorSession).filter(TPVOperatorSession.user_id == current_user.id).delete()
     db.commit()
+
+    from services.employee_work_session_service import (
+        close_active_shift_after_tpv_operator_logout,
+        get_jornada_status,
+    )
+    from services.tpv_operator_context import session_company_employee
+
+    role = (getattr(current_user, "role", None) or "owner").strip().lower()
+    if emp_code:
+        try:
+            close_active_shift_after_tpv_operator_logout(db, current_user, emp_code)
+        except Exception:
+            logger.exception(
+                "close_active_shift_after_tpv_operator_logout user_id=%s code=%s",
+                current_user.id,
+                emp_code,
+            )
+    elif role == "employee":
+        ce = session_company_employee(db, current_user)
+        if ce:
+            try:
+                close_active_shift_after_tpv_operator_logout(
+                    db, current_user, str(ce.employee_code)
+                )
+            except Exception:
+                logger.exception(
+                    "close_active_shift_after_tpv_operator_logout default employee user_id=%s",
+                    current_user.id,
+                )
+
     logger.info("tpv_employee_logout user_id=%s", current_user.id)
     svc = _tpv_service_for_user(db, current_user)
-    return {"success": True, "tpv_operator": tpv_operator_badge_payload(db, current_user, svc)}
+    jornada = get_jornada_status(db, current_user)
+    return {
+        "success": True,
+        "tpv_operator": tpv_operator_badge_payload(db, current_user, svc),
+        "jornada": jornada,
+    }
 
 
 @router.delete("/employee/switch")

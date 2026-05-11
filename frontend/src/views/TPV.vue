@@ -990,6 +990,9 @@ const submitOperatorSwitch = async () => {
     } else {
       await loadTPVConfig()
     }
+    if (res?.jornada !== undefined) {
+      tpvJornada.value = res.jornada
+    }
     showOperatorSwitchModal.value = false
     success(t('tpv.operatorSwitchOk'))
   } catch (err) {
@@ -1014,6 +1017,9 @@ const clearOperatorOverride = async () => {
       tpvOperator.value = res.tpv_operator
     } else {
       await loadTPVConfig()
+    }
+    if (res?.jornada !== undefined) {
+      tpvJornada.value = res.jornada
     }
     success(t('tpv.operatorResetOk'))
   } catch (err) {

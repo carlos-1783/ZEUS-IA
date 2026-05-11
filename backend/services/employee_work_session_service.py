@@ -19,7 +19,11 @@ from app.models.user import User
 from services import smart_time_control_service as sm
 from services.control_horario_singleton import control_horario_service
 from services.event_bus import emit_time_control_event
-from services.tpv_operator_context import primary_company_id, session_company_employee
+from services.tpv_operator_context import (
+    active_operator_company_employee,
+    primary_company_id,
+    session_company_employee,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -405,7 +409,19 @@ def get_jornada_status(db: Session, user: User) -> Dict[str, Any]:
             "reason": "no_company_employee",
         }
 
-    ws = _active_work_session(db, user)
+    op = active_operator_company_employee(db, user)
+    effective_code = str(op.employee_code) if op else str(ce.employee_code)
+
+    ws = (
+        db.query(EmployeeWorkSession)
+        .filter(
+            EmployeeWorkSession.user_id == user.id,
+            EmployeeWorkSession.status == "active",
+            EmployeeWorkSession.employee_code == effective_code,
+        )
+        .order_by(EmployeeWorkSession.id.desc())
+        .first()
+    )
     if not ws:
         return {
             "requires_jornada": True,
@@ -430,6 +446,216 @@ def get_jornada_status(db: Session, user: User) -> Dict[str, Any]:
         "check_in_time": rec.check_in_time.isoformat() if rec and rec.check_in_time else None,
         "last_activity_at": ws.last_activity_at.isoformat() if ws.last_activity_at else None,
     }
+
+
+def ensure_active_shift_for_tpv_operator_login(
+    db: Session,
+    user: User,
+    operator_ce: CompanyEmployee,
+) -> Dict[str, Any]:
+    """
+    Tras POST /tpv/employee/login: una sola fuente de verdad para turno (EmployeeWorkSession + fichaje ACTIVE)
+    para el employee_code del operador TPV bajo el user_id JWT (kiosk o empleado).
+    Idempotente; si ya hay turno activo para ese código, solo actualiza actividad.
+    """
+    employee_code = str(operator_ce.employee_code)
+    now_ts = datetime.now(timezone.utc)
+
+    ws_same = (
+        db.query(EmployeeWorkSession)
+        .filter(
+            EmployeeWorkSession.user_id == user.id,
+            EmployeeWorkSession.status == "active",
+            EmployeeWorkSession.employee_code == employee_code,
+        )
+        .order_by(EmployeeWorkSession.id.desc())
+        .first()
+    )
+    if ws_same and ws_same.time_tracking_record_id:
+        rec = (
+            db.query(TimeTrackingRecord)
+            .filter(TimeTrackingRecord.id == ws_same.time_tracking_record_id)
+            .first()
+        )
+        if rec and rec.status == RecordStatus.ACTIVE:
+            ws_same.last_activity_at = now_ts
+            db.add(ws_same)
+            db.commit()
+            sm.sync_runtime_active_records(db, user, control_horario_service)
+            return {
+                "shift_started": False,
+                "continued": True,
+                "work_session_id": ws_same.id,
+                "time_tracking_record_id": rec.id,
+                "employee_code": employee_code,
+            }
+
+    ws_any = (
+        db.query(EmployeeWorkSession)
+        .filter(
+            EmployeeWorkSession.user_id == user.id,
+            EmployeeWorkSession.status == "active",
+        )
+        .order_by(EmployeeWorkSession.id.desc())
+        .first()
+    )
+    if ws_any and str(ws_any.employee_code) != employee_code:
+        _close_active_sessions_and_records(
+            db, user, str(ws_any.employee_code), now_ts, "tpv_operator_switch"
+        )
+
+    _close_active_sessions_and_records(
+        db, user, employee_code, now_ts, "tpv_operator_switch"
+    )
+
+    row = TimeTrackingRecord(
+        employee_id=employee_code,
+        user_id=user.id,
+        check_in_time=now_ts,
+        check_in_method=CheckInMethod.REMOTE,
+        check_in_location="tpv_employee_login",
+        status=RecordStatus.ACTIVE,
+        irregularities=[],
+        irregularities_count=0,
+        is_late_check_in=False,
+    )
+    db.add(row)
+    db.flush()
+
+    sm.append_event(
+        db,
+        user_id=user.id,
+        employee_id=employee_code,
+        record_id=row.id,
+        event_type="check-in",
+        occurred_at=now_ts,
+        location="tpv_employee_login",
+        latitude=None,
+        longitude=None,
+        device="tpv",
+        extra_payload={"source": "tpv_employee_login", "shift_started": True},
+    )
+
+    cid = primary_company_id(db, user) or operator_ce.company_id
+    ews = EmployeeWorkSession(
+        user_id=user.id,
+        company_id=cid,
+        employee_code=employee_code,
+        time_tracking_record_id=row.id,
+        status="active",
+        opened_at=now_ts,
+        last_activity_at=now_ts,
+    )
+    db.add(ews)
+    db.commit()
+    sm.sync_runtime_active_records(db, user, control_horario_service)
+
+    if getattr(settings, "SMART_TIME_CONTROL_LOG_AFRODITA", True):
+        try:
+            emit_time_control_event(
+                user_id=user.id,
+                user_email=user.email,
+                company_id=cid,
+                employee_id=employee_code,
+                event_type="check-in",
+                record_id=row.id,
+                details={"source": "tpv_employee_login", "shift_started": True},
+            )
+        except Exception:
+            logger.exception("emit_time_control_event tpv login jornada")
+
+    logger.info(
+        "shift_started user_id=%s employee_code=%s work_session_id=%s",
+        user.id,
+        employee_code,
+        ews.id,
+    )
+    return {
+        "shift_started": True,
+        "continued": False,
+        "work_session_id": ews.id,
+        "time_tracking_record_id": row.id,
+        "employee_code": employee_code,
+    }
+
+
+def close_active_shift_after_tpv_operator_logout(
+    db: Session,
+    user: User,
+    employee_code: str,
+) -> Dict[str, Any]:
+    """Clock-out + cierre de EmployeeWorkSession para el código (logout operativo TPV)."""
+    if not employee_code or not str(employee_code).strip():
+        return {"skipped": True}
+    employee_code = str(employee_code).strip()
+    now_ts = datetime.now(timezone.utc)
+
+    sm.sync_runtime_active_records(db, user, control_horario_service)
+    active = (
+        db.query(TimeTrackingRecord)
+        .filter(
+            TimeTrackingRecord.user_id == user.id,
+            TimeTrackingRecord.employee_id == employee_code,
+            TimeTrackingRecord.status == RecordStatus.ACTIVE,
+        )
+        .order_by(TimeTrackingRecord.id.desc())
+        .first()
+    )
+    ws = (
+        db.query(EmployeeWorkSession)
+        .filter(
+            EmployeeWorkSession.user_id == user.id,
+            EmployeeWorkSession.status == "active",
+            EmployeeWorkSession.employee_code == employee_code,
+        )
+        .order_by(EmployeeWorkSession.id.desc())
+        .first()
+    )
+
+    hours = 0.0
+    rec_id = active.id if active else None
+    if active:
+        _close_tracking_row_at(
+            db,
+            user=user,
+            employee_code=employee_code,
+            active=active,
+            checkout_time=now_ts,
+            close_reason="tpv_operator_logout",
+            device="tpv",
+        )
+        hours = float(active.hours_worked or 0)
+
+    if ws:
+        ws.status = "closed"
+        ws.closed_at = now_ts
+        ws.close_reason = "tpv_operator_logout"
+        db.add(ws)
+
+    db.commit()
+    sm.sync_runtime_active_records(db, user, control_horario_service)
+
+    if getattr(settings, "SMART_TIME_CONTROL_LOG_AFRODITA", True) and active and rec_id:
+        try:
+            emit_time_control_event(
+                user_id=user.id,
+                user_email=user.email,
+                company_id=primary_company_id(db, user),
+                employee_id=employee_code,
+                event_type="check-out",
+                record_id=rec_id,
+                details={"hours_worked": hours, "source": "tpv_employee_logout", "shift_ended": True},
+            )
+        except Exception:
+            logger.exception("emit tpv operator logout jornada")
+
+    logger.info(
+        "shift_ended user_id=%s employee_code=%s hours=%s",
+        user.id,
+        employee_code,
+        hours,
+    )
+    return {"success": True, "hours_worked": hours, "employee_code": employee_code}
 
 
 def get_active_work_session_id_for_sale(db: Session, user: User) -> Optional[int]:

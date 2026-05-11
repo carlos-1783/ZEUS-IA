@@ -11,11 +11,10 @@ from sqlalchemy.orm import Session
 import logging
 from pathlib import Path
 from datetime import datetime, date, timedelta, timezone
+import re
 import secrets
 import time
 import uuid
-
-from app.core.security import pwd_context
 from app.db.session import get_db
 from app.core.auth import get_current_active_user, get_current_active_superuser
 from app.core.config import settings
@@ -54,7 +53,7 @@ def _pin_rate_check_or_raise(user_id: int) -> None:
         logger.warning("tpv_pin_rate_limited user_id=%s fails=%s", user_id, len(lst))
         raise HTTPException(
             status_code=429,
-            detail="Demasiados intentos fallidos de PIN. Espera unos minutos e inténtalo de nuevo.",
+            detail="Demasiados intentos fallidos. Espera unos minutos e inténtalo de nuevo.",
         )
 
 
@@ -68,6 +67,10 @@ def _pin_rate_record_failure(user_id: int) -> None:
 
 def _pin_rate_clear(user_id: int) -> None:
     _PIN_FAIL_TIMES.pop(user_id, None)
+
+
+def _normalize_phone_digits(val: Optional[str]) -> str:
+    return re.sub(r"\D+", "", val or "")
 
 
 def _ensure_employee_tpv_jornada(db: Session, user: User) -> None:
@@ -222,12 +225,11 @@ class CloseRegisterRequest(BaseModel):
     final_cash: float
 
 
-class EmployeeSwitchBody(BaseModel):
-    """Cambiar operador TPV sin cerrar sesión empresa: código RRHH + PIN."""
+class TpvEmployeeLoginBody(BaseModel):
+    """Login operativo TPV: empleado elegido + teléfono (debe coincidir con el registrado)."""
 
-    employee_code: str = Field(..., min_length=1)
-    pin: str = Field(..., min_length=1)
-    company_id: Optional[int] = Field(None, description="Obligatorio si el código existe en más de una empresa")
+    employee_id: int = Field(..., ge=1, description="ID de company_employees")
+    telefono: str = Field(..., min_length=6, max_length=32)
 
 
 class SetBusinessProfileRequest(BaseModel):
@@ -267,13 +269,34 @@ async def _get_tpv_info(db: Session, current_user: User):
     )
     company_ids = _company_ids_for_user(db, current_user)
     jornada = get_jornada_status(db, current_user)
+    tpv_operator_candidates: List[Dict[str, Any]] = []
+    if company_ids:
+        rows = (
+            db.query(CompanyEmployee)
+            .filter(
+                CompanyEmployee.company_id.in_(company_ids),
+                CompanyEmployee.is_active.is_(True),
+            )
+            .order_by(CompanyEmployee.full_name.asc())
+            .all()
+        )
+        tpv_operator_candidates = [
+            {
+                "id": r.id,
+                "full_name": r.full_name,
+                "role_title": r.role_title or "",
+                "company_id": r.company_id,
+            }
+            for r in rows
+            if len(_normalize_phone_digits(r.phone or "")) >= 8
+        ]
     return {
         "success": True,
         "service": "TPV Universal Enterprise",
         "version": "1.0.0",
-        # Hostelería: el móvil se valida en servidor (ficha RRHH); no entrada manual en cliente.
         "requires_employee_phone_verification": False,
         "tpv_operator": tpv_operator_badge_payload(db, current_user, svc),
+        "tpv_operator_candidates": tpv_operator_candidates,
         "jornada": jornada,
         "user": {
             "email": current_user.email,
@@ -305,76 +328,64 @@ async def _get_tpv_info(db: Session, current_user: User):
     }
 
 
-def _verify_operator_pin_for_switch(ce: CompanyEmployee, pin: str) -> None:
-    """Si hay hash en RRHH, valida con bcrypt; si no, el PIN por defecto es el código de empleado."""
-    pin_stripped = (pin or "").strip()
-    if not pin_stripped:
-        raise HTTPException(status_code=400, detail="PIN requerido")
-    hash_val = getattr(ce, "tpv_pin_hash", None)
-    if hash_val:
-        if not pwd_context.verify(pin_stripped, hash_val):
-            raise HTTPException(status_code=403, detail="PIN incorrecto")
-    else:
-        if pin_stripped != str(ce.employee_code).strip():
-            raise HTTPException(
-                status_code=403,
-                detail="PIN incorrecto. Si no hay PIN en RRHH, introduce el mismo código de empleado como PIN.",
-            )
-
-
-def _resolve_switch_company_employee(
+def _resolve_company_employee_for_tpv_login_by_id(
     db: Session,
     current_user: User,
-    employee_code: str,
-    company_id: Optional[int],
+    employee_pk: int,
 ) -> CompanyEmployee:
     ensure_user_company_link_for_operations(db, current_user)
     cids = _company_ids_for_user(db, current_user)
     if not cids:
         raise HTTPException(status_code=403, detail="Sin empresa asociada")
-    code = employee_code.strip()
-    q = db.query(CompanyEmployee).filter(
-        CompanyEmployee.employee_code == code,
-        CompanyEmployee.company_id.in_(cids),
-        CompanyEmployee.is_active.is_(True),
+    ce = (
+        db.query(CompanyEmployee)
+        .filter(
+            CompanyEmployee.id == employee_pk,
+            CompanyEmployee.company_id.in_(cids),
+            CompanyEmployee.is_active.is_(True),
+        )
+        .first()
     )
-    if company_id is not None:
-        if company_id not in cids:
-            raise HTTPException(status_code=403, detail="Empresa no permitida")
-        q = q.filter(CompanyEmployee.company_id == company_id)
-    matches = q.all()
-    if len(matches) == 1:
-        return matches[0]
-    if len(matches) == 0:
-        raise HTTPException(status_code=404, detail="Empleado no encontrado en tu empresa")
-    pcid = _primary_company_id(db, current_user)
-    if pcid is not None:
-        for m in matches:
-            if m.company_id == pcid:
-                return m
-    raise HTTPException(
-        status_code=400,
-        detail="Hay varios empleados con ese código; indica company_id",
-    )
+    if not ce:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    return ce
+
+
+def _verify_operator_phone_match(ce: CompanyEmployee, telefono: str) -> None:
+    want = _normalize_phone_digits(telefono)
+    if len(want) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail="Introduce un número de teléfono válido (mínimo 8 dígitos).",
+        )
+    stored = _normalize_phone_digits(getattr(ce, "phone", None) or "")
+    if len(stored) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail="Este empleado no tiene un teléfono válido registrado; no puede iniciar sesión en el TPV.",
+        )
+    if want != stored:
+        raise HTTPException(status_code=403, detail="El teléfono no coincide con el del empleado.")
 
 
 async def _tpv_employee_switch_impl(
-    body: EmployeeSwitchBody,
+    body: TpvEmployeeLoginBody,
     db: Session,
     current_user: User,
 ) -> Dict[str, Any]:
-    """Login operativo TPV (misma sesión empresa): código RRHH + PIN."""
+    """Login operativo TPV (misma sesión empresa): empleado + teléfono verificado."""
     _pin_rate_check_or_raise(current_user.id)
-    ce = _resolve_switch_company_employee(db, current_user, body.employee_code, body.company_id)
+    ce = _resolve_company_employee_for_tpv_login_by_id(db, current_user, body.employee_id)
     try:
-        _verify_operator_pin_for_switch(ce, body.pin)
+        _verify_operator_phone_match(ce, body.telefono)
     except HTTPException as exc:
-        if exc.status_code == 403:
+        if exc.status_code in (400, 403):
             _pin_rate_record_failure(current_user.id)
             logger.warning(
-                "employee_login_fail user_id=%s employee_code=%s detail=%s",
+                "employee_login_fail user_id=%s company_employee_id=%s status=%s detail=%s",
                 current_user.id,
-                body.employee_code,
+                body.employee_id,
+                exc.status_code,
                 getattr(exc, "detail", ""),
             )
         raise
@@ -395,8 +406,9 @@ async def _tpv_employee_switch_impl(
         )
     db.commit()
     logger.info(
-        "employee_login_success user_id=%s employee_code=%s company_id=%s",
+        "employee_login_success user_id=%s company_employee_id=%s employee_code=%s company_id=%s",
         current_user.id,
+        ce.id,
         ce.employee_code,
         ce.company_id,
     )
@@ -415,7 +427,8 @@ async def _tpv_employee_switch_impl(
     return {
         "success": True,
         "tpv_operator": tpv_operator_badge_payload(db, current_user, svc),
-        "employee_id": ce.employee_code,
+        "company_employee_id": ce.id,
+        "employee_code": ce.employee_code,
         "full_name": ce.full_name,
         "employee_session": shift_info,
         "jornada": jornada,
@@ -425,13 +438,13 @@ async def _tpv_employee_switch_impl(
 @router.post("/employee/switch")
 @router.post("/employee/login")
 async def tpv_post_employee_switch(
-    body: EmployeeSwitchBody,
+    body: TpvEmployeeLoginBody,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
     """
     Establece el operador TPV (cobrador) sin cerrar la sesión de la empresa.
-    Alias: POST /employee/login (JWT empresa + PIN empleado).
+    POST /employee/login: JWT empresa + id de empleado + teléfono (coincide con ficha).
     """
     return await _tpv_employee_switch_impl(body, db, current_user)
 

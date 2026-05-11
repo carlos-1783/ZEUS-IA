@@ -531,7 +531,7 @@
       </div>
     </div>
 
-    <!-- Cambiar operador: PIN empleado (sin logout empresa / sin redirección) -->
+    <!-- Cambiar operador: empleado + teléfono (sin logout empresa / sin redirección) -->
     <div v-if="showOperatorSwitchModal" class="modal-overlay" @click.self="showOperatorSwitchModal = false">
       <div class="modal-content operator-switch-modal" role="dialog" aria-modal="true" aria-labelledby="operator-switch-title">
         <div class="modal-header">
@@ -539,22 +539,30 @@
           <button type="button" class="modal-close" @click="showOperatorSwitchModal = false">✕</button>
         </div>
         <p class="modal-hint operator-switch-hint">{{ $t('tpv.changeOperatorHint') }}</p>
-        <label class="form-label" for="operator-code-input">{{ $t('tpv.employeeCode') }}</label>
+        <p v-if="!tpvOperatorCandidates.length" class="modal-hint operator-switch-warning">
+          {{ $t('tpv.operatorNoCandidates') }}
+        </p>
+        <label class="form-label" for="operator-employee-select">{{ $t('tpv.operatorSelectEmployee') }}</label>
+        <select
+          id="operator-employee-select"
+          v-model="operatorSwitchEmployeeId"
+          class="form-input operator-switch-select"
+          :disabled="!tpvOperatorCandidates.length"
+        >
+          <option disabled value="">{{ $t('tpv.operatorSelectPlaceholder') }}</option>
+          <option v-for="e in tpvOperatorCandidates" :key="e.id" :value="String(e.id)">
+            {{ e.full_name }}{{ e.role_title ? ` — ${e.role_title}` : '' }}
+          </option>
+        </select>
+        <label class="form-label" for="operator-phone-input">{{ $t('tpv.operatorPhone') }}</label>
         <input
-          id="operator-code-input"
-          v-model="operatorSwitchCode"
-          type="text"
+          id="operator-phone-input"
+          v-model="operatorSwitchPhone"
+          type="tel"
+          inputmode="tel"
+          autocomplete="tel"
           class="form-input"
-          autocomplete="username"
-          @keyup.enter="submitOperatorSwitch"
-        />
-        <label class="form-label" for="operator-pin-input">{{ $t('tpv.operatorPin') }}</label>
-        <input
-          id="operator-pin-input"
-          v-model="operatorSwitchPin"
-          type="password"
-          class="form-input"
-          autocomplete="current-password"
+          :placeholder="$t('tpv.operatorPhonePlaceholder')"
           @keyup.enter="submitOperatorSwitch"
         />
         <div class="modal-footer operator-switch-footer">
@@ -725,9 +733,10 @@ const canEditProducts = computed(() => {
 // Estado del modal de producto
 const showProductModal = ref(false)
 const showOperatorSwitchModal = ref(false)
-const operatorSwitchCode = ref('')
-const operatorSwitchPin = ref('')
+const operatorSwitchEmployeeId = ref('')
+const operatorSwitchPhone = ref('')
 const operatorSwitchLoading = ref(false)
+const tpvOperatorCandidates = ref([])
 const editingProduct = ref(null)
 const productForm = ref({
   name: '',
@@ -953,21 +962,31 @@ const loginRedirectPath = () => {
 }
 
 const openOperatorSwitchModal = () => {
-  operatorSwitchCode.value = ''
-  operatorSwitchPin.value = ''
+  operatorSwitchEmployeeId.value = ''
+  operatorSwitchPhone.value = ''
   showOperatorSwitchModal.value = true
   nextTick(() => {
     try {
-      document.getElementById('operator-code-input')?.focus()
+      document.getElementById('operator-employee-select')?.focus()
     } catch (_) {}
   })
 }
 
 const submitOperatorSwitch = async () => {
-  const code = String(operatorSwitchCode.value || '').trim()
-  const pin = String(operatorSwitchPin.value || '').trim()
-  if (!code || !pin) {
+  const idRaw = String(operatorSwitchEmployeeId.value || '').trim()
+  const telefono = String(operatorSwitchPhone.value || '').trim()
+  const employee_id = parseInt(idRaw, 10)
+  const digits = telefono.replace(/\D/g, '')
+  if (!idRaw || !telefono) {
     warning(t('tpv.operatorSwitchFillBoth'))
+    return
+  }
+  if (!Number.isFinite(employee_id) || employee_id < 1) {
+    warning(t('tpv.operatorSwitchPickEmployee'))
+    return
+  }
+  if (digits.length < 8) {
+    warning(t('tpv.operatorPhoneInvalid'))
     return
   }
   operatorSwitchLoading.value = true
@@ -982,7 +1001,7 @@ const submitOperatorSwitch = async () => {
     const api = (await import('@/services/api')).default
     const res = await api.post(
       '/api/v1/tpv/employee/login',
-      { employee_code: code, pin },
+      { employee_id, telefono },
       token
     )
     if (res?.tpv_operator) {
@@ -1485,6 +1504,9 @@ const loadTPVConfig = async () => {
     businessProfile.value = data.business_profile
     tpvOperator.value = data.tpv_operator || null
     tpvJornada.value = data.jornada || null
+    tpvOperatorCandidates.value = Array.isArray(data.tpv_operator_candidates)
+      ? data.tpv_operator_candidates
+      : []
     tpvConfig.value = {
       ...(data.config || {}),
       requires_employee_phone_verification: !!data.requires_employee_phone_verification,
@@ -3919,11 +3941,15 @@ onUnmounted(() => {
   max-width: 440px;
 }
 
-.operator-switch-hint {
+.operator-switch-warning {
   margin: 0 20px 12px;
-  color: rgba(255, 255, 255, 0.75);
-  font-size: 0.9rem;
-  line-height: 1.4;
+  color: rgba(255, 200, 120, 0.95);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.operator-switch-select {
+  cursor: pointer;
 }
 
 .operator-switch-modal .form-label {

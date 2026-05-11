@@ -1,6 +1,6 @@
 """
 Operador TPV desde la sesión autenticada (CompanyEmployee.user_id).
-No usar employee_id / teléfono enviados por el cliente para identificar al cobrador.
+El cobrador efectivo sale de TPVOperatorSession o de la ficha vinculada al usuario; el login TPV valida id + teléfono en servidor antes de crear esa sesión.
 """
 
 from __future__ import annotations

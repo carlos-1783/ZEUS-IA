@@ -70,8 +70,7 @@
         <button 
           v-if="!isEmployee"
           class="nav-item"
-          :class="{ active: currentView === 'settings' }"
-          @click="currentView = 'settings'; closeSidebarOnMobile()"
+          @click="closeSidebarOnMobile(); goToUserSettings()"
         >
           <span class="icon">⚙️</span>
           <span>Settings</span>
@@ -220,7 +219,7 @@
         </div>
       </section>
 
-      <!-- Settings View -->
+      <!-- Ajustes de cuenta (idioma/tema/2FA): página dedicada /settings -->
       <section v-if="currentView === 'settings'" class="settings-view">
         <div class="settings-grid">
           <div class="settings-card">
@@ -240,43 +239,8 @@
           </div>
 
           <div class="settings-card">
-            <h3>🎨 Appearance</h3>
-            <div class="setting-item">
-              <label>Theme</label>
-              <select v-model="theme" @change="handleThemeChange">
-                <option value="dark">Dark (Current)</option>
-                <option value="light">Light</option>
-                <option value="auto">Auto</option>
-              </select>
-            </div>
-            <div class="setting-item">
-              <label>Language</label>
-              <select v-model="currentLanguage">
-                <option v-for="lang in supportedLanguages" :key="lang" :value="lang">
-                  {{ lang === 'es' ? 'Español' : lang === 'en' ? 'English' : lang.toUpperCase() }}
-                </option>
-              </select>
-            </div>
-          </div>
-
-          <div class="settings-card">
-            <h3>🔐 Security</h3>
-            <div class="setting-item">
-              <label>Two-factor authentication</label>
-              <button class="btn-secondary" @click="handleEnable2FA">Enable</button>
-            </div>
-            <div class="setting-item">
-              <label>Session timeout</label>
-              <select v-model="sessionTimeout" @change="handleSessionTimeoutChange">
-                <option value="30">30 minutes</option>
-                <option value="60">1 hour</option>
-                <option value="240">4 hours</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="settings-card">
             <h3>⚙️ Advanced</h3>
+            <p class="settings-embed-hint">Idioma, tema y sesión: <a href="#" class="settings-link" @click.prevent="goToUserSettings">Abrir ajustes de cuenta</a></p>
             <div class="setting-item">
               <label>API Access</label>
               <button class="btn-secondary" @click="handleGenerateApiKey">Generate Key</button>
@@ -303,34 +267,17 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
+import { useSettingsStore } from '@/stores/settings'
 import AgentActivityPanel from './AgentActivityPanel.vue'
 import { usePWA } from '@/composables/usePWA'
 
 const router = useRouter()
 const authStore = useAuthStore()
-
-// i18n
-const { locale, t } = useI18n()
+const settingsStore = useSettingsStore()
 
 // PWA Install
 const { isInstallable, isInstalled, promptInstall } = usePWA()
-
-// Idiomas soportados
-const supportedLanguages = ['es', 'en']
-
-// Idioma actual
-const currentLanguage = computed({
-  get: () => locale.value,
-  set: (value) => {
-    locale.value = value
-    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-      window.localStorage.setItem('zeus_locale', value)
-    }
-    console.log('🌍 Idioma cambiado a:', value)
-  }
-})
 
 const props = defineProps({
   agents: Array
@@ -352,9 +299,6 @@ const notificationSettings = ref({
   push: true,
   agentStatus: false
 })
-
-const theme = ref('dark')
-const sessionTimeout = ref('60')
 
 const closeSidebarOnMobile = () => {
   // Cerrar sidebar en móvil después de seleccionar una opción
@@ -382,6 +326,10 @@ const goToPayroll = () => {
   router.push('/payroll')
 }
 
+const goToUserSettings = () => {
+  router.push('/settings')
+}
+
 // Instalar PWA
 const handleInstallPWA = async () => {
   const installed = await promptInstall()
@@ -391,23 +339,6 @@ const handleInstallPWA = async () => {
 }
 
 // Settings handlers
-const handleEnable2FA = async () => {
-  try {
-    const token = authStore.getToken ? authStore.getToken() : authStore.token
-    if (!token) {
-      alert('Error: No hay token de autenticación')
-      return
-    }
-    
-    const api = (await import('@/services/api')).default
-    const data = await api.post('/api/v1/user/2fa/enable', undefined, token)
-    alert(`✅ Autenticación de dos factores habilitada\n\nCódigo QR:\n${data.qr_code || 'Disponible en configuración'}`)
-  } catch (error) {
-    console.error('Error habilitando 2FA:', error)
-    alert('⚠️ Función disponible próximamente')
-  }
-}
-
 const handleGenerateApiKey = async () => {
   try {
     const token = authStore.getToken ? authStore.getToken() : authStore.token
@@ -465,9 +396,7 @@ const handleExportData = async () => {
         user: authStore.user,
         settings: {
           notifications: notificationSettings.value,
-          theme: theme.value,
-          sessionTimeout: sessionTimeout.value,
-          language: locale.value
+          app: { ...settingsStore.settings },
         },
         exportedAt: new Date().toISOString()
       }
@@ -490,9 +419,7 @@ const handleExportData = async () => {
       user: authStore.user,
       settings: {
         notifications: notificationSettings.value,
-        theme: theme.value,
-        sessionTimeout: sessionTimeout.value,
-        language: locale.value
+        app: { ...settingsStore.settings },
       },
       exportedAt: new Date().toISOString()
     }
@@ -507,24 +434,6 @@ const handleExportData = async () => {
     window.URL.revokeObjectURL(url)
     document.body.removeChild(a)
     alert('✅ Datos exportados correctamente (datos locales)')
-  }
-}
-
-const handleThemeChange = () => {
-  // Guardar tema en localStorage
-  if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-    window.localStorage.setItem('zeus_theme', theme.value)
-    // Aplicar tema al documento
-    document.documentElement.setAttribute('data-theme', theme.value)
-    alert(`✅ Tema cambiado a: ${theme.value}`)
-  }
-}
-
-const handleSessionTimeoutChange = () => {
-  // Guardar timeout en localStorage
-  if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-    window.localStorage.setItem('zeus_session_timeout', sessionTimeout.value)
-    alert(`✅ Timeout de sesión configurado: ${sessionTimeout.value} minutos`)
   }
 }
 
@@ -705,21 +614,6 @@ watch(notificationSettings, () => {
   saveNotificationSettings()
 }, { deep: true })
 
-// Watch para guardar tema automáticamente
-watch(theme, (newVal) => {
-  if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-    window.localStorage.setItem('zeus_theme', newVal)
-    document.documentElement.setAttribute('data-theme', newVal)
-  }
-})
-
-// Watch para guardar timeout automáticamente
-watch(sessionTimeout, (newVal) => {
-  if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-    window.localStorage.setItem('zeus_session_timeout', newVal)
-  }
-})
-
 // Función para actualizar módulos basado en permisos de superusuario
 const updateModulesForSuperuser = () => {
   const isAdmin = authStore.isAdmin || authStore.user?.is_superuser || false
@@ -785,20 +679,6 @@ onMounted(async () => {
   loadDashboardMetrics()
   loadBackendHealth()
   loadAgentsActivities()
-  
-  // Cargar configuraciones guardadas
-  if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-    const savedTheme = window.localStorage.getItem('zeus_theme')
-    if (savedTheme) {
-      theme.value = savedTheme
-      document.documentElement.setAttribute('data-theme', savedTheme)
-    }
-    
-    const savedTimeout = window.localStorage.getItem('zeus_session_timeout')
-    if (savedTimeout) {
-      sessionTimeout.value = savedTimeout
-    }
-  }
   
   // Refresh dashboard metrics cada 30 segundos; salud API/BD cada minuto
   setInterval(loadDashboardMetrics, 30000)
@@ -1665,6 +1545,23 @@ const chatWith = (agent) => {
   margin: 0 0 20px;
   font-size: 18px;
   color: #fff;
+}
+
+.settings-embed-hint {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.45;
+}
+
+.settings-link {
+  color: #7eb8ff;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.settings-link:hover {
+  color: #a8d4ff;
 }
 
 .setting-item {

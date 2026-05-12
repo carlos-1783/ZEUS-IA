@@ -11,6 +11,23 @@
     "settings": "Configuración",
     "analytics": "Analíticas"
   },
+  "userSettings": {
+    "pageTitle": "Ajustes de la cuenta",
+    "back": "Volver",
+    "appearance": "Apariencia",
+    "theme": "Tema",
+    "themeDark": "Oscuro",
+    "themeLight": "Claro",
+    "themeAuto": "Automático (sistema)",
+    "language": "Idioma",
+    "security": "Seguridad",
+    "twoFactor": "Autenticación en dos pasos",
+    "twoFactorHint": "Se guarda en tu cuenta; el flujo real de verificación puede activarse más adelante.",
+    "sessionTimeout": "Cierre por inactividad",
+    "sessionTimeoutHint": "Tras este tiempo sin actividad se cerrará la sesión en este dispositivo.",
+    "minutes": "minutos",
+    "saveError": "No se pudo guardar en el servidor; se revirtió el cambio."
+  },
   "layout": {
     "openMenu": "Abrir menú",
     "logout": "Cerrar sesión",

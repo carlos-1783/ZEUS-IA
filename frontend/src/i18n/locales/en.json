@@ -11,6 +11,23 @@
     "settings": "Settings",
     "analytics": "Analytics"
   },
+  "userSettings": {
+    "pageTitle": "Account settings",
+    "back": "Back",
+    "appearance": "Appearance",
+    "theme": "Theme",
+    "themeDark": "Dark",
+    "themeLight": "Light",
+    "themeAuto": "Auto (system)",
+    "language": "Language",
+    "security": "Security",
+    "twoFactor": "Two-factor authentication",
+    "twoFactorHint": "Stored on your account; full verification flow may be enabled later.",
+    "sessionTimeout": "Idle sign-out",
+    "sessionTimeoutHint": "After this period without activity, your session closes on this device.",
+    "minutes": "minutes",
+    "saveError": "Could not save on the server; the change was reverted."
+  },
   "layout": {
     "openMenu": "Open menu",
     "logout": "Log out",

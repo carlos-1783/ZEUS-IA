@@ -143,6 +143,15 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem(REFRESH_TOKEN_KEY);
     
     console.log('[AuthStore] Auth state reset complete');
+    import('@/stores/settings')
+      .then(({ useSettingsStore }) => {
+        try {
+          useSettingsStore().reset();
+        } catch {
+          /* ignore */
+        }
+      })
+      .catch(() => {});
   }
 
   // Update user data from token
@@ -323,6 +332,8 @@ export const useAuthStore = defineStore('auth', () => {
         if (!storedToken) {
           throw new Error('Could not verify saved token');
         }
+
+        await bootstrapSettingsAfterAuth();
         
         console.log('[AuthStore] Authentication successful');
         return {
@@ -449,6 +460,15 @@ export const useAuthStore = defineStore('auth', () => {
   let isInitializing = false;
   let hasInitialized = false;
 
+  async function bootstrapSettingsAfterAuth(): Promise<void> {
+    try {
+      const { useSettingsStore } = await import('@/stores/settings');
+      await useSettingsStore().bootstrapFromBackend();
+    } catch (e) {
+      console.warn('[AuthStore] settings bootstrap skipped', e);
+    }
+  }
+
   // Initialize the store
   async function initialize(): Promise<boolean> {
     // Performance: Skip si ya está inicializado o inicializando
@@ -518,6 +538,7 @@ export const useAuthStore = defineStore('auth', () => {
             company_employee: data.company_employee ?? null,
           };
         } catch (_) { /* mantener user desde token */ }
+        await bootstrapSettingsAfterAuth();
         console.log('[AuthStore] Initialization successful');
         hasInitialized = true;
         return true;

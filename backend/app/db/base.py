@@ -60,6 +60,7 @@ def create_tables():
 
             # Importar modelos aquí para evitar importación circular
             from app.models.user import User, RefreshToken, PasswordResetToken
+            from app.models.user_settings import UserSettings
             from app.models.company import Company, UserCompany
             from app.models.customer import Customer
             from app.models.erp import Invoice, Product, Payment, TPVProduct, TaxRate, FiscalProfile, TPVSale, TPVSaleItem

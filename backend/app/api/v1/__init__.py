@@ -31,6 +31,7 @@ from app.api.v1.endpoints import (
     webhooks,
     payroll,
     public as public_site,
+    user_settings,
 )
 from app.api.v1.endpoints.websocket import websocket_endpoint
 
@@ -41,6 +42,7 @@ api_router.include_router(health.router, tags=["health"])
 
 # Other endpoints with their respective prefixes
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
+api_router.include_router(user_settings.router, prefix="/settings", tags=["settings"])
 api_router.include_router(commands.router, prefix="/commands", tags=["commands"])
 api_router.include_router(system.router, prefix="/system", tags=["system"])
 

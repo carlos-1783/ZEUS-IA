@@ -249,6 +249,16 @@ const router = createRouter({
         requiresAuth: true
       }
     },
+    {
+      path: '/settings',
+      name: 'UserSettings',
+      component: () => import('../views/SettingsView.vue'),
+      meta: {
+        title: 'Ajustes - ZEUS-IA',
+        titleKey: 'userSettings.pageTitle',
+        requiresAuth: true
+      }
+    },
     
     // Nóminas (borradores)
     {

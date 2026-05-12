@@ -12,7 +12,7 @@
       <div class="logo-section">
         <img src="/images/logo-zeus.png" alt="ZEUS" class="logo-zeus-img" />
         <h1>ZEUS-IA</h1>
-        <p class="subtitle">Enterprise AI Platform</p>
+        <p class="subtitle">{{ t('dashboardPro.subtitle') }}</p>
       </div>
 
       <nav class="nav-menu">
@@ -22,7 +22,7 @@
           @click="currentView = 'dashboard'; closeSidebarOnMobile()"
         >
           <span class="icon">🏛️</span>
-          <span>Dashboard</span>
+          <span>{{ t('dashboardPro.nav.dashboard') }}</span>
         </button>
         <!-- Admin Panel: solo superusuario (el resto de empresas no lo ve en producción) -->
         <button 
@@ -31,7 +31,7 @@
           @click="closeSidebarOnMobile(); goToAdmin()"
         >
           <span class="icon">🔐</span>
-          <span>Admin Panel</span>
+          <span>{{ t('dashboardPro.nav.admin') }}</span>
         </button>
         <button 
           v-if="!isEmployee"
@@ -40,7 +40,7 @@
           @click="currentView = 'analytics'; closeSidebarOnMobile()"
         >
           <span class="icon">📊</span>
-          <span>Analytics</span>
+          <span>{{ t('dashboardPro.nav.analytics') }}</span>
         </button>
         <button 
           v-if="shouldShowTPV || authStore.isAdmin || authStore.user?.is_superuser || availableModules.tpv || true"
@@ -48,7 +48,7 @@
           @click="goToTPV"
         >
           <span class="icon">💳</span>
-          <span>TPV</span>
+          <span>{{ t('dashboardPro.nav.tpv') }}</span>
         </button>
         <button 
           v-if="shouldShowControlHorario || authStore.isAdmin || authStore.user?.is_superuser || availableModules.control_horario || true"
@@ -56,7 +56,7 @@
           @click="goToControlHorario"
         >
           <span class="icon">⏰</span>
-          <span>Control Horario</span>
+          <span>{{ t('dashboardPro.nav.controlHorario') }}</span>
         </button>
         <!-- Nóminas: solo dueño de empresa (empleado no ve) -->
         <button 
@@ -65,7 +65,7 @@
           @click="closeSidebarOnMobile(); goToPayroll()"
         >
           <span class="icon">📋</span>
-          <span>Nóminas</span>
+          <span>{{ t('dashboardPro.nav.payroll') }}</span>
         </button>
         <button 
           v-if="!isEmployee"
@@ -73,7 +73,7 @@
           @click="closeSidebarOnMobile(); goToUserSettings()"
         >
           <span class="icon">⚙️</span>
-          <span>Settings</span>
+          <span>{{ t('dashboardPro.nav.settings') }}</span>
         </button>
       </nav>
 
@@ -84,7 +84,7 @@
         </div>
         <div class="metric-item">
           <div class="metric-value">{{ agentsData.length }}</div>
-          <div class="metric-label">Active Agents</div>
+          <div class="metric-label">{{ t('dashboardPro.metrics.activeAgents') }}</div>
         </div>
       </div>
     </aside>
@@ -105,8 +105,8 @@
             <span></span>
           </button>
           <div>
-            <h2>AI Agents Control Center</h2>
-            <p class="breadcrumb">Dashboard / Agents Overview</p>
+            <h2>{{ t('dashboardPro.header.title') }}</h2>
+            <p class="breadcrumb">{{ t('dashboardPro.header.breadcrumb') }}</p>
           </div>
         </div>
         <div class="header-right">
@@ -115,16 +115,16 @@
             v-if="isInstallable && !isInstalled"
             @click="handleInstallPWA"
             class="pwa-install-btn"
-            title="Instalar ZEUS-IA como aplicación"
+            :title="t('dashboardPro.pwa.installTitle')"
           >
-            📲 Instalar
+            📲 {{ t('dashboardPro.pwa.install') }}
           </button>
           <!-- Debug: Mostrar estado PWA (temporal para diagnóstico) -->
-          <div v-if="!isInstallable || isInstalled" class="pwa-debug-info" title="Estado PWA: installable={{ isInstallable }}, installed={{ isInstalled }}">
-            🔧 PWA: {{ isInstalled ? 'Instalada' : isInstallable ? 'Instalable' : 'No disponible' }}
-            <a href="/clear-pwa-cache.html" target="_blank" style="color: #ffa500; margin-left: 8px; text-decoration: underline; font-size: 10px;">Limpiar Cache</a>
+          <div v-if="!isInstallable || isInstalled" class="pwa-debug-info" :title="`PWA: installable=${isInstallable}, installed=${isInstalled}`">
+            🔧 PWA: {{ isInstalled ? t('dashboardPro.pwa.stateInstalled') : isInstallable ? t('dashboardPro.pwa.stateInstallable') : t('dashboardPro.pwa.stateUnavailable') }}
+            <a href="/clear-pwa-cache.html" target="_blank" style="color: #ffa500; margin-left: 8px; text-decoration: underline; font-size: 10px;">{{ t('dashboardPro.pwa.clearCache') }}</a>
           </div>
-          <div class="status-badge online">● System Online</div>
+          <div class="status-badge online">● {{ t('dashboardPro.systemOnline') }}</div>
         </div>
       </header>
 
@@ -153,18 +153,18 @@
             
             <div class="agent-stats">
               <div class="stat">
-                <span class="stat-label">Status</span>
-                <span class="stat-value status-active">Online</span>
+                <span class="stat-label">{{ t('dashboardPro.agentCard.status') }}</span>
+                <span class="stat-value status-active">{{ t('dashboardPro.agentCard.online') }}</span>
               </div>
               <div class="stat">
-                <span class="stat-label">Actividades 24h</span>
+                <span class="stat-label">{{ t('dashboardPro.agentCard.activities24h') }}</span>
                 <span class="stat-value">{{ agent.activities_24h || 0 }}</span>
               </div>
             </div>
 
             <button class="btn-interact" @click.stop="chatWith(agent)">
               <span>💬</span>
-              Interact
+              {{ t('dashboardPro.agentCard.interact') }}
             </button>
           </div>
         </div>
@@ -176,7 +176,7 @@
           <div class="stat-card">
             <div class="stat-icon">📈</div>
             <div class="stat-content">
-              <h3>Total Interactions</h3>
+              <h3>{{ t('dashboardPro.analytics.totalInteractions') }}</h3>
               <p class="stat-number">{{ dashboardMetrics.totalInteractions.toLocaleString() }}</p>
               <span class="stat-change positive">{{ dashboardMetrics.interactionsTrend }}</span>
             </div>
@@ -185,7 +185,7 @@
           <div class="stat-card">
             <div class="stat-icon">⚡</div>
             <div class="stat-content">
-              <h3>Avg Response Time</h3>
+              <h3>{{ t('dashboardPro.analytics.avgResponseTime') }}</h3>
               <p class="stat-number">{{ dashboardMetrics.avgResponseTime }}</p>
               <span class="stat-change positive">{{ dashboardMetrics.responseTrend }}</span>
             </div>
@@ -194,7 +194,7 @@
           <div class="stat-card">
             <div class="stat-icon">💰</div>
             <div class="stat-content">
-              <h3>Cost Savings</h3>
+              <h3>{{ t('dashboardPro.analytics.costSavings') }}</h3>
               <p class="stat-number">{{ dashboardMetrics.costSavings }}</p>
               <span class="stat-change positive">{{ dashboardMetrics.savingsTrend }}</span>
             </div>
@@ -203,7 +203,7 @@
           <div class="stat-card">
             <div class="stat-icon">✅</div>
             <div class="stat-content">
-              <h3>Success Rate</h3>
+              <h3>{{ t('dashboardPro.analytics.successRate') }}</h3>
               <p class="stat-number">{{ dashboardMetrics.successRate }}</p>
               <span class="stat-change positive">{{ dashboardMetrics.successTrend }}</span>
             </div>
@@ -211,10 +211,10 @@
         </div>
 
         <div class="chart-placeholder">
-          <h3>Performance Analytics</h3>
+          <h3>{{ t('dashboardPro.analytics.chartTitle') }}</h3>
           <div class="placeholder-content">
             <span class="icon-large">📊</span>
-            <p>Detailed analytics charts coming soon</p>
+            <p>{{ t('dashboardPro.analytics.chartSoon') }}</p>
           </div>
         </div>
       </section>
@@ -223,31 +223,31 @@
       <section v-if="currentView === 'settings'" class="settings-view">
         <div class="settings-grid">
           <div class="settings-card">
-            <h3>🔔 Notifications</h3>
+            <h3>🔔 {{ t('dashboardPro.notifications.title') }}</h3>
             <div class="setting-item">
-              <label>Email notifications</label>
+              <label>{{ t('dashboardPro.notifications.email') }}</label>
               <input type="checkbox" v-model="notificationSettings.email" />
             </div>
             <div class="setting-item">
-              <label>Push notifications</label>
+              <label>{{ t('dashboardPro.notifications.push') }}</label>
               <input type="checkbox" v-model="notificationSettings.push" />
             </div>
             <div class="setting-item">
-              <label>Agent status updates</label>
+              <label>{{ t('dashboardPro.notifications.agentStatus') }}</label>
               <input type="checkbox" v-model="notificationSettings.agentStatus" />
             </div>
           </div>
 
           <div class="settings-card">
-            <h3>⚙️ Advanced</h3>
-            <p class="settings-embed-hint">Idioma, tema y sesión: <a href="#" class="settings-link" @click.prevent="goToUserSettings">Abrir ajustes de cuenta</a></p>
+            <h3>⚙️ {{ t('dashboardPro.advanced.title') }}</h3>
+            <p class="settings-embed-hint">{{ t('dashboardPro.settingsEmbed') }} <a href="#" class="settings-link" @click.prevent="goToUserSettings">{{ t('dashboardPro.settingsEmbedLink') }}</a></p>
             <div class="setting-item">
-              <label>API Access</label>
-              <button class="btn-secondary" @click="handleGenerateApiKey">Generate Key</button>
+              <label>{{ t('dashboardPro.advanced.apiAccess') }}</label>
+              <button class="btn-secondary" @click="handleGenerateApiKey">{{ t('dashboardPro.advanced.generateKey') }}</button>
             </div>
             <div class="setting-item">
-              <label>Export Data</label>
-              <button class="btn-secondary" @click="handleExportData">Download</button>
+              <label>{{ t('dashboardPro.advanced.exportData') }}</label>
+              <button class="btn-secondary" @click="handleExportData">{{ t('dashboardPro.advanced.download') }}</button>
             </div>
           </div>
         </div>
@@ -267,6 +267,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import AgentActivityPanel from './AgentActivityPanel.vue'
@@ -275,6 +276,7 @@ import { usePWA } from '@/composables/usePWA'
 const router = useRouter()
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
+const { t } = useI18n()
 
 // PWA Install
 const { isInstallable, isInstalled, promptInstall } = usePWA()

@@ -36,13 +36,51 @@ function normalizePayload(raw: unknown): UserAppSettingsState {
 }
 
 function applyThemeToDom(theme: AppTheme) {
-  const resolved =
-    theme === 'auto'
-      ? window.matchMedia?.('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light'
-      : theme
-  document.documentElement.setAttribute('data-theme', resolved)
+  const detachAutoMql = () => {
+    const w = window as unknown as { __zeusThemeMql?: MediaQueryList; __zeusThemeMqlHandler?: () => void }
+    if (w.__zeusThemeMql && w.__zeusThemeMqlHandler) {
+      try {
+        w.__zeusThemeMql.removeEventListener('change', w.__zeusThemeMqlHandler)
+      } catch {
+        /* ignore */
+      }
+    }
+    w.__zeusThemeMql = undefined
+    w.__zeusThemeMqlHandler = undefined
+  }
+
+  detachAutoMql()
+
+  const resolveResolved = (): 'dark' | 'light' => {
+    if (theme === 'auto') {
+      return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+    }
+    return theme as 'dark' | 'light'
+  }
+
+  const applyResolved = () => {
+    const resolved = resolveResolved()
+    document.documentElement.setAttribute('data-theme', resolved)
+    if (resolved === 'light') {
+      document.body.style.backgroundColor = '#e8eef5'
+      document.body.style.color = '#0f172a'
+    } else {
+      document.body.style.backgroundColor = '#0a0e1a'
+      document.body.style.color = '#f8fafc'
+    }
+  }
+
+  applyResolved()
+
+  if (theme === 'auto' && typeof window !== 'undefined' && window.matchMedia) {
+    const mql = window.matchMedia('(prefers-color-scheme: dark)')
+    const w = window as unknown as { __zeusThemeMql?: MediaQueryList; __zeusThemeMqlHandler?: () => void }
+    const handler = () => applyResolved()
+    w.__zeusThemeMql = mql
+    w.__zeusThemeMqlHandler = handler
+    mql.addEventListener('change', handler)
+  }
+
   try {
     localStorage.setItem('zeus_theme', theme)
   } catch {
@@ -174,9 +212,22 @@ export const useSettingsStore = defineStore('settings', () => {
 
   function reset() {
     clearIdleWatcher()
+    const w = window as unknown as { __zeusThemeMql?: MediaQueryList; __zeusThemeMqlHandler?: () => void }
+    if (w.__zeusThemeMql && w.__zeusThemeMqlHandler) {
+      try {
+        w.__zeusThemeMql.removeEventListener('change', w.__zeusThemeMqlHandler)
+      } catch {
+        /* ignore */
+      }
+    }
+    w.__zeusThemeMql = undefined
+    w.__zeusThemeMqlHandler = undefined
     settings.value = { ...DEFAULTS }
     hasSynced.value = false
     lastError.value = null
+    document.documentElement.setAttribute('data-theme', 'dark')
+    document.body.style.backgroundColor = ''
+    document.body.style.color = ''
   }
 
   return {

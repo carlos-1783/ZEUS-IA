@@ -28,6 +28,63 @@
     "minutes": "minutes",
     "saveError": "Could not save on the server; the change was reverted."
   },
+  "dashboardPro": {
+    "subtitle": "Enterprise AI platform",
+    "nav": {
+      "dashboard": "Dashboard",
+      "admin": "Administration",
+      "analytics": "Analytics",
+      "tpv": "POS",
+      "controlHorario": "Time tracking",
+      "payroll": "Payroll",
+      "settings": "Settings"
+    },
+    "header": {
+      "title": "AI agents control center",
+      "breadcrumb": "Dashboard / Agents overview"
+    },
+    "pwa": {
+      "install": "Install",
+      "installTitle": "Install ZEUS-IA as an app",
+      "stateInstalled": "Installed",
+      "stateInstallable": "Ready to install",
+      "stateUnavailable": "Not available",
+      "clearCache": "Clear cache"
+    },
+    "systemOnline": "System online",
+    "metrics": {
+      "activeAgents": "Active agents"
+    },
+    "agentCard": {
+      "status": "Status",
+      "online": "Online",
+      "activities24h": "Activities (24h)",
+      "interact": "Interact"
+    },
+    "analytics": {
+      "totalInteractions": "Total interactions",
+      "avgResponseTime": "Avg response time",
+      "costSavings": "Cost savings",
+      "successRate": "Success rate",
+      "chartTitle": "Performance",
+      "chartSoon": "Detailed charts coming soon"
+    },
+    "notifications": {
+      "title": "Notifications",
+      "email": "Email notifications",
+      "push": "Push notifications",
+      "agentStatus": "Agent status updates"
+    },
+    "advanced": {
+      "title": "Advanced",
+      "apiAccess": "API access",
+      "generateKey": "Generate key",
+      "exportData": "Export data",
+      "download": "Download"
+    },
+    "settingsEmbed": "Language, theme and session:",
+    "settingsEmbedLink": "Open account settings"
+  },
   "layout": {
     "openMenu": "Open menu",
     "logout": "Log out",

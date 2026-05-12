@@ -28,6 +28,63 @@
     "minutes": "minutos",
     "saveError": "No se pudo guardar en el servidor; se revirtió el cambio."
   },
+  "dashboardPro": {
+    "subtitle": "Plataforma empresarial de IA",
+    "nav": {
+      "dashboard": "Panel",
+      "admin": "Administración",
+      "analytics": "Analíticas",
+      "tpv": "TPV",
+      "controlHorario": "Control horario",
+      "payroll": "Nóminas",
+      "settings": "Ajustes"
+    },
+    "header": {
+      "title": "Centro de control de agentes IA",
+      "breadcrumb": "Panel / Resumen de agentes"
+    },
+    "pwa": {
+      "install": "Instalar",
+      "installTitle": "Instalar ZEUS-IA como aplicación",
+      "stateInstalled": "Instalada",
+      "stateInstallable": "Instalable",
+      "stateUnavailable": "No disponible",
+      "clearCache": "Limpiar caché"
+    },
+    "systemOnline": "Sistema en línea",
+    "metrics": {
+      "activeAgents": "Agentes activos"
+    },
+    "agentCard": {
+      "status": "Estado",
+      "online": "En línea",
+      "activities24h": "Actividades 24 h",
+      "interact": "Interactuar"
+    },
+    "analytics": {
+      "totalInteractions": "Interacciones totales",
+      "avgResponseTime": "Tiempo medio de respuesta",
+      "costSavings": "Ahorro estimado",
+      "successRate": "Tasa de éxito",
+      "chartTitle": "Rendimiento",
+      "chartSoon": "Gráficos detallados próximamente"
+    },
+    "notifications": {
+      "title": "Notificaciones",
+      "email": "Notificaciones por correo",
+      "push": "Notificaciones push",
+      "agentStatus": "Actualizaciones de estado del agente"
+    },
+    "advanced": {
+      "title": "Avanzado",
+      "apiAccess": "Acceso API",
+      "generateKey": "Generar clave",
+      "exportData": "Exportar datos",
+      "download": "Descargar"
+    },
+    "settingsEmbed": "Idioma, tema y sesión:",
+    "settingsEmbedLink": "Abrir ajustes de cuenta"
+  },
   "layout": {
     "openMenu": "Abrir menú",
     "logout": "Cerrar sesión",

@@ -83,6 +83,9 @@ body {
 // Importar Tailwind CSS
 @import './tailwind.css';
 
+// Tema claro: dashboard + página /settings (colores base del dashboard son oscuros fijos)
+@import './dashboard-profesional-theme.scss';
+
 // Componentes personalizados
 .btn {
   display: inline-flex;

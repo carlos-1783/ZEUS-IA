@@ -1,0 +1,170 @@
+/**
+ * El dashboard profesional usa colores oscuros fijos en scoped CSS.
+ * Estos overrides globales reaccionan a data-theme en <html> (settings store).
+ */
+
+[data-theme='light'] .dashboard-profesional {
+  background: #e8eef5;
+  color: #0f172a;
+}
+
+[data-theme='light'] .dashboard-profesional .sidebar-dark {
+  background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+  border-right: 1px solid rgba(15, 23, 42, 0.12);
+}
+
+[data-theme='light'] .dashboard-profesional .subtitle {
+  color: rgba(15, 23, 42, 0.55);
+}
+
+[data-theme='light'] .dashboard-profesional .nav-item {
+  color: rgba(15, 23, 42, 0.75);
+}
+
+[data-theme='light'] .dashboard-profesional .nav-item:hover {
+  background: rgba(59, 130, 246, 0.1);
+  color: #1e40af;
+}
+
+[data-theme='light'] .dashboard-profesional .nav-item.active {
+  background: rgba(59, 130, 246, 0.18);
+  color: #1d4ed8;
+}
+
+[data-theme='light'] .dashboard-profesional .metrics-mini {
+  border-top: 1px solid rgba(15, 23, 42, 0.1);
+}
+
+[data-theme='light'] .dashboard-profesional .metric-label {
+  color: rgba(15, 23, 42, 0.55);
+}
+
+[data-theme='light'] .dashboard-profesional .hamburger-btn span {
+  background: #0f172a;
+}
+
+[data-theme='light'] .dashboard-profesional .dashboard-header h2 {
+  color: #0f172a;
+}
+
+[data-theme='light'] .dashboard-profesional .breadcrumb {
+  color: rgba(15, 23, 42, 0.55);
+}
+
+[data-theme='light'] .dashboard-profesional .pwa-debug-info,
+[data-theme='light'] .dashboard-profesional .pwa-debug-info a {
+  color: rgba(15, 23, 42, 0.75) !important;
+}
+
+[data-theme='light'] .dashboard-profesional .status-badge.online {
+  background: rgba(16, 185, 129, 0.2);
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+[data-theme='light'] .dashboard-profesional .agent-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
+  border: 1px solid rgba(15, 23, 42, 0.1);
+}
+
+[data-theme='light'] .dashboard-profesional .agent-name {
+  color: #0f172a;
+}
+
+[data-theme='light'] .dashboard-profesional .agent-role {
+  color: rgba(15, 23, 42, 0.6);
+}
+
+[data-theme='light'] .dashboard-profesional .stat-label {
+  color: rgba(15, 23, 42, 0.5);
+}
+
+[data-theme='light'] .dashboard-profesional .analytics-view .stat-card {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+[data-theme='light'] .dashboard-profesional .analytics-view .stat-content h3,
+[data-theme='light'] .dashboard-profesional .chart-placeholder h3 {
+  color: #0f172a;
+}
+
+[data-theme='light'] .dashboard-profesional .chart-placeholder .placeholder-content {
+  color: rgba(15, 23, 42, 0.65);
+}
+
+[data-theme='light'] .dashboard-profesional .settings-view .settings-card {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+}
+
+[data-theme='light'] .dashboard-profesional .settings-view .settings-card h3 {
+  color: #0f172a;
+}
+
+[data-theme='light'] .dashboard-profesional .settings-view .setting-item label {
+  color: rgba(15, 23, 42, 0.85);
+}
+
+[data-theme='light'] .dashboard-profesional .settings-embed-hint {
+  color: rgba(15, 23, 42, 0.7);
+}
+
+[data-theme='light'] .dashboard-profesional .settings-link {
+  color: #2563eb;
+}
+
+[data-theme='light'] .settings-page {
+  background: linear-gradient(135deg, #e8eef5 0%, #f8fafc 100%);
+  color: #0f172a;
+}
+
+[data-theme='light'] .settings-page .settings-page-header h1 {
+  color: #0f172a;
+}
+
+[data-theme='light'] .settings-page .back-btn {
+  border-color: rgba(15, 23, 42, 0.2);
+  background: #ffffff;
+  color: #0f172a;
+}
+
+[data-theme='light'] .user-app-settings .settings-card {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+}
+
+[data-theme='light'] .user-app-settings .settings-card h3 {
+  color: #0f172a;
+}
+
+[data-theme='light'] .user-app-settings .setting-item label {
+  color: rgba(15, 23, 42, 0.85);
+}
+
+[data-theme='light'] .user-app-settings .setting-hint {
+  color: rgba(15, 23, 42, 0.55);
+}
+
+[data-theme='light'] .user-app-settings .setting-select {
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.15);
+  color: #0f172a;
+}
+
+[data-theme='light'] .dashboard-profesional .analytics-view .stat-content h3 {
+  color: rgba(15, 23, 42, 0.65);
+}
+
+[data-theme='light'] .dashboard-profesional .analytics-view .stat-number {
+  color: #0f172a;
+}
+
+[data-theme='light'] .dashboard-profesional .chart-placeholder {
+  background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
+  border: 1px solid rgba(15, 23, 42, 0.1);
+}
+
+[data-theme='light'] .dashboard-profesional .sidebar-overlay {
+  background: rgba(15, 23, 42, 0.35);
+}

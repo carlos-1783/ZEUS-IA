@@ -751,7 +751,7 @@ async def set_new_password(
     user = db.query(User).filter(User.email == row.email).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
-
+    
     user.hashed_password = security.get_password_hash(new_password_data.new_password)
     db.delete(row)
     db.commit()

@@ -33,15 +33,15 @@ class EmailService:
         
         self.client = None
         if not SENDGRID_AVAILABLE:
-            print("⚠️ Email Service: SendGrid library not installed (pip install sendgrid)")
+            logger.warning("Email Service: SendGrid library not installed (pip install sendgrid)")
         elif self.api_key:
             try:
                 self.client = SendGridAPIClient(self.api_key)
-                print("✅ Email Service inicializado correctamente")
+                logger.info("Email Service: initialized successfully (SendGrid)")
             except Exception as e:
-                print(f"⚠️ Email Service no pudo inicializar: {e}")
+                logger.warning("Email Service init failed: %s", e)
         else:
-            print("⚠️ Email Service: SENDGRID_API_KEY no configurada")
+            logger.warning("Email Service: SENDGRID_API_KEY not set")
     
     def is_configured(self) -> bool:
         """SendGrid listo para enviar."""
@@ -179,7 +179,7 @@ class EmailService:
                         priority="normal",
                     )
                 except Exception as log_error:
-                    print(f"[EMAIL] Error registrando actividad: {log_error}")
+                    logger.warning("[EMAIL] Error registrando actividad: %s", log_error)
 
                 return result
 

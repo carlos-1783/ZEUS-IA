@@ -2,9 +2,13 @@
 📅 Google Service - Calendar, Gmail, Drive, Sheets Integration
 Automatiza operaciones con Google Workspace
 """
+import logging
 import os
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
+
 
 class GoogleService:
     """Servicio para integraciones con Google Workspace"""
@@ -29,9 +33,9 @@ class GoogleService:
             self.configured_services.append("sheets")
         
         if self.configured_services:
-            print(f"✅ Google Service inicializado: {', '.join(self.configured_services)}")
+            logger.info("Google Service: initialized (%s)", ", ".join(self.configured_services))
         else:
-            print("⚠️ Google Service: Credenciales no configuradas")
+            logger.warning("Google Service: credentials not configured")
     
     def is_configured(self, service: str = None) -> bool:
         """Verificar si el servicio está configurado"""

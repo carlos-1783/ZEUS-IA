@@ -9,11 +9,14 @@ class Customer(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False, index=True)
-    email = Column(String(100), unique=True, index=True, nullable=True)
+    email = Column(String(100), unique=False, index=True, nullable=True)
     phone = Column(String(20), nullable=True)
     address = Column(Text, nullable=True)
     tax_id = Column(String(50), nullable=True, index=True)
     notes = Column(Text, nullable=True)
+
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     
     # Status flags
     is_active = Column(Boolean, default=True)

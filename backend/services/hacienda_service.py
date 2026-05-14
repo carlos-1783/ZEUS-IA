@@ -2,10 +2,13 @@
 📊 Hacienda Service - AEAT Integration
 Automatiza facturación y presentación de modelos fiscales
 """
+import logging
 import os
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from decimal import Decimal
+
+logger = logging.getLogger(__name__)
 
 try:
     import zeep
@@ -33,11 +36,11 @@ class HaciendaService:
         
         self.client = None
         if not ZEEP_AVAILABLE:
-            print("⚠️ Hacienda Service: SOAP libraries not installed (pip install zeep xmltodict)")
+            logger.warning("Hacienda Service: SOAP libraries not installed (pip install zeep xmltodict)")
         elif self.nif and self.password:
-            print(f"✅ Hacienda Service configurado (modo: {self.environment})")
+            logger.info("Hacienda Service: configured (mode=%s)", self.environment)
         else:
-            print("⚠️ Hacienda Service: Credenciales AEAT no configuradas")
+            logger.warning("Hacienda Service: AEAT credentials not configured")
     
     def is_configured(self) -> bool:
         """Verificar si el servicio está configurado"""

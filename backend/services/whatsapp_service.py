@@ -52,17 +52,17 @@ class WhatsAppService:
         )
         self.client = None
         if not TWILIO_AVAILABLE:
-            print("⚠️ WhatsApp Service: Twilio library not installed (pip install twilio)")
+            logger.warning("WhatsApp Service: Twilio library not installed (pip install twilio)")
         elif not self.whatsapp_enabled:
-            print("ℹ️ WhatsApp Service: TWILIO_WHATSAPP_ENABLED=false — envío desactivado")
+            logger.info("WhatsApp Service: TWILIO_WHATSAPP_ENABLED=false, sending disabled")
         elif self.account_sid and self.auth_token:
             try:
                 self.client = Client(self.account_sid, self.auth_token)
-                print("✅ WhatsApp Service inicializado correctamente")
+                logger.info("WhatsApp Service: initialized successfully")
             except Exception as e:
-                print(f"⚠️ WhatsApp Service no pudo inicializar: {e}")
+                logger.warning("WhatsApp Service init failed: %s", e)
         else:
-            print("⚠️ WhatsApp Service: Credenciales de Twilio no configuradas")
+            logger.warning("WhatsApp Service: Twilio credentials not configured")
     
     def is_configured(self) -> bool:
         """Cliente Twilio listo y envío WhatsApp permitido por configuración."""

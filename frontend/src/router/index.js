@@ -38,6 +38,7 @@ const Checkout = () => import('../views/Checkout.vue')
 const AdminPanel = () => import('../views/AdminPanel.vue')
 const TPV = () => import('../views/TPV.vue')
 const PayrollDrafts = () => import('../views/PayrollDrafts.vue')
+const OfficeCrm = () => import('../views/OfficeCrm.vue')
 const Terminos = () => import('../views/legal/Terminos.vue')
 const Privacidad = () => import('../views/legal/Privacidad.vue')
 const LandingPage = () => import('../views/LandingPage.vue')
@@ -267,6 +268,17 @@ const router = createRouter({
       component: PayrollDrafts,
       meta: { 
         title: 'Nóminas - ZEUS-IA',
+        requiresAuth: true
+      }
+    },
+
+    {
+      path: '/office-crm',
+      name: 'OfficeCrm',
+      component: OfficeCrm,
+      meta: {
+        title: 'CRM oficina - ZEUS-IA',
+        titleKey: 'officeCrm.title',
         requiresAuth: true
       }
     },

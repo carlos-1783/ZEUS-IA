@@ -2,9 +2,13 @@
 📊 Marketing Automation Service
 Integración con Google Ads, Meta Ads (Facebook/Instagram), Analytics
 """
+import logging
 import os
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
+
 
 class MarketingService:
     """Servicio para automatización de marketing y campañas"""
@@ -38,9 +42,9 @@ class MarketingService:
             self.configured_platforms.append("google_analytics")
         
         if self.configured_platforms:
-            print(f"✅ Marketing Service inicializado: {', '.join(self.configured_platforms)}")
+            logger.info("Marketing Service: initialized (%s)", ", ".join(self.configured_platforms))
         else:
-            print("⚠️ Marketing Service: Credenciales no configuradas")
+            logger.warning("Marketing Service: credentials not configured")
     
     def is_configured(self, platform: str = None) -> bool:
         """Verificar si una plataforma está configurada"""

@@ -7,6 +7,7 @@ from app.api.v1.endpoints import (
     health,
     system,
     customers,
+    crm,
     test,
     zeus_core,
     agents,
@@ -48,6 +49,7 @@ api_router.include_router(system.router, prefix="/system", tags=["system"])
 
 # CRM endpoints
 api_router.include_router(customers.router, prefix="/customers", tags=["customers"])
+api_router.include_router(crm.router, prefix="/crm", tags=["crm-office"])
 
 # Test endpoints
 api_router.include_router(test.router, prefix="/test", tags=["test"])

@@ -2,6 +2,7 @@
 💳 Stripe Service - Payment Processing
 Automatiza procesamiento de pagos y suscripciones
 """
+import logging
 import os
 from typing import Optional, Dict, Any
 try:
@@ -10,6 +11,9 @@ try:
 except ImportError:
     STRIPE_AVAILABLE = False
     stripe = None
+
+logger = logging.getLogger(__name__)
+
 
 class StripeService:
     """Servicio para procesamiento de pagos con Stripe"""
@@ -35,21 +39,24 @@ class StripeService:
                 self.detected_mode = "custom"
         
         if not STRIPE_AVAILABLE:
-            print("⚠️ Stripe Service: Stripe library not installed (pip install stripe)")
+            logger.warning("Stripe Service: Stripe library not installed (pip install stripe)")
         elif self.api_key:
             stripe.api_key = self.api_key
-            print("✅ Stripe Service inicializado correctamente")
-            
+            logger.info("Stripe Service: initialized successfully")
+
             if self.requested_mode not in ("auto", "live", "test"):
-                print(f"⚠️ Stripe Service: STRIPE_MODE '{self.requested_mode}' no es válido. Usa 'auto', 'live' o 'test'.")
+                logger.warning(
+                    "Stripe Service: STRIPE_MODE '%s' is invalid; use 'auto', 'live' or 'test'.",
+                    self.requested_mode,
+                )
             elif self.requested_mode != "auto" and self.requested_mode != self.detected_mode:
-                print(
-                    "⚠️ Stripe Service: STRIPE_MODE="
-                    f"{self.requested_mode} pero la API key parece ser '{self.detected_mode}'. "
-                    "Actualiza tus credenciales para evitar operar en modo incorrecto."
+                logger.warning(
+                    "Stripe Service: STRIPE_MODE=%s but API key looks like '%s'. Update credentials.",
+                    self.requested_mode,
+                    self.detected_mode,
                 )
         else:
-            print("⚠️ Stripe Service: STRIPE_API_KEY no configurada")
+            logger.warning("Stripe Service: STRIPE_API_KEY not set")
     
     def is_configured(self) -> bool:
         """Verificar si el servicio está configurado"""

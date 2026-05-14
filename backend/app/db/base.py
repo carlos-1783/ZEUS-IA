@@ -72,7 +72,7 @@ def create_tables():
             from app.models.reservation import Reservation
             from app.models.tpv_comanda_share import TPVComandaShare
             from app.models.tpv_table import TPVTable
-            from app.models.company_employee import CompanyEmployee
+            from app.models.crm_office import CrmActivityLog, CrmSaleLink, CustomerRecord
             from app.models.employee_work_session import EmployeeWorkSession
             from app.models.tpv_operator_session import TPVOperatorSession
             from app.models.time_tracking import (

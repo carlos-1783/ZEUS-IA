@@ -58,6 +58,14 @@
           <span class="icon">⏰</span>
           <span>{{ t('dashboardPro.nav.controlHorario') }}</span>
         </button>
+        <button 
+          type="button"
+          class="nav-item"
+          @click="closeSidebarOnMobile(); goToOfficeCrm()"
+        >
+          <span class="icon">📁</span>
+          <span>{{ t('dashboardPro.nav.officeCrm') }}</span>
+        </button>
         <!-- Nóminas: solo dueño de empresa (empleado no ve) -->
         <button 
           v-if="!isEmployee"
@@ -321,6 +329,10 @@ const goToTPV = () => {
 // Navegar a Control Horario
 const goToControlHorario = () => {
   router.push('/control-horario')
+}
+
+const goToOfficeCrm = () => {
+  router.push('/office-crm')
 }
 
 // Navegar a Nóminas

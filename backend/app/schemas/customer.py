@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, validator
 
 # Base schemas
 class ContactPersonBase(BaseModel):
@@ -86,10 +86,13 @@ class CustomerOut(CustomerBase):
     created_at: datetime
     updated_at: datetime
     contacts: List[ContactPersonOut] = []
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        validation_alias="metadata_",
+        description="Additional metadata as key-value pairs",
+    )
 
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 # Response models for API endpoints
 class CustomerResponse(BaseModel):

@@ -662,6 +662,7 @@ class TPVService:
                 consumption_type=ct,
                 company_id=company_id,
                 work_session_id=work_session_id,
+                customer_data=customer_data if isinstance(customer_data, dict) else None,
             )
             ticket["fiscal_snapshot_id"] = tpv_sale_id
         

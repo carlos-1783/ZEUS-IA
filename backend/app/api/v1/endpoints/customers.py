@@ -1,7 +1,6 @@
-from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Path, Body, Request
+from typing import Any, Dict, List
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_, or_
 
 # Import models
 from app.models.user import User
@@ -20,6 +19,8 @@ from app.db.session import get_db
 
 # Import logging
 import logging
+
+import services.crm_office_service as crm_svc
 
 # Configurar logging
 logger = logging.getLogger(__name__)
@@ -49,77 +50,49 @@ async def test_endpoint() -> Dict[str, str]:
 def get_customer_or_404(
     db: Session,
     customer_id: int,
-    current_user: Optional[User] = None
+    current_user: User,
 ) -> Customer:
-    """
-    Obtiene un cliente por ID o lanza una excepción 404 si no se encuentra.
-    
-    Args:
-        db: Sesión de base de datos
-        customer_id: ID del cliente a buscar
-        current_user: Usuario autenticado (opcional)
-        
-    Returns:
-        Customer: El objeto del cliente si se encuentra
-        
-    Raises:
-        HTTPException: 404 si el cliente no existe
-        HTTPException: 403 si el usuario no tiene permisos
-    """
-    # Optimizar la consulta cargando relaciones comunes
-    customer = db.query(Customer).options(
-        joinedload(Customer.contacts)
-    ).filter(
-        Customer.id == customer_id
-    ).first()
-    
-    if not customer:
+    """Cliente CRM en ámbito multi-empresa / propietario."""
+    crm_svc.resolve_customer(db, current_user, customer_id)
+    row = (
+        db.query(Customer)
+        .options(joinedload(Customer.contacts))
+        .filter(Customer.id == customer_id)
+        .first()
+    )
+    if not row:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Customer with ID {customer_id} not found"
+            detail=f"Customer with ID {customer_id} not found",
         )
-        
-    # Verificar que el usuario tenga acceso al cliente
-    # Aquí podrías agregar lógica de autorización adicional según tus necesidades
-    # Por ejemplo, verificar si el usuario pertenece a la misma organización
-    
-    return customer  # <-- Devuelve el modelo de base de datos
+    return row
 
 @router.get(
     "/",
     response_model=CustomerListResponse,
     operation_id="customers_list_api_v1",
-    summary="List Customers (Simplified for Debugging)",
+    summary="List customers (tenant-scoped)",
 )
 async def list_customers(
+    page: int = Query(1, ge=1),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
 ):
-    """
-    List all customers with pagination support.
-    """
-    try:
-        # For now, return a simple response without database operations
-        return CustomerListResponse(
-            success=True,
-            message="Debug endpoint working - No database operations performed",
-            data=[],
-            total=0,
-            page=1,
-            limit=10,
-            total_pages=0
-        )
-    except Exception as e:
-        logger.error(f"Error listing customers: {str(e)}", exc_info=True)
-        return CustomerListResponse(
-            success=False,
-            message=f"Error: {str(e)}",
-            data=[],
-            total=0,
-            page=1,
-            limit=10,
-            total_pages=0
-        )
+    rows = crm_svc.list_customers(db, current_user)
+    total = len(rows)
+    start = (page - 1) * limit
+    page_rows = rows[start : start + limit]
+    total_pages = max(1, (total + limit - 1) // limit) if total else 1
+    return CustomerListResponse(
+        success=True,
+        message="OK",
+        data=[CustomerOut.model_validate(r) for r in page_rows],
+        total=total,
+        page=page,
+        limit=limit,
+        total_pages=total_pages,
+    )
 
 @router.post(
     "/",
@@ -134,46 +107,64 @@ async def create_customer(
     *,
     db: Session = Depends(get_db),
     customer_in: CustomerCreate,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
 ) -> CustomerResponse:
-    """
-    Create a new customer
-    """
+    """Alta de cliente CRM con empresa y email único por empresa."""
     try:
-        # Check if customer with email already exists
-        if customer_in.email:
-            existing_customer = db.query(Customer).filter(
-                Customer.email == customer_in.email
-            ).first()
-            if existing_customer:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="A customer with this email already exists"
-                )
-        
-        # Create customer
-        customer_data = customer_in.dict(exclude={"contacts"})
-        customer = Customer(**customer_data)
-        
-        # Add to database
+        cid = crm_svc.primary_company_id(db, current_user)
+        crm_svc.assert_email_unique_in_company(db, cid, customer_in.email)
+
+        contacts_data = list(customer_in.contacts or [])
+        customer = Customer(
+            name=customer_in.name,
+            email=customer_in.email,
+            phone=customer_in.phone,
+            address=customer_in.address,
+            tax_id=customer_in.tax_id,
+            notes=customer_in.notes,
+            is_active=customer_in.is_active,
+            is_company=customer_in.is_company,
+            metadata_=customer_in.metadata,
+            company_id=cid,
+            owner_user_id=current_user.id,
+        )
         db.add(customer)
+        db.flush()
+
+        for c in contacts_data:
+            db.add(ContactPerson(customer_id=customer.id, **c.model_dump()))
+
         db.commit()
         db.refresh(customer)
-        
-        # Convert to Pydantic model before returning
+
+        log_cid = customer.company_id or crm_svc.primary_company_id(db, current_user)
+        if log_cid is not None:
+            crm_svc.log_activity(
+                db,
+                company_id=log_cid,
+                user_id=current_user.id,
+                customer_id=customer.id,
+                record_id=None,
+                action="customer_created",
+                summary=f"Cliente creado: {customer.name}",
+                payload={"customer_id": customer.id},
+            )
+
         customer_out = CustomerOut.model_validate(customer)
-        
         return CustomerResponse(
             success=True,
             message="Customer created successfully",
-            data=customer_out
+            data=customer_out,
         )
-        
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
+        logger.exception("create_customer")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating customer: {str(e)}"
+            detail=f"Error creating customer: {str(e)}",
         )
 
 @router.get(
@@ -212,23 +203,47 @@ def update_customer(
     customer_id: int = Path(..., description="ID of the customer to update"),
     customer_in: CustomerUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Update a customer
     """
     from datetime import datetime
+
     customer = get_customer_or_404(db, customer_id, current_user)
     update_data = customer_in.model_dump(exclude_unset=True, exclude={"contacts"})
+    new_email = update_data.get("email")
+    if new_email is not None:
+        scope_cid = customer.company_id or crm_svc.primary_company_id(db, current_user)
+        crm_svc.assert_email_unique_in_company(
+            db, scope_cid, new_email, exclude_customer_id=customer.id
+        )
     for field, value in update_data.items():
-        setattr(customer, field, value)
+        if field == "metadata":
+            setattr(customer, "metadata_", value)
+        else:
+            setattr(customer, field, value)
     customer.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(customer)
+
+    log_cid = customer.company_id or crm_svc.primary_company_id(db, current_user)
+    if log_cid is not None:
+        crm_svc.log_activity(
+            db,
+            company_id=log_cid,
+            user_id=current_user.id,
+            customer_id=customer.id,
+            record_id=None,
+            action="customer_updated",
+            summary=f"Cliente actualizado: {customer.name}",
+            payload={"customer_id": customer.id},
+        )
+
     customer_out = CustomerOut.model_validate(customer)
     return CustomerResponse(
         success=True,
-        data=customer_out
+        data=customer_out,
     )
 
 @router.delete(
@@ -243,29 +258,44 @@ def update_customer(
 def delete_customer(
     customer_id: int = Path(..., description="ID of the customer to delete"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Delete a customer and all related contacts
-    
-    Returns the deleted customer data in the response.
     """
     customer = get_customer_or_404(db, customer_id, current_user)
+    customer_out = CustomerOut.model_validate(customer)
+    log_cid = customer.company_id or crm_svc.primary_company_id(db, current_user)
+    name = customer.name
+    cust_id = customer.id
     try:
-        db.query(ContactPerson).filter(ContactPerson.customer_id == customer_id).delete()
-        db.delete(customer)
+        if log_cid is not None:
+            crm_svc.log_activity(
+                db,
+                company_id=log_cid,
+                user_id=current_user.id,
+                customer_id=cust_id,
+                record_id=None,
+                action="customer_deleted",
+                summary=f"Cliente eliminado: {name}",
+                payload={"customer_id": cust_id},
+                commit=False,
+            )
+        db.query(ContactPerson).filter(ContactPerson.customer_id == cust_id).delete(
+            synchronize_session=False
+        )
+        db.query(Customer).filter(Customer.id == cust_id).delete(synchronize_session=False)
         db.commit()
-        customer_out = CustomerOut.model_validate(customer)
         return CustomerResponse(
             success=True,
             message="Customer deleted successfully",
-            data=customer_out
+            data=customer_out,
         )
     except Exception as e:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error deleting customer: {str(e)}"
+            detail=f"Error deleting customer: {str(e)}",
         )
 
 # Contact person endpoints

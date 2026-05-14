@@ -7,13 +7,13 @@ import logging
 import os
 from typing import Optional, Dict, Any, List
 
-import requests
+import requests  # pyright: ignore[reportMissingImports, reportMissingModuleSource]
 
 logger = logging.getLogger(__name__)
 
 try:
-    from sendgrid import SendGridAPIClient
-    from sendgrid.helpers.mail import Mail, Email, To, Content  # pyright: ignore[reportMissingImports]  # pyright: ignore[reportMissingImports]
+    from sendgrid import SendGridAPIClient  # pyright: ignore[reportMissingImports]
+    from sendgrid.helpers.mail import Mail, Email, To, Content  # pyright: ignore[reportMissingImports]
     SENDGRID_AVAILABLE = True
 except ImportError:
     SENDGRID_AVAILABLE = False

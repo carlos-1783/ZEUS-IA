@@ -11,10 +11,10 @@ from decimal import Decimal
 logger = logging.getLogger(__name__)
 
 try:
-    import zeep
-    from zeep import Client as SoapClient
-    from zeep.wsse.username import UsernameToken
-    import xmltodict
+    import zeep  # pyright: ignore[reportMissingImports]
+    from zeep import Client as SoapClient  # pyright: ignore[reportMissingImports]
+    from zeep.wsse.username import UsernameToken  # pyright: ignore[reportMissingImports]
+    import xmltodict  # pyright: ignore[reportMissingImports, reportMissingModuleSource]
     ZEEP_AVAILABLE = True
 except ImportError:
     ZEEP_AVAILABLE = False

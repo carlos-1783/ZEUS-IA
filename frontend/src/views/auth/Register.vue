@@ -387,6 +387,13 @@ function parseRegisterError(err) {
   const data = err?.response?.data
   const detail = data?.detail ?? data?.message
 
+  if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+    if (detail.message) return String(detail.message)
+    if (detail.code === 'email_already_registered') {
+      return 'Este correo ya está registrado. Inicia sesión o usa otro email.'
+    }
+  }
+
   if (typeof detail === 'string') {
     if (detail === 'Email already registered') {
       return 'Este correo ya está registrado. Inicia sesión o usa otro email.'

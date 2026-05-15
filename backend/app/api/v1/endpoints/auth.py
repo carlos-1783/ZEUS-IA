@@ -41,6 +41,35 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+REGISTER_EMAIL_TAKEN = "email_already_registered"
+REGISTER_DUPLICATE_DATA = "duplicate_data"
+
+
+def _register_http_400(detail_es: str, *, code: str = REGISTER_DUPLICATE_DATA) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"message": detail_es, "code": code},
+    )
+
+
+def _integrity_error_to_register_detail(exc: IntegrityError) -> HTTPException:
+    raw = str(getattr(exc, "orig", None) or exc).lower()
+    if "email" in raw or "users_email" in raw or "ix_users_email" in raw:
+        logger.warning("register IntegrityError: email duplicado")
+        return _register_http_400(
+            "Este correo ya está registrado. Inicia sesión o usa otro email.",
+            code=REGISTER_EMAIL_TAKEN,
+        )
+    if "slug" in raw or "companies_slug" in raw:
+        logger.warning("register IntegrityError: slug empresa duplicado")
+        return _register_http_400(
+            "Ya existe una empresa con un nombre similar. Prueba otro nombre comercial.",
+        )
+    logger.warning("register IntegrityError: %s", raw[:200])
+    return _register_http_400(
+        "No se pudo completar el registro por datos duplicados. Revisa el email o el nombre del negocio.",
+    )
+
 
 async def _send_register_welcome_email(user: User) -> Dict[str, Any]:
     """Email de bienvenida tras registro (SendGrid o Resend). No lanza: el registro ya está guardado."""
@@ -267,9 +296,10 @@ async def register_user(
     )
     email_norm = str(user_data.email).strip().lower()
     if db.query(User).filter(User.email == email_norm).first():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered",
+        logger.warning("register 400: email ya existe (%s)", email_norm)
+        raise _register_http_400(
+            "Este correo ya está registrado. Inicia sesión o usa otro email.",
+            code=REGISTER_EMAIL_TAKEN,
         )
 
     hashed_password = get_password_hash(user_data.password)
@@ -284,12 +314,9 @@ async def register_user(
     db.add(db_user)
     try:
         db.flush()
-    except IntegrityError:
+    except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered",
-        )
+        raise _integrity_error_to_register_detail(exc) from exc
 
     outcome = apply_registration_onboarding(
         db,
@@ -307,12 +334,9 @@ async def register_user(
     try:
         db.commit()
         db.refresh(db_user)
-    except IntegrityError:
+    except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered",
-        )
+        raise _integrity_error_to_register_detail(exc) from exc
     except Exception as e:
         db.rollback()
         logger.exception("register commit failed: %s", e)

@@ -174,6 +174,9 @@
             <p v-if="errors.password" class="mt-2 text-sm text-red-600">
               {{ errors.password }}
             </p>
+            <p v-else class="mt-1 text-xs text-gray-500">
+              Mínimo 8 caracteres, con mayúscula, minúscula y un número.
+            </p>
           </div>
         </div>
 
@@ -379,6 +382,44 @@ const validateForm = () => {
   return isValid;
 };
 
+/** Mensaje real del backend (FastAPI: detail string o lista de errores de validación). */
+function parseRegisterError(err) {
+  const data = err?.response?.data
+  const detail = data?.detail ?? data?.message
+
+  if (typeof detail === 'string') {
+    if (detail === 'Email already registered') {
+      return 'Este correo ya está registrado. Inicia sesión o usa otro email.'
+    }
+    return detail
+  }
+
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((item) => {
+        if (!item || typeof item !== 'object') return ''
+        const field = Array.isArray(item.loc) ? item.loc.slice(-1)[0] : ''
+        const msg = item.msg || item.message || ''
+        if (field === 'password') {
+          return 'La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula y un número.'
+        }
+        return msg
+      })
+      .filter(Boolean)
+    if (parts.length) return parts.join(' ')
+  }
+
+  const status = err?.response?.status
+  if (status === 400) {
+    return 'No se pudo completar el registro. Revisa los datos o prueba con otro correo.'
+  }
+  if (status === 422) {
+    return 'Algunos datos no son válidos. Revisa el formulario (sobre todo la contraseña).'
+  }
+
+  return err?.message && err.message !== 'Bad Request' ? err.message : null
+}
+
 // Handle form submission
 const handleSubmit = async () => {
   if (!validateForm()) {
@@ -389,10 +430,11 @@ const handleSubmit = async () => {
   error.value = '';
   
   try {
+    const fullName = [form.first_name, form.last_name].filter(Boolean).join(' ').trim()
     await api.register({
       email: form.email.trim(),
       password: form.password,
-      full_name: [form.first_name, form.last_name].filter(Boolean).join(' ').trim() || undefined,
+      full_name: fullName,
       phone: form.phone.trim(),
       company_name: form.company_name.trim(),
       business_type: form.business_type,
@@ -403,9 +445,9 @@ const handleSubmit = async () => {
     });
   } catch (err) {
     console.error('Registration error:', err);
-    const detail = err.response?.data?.detail;
-    const msg = typeof detail === 'string' ? detail : err.response?.data?.message || err.message;
-    error.value = msg || 'Ocurrió un error al registrar la cuenta. Por favor, inténtalo de nuevo.';
+    error.value =
+      parseRegisterError(err) ||
+      'Ocurrió un error al registrar la cuenta. Por favor, inténtalo de nuevo.'
   } finally {
     isLoading.value = false;
   }

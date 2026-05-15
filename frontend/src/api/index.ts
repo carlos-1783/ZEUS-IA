@@ -573,7 +573,7 @@ const api: ApiClient = {
     const response = await axiosInstance.post('auth/register', {
       email: payload.email.trim().toLowerCase(),
       password: payload.password,
-      full_name: (payload.full_name || '').trim() || undefined,
+      full_name: (payload.full_name || '').trim() || 'Usuario',
       phone: (payload.phone || '').trim(),
       company_name: (payload.company_name || '').trim(),
       business_type: payload.business_type,

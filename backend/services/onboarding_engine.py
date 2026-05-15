@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from app.models.company import Company, UserCompany
+from services.company_module_config import business_type_to_company_type
 from app.models.erp import TPVProduct
 from app.models.tpv_table import TPVTable
 from app.models.user import User
@@ -304,6 +305,7 @@ def apply_registration_onboarding(
                 return out
             company.company_name = cn[:255]
             company.sector = BUSINESS_TYPE_TO_SECTOR.get(business_type)
+            company.company_type = business_type_to_company_type(business_type)
             meta = company.metadata_ if isinstance(company.metadata_, dict) else {}
             meta.setdefault("source", "registration_onboarding")
             meta["business_type"] = business_type
@@ -318,6 +320,7 @@ def apply_registration_onboarding(
                 pilot_company=False,
                 status="active",
                 sector=BUSINESS_TYPE_TO_SECTOR.get(business_type),
+                company_type=business_type_to_company_type(business_type),
                 country="ES",
                 currency="EUR",
                 metadata_={
@@ -620,6 +623,9 @@ def remediate_existing_company(
         if not company.sector:
             company.sector = BUSINESS_TYPE_TO_SECTOR.get(business_type)
             out["actions"].append("set_sector")
+        if not company.company_type:
+            company.company_type = business_type_to_company_type(business_type)
+            out["actions"].append("set_company_type")
 
         meta = company.metadata_ if isinstance(company.metadata_, dict) else {}
         meta.setdefault("business_type", business_type)

@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { routeAllowed } from '../utils/companyModules'
 import i18n from '../i18n'
 
 // Custom encoding/decoding functions for URL parameters
@@ -428,6 +429,23 @@ router.beforeEach((to, from, next) => {
   if (requiresAuth && authStore.isAuthenticated && authStore.isEmployee) {
     if (!employeeAllowedRoutes.has(to.name)) {
       next('/tpv')
+      return
+    }
+  }
+
+  // Módulos por company_type (rutas siguen existiendo; solo se bloquea acceso directo)
+  if (requiresAuth && authStore.isAuthenticated && !authStore.isAdmin) {
+    const allowed = routeAllowed(to.name, authStore.modules, {
+      isSuperuser: false,
+      isEmployee: authStore.isEmployee,
+    })
+    if (!allowed) {
+      const fallback = authStore.isEmployee
+        ? '/tpv'
+        : authStore.companyType === 'office'
+          ? '/dashboard'
+          : '/dashboard'
+      next(fallback)
       return
     }
   }

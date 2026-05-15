@@ -19,6 +19,7 @@ class Company(Base):
     pilot_company = Column(Boolean(), default=False, nullable=False)
     status = Column(String(50), default="active", nullable=False)  # active, suspended, etc.
     sector = Column(String(100), nullable=True)
+    company_type = Column(String(32), nullable=True, index=True)  # bar_restaurant | office
     country = Column(String(10), nullable=True)
     currency = Column(String(10), default="EUR", nullable=False)
     metadata_ = Column("metadata", JSON, nullable=True)  # internal_company, purpose, billing_enabled, etc.

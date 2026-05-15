@@ -895,6 +895,10 @@ async def read_current_user(
 
         jornada = get_jornada_status(db, current_user)
 
+        from services.company_module_config import get_company_config_for_user
+
+        company_cfg = get_company_config_for_user(db, current_user)
+
         # Devolver en el formato esperado por el frontend
         return {
             "status": "success",
@@ -906,6 +910,10 @@ async def read_current_user(
                 "is_superuser": current_user.is_superuser,
                 "role": role,
                 "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+                "company_id": company_cfg.get("company_id"),
+                "company_name": company_cfg.get("company_name"),
+                "company_type": company_cfg.get("company_type"),
+                "modules": company_cfg.get("modules"),
                 "company_employee": None
                 if not ce
                 else {

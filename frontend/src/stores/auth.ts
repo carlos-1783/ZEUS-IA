@@ -3,6 +3,10 @@ import { ref, computed } from 'vue';
 import { jwtDecode } from 'jwt-decode';
 import type { User } from '@/types';
 import api from '@/api/index';
+import {
+  type ModuleMap,
+  normalizeModulesFromApi,
+} from '@/utils/companyModules';
 
 // Types
 interface JwtPayload {
@@ -81,8 +85,21 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem(TOKEN_KEY));
   const refreshToken = ref<string | null>(localStorage.getItem(REFRESH_TOKEN_KEY));
   const user = ref<User | null>(null);
+  const companyType = ref<string | null>(null);
+  const modules = ref<ModuleMap>({});
   const isLoading = ref<boolean>(false);
   const error = ref<string | null>(null);
+
+  function applyProfileModules(data: Record<string, unknown> | null | undefined) {
+    if (!data) return;
+    if (data.company_type != null) {
+      companyType.value = String(data.company_type);
+    }
+    modules.value = normalizeModulesFromApi(
+      data.modules as ModuleMap | undefined,
+      companyType.value
+    );
+  }
   
   // Getters
   const isAuthenticated = computed<boolean>(() => !!token.value);
@@ -136,6 +153,8 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = null;
     refreshToken.value = null;
     user.value = null;
+    companyType.value = null;
+    modules.value = {};
     error.value = null;
     
     // Clear storage
@@ -322,7 +341,10 @@ export const useAuthStore = defineStore('auth', () => {
             role: String(data.role || 'owner').toLowerCase(),
             jornada: data.jornada ?? null,
             company_employee: data.company_employee ?? null,
+            company_type: data.company_type,
+            company_id: data.company_id,
           };
+          applyProfileModules(data);
         } catch (_) {
           // mantener user desde token
         }
@@ -536,7 +558,10 @@ export const useAuthStore = defineStore('auth', () => {
             role: String(data.role || 'owner').toLowerCase(),
             jornada: data.jornada ?? null,
             company_employee: data.company_employee ?? null,
+            company_type: data.company_type,
+            company_id: data.company_id,
           };
+          applyProfileModules(data);
         } catch (_) { /* mantener user desde token */ }
         await bootstrapSettingsAfterAuth();
         console.log('[AuthStore] Initialization successful');
@@ -563,6 +588,8 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     refreshToken,
     user,
+    companyType,
+    modules,
     isLoading,
     error,
     
@@ -570,6 +597,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     isAdmin,
     isEmployee,
+    applyProfileModules,
     
     // Actions
     login,

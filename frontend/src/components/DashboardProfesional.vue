@@ -34,7 +34,7 @@
           <span>{{ t('dashboardPro.nav.admin') }}</span>
         </button>
         <button 
-          v-if="!isEmployee"
+          v-if="showModule('analytics')"
           class="nav-item"
           :class="{ active: currentView === 'analytics' }"
           @click="currentView = 'analytics'; closeSidebarOnMobile()"
@@ -43,7 +43,7 @@
           <span>{{ t('dashboardPro.nav.analytics') }}</span>
         </button>
         <button 
-          v-if="shouldShowTPV || authStore.isAdmin || authStore.user?.is_superuser || availableModules.tpv || true"
+          v-if="showModule('tpv')"
           class="nav-item tpv-nav-btn"
           @click="goToTPV"
         >
@@ -51,7 +51,7 @@
           <span>{{ t('dashboardPro.nav.tpv') }}</span>
         </button>
         <button 
-          v-if="shouldShowControlHorario || authStore.isAdmin || authStore.user?.is_superuser || availableModules.control_horario || true"
+          v-if="showModule('control_horario')"
           class="nav-item control-horario-nav-btn"
           @click="goToControlHorario"
         >
@@ -59,6 +59,7 @@
           <span>{{ t('dashboardPro.nav.controlHorario') }}</span>
         </button>
         <button 
+          v-if="showModule('crm')"
           type="button"
           class="nav-item"
           @click="closeSidebarOnMobile(); goToOfficeCrm()"
@@ -68,7 +69,7 @@
         </button>
         <!-- Nóminas: solo dueño de empresa (empleado no ve) -->
         <button 
-          v-if="!isEmployee"
+          v-if="showModule('payroll')"
           class="nav-item"
           @click="closeSidebarOnMobile(); goToPayroll()"
         >
@@ -280,6 +281,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import AgentActivityPanel from './AgentActivityPanel.vue'
 import { usePWA } from '@/composables/usePWA'
+import { isModuleVisible } from '@/utils/companyModules'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -468,11 +470,13 @@ const dashboardMetrics = ref({
 const availableModules = ref({
   tpv: false,
   control_horario: false,
+  crm: false,
+  payroll: false,
   dashboard: true,
-  analytics: true,
+  analytics: false,
   agents: true,
   admin: false,
-  settings: true
+  settings: true,
 })
 
 // Computed para verificar si el usuario es admin (reactivo) - múltiples formas de verificación
@@ -488,34 +492,30 @@ const isAdmin = computed(() => {
     return u && typeof u === 'object' && 'role' in u && u.role === 'employee'
   })
 
-// Computed para módulos visibles - SIEMPRE mostrar si es admin o si availableModules lo permite
-// Por defecto, los botones están visibles (availableModules inicializado en true)
-const shouldShowTPV = computed(() => {
-  // Si es admin, mostrar SIEMPRE
-  if (isAdmin.value) {
-    return true
+const moduleOpts = computed(() => ({
+  isSuperuser: isAdmin.value,
+  isEmployee: isEmployee.value,
+}))
+
+const mergedModules = computed(() => {
+  const fromAuth = authStore.modules || {}
+  const fromMetrics = availableModules.value || {}
+  return {
+    dashboard: true,
+    settings: true,
+    agents: true,
+    analytics: !!(fromAuth.analytics || fromMetrics.analytics),
+    tpv: !!(fromAuth.tpv || fromMetrics.tpv),
+    control_horario: !!(fromAuth.control_horario || fromMetrics.control_horario),
+    crm: !!(fromAuth.crm || fromMetrics.crm),
+    payroll: !!(fromAuth.payroll || fromMetrics.payroll),
+    admin: !!(fromAuth.admin || fromMetrics.admin),
   }
-  // Si no es admin, verificar availableModules
-  return availableModules.value.tpv
 })
 
-const shouldShowControlHorario = computed(() => {
-  // Si es admin, mostrar SIEMPRE
-  if (isAdmin.value) {
-    return true
-  }
-  // Si no es admin, verificar availableModules
-  return availableModules.value.control_horario
-})
-
-const shouldShowAdmin = computed(() => {
-  // Si es admin, mostrar SIEMPRE
-  if (isAdmin.value) {
-    return true
-  }
-  // Si no es admin, verificar availableModules
-  return availableModules.value.admin
-})
+function showModule(key) {
+  return isModuleVisible(mergedModules.value, key, moduleOpts.value)
+}
 
 const loadBackendHealth = async () => {
   try {
@@ -558,26 +558,15 @@ const loadDashboardMetrics = async () => {
         successTrend: data.metrics.success_trend || '0%'
       }
 
-      // Verificar si es superusuario ANTES de actualizar módulos
-      const isSuperuser = authStore.isAdmin || authStore.user?.is_superuser || data.user?.is_superuser || false
-      
-      // SIEMPRE forzar módulos para superusuarios (garantizar acceso completo)
-      if (isSuperuser) {
-        availableModules.value.tpv = true
-        availableModules.value.control_horario = true
-        availableModules.value.admin = true
-        console.log('✅ Forzando módulos desde endpoint para superusuario:', {
-          authStoreIsAdmin: authStore.isAdmin,
-          userIsSuperuser: authStore.user?.is_superuser,
-          dataUserIsSuperuser: data.user?.is_superuser,
-          isSuperuser
+      if (data.company_type) {
+        authStore.companyType = data.company_type
+      }
+      if (data.available_modules) {
+        availableModules.value = { ...availableModules.value, ...data.available_modules }
+        authStore.applyProfileModules({
+          company_type: data.company_type,
+          modules: data.available_modules,
         })
-      } else {
-        // Solo actualizar módulos si NO es superusuario
-        if (data.available_modules) {
-          availableModules.value = { ...data.available_modules }
-          console.log('⚠️ Usuario no es superusuario, usando módulos del endpoint:', data.available_modules)
-        }
       }
 
       console.log('✅ Dashboard unificado cargado:', {

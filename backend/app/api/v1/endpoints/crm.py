@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_active_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.customer import CustomerOut
+from app.schemas.customer import CustomerCreate, CustomerOut
 from app.schemas.crm_office import (
     CrmActivityOut,
     CrmListResponse,
@@ -30,6 +30,20 @@ def crm_list_customers(
 ):
     rows = crm_svc.list_customers(db, current_user)
     return CrmListResponse(success=True, data=[CustomerOut.model_validate(r) for r in rows])
+
+
+@router.post(
+    "/customers",
+    response_model=CustomerOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def crm_create_customer(
+    customer_in: CustomerCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    customer = crm_svc.create_customer(db, current_user, customer_in)
+    return CustomerOut.model_validate(customer)
 
 
 @router.get(

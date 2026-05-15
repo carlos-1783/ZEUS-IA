@@ -68,7 +68,7 @@ def get_customer_or_404(
     return row
 
 @router.get(
-    "/",
+    "",
     response_model=CustomerListResponse,
     operation_id="customers_list_api_v1",
     summary="List customers (tenant-scoped)",
@@ -95,7 +95,7 @@ async def list_customers(
     )
 
 @router.post(
-    "/",
+    "",
     response_model=CustomerResponse,
     status_code=status.HTTP_201_CREATED,
     operation_id="customers_create_api_v1",
@@ -111,45 +111,7 @@ async def create_customer(
 ) -> CustomerResponse:
     """Alta de cliente CRM con empresa y email único por empresa."""
     try:
-        cid = crm_svc.primary_company_id(db, current_user)
-        crm_svc.assert_email_unique_in_company(db, cid, customer_in.email)
-
-        contacts_data = list(customer_in.contacts or [])
-        customer = Customer(
-            name=customer_in.name,
-            email=customer_in.email,
-            phone=customer_in.phone,
-            address=customer_in.address,
-            tax_id=customer_in.tax_id,
-            notes=customer_in.notes,
-            is_active=customer_in.is_active,
-            is_company=customer_in.is_company,
-            metadata_=customer_in.metadata,
-            company_id=cid,
-            owner_user_id=current_user.id,
-        )
-        db.add(customer)
-        db.flush()
-
-        for c in contacts_data:
-            db.add(ContactPerson(customer_id=customer.id, **c.model_dump()))
-
-        db.commit()
-        db.refresh(customer)
-
-        log_cid = customer.company_id or crm_svc.primary_company_id(db, current_user)
-        if log_cid is not None:
-            crm_svc.log_activity(
-                db,
-                company_id=log_cid,
-                user_id=current_user.id,
-                customer_id=customer.id,
-                record_id=None,
-                action="customer_created",
-                summary=f"Cliente creado: {customer.name}",
-                payload={"customer_id": customer.id},
-            )
-
+        customer = crm_svc.create_customer(db, current_user, customer_in)
         customer_out = CustomerOut.model_validate(customer)
         return CustomerResponse(
             success=True,

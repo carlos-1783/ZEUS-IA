@@ -16,6 +16,7 @@ from app.models.company import UserCompany
 from app.models.customer import Customer, ContactPerson
 from app.models.crm_office import CrmActivityLog, CrmSaleLink, CustomerRecord
 from app.models.user import User
+from app.schemas.customer import CustomerCreate
 from services.fiscal_engine import build_fiscal_items_from_cart, get_fiscal_profile, persist_fiscal_sale
 from services.tpv_service import PaymentMethod
 
@@ -133,6 +134,50 @@ def log_activity(
         db.commit()
     else:
         db.flush()
+
+
+def create_customer(db: Session, user: User, customer_in: CustomerCreate) -> Customer:
+    """Alta de cliente CRM (multi-empresa, contactos opcionales, log de actividad)."""
+    cid = primary_company_id(db, user)
+    assert_email_unique_in_company(db, cid, customer_in.email)
+
+    contacts_data = list(customer_in.contacts or [])
+    customer = Customer(
+        name=customer_in.name,
+        email=customer_in.email,
+        phone=customer_in.phone,
+        address=customer_in.address,
+        tax_id=customer_in.tax_id,
+        notes=customer_in.notes,
+        is_active=customer_in.is_active,
+        is_company=customer_in.is_company,
+        metadata_=customer_in.metadata,
+        company_id=cid,
+        owner_user_id=user.id,
+    )
+    db.add(customer)
+    db.flush()
+
+    for c in contacts_data:
+        db.add(ContactPerson(customer_id=customer.id, **c.model_dump()))
+
+    db.commit()
+    db.refresh(customer)
+
+    log_cid = customer.company_id or primary_company_id(db, user)
+    if log_cid is not None:
+        log_activity(
+            db,
+            company_id=log_cid,
+            user_id=user.id,
+            customer_id=customer.id,
+            record_id=None,
+            action="customer_created",
+            summary=f"Cliente creado: {customer.name}",
+            payload={"customer_id": customer.id},
+        )
+
+    return customer
 
 
 def list_records(db: Session, user: User, customer_id: int) -> List[CustomerRecord]:

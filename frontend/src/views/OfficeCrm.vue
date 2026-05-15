@@ -256,8 +256,8 @@ async function createCustomer() {
       is_active: true,
       contacts: [],
     }
-    const res = await api.post('/api/v1/customers', body)
-    const created = res?.data
+    const res = await api.post('/api/v1/crm/customers', body)
+    const created = res?.id != null ? res : res?.data
     if (created?.id) {
       await loadCustomers()
       const row = customers.value.find((x) => x.id === created.id)

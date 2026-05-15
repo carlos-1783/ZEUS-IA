@@ -6,9 +6,15 @@
       <p class="subtitle">{{ t('officeCrm.subtitle') }}</p>
     </header>
 
-    <p v-if="globalError" class="global-error" role="alert">{{ globalError }}</p>
+    <p v-if="accessDenied" class="access-denied" role="alert">{{ accessDeniedMessage }}</p>
+    <p v-else-if="globalError" class="global-error" role="alert">
+      {{ globalError }}
+      <router-link v-if="sessionExpired" :to="{ name: 'AuthLogin', query: { redirect: '/office-crm' } }" class="error-login-link">
+        {{ t('officeCrm.loginAgain') }}
+      </router-link>
+    </p>
 
-    <div class="crm-layout">
+    <div v-if="!accessDenied" class="crm-layout">
       <section class="panel customers-panel">
         <h2>{{ t('officeCrm.clients') }}</h2>
         <button type="button" class="btn-primary" @click="showNewCustomer = !showNewCustomer">
@@ -137,13 +143,21 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useAuthStore } from '@/stores/auth'
 import api from '@/services/api'
+import { isModuleVisible } from '@/utils/companyModules'
 
 const { t } = useI18n()
+const router = useRouter()
+const authStore = useAuthStore()
 
 const globalError = ref('')
+const sessionExpired = ref(false)
+const accessDenied = ref(false)
+const accessDeniedMessage = computed(() => t('officeCrm.accessDenied'))
 const loadingCustomers = ref(true)
 const loadingRecords = ref(false)
 const loadingActivity = ref(false)
@@ -194,9 +208,24 @@ function formatDt(iso) {
   }
 }
 
-function errMessage(e) {
-  const d = e?.response ? null : e?.message
-  if (typeof d === 'string') return d
+async function errMessage(e) {
+  if (e?.status === 401) {
+    sessionExpired.value = true
+    return t('officeCrm.sessionExpired')
+  }
+  if (e?.status === 403) {
+    return t('officeCrm.accessDenied')
+  }
+  if (e?.response) {
+    try {
+      const body = await e.response.clone().json()
+      if (body?.detail) {
+        return typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
+      }
+    } catch {
+      /* ignore */
+    }
+  }
   return e?.message || t('officeCrm.errorGeneric')
 }
 
@@ -207,7 +236,7 @@ async function loadCustomers() {
     const res = await api.get('/api/v1/crm/customers')
     customers.value = Array.isArray(res?.data) ? res.data : []
   } catch (e) {
-    globalError.value = errMessage(e)
+    globalError.value = await errMessage(e)
     customers.value = []
   } finally {
     loadingCustomers.value = false
@@ -240,7 +269,7 @@ async function createCustomer() {
       newCustomer.tax_id = ''
     }
   } catch (e) {
-    globalError.value = errMessage(e)
+    globalError.value = await errMessage(e)
   } finally {
     savingCustomer.value = false
   }
@@ -263,7 +292,7 @@ async function openCustomer(c) {
     records.value = Array.isArray(recRes?.data) ? recRes.data : []
     activity.value = Array.isArray(actRes?.data) ? actRes.data : []
   } catch (e) {
-    globalError.value = errMessage(e)
+    globalError.value = await errMessage(e)
   } finally {
     loadingRecords.value = false
     loadingActivity.value = false
@@ -277,7 +306,7 @@ async function loadActivity() {
     const actRes = await api.get(`/api/v1/crm/customers/${selectedCustomer.value.id}/activity`)
     activity.value = Array.isArray(actRes?.data) ? actRes.data : []
   } catch (e) {
-    globalError.value = errMessage(e)
+    globalError.value = await errMessage(e)
   } finally {
     loadingActivity.value = false
   }
@@ -304,7 +333,7 @@ async function createRecord() {
     records.value = Array.isArray(recRes?.data) ? recRes.data : []
     await loadActivity()
   } catch (e) {
-    globalError.value = errMessage(e)
+    globalError.value = await errMessage(e)
   } finally {
     savingRecord.value = false
   }
@@ -339,214 +368,44 @@ async function submitCharge() {
     records.value = Array.isArray(recRes?.data) ? recRes.data : []
     await loadActivity()
   } catch (e) {
-    globalError.value = errMessage(e)
+    globalError.value = await errMessage(e)
   } finally {
     charging.value = false
   }
 }
 
-onMounted(loadCustomers)
+async function bootstrapPage() {
+  sessionExpired.value = false
+  accessDenied.value = false
+  globalError.value = ''
+
+  await authStore.initialize()
+  if (!authStore.getToken?.() && !authStore.token) {
+    router.push({ name: 'AuthLogin', query: { redirect: '/office-crm' } })
+    return
+  }
+
+  const canCrm = isModuleVisible(authStore.modules, 'crm', {
+    isSuperuser: authStore.isAdmin,
+    isEmployee: authStore.isEmployee,
+  })
+  if (!canCrm) {
+    accessDenied.value = true
+    loadingCustomers.value = false
+    return
+  }
+
+  await loadCustomers()
+}
+
+onMounted(bootstrapPage)
 </script>
 
 <style scoped>
-.office-crm {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1.25rem 1rem 2rem;
-  color: #e8eaed;
-}
-.crm-header {
-  margin-bottom: 1.25rem;
-}
-.back-link {
-  color: #8ab4f8;
-  text-decoration: none;
-  font-size: 0.9rem;
-}
-.back-link:hover {
-  text-decoration: underline;
-}
-h1 {
-  margin: 0.5rem 0 0.25rem;
-  font-size: 1.5rem;
-}
-.subtitle {
-  margin: 0;
-  opacity: 0.8;
-  font-size: 0.95rem;
-}
-.global-error {
-  background: rgba(242, 139, 130, 0.15);
-  border: 1px solid #f28b82;
-  color: #f28b82;
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  margin-bottom: 1rem;
-}
-.crm-layout {
-  display: grid;
-  grid-template-columns: 1fr 1.2fr 1fr;
-  gap: 1rem;
-}
-@media (max-width: 960px) {
-  .crm-layout {
-    grid-template-columns: 1fr;
-  }
-}
-.panel {
-  background: #1e1f24;
-  border: 1px solid #3c4043;
-  border-radius: 10px;
-  padding: 1rem;
-}
-.panel h2 {
-  margin: 0 0 0.75rem;
-  font-size: 1.1rem;
-}
-.panel h3,
-.panel h4 {
-  margin: 1rem 0 0.5rem;
-  font-size: 1rem;
-}
-.btn-primary,
-.btn-secondary,
-.btn-small {
-  cursor: pointer;
-  border-radius: 6px;
-  padding: 0.45rem 0.85rem;
-  font-size: 0.875rem;
-  border: none;
-  margin: 0.25rem 0.25rem 0.25rem 0;
-}
-.btn-primary {
-  background: #8ab4f8;
-  color: #202124;
-}
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.btn-secondary {
-  background: #3c4043;
-  color: #e8eaed;
-}
-.btn-small {
-  background: #5f6368;
-  color: #fff;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.8rem;
-}
-.form-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  margin: 0.75rem 0;
-  padding: 0.75rem;
-  background: #292a2e;
-  border-radius: 8px;
-}
-.form-card label {
-  font-size: 0.8rem;
-  margin-top: 0.35rem;
-}
-.form-card input,
-.form-card select,
-.form-card textarea {
-  padding: 0.4rem 0.5rem;
-  border-radius: 4px;
-  border: 1px solid #5f6368;
-  background: #202124;
-  color: #e8eaed;
-}
-.checkbox {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.customer-list {
-  list-style: none;
-  margin: 0.75rem 0 0;
-  padding: 0;
-  max-height: 420px;
-  overflow-y: auto;
-}
-.customer-list li {
-  padding: 0.55rem 0.5rem;
-  border-radius: 6px;
-  cursor: pointer;
-  border: 1px solid transparent;
-}
-.customer-list li:hover {
-  background: #292a2e;
-}
-.customer-list li.active {
-  border-color: #8ab4f8;
-  background: rgba(138, 180, 248, 0.12);
-}
-.cust-name {
-  display: block;
+.error-login-link {
+  display: inline-block;
+  margin-left: 0.5rem;
+  color: #2563eb;
   font-weight: 600;
-}
-.cust-meta {
-  font-size: 0.8rem;
-  opacity: 0.75;
-}
-.meta-line {
-  font-size: 0.9rem;
-  opacity: 0.85;
-  margin: 0 0 1rem;
-}
-.records-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
-  margin-top: 0.5rem;
-}
-.records-table th,
-.records-table td {
-  text-align: left;
-  padding: 0.45rem 0.35rem;
-  border-bottom: 1px solid #3c4043;
-}
-.actions {
-  white-space: nowrap;
-}
-.charge-box {
-  margin-top: 1rem;
-  padding: 0.75rem;
-  background: #292a2e;
-  border-radius: 8px;
-}
-.charge-actions {
-  margin-top: 0.5rem;
-}
-.activity-list {
-  list-style: none;
-  margin: 0.5rem 0 0;
-  padding: 0;
-  max-height: 480px;
-  overflow-y: auto;
-}
-.activity-item {
-  padding: 0.6rem 0;
-  border-bottom: 1px solid #3c4043;
-}
-.activity-time {
-  display: block;
-  font-size: 0.75rem;
-  opacity: 0.7;
-}
-.activity-action {
-  font-weight: 600;
-  font-size: 0.85rem;
-}
-.activity-summary {
-  margin: 0.25rem 0 0;
-  font-size: 0.85rem;
-  opacity: 0.9;
-}
-.muted {
-  opacity: 0.65;
-  font-size: 0.9rem;
 }
 </style>

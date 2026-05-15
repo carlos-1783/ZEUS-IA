@@ -59,7 +59,7 @@
           <span>{{ t('dashboardPro.nav.controlHorario') }}</span>
         </button>
         <button 
-          v-if="showModule('crm')"
+          v-if="showModule('crm') && !isEmployee"
           type="button"
           class="nav-item"
           @click="closeSidebarOnMobile(); goToOfficeCrm()"

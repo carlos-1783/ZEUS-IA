@@ -374,7 +374,10 @@
     "refreshActivity": "Refresh activity",
     "noActivity": "No activity yet.",
     "invalidAmount": "Enter a valid amount greater than zero.",
-    "errorGeneric": "Something went wrong. Check your connection and try again."
+    "errorGeneric": "Something went wrong. Check your connection and try again.",
+    "sessionExpired": "Your session has expired or is invalid.",
+    "loginAgain": "Sign in again",
+    "accessDenied": "Office CRM is not available for your company type. Use the modules shown on your dashboard."
   },
   "controlHorario": {
     "title": "Universal Time Tracking",

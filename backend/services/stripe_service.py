@@ -6,7 +6,7 @@ import logging
 import os
 from typing import Optional, Dict, Any
 try:
-    import stripe
+    import stripe  # pyright: ignore[reportMissingImports]
     STRIPE_AVAILABLE = True
 except ImportError:
     STRIPE_AVAILABLE = False

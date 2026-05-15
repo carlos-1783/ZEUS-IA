@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_active_user
+from app.core.auth import get_current_active_user
 from app.db.session import get_db
 from app.models.user import User
 from services.company_module_config import get_company_config_for_user

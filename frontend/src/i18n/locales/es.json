@@ -374,7 +374,10 @@
     "refreshActivity": "Actualizar actividad",
     "noActivity": "Sin actividad todavía.",
     "invalidAmount": "Indica un importe válido mayor que cero.",
-    "errorGeneric": "Ha ocurrido un error. Revisa la conexión e inténtalo de nuevo."
+    "errorGeneric": "Ha ocurrido un error. Revisa la conexión e inténtalo de nuevo.",
+    "sessionExpired": "Tu sesión ha caducado o no es válida.",
+    "loginAgain": "Iniciar sesión de nuevo",
+    "accessDenied": "El CRM de oficina no está disponible para tu tipo de empresa. Usa los módulos de tu panel (TPV, control horario, etc.)."
   },
   "controlHorario": {
     "title": "Control Horario Universal",

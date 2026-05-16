@@ -17,9 +17,14 @@
     <div v-if="!accessDenied" class="crm-layout">
       <section class="panel customers-panel">
         <h2>{{ t('officeCrm.clients') }}</h2>
-        <button type="button" class="btn-primary" @click="showNewCustomer = !showNewCustomer">
-          {{ showNewCustomer ? t('officeCrm.cancel') : t('officeCrm.newClient') }}
-        </button>
+        <div class="clients-toolbar">
+          <button type="button" class="btn-primary" @click="showNewCustomer = !showNewCustomer">
+            {{ showNewCustomer ? t('officeCrm.cancel') : t('officeCrm.newClient') }}
+          </button>
+          <button type="button" class="btn-secondary" @click="showImport = true">
+            {{ t('officeCrm.import.button') }}
+          </button>
+        </div>
 
         <form v-if="showNewCustomer" class="form-card" @submit.prevent="createCustomer">
           <label>{{ t('officeCrm.name') }} *</label>
@@ -139,6 +144,8 @@
         <p v-if="!loadingActivity && !activity.length" class="muted">{{ t('officeCrm.noActivity') }}</p>
       </section>
     </div>
+
+    <CrmCustomerImport v-if="showImport" @close="showImport = false" @imported="onCustomersImported" />
   </div>
 </template>
 
@@ -149,6 +156,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/services/api'
 import { isModuleVisible } from '@/utils/companyModules'
+import CrmCustomerImport from '@/components/CrmCustomerImport.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -166,6 +174,7 @@ const selectedCustomer = ref(null)
 const records = ref([])
 const activity = ref([])
 const showNewCustomer = ref(false)
+const showImport = ref(false)
 const showNewRecord = ref(false)
 const savingCustomer = ref(false)
 const savingRecord = ref(false)
@@ -227,6 +236,11 @@ async function errMessage(e) {
     }
   }
   return e?.message || t('officeCrm.errorGeneric')
+}
+
+async function onCustomersImported() {
+  showImport.value = false
+  await loadCustomers()
 }
 
 async function loadCustomers() {

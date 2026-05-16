@@ -377,7 +377,24 @@
     "errorGeneric": "Something went wrong. Check your connection and try again.",
     "sessionExpired": "Your session has expired or is invalid.",
     "loginAgain": "Sign in again",
-    "accessDenied": "Office CRM is not available for your company type. Use the modules shown on your dashboard."
+    "accessDenied": "Office CRM is not available for your company type. Use the modules shown on your dashboard.",
+    "import": {
+      "button": "Import clients",
+      "title": "Import clients from file",
+      "hint": "Upload a CSV or Excel (.xlsx) with headers in the first row. Existing clients are never overwritten (duplicate email or phone are skipped).",
+      "chooseFile": "Choose file",
+      "analyze": "Analyze file",
+      "mapColumns": "Map columns",
+      "columnNone": "— Do not import —",
+      "preview": "Preview",
+      "rowsFound": "{count} rows in «{file}»",
+      "confirm": "Import clients",
+      "back": "Back",
+      "done": "Close",
+      "imported": "Imported: {count}",
+      "skipped": "Skipped: {count}",
+      "skippedDuplicates": "Duplicates (email/phone): {count}"
+    }
   },
   "controlHorario": {
     "title": "Universal Time Tracking",

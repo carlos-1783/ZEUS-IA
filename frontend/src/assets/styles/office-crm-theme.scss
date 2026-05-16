@@ -327,3 +327,169 @@
 [data-theme='dark'] .office-crm .records-table td {
   border-color: #334155;
 }
+
+.office-crm .clients-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.office-crm .import-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.office-crm .import-modal {
+  width: min(640px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2);
+  padding: 1.25rem 1.35rem 1.5rem;
+}
+
+.office-crm .import-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.office-crm .import-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.office-crm .import-close {
+  border: 0;
+  background: transparent;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #64748b;
+}
+
+.office-crm .import-error {
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 0.75rem;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #b91c1c;
+  font-size: 0.9rem;
+}
+
+.office-crm .import-hint,
+.office-crm .import-meta {
+  color: #64748b;
+  font-size: 0.9rem;
+  margin: 0 0 1rem;
+}
+
+.office-crm .import-file-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.office-crm .import-file-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+}
+
+.office-crm .import-filename {
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.office-crm .import-mapping h3,
+.office-crm .import-preview h3 {
+  font-size: 0.95rem;
+  margin: 0 0 0.5rem;
+}
+
+.office-crm .mapping-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.office-crm .mapping-row select {
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+}
+
+.office-crm .preview-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+
+.office-crm .preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.office-crm .preview-table th,
+.office-crm .preview-table td {
+  border: 1px solid #e2e8f0;
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+
+.office-crm .import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.office-crm .import-success {
+  color: #047857;
+  font-weight: 600;
+}
+
+.office-crm .import-stats,
+.office-crm .import-warnings {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.office-crm .import-warnings {
+  color: #b45309;
+}
+
+[data-theme='dark'] .office-crm .import-modal {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f1f5f9;
+}
+
+[data-theme='dark'] .office-crm .mapping-row select {
+  background: #0f172a;
+  border-color: #475569;
+  color: #f1f5f9;
+}
+
+[data-theme='dark'] .office-crm .preview-table th,
+[data-theme='dark'] .office-crm .preview-table td {
+  border-color: #334155;
+}

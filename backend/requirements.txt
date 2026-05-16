@@ -40,6 +40,9 @@ openai>=1.0.0,<2.0.0
 twilio==9.0.4
 sendgrid==6.11.0
 
+# CRM import (Excel)
+openpyxl==3.1.5
+
 # Utilities
 python-dateutil==2.9.0
 pytz==2024.1

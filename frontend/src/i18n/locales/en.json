@@ -382,6 +382,8 @@
       "button": "Import clients",
       "title": "Import clients from file",
       "hint": "Upload a CSV or Excel (.xlsx) with headers in the first row. Existing clients are never overwritten (duplicate email or phone are skipped).",
+      "dropHint": "Drag and drop your file here, or choose one",
+      "invalidFormat": "Only .csv and .xlsx files are supported",
       "chooseFile": "Choose file",
       "analyze": "Analyze file",
       "mapColumns": "Map columns",

@@ -10,17 +10,26 @@
 
       <section v-if="step === 'upload'" class="import-step">
         <p class="import-hint">{{ t('officeCrm.import.hint') }}</p>
-        <label class="import-file-label">
-          <input
-            ref="fileInput"
-            type="file"
-            accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            class="import-file-input"
-            @change="onFileSelected"
-          />
-          <span class="btn-secondary">{{ t('officeCrm.import.chooseFile') }}</span>
-          <span v-if="selectedFile" class="import-filename">{{ selectedFile.name }}</span>
-        </label>
+        <div
+          class="import-dropzone"
+          :class="{ 'import-dropzone--active': dragOver }"
+          @dragover.prevent="dragOver = true"
+          @dragleave.prevent="dragOver = false"
+          @drop.prevent="onDrop"
+        >
+          <p class="import-dropzone-text">{{ t('officeCrm.import.dropHint') }}</p>
+          <label class="import-file-label">
+            <input
+              ref="fileInput"
+              type="file"
+              accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              class="import-file-input"
+              @change="onFileSelected"
+            />
+            <span class="btn-secondary">{{ t('officeCrm.import.chooseFile') }}</span>
+            <span v-if="selectedFile" class="import-filename">{{ selectedFile.name }}</span>
+          </label>
+        </div>
         <div class="import-actions">
           <button type="button" class="btn-primary" :disabled="!selectedFile || loading" @click="runPreview">
             {{ loading ? t('officeCrm.loading') : t('officeCrm.import.analyze') }}
@@ -70,8 +79,8 @@
         </div>
 
         <div class="import-actions">
-          <button type="button" class="btn-secondary" @click="step = 'upload'">{{ t('officeCrm.import.back') }}</button>
-          <button type="button" class="btn-primary" :disabled="!mapping.name || loading" @click="runImport">
+          <button type="button" class="btn-secondary" @click="backToUpload">{{ t('officeCrm.import.back') }}</button>
+          <button type="button" class="btn-primary" :disabled="!mapping.name || loading || !fileId" @click="runImport">
             {{ loading ? t('officeCrm.loading') : t('officeCrm.import.confirm') }}
           </button>
         </div>
@@ -109,8 +118,10 @@ const { t } = useI18n()
 const step = ref('upload')
 const loading = ref(false)
 const error = ref('')
+const dragOver = ref(false)
 const selectedFile = ref(null)
 const fileInput = ref(null)
+const fileId = ref('')
 const previewData = ref(null)
 const result = ref(null)
 
@@ -138,10 +149,32 @@ function close() {
   emit('close')
 }
 
-function onFileSelected(ev) {
-  const f = ev.target?.files?.[0]
-  selectedFile.value = f || null
+function setFile(f) {
+  if (!f) return
+  const name = (f.name || '').toLowerCase()
+  if (!name.endsWith('.csv') && !name.endsWith('.xlsx')) {
+    error.value = t('officeCrm.import.invalidFormat')
+    return
+  }
+  selectedFile.value = f
   error.value = ''
+  fileId.value = ''
+}
+
+function onFileSelected(ev) {
+  setFile(ev.target?.files?.[0])
+}
+
+function onDrop(ev) {
+  dragOver.value = false
+  const f = ev.dataTransfer?.files?.[0]
+  setFile(f)
+}
+
+function backToUpload() {
+  step.value = 'upload'
+  fileId.value = ''
+  previewData.value = null
 }
 
 async function parseError(e) {
@@ -173,14 +206,18 @@ async function runPreview() {
   try {
     const fd = new FormData()
     fd.append('file', selectedFile.value)
-    const res = await api.postFormData('/api/v1/crm/import/preview', fd)
+    const res = await api.postFormData('/api/v1/crm/import/clients/preview', fd)
     previewData.value = res
+    fileId.value = res?.file_id || ''
     columns.value = res?.columns || []
     previewRows.value = res?.preview_rows || []
     totalRows.value = res?.total_rows ?? 0
     applySuggested(res?.suggested_mapping)
     if (!mapping.name && columns.value.length) {
       mapping.name = columns.value[0]
+    }
+    if (!fileId.value) {
+      throw new Error(t('officeCrm.errorGeneric'))
     }
     step.value = 'mapping'
   } catch (e) {
@@ -191,23 +228,20 @@ async function runPreview() {
 }
 
 async function runImport() {
-  if (!selectedFile.value || !mapping.name) return
+  if (!fileId.value || !mapping.name) return
   loading.value = true
   error.value = ''
   try {
-    const fd = new FormData()
-    fd.append('file', selectedFile.value)
-    fd.append(
-      'mapping',
-      JSON.stringify({
+    const res = await api.post('/api/v1/crm/import/clients/confirm', {
+      file_id: fileId.value,
+      mapping: {
         name: mapping.name,
         email: mapping.email,
         phone: mapping.phone,
         notes: mapping.notes,
         tax_id: mapping.tax_id,
-      }),
-    )
-    const res = await api.postFormData('/api/v1/crm/import/clients', fd)
+      },
+    })
     result.value = res
     step.value = 'done'
   } catch (e) {

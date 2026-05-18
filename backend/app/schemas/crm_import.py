@@ -19,11 +19,17 @@ class CrmImportColumnMapping(BaseModel):
 
 class CrmImportPreviewOut(BaseModel):
     success: bool = True
+    file_id: str = ""
     columns: List[str] = []
     suggested_mapping: CrmImportColumnMapping
     preview_rows: List[Dict[str, Any]] = []
     total_rows: int = 0
     filename: str = ""
+
+
+class CrmImportConfirmIn(BaseModel):
+    file_id: str = Field(..., min_length=8, max_length=64)
+    mapping: CrmImportColumnMapping
 
 
 class CrmImportResultOut(BaseModel):

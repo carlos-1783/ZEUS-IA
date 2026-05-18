@@ -382,6 +382,8 @@
       "button": "Importar clientes",
       "title": "Importar clientes desde archivo",
       "hint": "Sube un CSV o Excel (.xlsx) con cabeceras en la primera fila. No se sobrescriben clientes existentes (email o teléfono duplicado).",
+      "dropHint": "Arrastra el archivo aquí o elige uno",
+      "invalidFormat": "Solo se admiten archivos .csv y .xlsx",
       "chooseFile": "Elegir archivo",
       "analyze": "Analizar archivo",
       "mapColumns": "Mapear columnas",

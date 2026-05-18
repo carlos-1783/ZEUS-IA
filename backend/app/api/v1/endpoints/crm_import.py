@@ -1,16 +1,18 @@
-"""Importación masiva de clientes CRM (CSV / XLSX)."""
+"""Importación masiva de clientes CRM (preview + confirm, archivos temporales)."""
 
 from __future__ import annotations
 
-import json
-
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.crm_import import CrmImportColumnMapping, CrmImportPreviewOut, CrmImportResultOut
+from app.schemas.crm_import import (
+    CrmImportConfirmIn,
+    CrmImportPreviewOut,
+    CrmImportResultOut,
+)
 import services.crm_import_service as import_svc
 
 router = APIRouter()
@@ -25,48 +27,36 @@ def _read_upload(file: UploadFile) -> tuple[bytes, str]:
     return content, file.filename
 
 
-@router.post("/preview", response_model=CrmImportPreviewOut)
-async def crm_import_preview(
+@router.post("/clients/preview", response_model=CrmImportPreviewOut)
+async def crm_import_clients_preview(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Parsea el archivo y devuelve columnas, mapeo sugerido y vista previa."""
-    del current_user
+    """Sube archivo, lo guarda en tmp_uploads/ y devuelve file_id, columnas y vista previa."""
     content, filename = _read_upload(file)
-    columns, suggested, preview, total = import_svc.build_preview(content, filename)
-    preview_clean = [{k: v for k, v in row.items() if k != "_raw"} for row in preview]
+    file_id = import_svc.store_preview_from_upload(content, filename, current_user)
+    fid, columns, suggested, preview, total, name = import_svc.build_preview(file_id, current_user.id)
     return CrmImportPreviewOut(
+        file_id=fid,
         columns=columns,
         suggested_mapping=suggested,
-        preview_rows=preview_clean,
+        preview_rows=preview,
         total_rows=total,
-        filename=filename,
+        filename=name,
     )
 
 
-@router.post("/clients", response_model=CrmImportResultOut)
-async def crm_import_clients(
-    file: UploadFile = File(...),
-    mapping: str = Form(..., description="JSON con mapeo de columnas"),
+@router.post("/clients/confirm", response_model=CrmImportResultOut)
+async def crm_import_clients_confirm(
+    body: CrmImportConfirmIn,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Importa clientes según el mapeo confirmado (sin sobrescribir existentes)."""
-    content, filename = _read_upload(file)
-    try:
-        mapping_data = json.loads(mapping)
-        column_mapping = CrmImportColumnMapping.model_validate(mapping_data)
-    except (json.JSONDecodeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Mapeo de columnas inválido.",
-        ) from exc
-
-    result = import_svc.import_customers(
+    """Confirma importación con file_id y mapeo (sin re-subir archivo)."""
+    result = import_svc.confirm_import(
         db,
         current_user,
-        content=content,
-        filename=filename,
-        mapping=column_mapping,
+        file_id=body.file_id,
+        mapping=body.mapping,
     )
     return CrmImportResultOut(**result)

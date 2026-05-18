@@ -10,7 +10,9 @@ from pydantic import BaseModel
 from typing import Any, Dict, Optional
 
 from app.core.auth import get_current_active_user
+from app.db.session import get_db
 from app.models.user import User
+from sqlalchemy.orm import Session
 from services.teamflow_engine import teamflow_engine
 
 
@@ -20,6 +22,12 @@ router = APIRouter(prefix="/teamflow", tags=["teamflow"])
 class TeamFlowRunRequest(BaseModel):
     workflow_payload: Optional[Dict[str, Any]] = None
     requested_by: Optional[str] = None
+
+
+class TeamFlowChatExecuteRequest(BaseModel):
+    message: str
+    thread_id: Optional[str] = "main"
+    force_execute: bool = False
 
 
 @router.get("/workflows")
@@ -87,4 +95,29 @@ async def validate_integrations(_: User = Depends(get_current_active_user)):
         "success": True,
         **teamflow_engine.validate_integrations(),
     }
+
+
+@router.post("/execute-from-chat")
+async def execute_from_chat(
+    request: TeamFlowChatExecuteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Ejecuta intent → task → acción (mismo puente que el chat de ZEUS Core)."""
+    from services.teamflow_orchestrator import try_handle_zeus_chat
+
+    bridge = await try_handle_zeus_chat(
+        db,
+        current_user,
+        request.message,
+        {"thread_id": request.thread_id or "main"},
+        force_execute=request.force_execute,
+    )
+    if not bridge or not bridge.get("handled"):
+        return {
+            "success": True,
+            "handled": False,
+            "message": "No se detectó una acción ejecutable en el mensaje.",
+        }
+    return {"success": bridge.get("success", False), **bridge}
 

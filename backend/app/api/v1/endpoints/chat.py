@@ -163,6 +163,9 @@ class ChatResponse(BaseModel):
     hitl_required: Optional[bool] = None
     error: Optional[str] = None
     workspace_document_id: Optional[int] = None
+    executed_action: Optional[bool] = None
+    needs_confirmation: Optional[bool] = None
+    execution: Optional[dict] = None
 
 class AgentCommunicationRequest(BaseModel):
     from_agent: str
@@ -223,6 +226,49 @@ async def chat_with_agent(
         context.setdefault("user_email", current_user.email)
         thread_id = request.thread_id or context.get("thread_id") or "main"
         company_id = context.get("company_id") or context.get("user_email")
+        context["thread_id"] = thread_id
+        context["user_id"] = current_user.id
+
+        # ZEUS Core: intent → task → ejecución real (CRM, campaña, email) antes del LLM.
+        if agent_name == "ZEUS CORE":
+            from services.teamflow_orchestrator import try_handle_zeus_chat
+
+            force = bool(context.get("confirm_action") or context.get("force_execute"))
+            bridge = await try_handle_zeus_chat(
+                db,
+                current_user,
+                request.message,
+                context,
+                force_execute=force,
+            )
+            if bridge and bridge.get("handled"):
+                try:
+                    ActivityLogger.log_activity(
+                        agent_name=agent_name,
+                        action_type="zeus_action_executed" if bridge.get("executed") else "zeus_action_preview",
+                        action_description=bridge.get("message", "")[:500],
+                        details={
+                            "execution": bridge.get("execution"),
+                            "user_id": current_user.id,
+                            "thread_id": thread_id,
+                        },
+                        metrics=bridge.get("execution", {}).get("metrics") if isinstance(bridge.get("execution"), dict) else None,
+                        user_email=current_user.email,
+                        status="completed" if bridge.get("success") else "failed",
+                        priority="high" if bridge.get("executed") else "normal",
+                        visible_to_client=True,
+                    )
+                except Exception:
+                    logger.exception("ActivityLogger tras acción ZEUS omitido")
+                return ChatResponse(
+                    agent=agent_name,
+                    message=bridge.get("message", ""),
+                    success=bool(bridge.get("success")),
+                    executed_action=bool(bridge.get("executed")),
+                    needs_confirmation=bool(bridge.get("needs_confirmation")),
+                    execution=bridge.get("execution") if isinstance(bridge.get("execution"), dict) else None,
+                    error=None if bridge.get("success") else bridge.get("message"),
+                )
 
         # CRÍTICO (Railway / Gunicorn): run_chat es síncrono y largo (LLM). No en el event loop.
         result = await asyncio.to_thread(

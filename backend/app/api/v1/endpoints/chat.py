@@ -9,11 +9,13 @@ import threading
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.schemas.chat_message import ChatMessageListResponse, ChatMessageOut
+from services import chat_persistence_service as chat_db
 
 # Agregar el directorio raíz al path para importar agentes
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../..")))
@@ -178,6 +180,51 @@ class MultiAgentTaskRequest(BaseModel):
     required_agents: List[str]
     context: Optional[dict] = None
 
+
+def _persist_assistant(
+    db: Session,
+    user: User,
+    agent_name: str,
+    thread_id: str,
+    text: str,
+) -> None:
+    chat_db.save_message(
+        db,
+        user=user,
+        agent_name=agent_name,
+        thread_id=thread_id,
+        role="assistant",
+        message=text or "",
+    )
+
+
+@router.get("/messages", response_model=ChatMessageListResponse)
+async def get_chat_messages(
+    agent_name: str = Query(..., description="Nombre del agente (ej. ZEUS CORE, PERSEO)"),
+    thread_id: str = Query("main"),
+    limit: int = Query(200, ge=1, le=500),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Historial de chat persistido para el usuario y agente indicados."""
+    agent_norm = chat_db.normalize_agent_name(agent_name)
+    tid = (thread_id or "main").strip() or "main"
+    rows = chat_db.list_messages(
+        db,
+        user=current_user,
+        agent_name=agent_norm,
+        thread_id=tid,
+        limit=limit,
+    )
+    return ChatMessageListResponse(
+        success=True,
+        messages=[ChatMessageOut.model_validate(r) for r in rows],
+        total=len(rows),
+        agent_name=agent_norm,
+        thread_id=tid,
+    )
+
+
 @router.post("/{agent_name}/chat", response_model=ChatResponse)
 async def chat_with_agent(
     agent_name: str,
@@ -216,18 +263,28 @@ async def chat_with_agent(
             status_code=500,
             detail=f"Agente '{agent_name}' no está inicializado correctamente"
         )
+
+    context = request.context or {}
+    thread_id = request.thread_id or context.get("thread_id") or "main"
     
     try:
         from services.unified_agent_runtime import run_chat
 
-        context = request.context or {}
         context["user_message"] = request.message
         context.setdefault("user_id", current_user.id)
         context.setdefault("user_email", current_user.email)
-        thread_id = request.thread_id or context.get("thread_id") or "main"
         company_id = context.get("company_id") or context.get("user_email")
         context["thread_id"] = thread_id
         context["user_id"] = current_user.id
+
+        chat_db.save_message(
+            db,
+            user=current_user,
+            agent_name=agent_name,
+            thread_id=thread_id,
+            role="user",
+            message=request.message,
+        )
 
         # ZEUS Core: intent → task → ejecución real (CRM, campaña, email) antes del LLM.
         if agent_name == "ZEUS CORE":
@@ -260,9 +317,11 @@ async def chat_with_agent(
                     )
                 except Exception:
                     logger.exception("ActivityLogger tras acción ZEUS omitido")
+                bridge_msg = bridge.get("message", "") or ""
+                _persist_assistant(db, current_user, agent_name, thread_id, bridge_msg)
                 return ChatResponse(
                     agent=agent_name,
-                    message=bridge.get("message", ""),
+                    message=bridge_msg,
                     success=bool(bridge.get("success")),
                     executed_action=bool(bridge.get("executed")),
                     needs_confirmation=bool(bridge.get("needs_confirmation")),
@@ -370,9 +429,11 @@ async def chat_with_agent(
                 )
             except Exception:
                 logger.exception("ActivityLogger tras chat OK omitido (BD u otro fallo)")
+            ok_msg = result.get("message", "Sin respuesta") or ""
+            _persist_assistant(db, current_user, agent_name, thread_id, ok_msg)
             return ChatResponse(
                 agent=agent_name,
-                message=result.get("message", "Sin respuesta"),
+                message=ok_msg,
                 success=True,
                 confidence=result.get("confidence"),
                 hitl_required=result.get("hitl_required", False),
@@ -400,6 +461,7 @@ async def chat_with_agent(
         fail_msg = (result.get("message") or "").strip() or (
             result.get("error") or ""
         ).strip() or f"Error: {result.get('error', 'Error desconocido')}"
+        _persist_assistant(db, current_user, agent_name, thread_id, fail_msg)
         return ChatResponse(
             agent=agent_name,
             message=fail_msg,
@@ -424,9 +486,11 @@ async def chat_with_agent(
             )
         except Exception:
             logger.exception("ActivityLogger tras excepción chat omitido")
+        exc_msg = f"Error interno: {str(e)}"
+        _persist_assistant(db, current_user, agent_name, thread_id, exc_msg)
         return ChatResponse(
             agent=agent_name,
-            message=f"Error interno: {str(e)}",
+            message=exc_msg,
             success=False,
             error=str(e),
         )

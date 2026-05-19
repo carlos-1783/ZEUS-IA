@@ -20,3 +20,15 @@ export function getAgentChatUrl(agentDisplayName: string): string {
   const base = API_BASE_URL.replace(/\/+$/, '');
   return `${base}/chat/${agentNameUrl}/chat`;
 }
+
+/**
+ * Historial persistido GET /api/v1/chat/messages
+ */
+export function getChatMessagesUrl(agentDisplayName: string, threadId = 'main'): string {
+  const base = API_BASE_URL.replace(/\/+$/, '');
+  const params = new URLSearchParams({
+    agent_name: agentDisplayName,
+    thread_id: threadId,
+  });
+  return `${base}/chat/messages?${params.toString()}`;
+}

@@ -71,6 +71,7 @@
       <!-- Modo Texto -->
       <div v-if="communicationMode === 'text'" class="text-chat">
         <div class="chat-messages" ref="messagesContainer">
+          <p v-if="loadingChatHistory" class="chat-history-loading">Cargando historial…</p>
           <div 
             v-for="message in messages" 
             :key="message.id"
@@ -238,7 +239,7 @@ import AfroditaWorkspace from './agent-workspaces/AfroditaWorkspace.vue'
 import ThalosWorkspace from './agent-workspaces/ThalosWorkspace.vue'
 import JusticiaWorkspace from './agent-workspaces/JusticiaWorkspace.vue'
 import ImageUploader from '@/components/ImageUploader.jsx'
-import { getAgentChatUrl, AGENT_CHAT_TIMEOUT_MS } from '@/utils/chatApi'
+import { getAgentChatUrl, getChatMessagesUrl, AGENT_CHAT_TIMEOUT_MS } from '@/utils/chatApi'
 
 const props = defineProps({
   agent: {
@@ -274,6 +275,8 @@ const activeTab = ref(hasWorkspace.value ? 'workspace' : 'chat')
 
 // Text chat
 const messages = ref([])
+const chatThreadId = ref('main')
+const loadingChatHistory = ref(false)
 const textInput = ref('')
 const messagesContainer = ref(null)
 const isPerseoAgent = computed(() => (props.agent?.name || '').toUpperCase().includes('PERSEO'))
@@ -364,7 +367,11 @@ const sendVoiceToAgent = async (transcript) => {
       else if (/\.(mp4|webm|mov|m4v)($|\?)/i.test(u) || u.includes('/videos/')) vctx.video_url = u
       else vctx.image_url = u
     }
-    const response = await postAgentChat({ message: transcript, context: vctx })
+    const response = await postAgentChat({
+      message: transcript,
+      thread_id: chatThreadId.value,
+      context: vctx,
+    })
     const data = await response.json().catch(() => ({}))
     if (!response.ok) {
       const detail = data?.detail || data?.message || `HTTP ${response.status}`
@@ -405,9 +412,52 @@ const activityDays = ref(7)
 const metrics = ref({})
 let activityPollTimer = null
 
+function mapDbMessageToUi(row) {
+  const role = (row.role || '').toLowerCase()
+  const sender = role === 'user' ? 'user' : 'agent'
+  const ts = row.created_at ? new Date(row.created_at) : new Date()
+  return {
+    id: row.id ?? `${sender}-${ts.getTime()}`,
+    sender,
+    content: row.message || '',
+    timestamp: ts,
+  }
+}
+
+async function loadChatHistory() {
+  loadingChatHistory.value = true
+  try {
+    const token = authStore.getToken?.() ?? authStore.token ?? null
+    if (!token) {
+      messages.value = []
+      return
+    }
+    const api = (await import('@/services/api')).default
+    const data = await api.get(
+      getChatMessagesUrl(props.agent.name, chatThreadId.value),
+      token,
+    )
+    const rows = Array.isArray(data?.messages) ? data.messages : []
+    messages.value = rows.map(mapDbMessageToUi)
+    await nextTick(() => {
+      if (messagesContainer.value) {
+        messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+      }
+    })
+  } catch (err) {
+    console.warn('No se pudo cargar historial de chat:', err)
+    messages.value = []
+  } finally {
+    loadingChatHistory.value = false
+  }
+}
+
 onMounted(() => {
   loadActivities()
   loadMetrics()
+  if (activeTab.value === 'chat' || !hasWorkspace.value) {
+    loadChatHistory()
+  }
   activityPollTimer = setInterval(() => {
     if (activeTab.value === 'activity') {
       loadActivities()
@@ -428,8 +478,14 @@ onUnmounted(() => {
 watch(() => props.agent.name, () => {
   loadActivities()
   loadMetrics()
-  messages.value = []
   imageReferenceUrl.value = null
+  loadChatHistory()
+})
+
+watch(activeTab, (tab) => {
+  if (tab === 'chat') {
+    loadChatHistory()
+  }
 })
 
 const loadActivities = async () => {
@@ -580,6 +636,7 @@ const sendTextMessage = async () => {
 
       const response = await postAgentChat({
         message: userMessage,
+        thread_id: chatThreadId.value,
         context: contextPayload,
       })
       const data = await response.json().catch(() => ({}))
@@ -631,12 +688,7 @@ const sendTextMessage = async () => {
       })
     }
     
-    // Scroll al final
-    nextTick(() => {
-      if (messagesContainer.value) {
-        messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-      }
-    })
+    await loadChatHistory()
     
   } catch (error) {
     console.error('Error al comunicarse con el agente:', error)
@@ -846,6 +898,13 @@ const formatMetricValue = (value) => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.chat-history-loading {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #64748b;
+  text-align: center;
 }
 
 .message {

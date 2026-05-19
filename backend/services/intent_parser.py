@@ -44,8 +44,20 @@ _ANALYTICS_RE = re.compile(
     re.I,
 )
 
+_TPV_TODAY_RE = re.compile(
+    r"(venta|tpv|caja|ticket).{0,30}?(hoy|este\s*d[ií]a|de\s*hoy)|"
+    r"(qu[eé]|que)\s+ventas?.{0,25}?hoy",
+    re.I,
+)
+
 _TPV_RE = re.compile(
     r"(venta|tpv|caja|ticket).{0,40}?(resumen|total|cu[aá]nto|cuanto|últim|ultim)",
+    re.I,
+)
+
+_OPERATIONAL_RE = re.compile(
+    r"(envi[aá]|mandar|campa[nñ]a|oferta|descuento|cliente|venta|tpv|caja|turno|"
+    r"jornada|fichaje|importar|confirmar|promoci[oó]n)",
     re.I,
 )
 
@@ -56,6 +68,11 @@ _SHIFT_RE = re.compile(
 )
 
 _DISCOUNT_RE = re.compile(r"(\d{1,2})\s*%|descuento\s*(?:de|del)?\s*(\d{1,2})", re.I)
+
+
+def looks_like_operational(message: str) -> bool:
+    text = (message or "").strip()
+    return bool(text and _OPERATIONAL_RE.search(text))
 
 
 def is_confirmation_message(message: str) -> bool:
@@ -93,6 +110,15 @@ def parse_intent(message: str) -> ZeusTaskObject:
             raw_message=text,
             confidence=0.82,
             metadata={"days": days},
+        )
+
+    if _TPV_TODAY_RE.search(text):
+        return ZeusTaskObject(
+            intent="tpv_sales_today",
+            action="tpv_sales_summary",
+            raw_message=text,
+            confidence=0.88,
+            metadata={"period": "today", "days": 1},
         )
 
     if _TPV_RE.search(text):

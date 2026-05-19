@@ -2,6 +2,7 @@
 ZEUS Core — orquestador central: intent → action → ejecución multi-módulo.
 
 Módulos: CRM, PERSEO (marketing), TPV, control horario, analytics, activity log.
+Toda acción operativa pasa por aquí; el chat no invoca agentes directamente.
 """
 
 from __future__ import annotations
@@ -20,8 +21,10 @@ from services.agent_memory_service import load as memory_load, persist_operation
 from services.intent_parser_service import (
     build_action,
     is_confirmation_message,
+    looks_like_operational,
     parse_message,
 )
+from services.zeus_global_context import attach_context_to_action_payload, enrich_chat_context
 from services import zeus_orchestrator_handlers as handlers
 
 logger = logging.getLogger(__name__)
@@ -31,10 +34,22 @@ LEGACY_PENDING_KEY = "pending_zeus_task"
 AGENT_ZEUS = "ZEUS CORE"
 MIN_CONFIDENCE = 0.7
 
+_OPERATIONAL_HELP = (
+    "No pude ejecutar esa acción. Prueba con frases concretas, por ejemplo:\n"
+    "• «¿cuántos clientes tengo?»\n"
+    "• «envía oferta 5% a clientes» (luego «confirmar»)\n"
+    "• «qué ventas hicimos hoy»\n"
+    "• «¿tengo turno activo?»\n"
+    "• «resumen de actividad últimos 30 días»"
+)
+
 
 def _company_key(user: User, context: Optional[Dict[str, Any]]) -> str:
     if context and context.get("company_id"):
         return str(context["company_id"])
+    gc = (context or {}).get("zeus_global_context") or {}
+    if gc.get("company_id"):
+        return str(gc["company_id"])
     return str(user.id)
 
 
@@ -53,12 +68,15 @@ def _pending_to_action(
     db: Session,
     user: User,
     pending_raw: Dict[str, Any],
+    global_context: Dict[str, Any],
 ) -> ZeusAction:
     try:
-        return ZeusAction.model_validate(pending_raw)
+        action = ZeusAction.model_validate(pending_raw)
     except ValidationError:
         task = ZeusTaskObject.model_validate(pending_raw)
-        return build_action(db, user, task)
+        action = build_action(db, user, task)
+    action.payload = attach_context_to_action_payload(action.payload, global_context)
+    return action
 
 
 def _set_pending(company_id: str, thread_id: str, action: Optional[ZeusAction]) -> None:
@@ -84,6 +102,13 @@ def _set_pending(company_id: str, thread_id: str, action: Optional[ZeusAction]) 
         artifacts={PENDING_ACTION_KEY: action.model_dump()},
         blocked=None,
     )
+
+
+def _with_global_context(action: ZeusAction, global_context: Dict[str, Any]) -> ZeusAction:
+    action.payload = attach_context_to_action_payload(action.payload, global_context)
+    if action.company_id is None and global_context.get("company_id"):
+        action.company_id = global_context["company_id"]
+    return action
 
 
 def _to_chat_payload(result: ZeusExecutionResult) -> Dict[str, Any]:
@@ -153,11 +178,12 @@ async def try_handle_zeus_chat(
 ) -> Optional[Dict[str, Any]]:
     """
     Si el mensaje dispara una acción ejecutable, devuelve respuesta estructurada.
-    Si no, devuelve None (continuar con LLM).
+    Si no, devuelve None (continuar con LLM solo para consultas no operativas).
     """
-    company_id = _company_key(user, context)
-    thread_id = _thread_id(context)
-    ctx = context or {}
+    ctx = enrich_chat_context(db, user, context)
+    global_context = ctx["zeus_global_context"]
+    company_id = _company_key(user, ctx)
+    thread_id = _thread_id(ctx)
 
     if ctx.get("skip_action_execution"):
         return None
@@ -165,7 +191,7 @@ async def try_handle_zeus_chat(
     if is_confirmation_message(message) or force_execute:
         pending_raw = _get_pending(company_id, thread_id)
         if pending_raw:
-            action = _pending_to_action(db, user, pending_raw)
+            action = _pending_to_action(db, user, pending_raw, global_context)
             result = await execute_action(db, user, action, force_execute=True)
             _set_pending(company_id, thread_id, None)
             return _to_chat_payload(result)
@@ -179,9 +205,16 @@ async def try_handle_zeus_chat(
 
     task = parse_message(message)
     if task.intent == "unknown" or task.confidence < MIN_CONFIDENCE:
+        if looks_like_operational(message):
+            return {
+                "handled": True,
+                "success": False,
+                "executed": False,
+                "message": _OPERATIONAL_HELP,
+            }
         return None
 
-    action = build_action(db, user, task)
+    action = _with_global_context(build_action(db, user, task), global_context)
 
     if action.requires_confirmation and not force_execute and action.action_type == "send_campaign":
         preview = handlers.preview_send_campaign(db, user, action)
@@ -200,4 +233,4 @@ async def try_handle_zeus_chat(
     return _to_chat_payload(result)
 
 
-__all__ = ["try_handle_zeus_chat", "execute_action", "AGENT_ZEUS"]
+__all__ = ["try_handle_zeus_chat", "execute_action", "AGENT_ZEUS", "enrich_chat_context"]

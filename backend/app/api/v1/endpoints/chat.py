@@ -273,9 +273,15 @@ async def chat_with_agent(
         context["user_message"] = request.message
         context.setdefault("user_id", current_user.id)
         context.setdefault("user_email", current_user.email)
-        company_id = context.get("company_id") or context.get("user_email")
         context["thread_id"] = thread_id
         context["user_id"] = current_user.id
+
+        if agent_name == "ZEUS CORE":
+            from services.zeus_global_context import enrich_chat_context
+
+            context = enrich_chat_context(db, current_user, context)
+
+        company_id = context.get("company_id") or context.get("user_email")
 
         chat_db.save_message(
             db,
@@ -299,24 +305,6 @@ async def chat_with_agent(
                 force_execute=force,
             )
             if bridge and bridge.get("handled"):
-                try:
-                    ActivityLogger.log_activity(
-                        agent_name=agent_name,
-                        action_type="zeus_action_executed" if bridge.get("executed") else "zeus_action_preview",
-                        action_description=bridge.get("message", "")[:500],
-                        details={
-                            "execution": bridge.get("execution"),
-                            "user_id": current_user.id,
-                            "thread_id": thread_id,
-                        },
-                        metrics=bridge.get("execution", {}).get("metrics") if isinstance(bridge.get("execution"), dict) else None,
-                        user_email=current_user.email,
-                        status="completed" if bridge.get("success") else "failed",
-                        priority="high" if bridge.get("executed") else "normal",
-                        visible_to_client=True,
-                    )
-                except Exception:
-                    logger.exception("ActivityLogger tras acción ZEUS omitido")
                 bridge_msg = bridge.get("message", "") or ""
                 _persist_assistant(db, current_user, agent_name, thread_id, bridge_msg)
                 return ChatResponse(

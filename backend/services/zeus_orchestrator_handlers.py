@@ -23,6 +23,26 @@ logger = logging.getLogger(__name__)
 
 MAX_EMAILS_PER_RUN = 200
 
+AGENT_CRM = "crm_agent"
+AGENT_PERSEO = "perseo_agent"
+AGENT_TPV = "tpv_agent"
+AGENT_HR = "hr_agent"
+AGENT_ANALYTICS = "analytics_agent"
+AGENT_ACTIVITY = "activity_log"
+
+
+def _sales_since(action: ZeusAction) -> datetime:
+    if action.payload.get("period") == "today":
+        now = datetime.now(timezone.utc)
+        return now.replace(hour=0, minute=0, second=0, microsecond=0)
+    days = int(action.payload.get("days") or 7)
+    return datetime.now(timezone.utc) - timedelta(days=days)
+
+
+def _context_customers(action: ZeusAction) -> Dict[str, Any]:
+    gc = action.payload.get("_zeus_context") or {}
+    return gc.get("active_customers") or {}
+
 
 def log_central(
     *,
@@ -73,12 +93,12 @@ def execute_list_customers(db: Session, user: User, action: ZeusAction) -> ZeusE
         metrics={"total": len(customers), "with_email": with_email, "with_phone": with_phone},
         steps=[
             ZeusExecutionStepResult(
-                agent="crm",
+                agent=AGENT_CRM,
                 step="list_customers",
                 success=True,
                 detail=str(len(customers)),
             ),
-            ZeusExecutionStepResult(agent="activity_log", step="log", success=True, detail="ok"),
+            ZeusExecutionStepResult(agent=AGENT_ACTIVITY, step="log", success=True, detail="ok"),
         ],
     )
 
@@ -148,7 +168,7 @@ async def execute_send_campaign(db: Session, user: User, action: ZeusAction) -> 
 
     steps.append(
         ZeusExecutionStepResult(
-            agent="crm",
+            agent=AGENT_CRM,
             step="filter_target",
             success=True,
             detail=f"{len(recipients)} destinatarios",
@@ -170,7 +190,9 @@ async def execute_send_campaign(db: Session, user: User, action: ZeusAction) -> 
         status="in_progress",
     )
     steps.append(
-        ZeusExecutionStepResult(agent="marketing", step="create_campaign", success=True, detail=campaign_id)
+        ZeusExecutionStepResult(
+            agent=AGENT_PERSEO, step="campaign_created", success=True, detail=campaign_id
+        )
     )
 
     to_send = recipients[:MAX_EMAILS_PER_RUN]
@@ -204,8 +226,8 @@ async def execute_send_campaign(db: Session, user: User, action: ZeusAction) -> 
 
     steps.append(
         ZeusExecutionStepResult(
-            agent="notifications",
-            step="send_emails",
+            agent=AGENT_PERSEO,
+            step="message_sent",
             success=sent > 0,
             detail=f"enviados={sent} fallidos={failed}",
             data={"sent": sent, "failed": failed},
@@ -228,6 +250,15 @@ async def execute_send_campaign(db: Session, user: User, action: ZeusAction) -> 
         except Exception:
             logger.exception("crm campaign_sent log")
 
+    if sent > 0:
+        log_central(
+            user=user,
+            action_type="message_sent",
+            description=f"Mensajes de campaña enviados: {sent}",
+            details={"campaign_id": campaign_id, "sent": sent, "failed": failed},
+            metrics={"emails_sent": sent},
+            agent_name="PERSEO",
+        )
     log_central(
         user=user,
         action_type="campaign_sent",
@@ -238,7 +269,7 @@ async def execute_send_campaign(db: Session, user: User, action: ZeusAction) -> 
         status="completed" if sent else "failed",
     )
     steps.append(
-        ZeusExecutionStepResult(agent="activity_log", step="campaign_sent", success=sent > 0, detail=str(sent))
+        ZeusExecutionStepResult(agent=AGENT_ACTIVITY, step="campaign_sent", success=sent > 0, detail=str(sent))
     )
 
     remaining = len(recipients) - len(to_send)
@@ -294,8 +325,10 @@ def execute_analytics_summary(db: Session, user: User, action: ZeusAction) -> Ze
         executed=True,
         metrics={"total": total, "completed": completed, "days": days},
         steps=[
-            ZeusExecutionStepResult(agent="analytics", step="summary", success=True, detail=str(total)),
-            ZeusExecutionStepResult(agent="activity_log", step="log", success=True, detail="ok"),
+            ZeusExecutionStepResult(
+                agent=AGENT_ANALYTICS, step="summary", success=True, detail=str(total)
+            ),
+            ZeusExecutionStepResult(agent=AGENT_ACTIVITY, step="log", success=True, detail="ok"),
         ],
     )
 
@@ -363,7 +396,9 @@ def execute_shift_status(db: Session, user: User, action: ZeusAction) -> ZeusExe
             executed=True,
             metrics={"active": False},
             steps=[
-                ZeusExecutionStepResult(agent="control_horario", step="status", success=True, detail="inactive"),
+                ZeusExecutionStepResult(
+                    agent=AGENT_HR, step="status", success=True, detail="inactive"
+                ),
             ],
         )
     started = ws.opened_at.isoformat() if ws.opened_at else "—"
@@ -382,8 +417,8 @@ def execute_shift_status(db: Session, user: User, action: ZeusAction) -> ZeusExe
         executed=True,
         metrics={"active": True, "session_id": ws.id},
         steps=[
-            ZeusExecutionStepResult(agent="control_horario", step="status", success=True, detail="active"),
-            ZeusExecutionStepResult(agent="activity_log", step="log", success=True, detail="ok"),
+            ZeusExecutionStepResult(agent=AGENT_HR, step="status", success=True, detail="active"),
+            ZeusExecutionStepResult(agent=AGENT_ACTIVITY, step="log", success=True, detail="ok"),
         ],
     )
 

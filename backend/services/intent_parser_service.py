@@ -7,7 +7,7 @@ from typing import List, Optional
 from app.models.user import User
 from app.schemas.zeus_action import ZeusAction
 from app.schemas.zeus_task import ZeusTaskObject
-from services.intent_parser import is_confirmation_message, parse_intent
+from services.intent_parser import is_confirmation_message, looks_like_operational, parse_intent
 import services.crm_office_service as crm_svc
 
 from sqlalchemy.orm import Session
@@ -52,6 +52,7 @@ def _map_intent_to_action_type(intent: str, legacy_action: Optional[str]) -> str
         "confirm_pending": "confirm_pending",
         "analytics_summary": "analytics_summary",
         "tpv_sales_summary": "tpv_sales_summary",
+        "tpv_sales_today": "tpv_sales_summary",
         "shift_status": "shift_status",
     }
     if intent in mapping:
@@ -65,18 +66,24 @@ def _map_intent_to_action_type(intent: str, legacy_action: Optional[str]) -> str
 
 def _modules_for_intent(intent: str) -> List[str]:
     if intent == "create_campaign_send":
-        return ["crm", "marketing", "notifications", "activity_log"]
+        return ["crm_agent", "perseo_agent", "activity_log"]
     if intent == "list_customers_summary":
-        return ["crm", "activity_log"]
+        return ["crm_agent", "activity_log"]
     if intent == "analytics_summary":
-        return ["analytics", "activity_log"]
+        return ["analytics_agent", "activity_log"]
     if intent == "tpv_sales_summary":
         return ["tpv", "activity_log"]
     if intent == "shift_status":
-        return ["control_horario", "activity_log"]
+        return ["hr_agent", "activity_log"]
     if intent == "confirm_pending":
         return ["activity_log"]
     return []
 
 
-__all__ = ["parse_message", "build_action", "is_confirmation_message", "parse_intent"]
+__all__ = [
+    "parse_message",
+    "build_action",
+    "is_confirmation_message",
+    "looks_like_operational",
+    "parse_intent",
+]

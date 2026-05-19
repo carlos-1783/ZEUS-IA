@@ -14,6 +14,7 @@ ZeusIntentType = Literal[
     "confirm_pending",
     "analytics_summary",
     "tpv_sales_summary",
+    "tpv_sales_today",
     "shift_status",
 ]
 

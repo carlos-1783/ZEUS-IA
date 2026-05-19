@@ -5,27 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#0a0e1a" />
   <title>Limpiar caché PWA — ZEUS-IA</title>
-  <style>
+    <style>
     :root { color-scheme: dark; }
-    body {
+        body {
       font-family: system-ui, -apple-system, Segoe UI, sans-serif;
       max-width: 42rem;
       margin: 0 auto;
       padding: 1rem 1rem 2.5rem;
-      background: #0a0e1a;
+            background: #0a0e1a;
       color: #e2e8f0;
       line-height: 1.45;
-    }
+        }
     h1 { font-size: 1.35rem; margin-top: 0; }
     p.lead { color: #94a3b8; font-size: 0.95rem; }
     .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
-    button {
+        button {
       padding: 0.55rem 1rem;
       background: #2563eb;
       color: #fff;
       border: 0;
-      border-radius: 8px;
-      cursor: pointer;
+            border-radius: 8px;
+            cursor: pointer;
       font-size: 0.95rem;
     }
     button:hover { background: #1d4ed8; }
@@ -45,7 +45,7 @@
     pre#out {
       background: #020617;
       border: 1px solid #1e293b;
-      border-radius: 8px;
+            border-radius: 8px;
       padding: 0.75rem 1rem;
       min-height: 4rem;
       white-space: pre-wrap;
@@ -57,7 +57,7 @@
     .links a { color: #60a5fa; }
     .ok { color: #34d399; }
     .err { color: #f87171; }
-  </style>
+    </style>
 </head>
 <body>
   <h1>Limpiar caché PWA</h1>
@@ -65,15 +65,15 @@
     En producción la misma página está en <code>/clear-pwa-cache.html</code> (servida por el API).
     Aquí en Vite suele ser <code>/clear-pwa-cache.html</code> desde <code>public/</code>.
   </p>
-
-  <div class="info">
+    
+    <div class="info">
     <strong>Recomendado</strong> (móvil o PC):
     <ol>
       <li>Pulsa <strong>Limpiar todo</strong>.</li>
       <li>Cierra pestañas de este sitio y vuelve a abrir la URL, o fuerza recarga en el navegador.</li>
       <li>Si sigue fallando (sobre todo iPhone): Ajustes → Safari → Avanzado → Datos de sitios web → busca tu dominio y bórralo.</li>
-    </ol>
-  </div>
+        </ol>
+    </div>
 
   <div class="actions">
     <button type="button" id="btn-all">Limpiar todo</button>
@@ -82,7 +82,7 @@
     <button type="button" class="secondary" id="btn-ls">3. Limpiar almacenamiento ZEUS</button>
     <button type="button" class="secondary" id="btn-status">Ver estado</button>
     <button type="button" class="danger" id="btn-reload">Ir al inicio y recargar</button>
-  </div>
+    </div>
 
   <pre id="out"></pre>
 
@@ -91,7 +91,7 @@
     · <a href="/login">Login</a>
   </div>
 
-  <script>
+    <script>
 (function () {
   const out = document.getElementById('out');
   function log(msg, cls) {
@@ -209,7 +209,7 @@
           name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
       }
       log('Cookies de path=/ invalidadas (si las había).', 'ok');
-    } catch (e) {
+            } catch (e) {
       log('Cookies: ' + String(e), 'err');
     }
   }
@@ -223,14 +223,14 @@
 
   async function status() {
     clearOut();
-    if ('serviceWorker' in navigator) {
+            if ('serviceWorker' in navigator) {
       const r = await navigator.serviceWorker.getRegistrations();
       log('Service Workers activos: ' + r.length, r.length ? 'err' : 'ok');
       r.forEach(function (x, i) {
         log('  [' + (i + 1) + '] scope: ' + x.scope);
       });
     }
-    if ('caches' in window) {
+            if ('caches' in window) {
       const k = await caches.keys();
       log('Caches: ' + k.length, k.length ? 'err' : 'ok');
       k.forEach(function (n) {
@@ -254,9 +254,9 @@
     } catch (e) {
       log('localStorage: ' + String(e), 'err');
     }
-    if (window.matchMedia('(display-mode: standalone)').matches) {
+            if (window.matchMedia('(display-mode: standalone)').matches) {
       log('Modo: PWA / pantalla completa (instalada)', 'ok');
-    } else {
+            } else {
       log('Modo: navegador (pestaña normal)');
     }
   }
@@ -305,6 +305,6 @@
 
   status().catch(function () {});
 })();
-  </script>
+    </script>
 </body>
 </html>

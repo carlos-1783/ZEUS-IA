@@ -104,7 +104,7 @@ async def execute_from_chat(
     current_user: User = Depends(get_current_active_user),
 ):
     """Ejecuta intent → task → acción (mismo puente que el chat de ZEUS Core)."""
-    from services.teamflow_orchestrator import try_handle_zeus_chat
+    from services.zeus_orchestrator_service import try_handle_zeus_chat
 
     bridge = await try_handle_zeus_chat(
         db,

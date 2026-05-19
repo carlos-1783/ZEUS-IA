@@ -26,8 +26,32 @@ _CAMPAIGN_ONLY_RE = re.compile(
     re.I | re.DOTALL,
 )
 
+_SEND_OFFER_RE = re.compile(
+    r"^(envi[aá]|mandar?|notific).{0,80}?"
+    r"(oferta|descuento|promoci[oó]n|promo|campa[nñ]a).{0,120}?"
+    r"(a\s+)?(cliente|crm|base)",
+    re.I | re.DOTALL,
+)
+
 _LIST_CUSTOMERS_RE = re.compile(
     r"(cu[aá]ntos|cuantos|lista|listar|mostrar|ver|tengo).{0,40}?cliente",
+    re.I,
+)
+
+_ANALYTICS_RE = re.compile(
+    r"(resumen|estad[ií]stica|m[eé]trica|actividad|analytics).{0,50}?"
+    r"(agente|sistema|zeus|global|empresa|últim|ultim)",
+    re.I,
+)
+
+_TPV_RE = re.compile(
+    r"(venta|tpv|caja|ticket).{0,40}?(resumen|total|cu[aá]nto|cuanto|últim|ultim)",
+    re.I,
+)
+
+_SHIFT_RE = re.compile(
+    r"(turno|jornada|fichaje|fichar|control\s*horario).{0,40}?"
+    r"(activo|estado|abierto|tengo|estoy)",
     re.I,
 )
 
@@ -61,10 +85,38 @@ def parse_intent(message: str) -> ZeusTaskObject:
             confidence=0.85,
         )
 
+    if _ANALYTICS_RE.search(text):
+        days = _extract_days(text) or 30
+        return ZeusTaskObject(
+            intent="analytics_summary",
+            action="analytics_summary",
+            raw_message=text,
+            confidence=0.82,
+            metadata={"days": days},
+        )
+
+    if _TPV_RE.search(text):
+        days = _extract_days(text) or 7
+        return ZeusTaskObject(
+            intent="tpv_sales_summary",
+            action="tpv_sales_summary",
+            raw_message=text,
+            confidence=0.82,
+            metadata={"days": days},
+        )
+
+    if _SHIFT_RE.search(text):
+        return ZeusTaskObject(
+            intent="shift_status",
+            action="shift_status",
+            raw_message=text,
+            confidence=0.85,
+        )
+
     discount = _extract_discount(text)
     campaign_name = _extract_campaign_name(text, discount)
 
-    if _CAMPAIGN_SEND_RE.search(text):
+    if _SEND_OFFER_RE.search(text) or _CAMPAIGN_SEND_RE.search(text):
         return ZeusTaskObject(
             intent="create_campaign_send",
             action="create_campaign",
@@ -93,6 +145,18 @@ def parse_intent(message: str) -> ZeusTaskObject:
         )
 
     return ZeusTaskObject(intent="unknown", raw_message=text, confidence=0.0)
+
+
+def _extract_days(text: str) -> Optional[int]:
+    m = re.search(r"(\d{1,3})\s*d[ií]as?", text, re.I)
+    if m:
+        try:
+            d = int(m.group(1))
+            if 1 <= d <= 365:
+                return d
+        except ValueError:
+            pass
+    return None
 
 
 def _extract_discount(text: str) -> Optional[float]:

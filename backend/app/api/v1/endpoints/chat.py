@@ -288,7 +288,7 @@ async def chat_with_agent(
 
         # ZEUS Core: intent → task → ejecución real (CRM, campaña, email) antes del LLM.
         if agent_name == "ZEUS CORE":
-            from services.teamflow_orchestrator import try_handle_zeus_chat
+            from services.zeus_orchestrator_service import try_handle_zeus_chat
 
             force = bool(context.get("confirm_action") or context.get("force_execute"))
             bridge = await try_handle_zeus_chat(

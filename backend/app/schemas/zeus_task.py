@@ -12,6 +12,9 @@ ZeusIntentType = Literal[
     "create_campaign_send",
     "list_customers_summary",
     "confirm_pending",
+    "analytics_summary",
+    "tpv_sales_summary",
+    "shift_status",
 ]
 
 

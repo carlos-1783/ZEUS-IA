@@ -620,6 +620,20 @@ class TPVService:
         
         # Generar documento (ticket o factura)
         doc_id = f"{document_type.value.upper()}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+
+        if not db or not user_id:
+            return {
+                "success": False,
+                "error": "Persistencia fiscal obligatoria: falta sesión de base de datos o usuario.",
+            }
+
+        logger.info(
+            "TPV venta iniciada ticket=%s user_id=%s company_id=%s lineas=%s",
+            doc_id,
+            user_id,
+            company_id,
+            len(cart_lines),
+        )
         
         ticket = {
             "id": doc_id,
@@ -635,23 +649,25 @@ class TPVService:
             "config": self.config
         }
         
-        # ZEUS_TPV_FULL_FISCAL_INFRASTRUCTURE_ES_003: persistir snapshot fiscal por línea (obligatorio si hay db+user)
-        if db and user_id:
-            from services.fiscal_engine import (
-                get_fiscal_profile,
-                build_fiscal_items_from_cart,
-                persist_fiscal_sale,
-            )
-            profile = get_fiscal_profile(db, user_id)
-            apply_recargo = getattr(profile, "apply_recargo_equivalencia", False) if profile else False
-            recargo_rate = getattr(profile, "recargo_rate", None)
-            ct = consumption_type or "onsite"
-            fiscal_items = build_fiscal_items_from_cart(
-                cart_lines,
-                apply_recargo=apply_recargo,
-                recargo_rate=recargo_rate,
-                consumption_type=ct,
-            )
+        # Persistir snapshot fiscal + RAFAEL (transacción única; sin éxito silencioso)
+        from services.fiscal_engine import (
+            build_fiscal_items_from_cart,
+            get_fiscal_profile,
+            persist_fiscal_sale,
+        )
+        from services.rafael_service import RafaelFiscalError, persist_sale as rafael_persist_sale
+
+        profile = get_fiscal_profile(db, user_id)
+        apply_recargo = getattr(profile, "apply_recargo_equivalencia", False) if profile else False
+        recargo_rate = getattr(profile, "recargo_rate", None)
+        ct = consumption_type or "onsite"
+        fiscal_items = build_fiscal_items_from_cart(
+            cart_lines,
+            apply_recargo=apply_recargo,
+            recargo_rate=recargo_rate,
+            consumption_type=ct,
+        )
+        try:
             tpv_sale_id = persist_fiscal_sale(
                 db,
                 user_id=user_id,
@@ -663,10 +679,60 @@ class TPVService:
                 company_id=company_id,
                 work_session_id=work_session_id,
                 customer_data=customer_data if isinstance(customer_data, dict) else None,
+                auto_commit=False,
             )
             ticket["fiscal_snapshot_id"] = tpv_sale_id
+            logger.info(
+                "TPV venta en BD (flush) ticket=%s sale_id=%s → enviando a RAFAEL",
+                doc_id,
+                tpv_sale_id,
+            )
+
+            accounting_result = rafael_persist_sale(
+                db=db,
+                user_id=user_id,
+                company_id=company_id,
+                ticket=ticket,
+                tpv_sale_id=tpv_sale_id,
+                user_email=self._resolve_user_email(db, user_id),
+            )
+            db.commit()
+            ticket["accounting_sent"] = True
+            ticket["accounting_entry"] = accounting_result.get("accounting_entry")
+            ticket["fiscal_document_id"] = accounting_result.get("fiscal_document_id")
+            ticket["fiscal_document_persisted"] = accounting_result.get("fiscal_document_persisted", False)
+            logger.info(
+                "TPV venta confirmada ticket=%s sale_id=%s rafael_ok=true",
+                doc_id,
+                tpv_sale_id,
+            )
+        except RafaelFiscalError as exc:
+            db.rollback()
+            logger.error(
+                "TPV venta revertida: RAFAEL falló ticket=%s user_id=%s error=%s",
+                doc_id,
+                user_id,
+                exc,
+            )
+            return {
+                "success": False,
+                "error": f"No se pudo registrar la venta en RAFAEL: {exc}",
+                "fiscal_error": True,
+            }
+        except Exception as exc:
+            db.rollback()
+            logger.exception(
+                "TPV venta revertida: error fiscal ticket=%s user_id=%s",
+                doc_id,
+                user_id,
+            )
+            return {
+                "success": False,
+                "error": f"Error de persistencia fiscal: {exc}",
+                "fiscal_error": True,
+            }
         
-        # Validar legalidad con JUSTICIA si está integrado
+        # Validar legalidad con JUSTICIA si está integrado (no bloquea venta ya confirmada)
         if self.justicia_integration:
             legal_validation = self._validate_ticket_legality(ticket)
             ticket["legal_validation"] = legal_validation
@@ -693,40 +759,6 @@ class TPVService:
                 )
             except Exception as e:
                 logger.warning("No se pudo registrar actividad JUSTICIA TPV: %s", e)
-        
-        # Enviar datos a RAFAEL para contabilidad automática
-        # PERSISTIR AUTOMÁTICAMENTE documento fiscal en BD
-        if self.rafael_integration:
-            accounting_result = self._send_to_rafael(ticket, user_id=user_id, db=db)
-            ticket["accounting_sent"] = accounting_result.get("success", False)
-            if accounting_result.get("success"):
-                ticket["accounting_entry"] = accounting_result.get("accounting_entry")
-                ticket["fiscal_document_id"] = accounting_result.get("fiscal_document_id")
-                ticket["fiscal_document_persisted"] = accounting_result.get("fiscal_document_persisted", False)
-            try:
-                from services.activity_logger import ActivityLogger
-                ActivityLogger.log_activity(
-                    agent_name="RAFAEL",
-                    action_type="tpv_accounting_processed",
-                    action_description=f"Procesamiento fiscal ticket {doc_id}",
-                    details={
-                        "ticket_id": doc_id,
-                        "success": accounting_result.get("success", False),
-                        "fiscal_document_id": accounting_result.get("fiscal_document_id"),
-                        "fiscal_document_persisted": accounting_result.get("fiscal_document_persisted", False),
-                        "user_id": user_id,
-                    },
-                    metrics={
-                        "amount": cart_total.get("total", 0.0),
-                        "persisted": 1 if accounting_result.get("fiscal_document_persisted") else 0,
-                    },
-                    user_email=self._resolve_user_email(db, user_id),
-                    status="completed" if accounting_result.get("success", False) else "failed",
-                    priority="normal",
-                    visible_to_client=True,
-                )
-            except Exception as e:
-                logger.warning("No se pudo registrar actividad RAFAEL TPV: %s", e)
         
         # Sincronizar con AFRODITA para empleados
         if self.afrodita_integration and employee_id:

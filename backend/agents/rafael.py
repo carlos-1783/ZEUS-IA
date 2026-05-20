@@ -429,10 +429,6 @@ Por favor, determina:
             logger.error(f"Error procesando ticket TPV en RAFAEL: {e}")
             return {
                 "success": False,
-                "error": str(e)
-            }
-            return {
-                "success": False,
-                "error": str(e)
+                "error": str(e),
             }
 

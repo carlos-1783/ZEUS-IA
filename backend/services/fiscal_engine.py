@@ -79,6 +79,7 @@ def persist_fiscal_sale(
     company_id: Optional[int] = None,
     work_session_id: Optional[int] = None,
     customer_data: Optional[Dict[str, Any]] = None,
+    auto_commit: bool = True,
 ) -> int:
     """
     Persistir venta fiscal en tpv_sales y tpv_sale_items (snapshot inmutable).
@@ -121,7 +122,8 @@ def persist_fiscal_sale(
                 consumption_type=row.get("consumption_type"),
             )
             db.add(line)
-        db.commit()
+        if auto_commit:
+            db.commit()
         logger.info(f"Fiscal sale persisted: ticket_id={ticket_id} tpv_sale_id={sale.id}")
         return sale.id
     except Exception as e:

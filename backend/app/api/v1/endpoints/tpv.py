@@ -1222,17 +1222,20 @@ async def process_sale(
 
     if not result.get("success"):
         logger.warning(
-            "TPV venta rechazada validación user_id=%s detalle=%s",
+            "TPV venta rechazada validación user_id=%s detalle=%s fiscal_error=%s",
             current_user.id,
             result.get("error"),
+            result.get("fiscal_error"),
         )
-        raise HTTPException(status_code=400, detail=result.get("error"))
+        status = 502 if result.get("fiscal_error") else 400
+        raise HTTPException(status_code=status, detail=result.get("error"))
 
     logger.info(
-        "TPV venta ok user_id=%s ticket_id=%s fiscal_snapshot_id=%s",
+        "TPV venta ok user_id=%s ticket_id=%s fiscal_snapshot_id=%s accounting_sent=%s",
         current_user.id,
         result.get("ticket_id"),
         (result.get("ticket") or {}).get("fiscal_snapshot_id"),
+        (result.get("ticket") or {}).get("accounting_sent"),
     )
     try:
         from services.event_bus import emit_sale_created

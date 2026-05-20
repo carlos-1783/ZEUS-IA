@@ -12,6 +12,62 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 
+def emit_payment_created(
+    *,
+    user_id: int,
+    user_email: Optional[str],
+    company_id: Optional[int],
+    customer_id: Optional[int],
+    ticket_id: Optional[str],
+    tpv_sale_id: Optional[int],
+    payment_method: Optional[str],
+    amount: Optional[float] = None,
+    service_name: Optional[str] = None,
+    db: Optional[Session] = None,
+) -> None:
+    """Evento de cobro CMR oficina → analytics y trazabilidad global."""
+    _ = db
+    payload: Dict[str, Any] = {
+        "user_id": user_id,
+        "company_id": company_id,
+        "customer_id": customer_id,
+        "ticket_id": ticket_id,
+        "tpv_sale_id": tpv_sale_id,
+        "payment_method": payment_method,
+        "amount": amount,
+        "service_name": service_name,
+        "source": "CMR",
+    }
+    logger.info("event payment_created %s", payload)
+    try:
+        from services.activity_logger import ActivityLogger
+
+        ActivityLogger.log_activity(
+            agent_name="RAFAEL",
+            action_type="event_payment_created",
+            action_description="Evento: cobro CMR registrado en motor fiscal",
+            details=payload,
+            metrics={"amount": amount} if amount is not None else None,
+            user_email=user_email,
+            status="completed",
+            priority="normal",
+            visible_to_client=True,
+        )
+        ActivityLogger.log_activity(
+            agent_name="ZEUS CORE",
+            action_type="event_payment_created",
+            action_description="Cobro oficina integrado en métricas globales",
+            details=payload,
+            metrics={"amount": amount} if amount is not None else None,
+            user_email=user_email,
+            status="completed",
+            priority="normal",
+            visible_to_client=True,
+        )
+    except Exception as e:
+        logger.warning("event_payment_created activity log failed: %s", e)
+
+
 def emit_sale_created(
     *,
     user_id: int,

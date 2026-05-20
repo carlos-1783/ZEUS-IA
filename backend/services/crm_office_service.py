@@ -374,6 +374,22 @@ def register_record_charge(
         "crm_record_id": rec.id,
         "customer_name": cust.name,
     }
+
+    logger.info(
+        "CMR cobro iniciado record_id=%s customer_id=%s company_id=%s amount=%s ticket=%s",
+        rec.id,
+        cust.id,
+        cid,
+        base_amount,
+        ticket_id,
+    )
+
+    from services.rafael_service import (
+        RafaelFiscalError,
+        build_cmr_fiscal_ticket,
+        persist_sale as rafael_persist_sale,
+    )
+
     try:
         tpv_sale_id = persist_fiscal_sale(
             db,
@@ -386,27 +402,70 @@ def register_record_charge(
             company_id=cid,
             work_session_id=work_sid,
             customer_data=customer_data,
+            auto_commit=False,
         )
-    except Exception:
-        logger.exception("register_record_charge persist_fiscal_sale")
+        ticket = build_cmr_fiscal_ticket(
+            ticket_id=ticket_id,
+            service_name=line_name,
+            cart_line=cart_line,
+            fiscal_items=fiscal_items,
+            payment_method=pm.value,
+            company_id=cid,
+            customer_id=cust.id,
+            customer_name=cust.name,
+            record_id=rec.id,
+        )
+        rafael_result = rafael_persist_sale(
+            db=db,
+            user_id=user.id,
+            company_id=cid,
+            ticket=ticket,
+            tpv_sale_id=tpv_sale_id,
+            user_email=getattr(user, "email", None),
+            source="CMR",
+        )
+
+        link = CrmSaleLink(
+            company_id=cid,
+            customer_id=cust.id,
+            customer_record_id=rec.id,
+            tpv_sale_id=tpv_sale_id,
+            user_id=user.id,
+        )
+        rec.updated_at = datetime.now(timezone.utc)
+        if rec.status in ("open", "in_progress"):
+            rec.status = "paid"
+        db.add(link)
+        db.add(rec)
+        db.commit()
+
+        logger.info(
+            "CMR cobro confirmado ticket=%s sale_id=%s rafael_ok=true",
+            ticket_id,
+            tpv_sale_id,
+        )
+    except RafaelFiscalError as exc:
+        db.rollback()
+        logger.error(
+            "CMR cobro revertido: RAFAEL falló record_id=%s ticket=%s error=%s",
+            rec.id,
+            ticket_id,
+            exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"No se pudo registrar el cobro en RAFAEL: {exc}",
+        ) from exc
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.exception("register_record_charge persistencia fiscal record_id=%s", rec.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="No se pudo registrar el cobro fiscal. Inténtelo de nuevo.",
-        )
-
-    link = CrmSaleLink(
-        company_id=cid,
-        customer_id=cust.id,
-        customer_record_id=rec.id,
-        tpv_sale_id=tpv_sale_id,
-        user_id=user.id,
-    )
-    rec.updated_at = datetime.now(timezone.utc)
-    if rec.status in ("open", "in_progress"):
-        rec.status = "paid"
-    db.add(link)
-    db.add(rec)
-    db.commit()
+        ) from exc
 
     log_activity(
         db,
@@ -414,10 +473,35 @@ def register_record_charge(
         user_id=user.id,
         customer_id=cust.id,
         record_id=rec.id,
-        action="charge",
-        summary=f"Cobro registrado ({pm.value}) ticket {ticket_id}",
-        payload={"tpv_sale_id": tpv_sale_id, "ticket_id": ticket_id, "base_amount": str(base_amount)},
+        action="payment_created",
+        summary=f"Cobro CMR registrado en RAFAEL ({pm.value}) ticket {ticket_id}",
+        payload={
+            "tpv_sale_id": tpv_sale_id,
+            "ticket_id": ticket_id,
+            "base_amount": str(base_amount),
+            "rafael_document_id": rafael_result.get("fiscal_document_id"),
+            "source": "CMR",
+        },
     )
+
+    try:
+        from services.event_bus import emit_payment_created
+
+        totals = ticket.get("totals") or {}
+        emit_payment_created(
+            user_id=user.id,
+            user_email=getattr(user, "email", None),
+            company_id=cid,
+            customer_id=cust.id,
+            ticket_id=ticket_id,
+            tpv_sale_id=tpv_sale_id,
+            payment_method=pm.value,
+            amount=totals.get("total"),
+            service_name=line_name,
+            db=db,
+        )
+    except Exception:
+        logger.exception("emit_payment_created falló (cobro ya confirmado) ticket=%s", ticket_id)
 
     return {
         "success": True,
@@ -425,4 +509,6 @@ def register_record_charge(
         "ticket_id": ticket_id,
         "customer_id": cust.id,
         "customer_record_id": rec.id,
+        "accounting_sent": True,
+        "fiscal_document_id": rafael_result.get("fiscal_document_id"),
     }

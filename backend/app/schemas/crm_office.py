@@ -65,6 +65,8 @@ class RecordChargeOut(BaseModel):
     ticket_id: str
     customer_id: int
     customer_record_id: int
+    accounting_sent: bool = True
+    fiscal_document_id: Optional[int] = None
 
 
 class CrmListResponse(BaseModel):

@@ -16,6 +16,8 @@ class UserSettings(Base):
     theme = Column(String(32), nullable=False, default="dark")
     two_factor_enabled = Column(Boolean, nullable=False, default=False)
     session_timeout = Column(Integer, nullable=False, default=60)  # minutos
+    api_key_hash = Column(String(64), nullable=True)
+    api_key_prefix = Column(String(16), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 

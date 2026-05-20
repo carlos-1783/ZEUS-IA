@@ -129,11 +129,13 @@
             📲 {{ t('dashboardPro.pwa.install') }}
           </button>
           <!-- Debug: Mostrar estado PWA (temporal para diagnóstico) -->
-          <div v-if="!isInstallable || isInstalled" class="pwa-debug-info" :title="`PWA: installable=${isInstallable}, installed=${isInstalled}`">
+          <div v-if="!isProd && (!isInstallable || isInstalled)" class="pwa-debug-info" :title="`PWA: installable=${isInstallable}, installed=${isInstalled}`">
             🔧 PWA: {{ isInstalled ? t('dashboardPro.pwa.stateInstalled') : isInstallable ? t('dashboardPro.pwa.stateInstallable') : t('dashboardPro.pwa.stateUnavailable') }}
             <a href="/clear-pwa-cache.html" target="_blank" style="color: #ffa500; margin-left: 8px; text-decoration: underline; font-size: 10px;">{{ t('dashboardPro.pwa.clearCache') }}</a>
           </div>
-          <div class="status-badge online">● {{ t('dashboardPro.systemOnline') }}</div>
+          <div class="status-badge" :class="backendHealthLabel === 'OK' ? 'online' : 'degraded'">
+            ● {{ backendHealthLabel === 'OK' ? t('dashboardPro.systemOnline') : backendHealthDetail }}
+          </div>
         </div>
       </header>
 
@@ -219,12 +221,55 @@
           </div>
         </div>
 
-        <div class="chart-placeholder">
-          <h3>{{ t('dashboardPro.analytics.chartTitle') }}</h3>
-          <div class="placeholder-content">
-            <span class="icon-large">📊</span>
-            <p>{{ t('dashboardPro.analytics.chartSoon') }}</p>
+        <div class="stats-grid financial-grid">
+          <div class="stat-card">
+            <div class="stat-icon">💶</div>
+            <div class="stat-content">
+              <h3>{{ t('dashboardPro.analytics.totalRevenue') }}</h3>
+              <p class="stat-number">€{{ financialMetrics.totalRevenue.toLocaleString('es-ES', { minimumFractionDigits: 2 }) }}</p>
+              <span class="stat-change">{{ financialMetrics.tpvSales }} TPV · {{ financialMetrics.cmrPayments }} CMR</span>
+            </div>
           </div>
+          <div class="stat-card">
+            <div class="stat-icon">🧾</div>
+            <div class="stat-content">
+              <h3>{{ t('dashboardPro.analytics.salesCount') }}</h3>
+              <p class="stat-number">{{ financialMetrics.salesCount }}</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">📊</div>
+            <div class="stat-content">
+              <h3>{{ t('dashboardPro.analytics.avgTicket') }}</h3>
+              <p class="stat-number">€{{ financialMetrics.avgTicket.toLocaleString('es-ES', { minimumFractionDigits: 2 }) }}</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">👥</div>
+            <div class="stat-content">
+              <h3>{{ t('dashboardPro.analytics.activeCustomers') }}</h3>
+              <p class="stat-number">{{ financialMetrics.activeCustomers }}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-real">
+          <h3>{{ t('dashboardPro.analytics.chartTitle') }}</h3>
+          <div v-if="salesByDay.length" class="bar-chart">
+            <div
+              v-for="bar in salesByDay"
+              :key="bar.date"
+              class="bar-col"
+              :title="`${bar.date}: €${bar.total}`"
+            >
+              <div
+                class="bar-fill"
+                :style="{ height: `${barHeight(bar.total)}%` }"
+              />
+              <span class="bar-label">{{ bar.label }}</span>
+            </div>
+          </div>
+          <p v-else class="chart-empty">{{ t('dashboardPro.analytics.noSalesData') }}</p>
         </div>
       </section>
 
@@ -290,6 +335,7 @@ const { t } = useI18n()
 
 // PWA Install
 const { isInstallable, isInstalled, promptInstall } = usePWA()
+const isProd = import.meta.env.PROD
 
 const props = defineProps({
   agents: Array
@@ -403,7 +449,7 @@ const handleExportData = async () => {
       a.download = `zeus-export-${new Date().toISOString().split('T')[0]}.json`
       document.body.appendChild(a)
       a.click()
-      window.URL.revokeObjectURL(url)
+      window.URL.revokeObjectURL(blobUrl)
       document.body.removeChild(a)
       alert('✅ Datos exportados correctamente')
     } else {
@@ -464,6 +510,28 @@ const dashboardMetrics = ref({
   savingsTrend: '0%',
   successTrend: '0%'
 })
+
+const financialMetrics = ref({
+  totalRevenue: 0,
+  salesCount: 0,
+  avgTicket: 0,
+  activeCustomers: 0,
+  cmrPayments: 0,
+  tpvSales: 0,
+})
+
+const salesByDay = ref([])
+
+const maxSalesDayTotal = computed(() => {
+  const vals = salesByDay.value.map((b) => Number(b.total) || 0)
+  return vals.length ? Math.max(...vals) : 0
+})
+
+function barHeight(total) {
+  const max = maxSalesDayTotal.value
+  if (!max) return 0
+  return Math.max(8, Math.round((Number(total) / max) * 100))
+}
 
 // Módulos disponibles (desde endpoint unificado)
 // Inicializar con valores por defecto: superusuarios tienen acceso completo
@@ -569,6 +637,23 @@ const loadDashboardMetrics = async () => {
         })
       }
 
+      if (data.analytics) {
+        applyAnalyticsPayload(data.analytics)
+      } else if (data.metrics?.total_revenue != null) {
+        applyAnalyticsPayload({
+          success: true,
+          financial: {
+            total_revenue: data.metrics.total_revenue,
+            sales_count: data.metrics.sales_count,
+            avg_ticket: data.metrics.avg_ticket,
+            cmr_payments_count: data.metrics.cmr_payments_count,
+            tpv_sales_count: data.metrics.tpv_sales_count,
+          },
+          customers: { active_total: data.metrics.active_customers },
+          sales_by_day: data.analytics?.sales_by_day || [],
+        })
+      }
+
       console.log('✅ Dashboard unificado cargado:', {
         metrics: dashboardMetrics.value,
         modules: availableModules.value,
@@ -588,6 +673,32 @@ const loadDashboardMetrics = async () => {
       availableModules.value.admin = true
       console.log('✅ Habilitando módulos por defecto para superusuario (error handler)')
     }
+  }
+}
+
+const applyAnalyticsPayload = (data) => {
+  if (!data?.success) return
+  const fin = data.financial || data.metrics || {}
+  financialMetrics.value = {
+    totalRevenue: Number(fin.total_revenue) || 0,
+    salesCount: Number(fin.sales_count) || 0,
+    avgTicket: Number(fin.avg_ticket) || 0,
+    activeCustomers: Number(data.customers?.active_total ?? fin.active_customers) || 0,
+    cmrPayments: Number(fin.cmr_payments_count) || 0,
+    tpvSales: Number(fin.tpv_sales_count) || 0,
+  }
+  salesByDay.value = Array.isArray(data.sales_by_day) ? data.sales_by_day : []
+}
+
+const loadFinancialAnalytics = async () => {
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) return
+    const api = (await import('@/services/api')).default
+    const data = await api.get('/api/v1/analytics/summary?days=30', token)
+    applyAnalyticsPayload(data)
+  } catch (error) {
+    console.error('❌ Error cargando analytics financieros:', error)
   }
 }
 
@@ -654,6 +765,12 @@ watch(isAdmin, (isAdmin) => {
   }
 }, { immediate: true })
 
+watch(currentView, (view) => {
+  if (view === 'analytics') {
+    loadFinancialAnalytics()
+  }
+})
+
 // Cargar al montar y refrescar periódicamente
 onMounted(async () => {
   // Inicializar authStore si no está inicializado
@@ -680,11 +797,13 @@ onMounted(async () => {
   
   loadSavedSettings()
   loadDashboardMetrics()
+  loadFinancialAnalytics()
   loadBackendHealth()
   loadAgentsActivities()
   
   // Refresh dashboard metrics cada 30 segundos; salud API/BD cada minuto
   setInterval(loadDashboardMetrics, 30000)
+  setInterval(loadFinancialAnalytics, 30000)
   setInterval(loadBackendHealth, 60000)
   
   // Refresh actividades de agentes cada minuto
@@ -1022,6 +1141,12 @@ const chatWith = (agent) => {
   border-radius: 20px;
   font-size: 13px;
   font-weight: 600;
+}
+
+.status-badge.degraded {
+  background: rgba(255, 165, 0, 0.15);
+  color: #ffa500;
+  border-color: rgba(255, 165, 0, 0.4);
 }
 
 .status-badge.online {

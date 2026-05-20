@@ -14,6 +14,7 @@ from app.api.v1.endpoints import (
     zeus_core,
     agents,
     metrics,
+    analytics,
     chat,
     integrations,
     google,
@@ -35,6 +36,7 @@ from app.api.v1.endpoints import (
     payroll,
     public as public_site,
     user_settings,
+    user_account,
 )
 from app.api.v1.endpoints.websocket import websocket_endpoint
 
@@ -46,6 +48,8 @@ api_router.include_router(health.router, tags=["health"])
 # Other endpoints with their respective prefixes
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(user_settings.router, prefix="/settings", tags=["settings"])
+api_router.include_router(user_account.router, prefix="/user", tags=["user-account"])
+api_router.include_router(user_account.router, prefix="", tags=["api-keys"])
 api_router.include_router(commands.router, prefix="/commands", tags=["commands"])
 api_router.include_router(system.router, prefix="/system", tags=["system"])
 
@@ -64,6 +68,7 @@ api_router.include_router(zeus_core.router, prefix="/zeus", tags=["zeus-core"])
 # Agents & Metrics endpoints (para dashboard)
 api_router.include_router(agents.router, prefix="/agents", tags=["agents"])
 api_router.include_router(metrics.router, prefix="/metrics", tags=["metrics"])
+api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 
 # Chat endpoint (para interactuar con agentes)
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])

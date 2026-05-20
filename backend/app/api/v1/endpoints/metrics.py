@@ -92,21 +92,41 @@ async def get_dashboard_metrics(
 @router.get("/performance")
 async def get_performance_metrics(
     agent: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
+    days: int = Query(30, ge=1, le=365),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """
-    Métricas de rendimiento por agente
-    """
+    """Métricas de rendimiento por agente (datos reales de activity_log)."""
+    from app.models.agent_activity import AgentActivity
+    from datetime import timedelta
+
+    since = datetime.utcnow() - timedelta(days=days)
+    q = db.query(AgentActivity).filter(AgentActivity.created_at >= since)
+    if agent:
+        q = q.filter(AgentActivity.agent_name == agent.upper())
+    if not getattr(current_user, "is_superuser", False):
+        q = q.filter(AgentActivity.user_email == current_user.email)
+    activities = q.all()
+    total = len(activities)
+    completed = sum(1 for a in activities if a.status == "completed")
+    failed = sum(1 for a in activities if a.status == "failed")
+    response_times = []
+    for a in activities:
+        if a.completed_at and a.created_at:
+            response_times.append((a.completed_at - a.created_at).total_seconds())
+    avg_rt = sum(response_times) / len(response_times) if response_times else 0.0
+    success_pct = (completed / total * 100) if total else 0.0
+    error_pct = (failed / total * 100) if total else 0.0
     return {
+        "success": True,
         "agent": agent or "all",
         "response_times": {
-            "avg": "0.3s",
-            "p50": "0.2s",
-            "p95": "0.8s",
-            "p99": "1.2s"
+            "avg": f"{avg_rt:.1f}s",
+            "samples": len(response_times),
         },
-        "success_rate": "99.8%",
-        "error_rate": "0.2%"
+        "success_rate": f"{success_pct:.1f}%",
+        "error_rate": f"{error_pct:.1f}%",
+        "total_activities": total,
     }
 
 
@@ -186,6 +206,10 @@ async def get_dashboard_summary(
 
         company_cfg = get_company_config_for_user(db, current_user)
         available_modules = company_cfg["modules"]
+
+        from services.analytics_service import build_analytics_summary
+
+        analytics = build_analytics_summary(db, current_user, days=days)
         
         return {
             "success": True,
@@ -207,8 +231,15 @@ async def get_dashboard_summary(
                 "interactions_trend": f"{interactions_change:+.0f}%" if interactions_change != 0 else "stable",
                 "response_trend": f"-{abs(avg_response-1):.0f}% faster" if avg_response < 1 else "stable",
                 "savings_trend": f"+{interactions_change:+.0f}%" if interactions_change > 0 else "stable",
-                "success_trend": f"+{success_rate-96:.1f}%" if success_rate > 96 else "stable"
+                "success_trend": f"+{success_rate-96:.1f}%" if success_rate > 96 else "stable",
+                "total_revenue": analytics["financial"]["total_revenue"],
+                "sales_count": analytics["financial"]["sales_count"],
+                "avg_ticket": analytics["financial"]["avg_ticket"],
+                "active_customers": analytics["customers"]["active_total"],
+                "cmr_payments_count": analytics["financial"]["cmr_payments_count"],
+                "tpv_sales_count": analytics["financial"]["tpv_sales_count"],
             },
+            "analytics": analytics,
             "available_modules": available_modules,
             "timezone": "UTC",
             "date_range": {

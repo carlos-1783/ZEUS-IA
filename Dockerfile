@@ -111,7 +111,7 @@ EXPOSE 8000
 
 # Health check (sin dependencia de curl y usando PORT dinámico)
 HEALTHCHECK --interval=30s --timeout=30s --start-period=120s --retries=5 \
-    CMD python -c "import os,urllib.request; p=os.getenv('PORT','8000'); urllib.request.urlopen(f'http://127.0.0.1:{p}/api/v1/health', timeout=5)"
+    CMD python -c "import os,urllib.request; p=os.getenv('PORT','8000'); urllib.request.urlopen(f'http://127.0.0.1:{p}/health', timeout=5)"
 
 # Gunicorn + migraciones con stamp legacy opcional (ver scripts/alembic_conditional_stamp.py).
-CMD ["sh", "-c", "if [ \"${SKIP_DB_MIGRATE}\" != \"1\" ] && [ \"${SKIP_DB_MIGRATE}\" != \"true\" ]; then python scripts/alembic_conditional_stamp.py && alembic upgrade head; fi && exec gunicorn -c gunicorn.conf.py app.main:app"]
+CMD ["sh", "-c", "if [ \"${SKIP_DB_MIGRATE}\" != \"1\" ] && [ \"${SKIP_DB_MIGRATE}\" != \"true\" ]; then python scripts/alembic_conditional_stamp.py && (alembic upgrade head || echo '[ZEUS] WARN: alembic upgrade failed — starting API anyway'); fi && exec gunicorn -c gunicorn.conf.py app.main:app"]

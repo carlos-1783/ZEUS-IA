@@ -10,6 +10,11 @@ depends_on = None
 
 
 def upgrade() -> None:
+    from sqlalchemy import inspect
+
+    if "chat_messages" in inspect(op.get_bind()).get_table_names():
+        return
+
     op.create_table(
         "chat_messages",
         sa.Column("id", sa.Integer(), nullable=False),

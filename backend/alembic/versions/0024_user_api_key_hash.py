@@ -13,8 +13,17 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("user_settings", sa.Column("api_key_hash", sa.String(64), nullable=True))
-    op.add_column("user_settings", sa.Column("api_key_prefix", sa.String(16), nullable=True))
+    from sqlalchemy import inspect
+
+    bind = op.get_bind()
+    insp = inspect(bind)
+    if "user_settings" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("user_settings")}
+    if "api_key_hash" not in cols:
+        op.add_column("user_settings", sa.Column("api_key_hash", sa.String(64), nullable=True))
+    if "api_key_prefix" not in cols:
+        op.add_column("user_settings", sa.Column("api_key_prefix", sa.String(16), nullable=True))
 
 
 def downgrade() -> None:

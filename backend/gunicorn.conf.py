@@ -95,18 +95,21 @@ def post_fork(server, worker):
     server.log.info(f"✅ Worker {worker.pid} iniciado")
     # Precalentar agentes en segundo plano: el primer POST /chat no debe sumar init+LLM por encima
     # del timeout del edge (p. ej. Railway ~60s) → evita 502 "Application failed to respond".
-    def _prewarm_agents():
-        try:
-            from app.api.v1.endpoints.chat import ensure_agent_stack
+    prewarm = os.getenv("ZEUS_PREWARM_AGENTS", "").strip().lower() in ("1", "true", "yes", "on")
+    if prewarm:
 
-            ensure_agent_stack()
-            server.log.info(f"🔥 Worker {worker.pid}: pila de agentes precalentada")
-        except Exception as e:
-            server.log.warning("Prewarm agentes omitido en worker %s: %s", worker.pid, e)
+        def _prewarm_agents():
+            try:
+                from app.api.v1.endpoints.chat import ensure_agent_stack
 
-    import threading
+                ensure_agent_stack()
+                server.log.info(f"🔥 Worker {worker.pid}: pila de agentes precalentada")
+            except Exception as e:
+                server.log.warning("Prewarm agentes omitido en worker %s: %s", worker.pid, e)
 
-    threading.Thread(target=_prewarm_agents, name="zeus_agent_prewarm", daemon=True).start()
+        import threading
+
+        threading.Thread(target=_prewarm_agents, name="zeus_agent_prewarm", daemon=True).start()
 
 def worker_abort(worker):
     """Called when a worker received the SIGABRT signal."""

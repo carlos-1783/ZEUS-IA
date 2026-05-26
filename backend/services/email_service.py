@@ -5,6 +5,9 @@ Automatiza respuestas por correo electrónico
 import asyncio
 import logging
 import os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import Optional, Dict, Any, List
 
 import requests  # pyright: ignore[reportMissingImports, reportMissingModuleSource]
@@ -49,6 +52,52 @@ class EmailService:
 
     def is_resend_configured(self) -> bool:
         return bool(self.resend_api_key and self.resend_from)
+
+    def is_smtp_configured(self) -> bool:
+        """Gmail u otro SMTP (SMTP_HOST, SMTP_USER, SMTP_PASSWORD)."""
+        return bool(
+            os.getenv("SMTP_HOST")
+            and os.getenv("SMTP_USER")
+            and os.getenv("SMTP_PASSWORD")
+        )
+
+    def _send_via_smtp_sync(
+        self,
+        to_email: str,
+        subject: str,
+        content: str,
+        content_type: str = "text/html",
+    ) -> Dict[str, Any]:
+        host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+        port = int(os.getenv("SMTP_PORT", "587"))
+        user = os.getenv("SMTP_USER", "")
+        password = os.getenv("SMTP_PASSWORD", "")
+        from_addr = os.getenv("EMAILS_FROM_EMAIL") or os.getenv("SMTP_FROM") or user
+        from_name = os.getenv("EMAILS_FROM_NAME") or os.getenv("SMTP_FROM_NAME") or "ZEUS-IA"
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{from_name} <{from_addr}>"
+        msg["To"] = to_email
+        subtype = "html" if content_type == "text/html" else "plain"
+        msg.attach(MIMEText(content, subtype, "utf-8"))
+
+        use_tls = str(os.getenv("SMTP_TLS", "true")).lower() in ("1", "true", "yes")
+        if port == 465:
+            server = smtplib.SMTP_SSL(host, port, timeout=30)
+        else:
+            server = smtplib.SMTP(host, port, timeout=30)
+            if use_tls:
+                server.starttls()
+        server.login(user, password)
+        server.sendmail(from_addr, [to_email], msg.as_string())
+        server.quit()
+        return {
+            "success": True,
+            "to": to_email,
+            "subject": subject,
+            "provider": "smtp_gmail" if "gmail" in host.lower() else "smtp",
+        }
 
     def _send_via_resend_sync(
         self,
@@ -115,11 +164,32 @@ class EmailService:
         Returns:
             Dict con status y message_id
         """
-        if not self.is_configured() and not self.is_resend_configured():
+        if (
+            not self.is_configured()
+            and not self.is_resend_configured()
+            and not self.is_smtp_configured()
+        ):
             return {
                 "success": False,
-                "error": "Email no configurado: define SENDGRID_API_KEY o RESEND_API_KEY + EMAIL_FROM",
+                "error": (
+                    "Email no configurado: define SMTP_HOST/SMTP_USER/SMTP_PASSWORD (Gmail), "
+                    "SENDGRID_API_KEY o RESEND_API_KEY + EMAIL_FROM"
+                ),
             }
+
+        if self.is_smtp_configured():
+            try:
+                return await asyncio.to_thread(
+                    self._send_via_smtp_sync,
+                    to_email,
+                    subject,
+                    content,
+                    content_type,
+                )
+            except Exception as smtp_err:
+                logger.warning("[EMAIL] SMTP falló: %s", smtp_err)
+                if not self.is_configured() and not self.is_resend_configured():
+                    return {"success": False, "error": str(smtp_err), "provider": "smtp"}
 
         if self.is_configured():
             try:

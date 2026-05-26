@@ -564,7 +564,19 @@ def onboarding_status(
             co.metadata_.get("onboarding_operational_profile_completed")
         )
 
-    setup_completed = questionnaire_completed or operational_profile_completed
+    user_onboarding_backup = False
+    try:
+        import json as _json
+
+        raw_cfg = getattr(current_user, "tpv_config", None) or "{}"
+        cfg = _json.loads(raw_cfg) if isinstance(raw_cfg, str) else dict(raw_cfg or {})
+        user_onboarding_backup = bool(cfg.get("onboarding_setup_completed"))
+    except Exception:
+        user_onboarding_backup = False
+
+    setup_completed = (
+        questionnaire_completed or operational_profile_completed or user_onboarding_backup
+    )
 
     try:
         from services.onboarding_engine import validate_onboarding_state
@@ -589,6 +601,15 @@ def onboarding_status(
         "questionnaire_completed": questionnaire_completed,
         "operational_profile_completed": operational_profile_completed,
         "setup_completed": setup_completed,
+        "user_onboarding_backup": user_onboarding_backup,
+        "email_gestor_fiscal": getattr(current_user, "email_gestor_fiscal", None),
+        "autoriza_envio_documentos_a_asesores": bool(
+            getattr(current_user, "autoriza_envio_documentos_a_asesores", False)
+        ),
+        "rafael_email_ready": bool(
+            getattr(current_user, "email_gestor_fiscal", None)
+            and getattr(current_user, "autoriza_envio_documentos_a_asesores", False)
+        ),
     }
 
 
@@ -647,29 +668,57 @@ def onboarding_profile(
     op["social_links"] = links_norm
     op["whatsapp_number"] = (body.whatsapp_number or "").strip() or None
     op["control_horario_policy"] = (body.control_horario_policy or "").strip() or None
+    if body.email_gestor_fiscal:
+        op["email_gestor_fiscal"] = str(body.email_gestor_fiscal).strip().lower()
     op["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-    if body.employees_count is not None or body.uses_tpv is not None or body.business_hours:
-        q = meta.get("onboarding_questionnaire") if isinstance(meta.get("onboarding_questionnaire"), dict) else {}
-        if body.employees_count is not None:
-            q["employees_count"] = int(body.employees_count)
-        if body.uses_tpv is not None:
-            q["uses_tpv"] = bool(body.uses_tpv)
-        if body.business_hours:
-            q["business_hours"] = str(body.business_hours).strip()
-        q["completed_at"] = datetime.now(timezone.utc).isoformat()
-        q["saved_via"] = "onboarding_profile"
-        meta["onboarding_questionnaire"] = q
-        meta["onboarding_questionnaire_completed"] = True
-
+    q = meta.get("onboarding_questionnaire") if isinstance(meta.get("onboarding_questionnaire"), dict) else {}
+    if body.employees_count is not None:
+        q["employees_count"] = int(body.employees_count)
+        current_user.employees = int(body.employees_count)
+    if body.uses_tpv is not None:
+        q["uses_tpv"] = bool(body.uses_tpv)
+    if body.business_hours:
+        q["business_hours"] = str(body.business_hours).strip()
+    q["completed_at"] = datetime.now(timezone.utc).isoformat()
+    q["saved_via"] = "onboarding_profile"
+    meta["onboarding_questionnaire"] = q
+    meta["onboarding_questionnaire_completed"] = True
     meta["operational_profile"] = op
     meta["onboarding_operational_profile_completed"] = True
-    company.metadata_ = meta
+
+    if body.email_gestor_fiscal:
+        current_user.email_gestor_fiscal = str(body.email_gestor_fiscal).strip().lower()
+    if body.autoriza_envio_documentos_a_asesores is not None:
+        current_user.autoriza_envio_documentos_a_asesores = bool(
+            body.autoriza_envio_documentos_a_asesores
+        )
+    elif body.email_gestor_fiscal and not getattr(
+        current_user, "autoriza_envio_documentos_a_asesores", None
+    ):
+        current_user.autoriza_envio_documentos_a_asesores = True
+
+    import json as _json
+
+    try:
+        raw_cfg = getattr(current_user, "tpv_config", None) or "{}"
+        cfg = _json.loads(raw_cfg) if isinstance(raw_cfg, str) else dict(raw_cfg or {})
+    except Exception:
+        cfg = {}
+    cfg["onboarding_setup_completed"] = True
+    cfg["onboarding_setup_completed_at"] = datetime.now(timezone.utc).isoformat()
+    current_user.tpv_config = _json.dumps(cfg, ensure_ascii=False)
+    db.add(current_user)
+
+    from app.db.metadata_utils import set_company_metadata
+
+    set_company_metadata(company, meta)
     db.add(company)
 
     try:
         db.commit()
         db.refresh(company)
+        db.refresh(current_user)
     except Exception as commit_err:
         db.rollback()
         logger.exception("onboarding_profile metadata commit failed: %s", commit_err)

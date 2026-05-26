@@ -156,6 +156,14 @@ class OnboardingProfileRequest(BaseModel):
     employees: Optional[List[EmployeeInput]] = Field(default=None, description="Plantilla inicial de empleados")
     uses_tpv: Optional[bool] = Field(default=None)
     business_hours: Optional[str] = Field(default=None, min_length=1, max_length=4000)
+    email_gestor_fiscal: Optional[EmailStr] = Field(
+        default=None,
+        description="Email del gestor/asesor fiscal (RAFAEL envía facturación aquí)",
+    )
+    autoriza_envio_documentos_a_asesores: Optional[bool] = Field(
+        default=True,
+        description="Autoriza envío de borradores fiscales al gestor tras aprobación",
+    )
 
 
 class ResetPasswordRequest(BaseModel):

@@ -65,6 +65,21 @@
         <label>WhatsApp del negocio</label>
         <input v-model.trim="form.whatsapp_number" type="text" placeholder="+34600111222" />
 
+        <label>Email del gestor fiscal (RAFAEL) *</label>
+        <input
+          v-model.trim="form.email_gestor_fiscal"
+          type="email"
+          placeholder="gestor@asesoria.com"
+          autocomplete="email"
+        >
+        <p class="hint">
+          RAFAEL enviará facturación y documentos fiscales a este correo (vía Gmail del servidor) tras tu aprobación.
+        </p>
+        <label class="check">
+          <input v-model="form.autoriza_envio_documentos_a_asesores" type="checkbox">
+          Autorizo el envío de borradores fiscales a mi gestor
+        </label>
+
         <label>Política control horario (opcional)</label>
         <textarea
           v-model="form.control_horario_policy"
@@ -127,6 +142,8 @@ const form = reactive({
     linkedin: '',
   } as Record<string, string>,
   whatsapp_number: '',
+  email_gestor_fiscal: '',
+  autoriza_envio_documentos_a_asesores: true,
   control_horario_policy: '',
   employees: [{ full_name: '', phone: '', role_title: 'camarero' }] as EmployeeRow[],
 })
@@ -170,7 +187,6 @@ watch(
 
 onMounted(async () => {
   try {
-    // Siempre inicializar para validar expiración/estado real del token.
     if (authStore.initialize) {
       await authStore.initialize()
     }
@@ -178,6 +194,18 @@ onMounted(async () => {
   const token = authStore.getToken ? authStore.getToken() : (authStore as any).token
   if (!token) {
     window.location.href = '/auth/login?redirect=/onboarding-setup'
+    return
+  }
+  try {
+    const status = await api.get('/api/v1/auth/onboarding/status', token)
+    if (status?.email_gestor_fiscal) {
+      form.email_gestor_fiscal = String(status.email_gestor_fiscal)
+    }
+    if (status?.autoriza_envio_documentos_a_asesores != null) {
+      form.autoriza_envio_documentos_a_asesores = !!status.autoriza_envio_documentos_a_asesores
+    }
+  } catch {
+    /* ignore */
   }
 })
 
@@ -218,6 +246,14 @@ const nextStep = (): void => {
         return
       }
     }
+    if (!String(form.email_gestor_fiscal || '').trim() || !/\S+@\S+\.\S+/.test(form.email_gestor_fiscal)) {
+      error.value = 'Indica el email del gestor fiscal'
+      return
+    }
+    if (!form.autoriza_envio_documentos_a_asesores) {
+      error.value = 'Debes autorizar el envío al gestor para activar RAFAEL'
+      return
+    }
   }
   step.value += 1
 }
@@ -250,6 +286,8 @@ const finishSetup = async () => {
         .filter((e) => !!e.full_name),
       uses_tpv: !!form.uses_tpv,
       business_hours: String(form.business_hours || '').trim(),
+      email_gestor_fiscal: String(form.email_gestor_fiscal || '').trim().toLowerCase(),
+      autoriza_envio_documentos_a_asesores: !!form.autoriza_envio_documentos_a_asesores,
     }, token)
     if (result && result.success === false) {
       throw new Error(result.message || 'No se pudo guardar la configuración')
@@ -294,6 +332,7 @@ const finishSetup = async () => {
 input, textarea, select { width: 100%; background: #0a1228; color: #fff; border: 1px solid #2b3a66; border-radius: 8px; padding: 10px; }
 .check { display: flex; align-items: center; gap: 8px; }
 .check input { width: auto; }
+.hint { font-size: 0.85rem; color: #9ca8cf; margin: 4px 0 12px; }
 .channels { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
 .employees-grid { display: grid; gap: 10px; margin: 6px 0 8px; }
 .employees-grid label { display: grid; gap: 6px; }

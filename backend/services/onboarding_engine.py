@@ -399,7 +399,9 @@ def apply_questionnaire_answers(db: Session, user: User, body: Any) -> Dict[str,
         "completed_at": datetime.now(timezone.utc).isoformat(),
     }
     meta["onboarding_questionnaire_completed"] = True
-    company.metadata_ = meta
+    from app.db.metadata_utils import set_company_metadata
+
+    set_company_metadata(company, meta)
     db.add(company)
 
     user.employees = body.employees_count

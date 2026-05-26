@@ -216,6 +216,7 @@ async def get_approval_history(
 async def update_advisor_emails(
     email_gestor_fiscal: Optional[EmailStr] = None,
     email_asesor_legal: Optional[EmailStr] = None,
+    autoriza_envio_documentos_a_asesores: Optional[bool] = None,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -224,10 +225,15 @@ async def update_advisor_emails(
     """
     try:
         if email_gestor_fiscal:
-            current_user.email_gestor_fiscal = email_gestor_fiscal
+            current_user.email_gestor_fiscal = str(email_gestor_fiscal).strip().lower()
         
         if email_asesor_legal:
             current_user.email_asesor_legal = email_asesor_legal
+
+        if autoriza_envio_documentos_a_asesores is not None:
+            current_user.autoriza_envio_documentos_a_asesores = bool(
+                autoriza_envio_documentos_a_asesores
+            )
         
         db.commit()
         db.refresh(current_user)
@@ -236,7 +242,10 @@ async def update_advisor_emails(
             "success": True,
             "message": "Emails de asesores actualizados correctamente",
             "email_gestor_fiscal": current_user.email_gestor_fiscal,
-            "email_asesor_legal": current_user.email_asesor_legal
+            "email_asesor_legal": current_user.email_asesor_legal,
+            "autoriza_envio_documentos_a_asesores": bool(
+                current_user.autoriza_envio_documentos_a_asesores
+            ),
         }
         
     except Exception as e:

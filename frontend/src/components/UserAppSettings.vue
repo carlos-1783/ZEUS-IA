@@ -33,6 +33,36 @@
     </div>
 
     <div class="settings-card">
+      <h3>📊 RAFAEL — Gestor fiscal</h3>
+      <p class="setting-hint">
+        Email donde RAFAEL envía facturación y borradores fiscales (Gmail/SMTP del servidor).
+      </p>
+      <div class="setting-item">
+        <label for="us-gestor">Email gestor fiscal</label>
+        <input
+          id="us-gestor"
+          v-model="gestorEmail"
+          type="email"
+          class="setting-input"
+          placeholder="gestor@asesoria.com"
+          :disabled="savingGestor"
+        >
+      </div>
+      <label class="setting-item-row">
+        <input
+          v-model="autorizaEnvio"
+          type="checkbox"
+          :disabled="savingGestor"
+        >
+        <span>Autorizo envío de documentos al gestor</span>
+      </label>
+      <button type="button" class="save-gestor-btn" :disabled="savingGestor" @click="saveGestorEmail">
+        {{ savingGestor ? 'Guardando…' : 'Guardar gestor fiscal' }}
+      </button>
+      <p v-if="gestorMessage" class="setting-hint" :class="{ ok: gestorOk }">{{ gestorMessage }}</p>
+    </div>
+
+    <div class="settings-card">
       <h3>🔐 {{ $t('userSettings.security') }}</h3>
       <div class="setting-item setting-item-row">
         <label for="us-2fa">{{ $t('userSettings.twoFactor') }}</label>
@@ -67,15 +97,66 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted, ref } from 'vue'
 import { getSupportedLocales } from '@/i18n'
 import { useNotifications } from '@/composables/useNotifications'
 import { useSettingsStore } from '@/stores/settings'
+import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
+import api from '@/services/api'
 
 const { t } = useI18n()
 const { error: notifyError } = useNotifications()
 const settingsStore = useSettingsStore()
+const authStore = useAuthStore()
 const supportedLanguages = getSupportedLocales()
+
+const gestorEmail = ref('')
+const autorizaEnvio = ref(true)
+const savingGestor = ref(false)
+const gestorMessage = ref('')
+const gestorOk = ref(false)
+
+onMounted(async () => {
+  try {
+    const token = authStore.getToken?.() ?? authStore.token
+    if (!token) return
+    const status = await api.get('/api/v1/auth/onboarding/status', token)
+    if (status?.email_gestor_fiscal) gestorEmail.value = String(status.email_gestor_fiscal)
+    if (status?.autoriza_envio_documentos_a_asesores != null) {
+      autorizaEnvio.value = !!status.autoriza_envio_documentos_a_asesores
+    }
+  } catch {
+    /* ignore */
+  }
+})
+
+async function saveGestorEmail() {
+  const email = gestorEmail.value.trim()
+  if (!email || !/\S+@\S+\.\S+/.test(email)) {
+    gestorMessage.value = 'Introduce un email de gestor válido'
+    gestorOk.value = false
+    return
+  }
+  savingGestor.value = true
+  gestorMessage.value = ''
+  try {
+    const token = authStore.getToken?.() ?? authStore.token
+  if (!token) throw new Error('Sesión expirada')
+    const params = new URLSearchParams({
+      email_gestor_fiscal: email.toLowerCase(),
+      autoriza_envio_documentos_a_asesores: autorizaEnvio.value ? 'true' : 'false',
+    })
+    await api.post(`/api/v1/documents/update-advisor-emails?${params.toString()}`, {}, token)
+    gestorMessage.value = 'Gestor fiscal guardado. RAFAEL puede enviar documentos tras tu aprobación.'
+    gestorOk.value = true
+  } catch (e: any) {
+    gestorMessage.value = e?.message || 'No se pudo guardar'
+    gestorOk.value = false
+  } finally {
+    savingGestor.value = false
+  }
+}
 
 async function onThemeChange(e: Event) {
   const v = (e.target as HTMLSelectElement).value
@@ -141,6 +222,34 @@ async function onSessionTimeoutChange(e: Event) {
 
 .setting-item-row label {
   margin-bottom: 0;
+}
+
+.setting-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.25);
+  color: #fff;
+}
+
+.save-gestor-btn {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: none;
+  background: #4f46e5;
+  color: #fff;
+  cursor: pointer;
+}
+
+.save-gestor-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.setting-hint.ok {
+  color: #86efac;
 }
 
 .setting-select {

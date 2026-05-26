@@ -500,13 +500,21 @@ class LegalFiscalFirewall:
         """
         try:
             from services.email_service import email_service
-            
-            if not email_service.is_configured():
-                logger.warning("[FIREWALL] Email service no configurado, simulando envío")
+
+            can_send = (
+                email_service.is_configured()
+                or email_service.is_resend_configured()
+                or email_service.is_smtp_configured()
+            )
+            if not can_send:
+                logger.warning("[FIREWALL] Email no configurado (Gmail SMTP / SendGrid / Resend)")
                 return {
-                    "success": True,
-                    "simulated": True,
-                    "message": "Envío simulado (email service no configurado)"
+                    "success": False,
+                    "error": (
+                        "Servicio de email no configurado en el servidor. "
+                        "Configura SMTP_HOST=smtp.gmail.com, SMTP_USER y SMTP_PASSWORD (app Gmail) en Railway."
+                    ),
+                    "status": "email_not_configured",
                 }
             
             # Preparar email
@@ -563,18 +571,26 @@ class LegalFiscalFirewall:
             </html>
             """
             
-            # Enviar email (async)
             result = await email_service.send_email(
                 to_email=advisor_email,
                 subject=subject,
                 content=html_content,
-                content_type="text/html"
+                content_type="text/html",
             )
-            
+
+            if not result.get("success"):
+                return {
+                    "success": False,
+                    "error": result.get("error") or "No se pudo enviar el email al gestor",
+                    "advisor_email": advisor_email,
+                    "provider": result.get("provider"),
+                }
+
             return {
-                "success": result.get("success", False),
+                "success": True,
                 "advisor_email": advisor_email,
-                "sent_at": datetime.utcnow().isoformat()
+                "sent_at": datetime.utcnow().isoformat(),
+                "provider": result.get("provider", "email"),
             }
             
         except Exception as e:

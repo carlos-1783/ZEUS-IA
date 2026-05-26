@@ -1,5 +1,11 @@
 <template>
   <div>
+      <div v-if="justRegistered" class="bg-green-50 border-l-4 border-green-500 p-4 mb-6">
+        <p class="text-sm text-green-800">
+          Cuenta creada. Inicia sesión para completar empleados, redes sociales y horario del negocio.
+        </p>
+      </div>
+
       <div v-if="error" class="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
         <div class="flex">
           <div class="flex-shrink-0">
@@ -96,6 +102,7 @@ import { ref, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useI18n } from 'vue-i18n';
+import { resolvePostAuthPath } from '@/utils/postAuthRedirect';
 
 console.log('🔍 Login.vue component is mounting...')
 
@@ -144,10 +151,18 @@ onMounted(() => {
   console.log('🔍 Login.vue onMounted called!')
   console.log('🔍 Login.vue authStore.isAuthenticated:', authStore.isAuthenticated)
   console.log('🔍 Login.vue redirectTo:', redirectTo)
+
+  const emailFromQuery = route.query.email
+  if (emailFromQuery && typeof emailFromQuery === 'string') {
+    form.value.email = emailFromQuery.trim()
+  }
   
   if (authStore.isAuthenticated) {
-    console.log('🔍 Login.vue redirecting to:', redirectTo)
-    router.push(redirectTo);
+    const token = authStore.getToken?.() ?? authStore.token
+    resolvePostAuthPath(redirectTo, token).then((target) => {
+      console.log('🔍 Login.vue redirecting to:', target)
+      router.push(target)
+    })
   } else {
     console.log('🔍 Login.vue not authenticated, staying on login page')
   }
@@ -204,24 +219,9 @@ const handleSubmit = async () => {
         return;
       }
       
-      // Si acaba de registrarse, guiarlo por setup inicial cuando corresponda.
-      let target = redirectTo;
-      if (justRegistered) {
-        try {
-          const api = (await import('@/services/api')).default;
-          const status = await api.get('/api/v1/auth/onboarding/status', token);
-          const questionnaireCompleted = !!status?.questionnaire_completed;
-          const valid = !!status?.validation?.valid;
-          if (!questionnaireCompleted || !valid) {
-            target = '/onboarding-setup';
-          }
-        } catch (e) {
-          console.warn('No se pudo consultar onboarding/status; fallback dashboard.', e);
-        }
-      }
-
+      const target = await resolvePostAuthPath(redirectTo, token);
       console.log('🚀 Redirigiendo a:', target);
-      window.location.href = target;
+      await router.push(target);
       
     } else {
       // Performance: Solo mostrar error en UI, sin alerts

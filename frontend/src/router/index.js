@@ -378,7 +378,7 @@ const router = createRouter({
 })
 
 // Global navigation guard to handle parameter decoding
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   // Decode any encoded parameters
   const decodedParams = {};
   for (const [key, value] of Object.entries(to.params)) {
@@ -454,6 +454,34 @@ router.beforeEach((to, from, next) => {
   if (to.meta.requiresSuperuser && !authStore.isAdmin) {
     next(authStore.isEmployee ? '/tpv' : '/dashboard')
     return
+  }
+
+  // Onboarding inicial (empleados, redes, horario) antes del dashboard
+  const skipOnboardingGate = new Set([
+    'OnboardingSetup',
+    'AuthLogin',
+    'Register',
+    'ForgotPassword',
+    'ResetPassword',
+    'AdminPanel',
+  ])
+  if (
+    requiresAuth &&
+    authStore.isAuthenticated &&
+    !skipOnboardingGate.has(to.name) &&
+    !authStore.isAdmin
+  ) {
+    try {
+      const { resolvePostAuthPath } = await import('@/utils/postAuthRedirect')
+      const token = authStore.getToken?.() ?? authStore.token
+      const resolved = await resolvePostAuthPath(to.fullPath, token)
+      if (resolved === '/onboarding-setup' && to.path !== '/onboarding-setup') {
+        next('/onboarding-setup')
+        return
+      }
+    } catch (e) {
+      console.warn('Onboarding gate:', e)
+    }
   }
 
   // Redirigir a dashboard si ya está autenticado e intenta acceder a páginas públicas

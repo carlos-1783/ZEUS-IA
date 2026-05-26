@@ -269,9 +269,12 @@
 import { ref, reactive, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import api from '@/api';
+import { useAuthStore } from '@/stores/auth';
+import { resolvePostAuthPath } from '@/utils/postAuthRedirect';
 
 const router = useRouter();
 const route = useRoute();
+const authStore = useAuthStore();
 
 const isLoading = ref(false);
 const error = ref('');
@@ -459,6 +462,15 @@ const handleSubmit = async () => {
     if (!result?.success && !result?.user_id) {
       throw { response: { status: 500, data: { detail: 'Respuesta de registro incompleta' } } };
     }
+
+    const loginResult = await authStore.login(form.email.trim(), form.password);
+    if (loginResult.success) {
+      const token = authStore.getToken?.() ?? authStore.token;
+      const target = await resolvePostAuthPath('/onboarding-setup', token);
+      await router.push(target);
+      return;
+    }
+
     router.push({
       name: 'AuthLogin',
       query: { email: form.email, registered: 'true' }
@@ -473,6 +485,17 @@ const handleSubmit = async () => {
       typeof detail === 'string' &&
       (detail.toLowerCase().includes('cuenta creada') || detail.toLowerCase().includes('inicia sesión'));
     if (accountLikelyCreated) {
+      try {
+        const loginResult = await authStore.login(form.email.trim(), form.password);
+        if (loginResult.success) {
+          const token = authStore.getToken?.() ?? authStore.token;
+          const target = await resolvePostAuthPath('/onboarding-setup', token);
+          await router.push(target);
+          return;
+        }
+      } catch {
+        /* fallback a login manual */
+      }
       router.push({
         name: 'AuthLogin',
         query: { email: form.email, registered: 'true', note: 'account_created' }

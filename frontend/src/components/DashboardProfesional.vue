@@ -128,10 +128,22 @@
           >
             📲 {{ t('dashboardPro.pwa.install') }}
           </button>
-          <!-- Debug: Mostrar estado PWA (temporal para diagnóstico) -->
-          <div v-if="!isProd && (!isInstallable || isInstalled)" class="pwa-debug-info" :title="`PWA: installable=${isInstallable}, installed=${isInstalled}`">
+          <a
+            href="/clear-pwa-cache.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="pwa-clear-cache-link"
+            :title="t('dashboardPro.pwa.clearCacheTitle')"
+          >
+            {{ t('dashboardPro.pwa.clearCache') }}
+          </a>
+          <!-- Diagnóstico PWA solo en desarrollo -->
+          <div
+            v-if="!isProd"
+            class="pwa-debug-info"
+            :title="`PWA: installable=${isInstallable}, installed=${isInstalled}`"
+          >
             🔧 PWA: {{ isInstalled ? t('dashboardPro.pwa.stateInstalled') : isInstallable ? t('dashboardPro.pwa.stateInstallable') : t('dashboardPro.pwa.stateUnavailable') }}
-            <a href="/clear-pwa-cache.html" target="_blank" style="color: #ffa500; margin-left: 8px; text-decoration: underline; font-size: 10px;">{{ t('dashboardPro.pwa.clearCache') }}</a>
           </div>
           <div class="status-badge" :class="backendHealthLabel === 'OK' ? 'online' : 'degraded'">
             ● {{ backendHealthLabel === 'OK' ? t('dashboardPro.systemOnline') : backendHealthDetail }}
@@ -1240,6 +1252,22 @@ const chatWith = (agent) => {
   background: rgba(59, 130, 246, 0.7);
   transform: scale(1.05);
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.pwa-clear-cache-link {
+  padding: 6px 12px;
+  background: rgba(255, 165, 0, 0.12);
+  border: 1px solid rgba(255, 165, 0, 0.35);
+  border-radius: 12px;
+  color: #ffa500;
+  font-size: 11px;
+  font-weight: 500;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+.pwa-clear-cache-link:hover {
+  background: rgba(255, 165, 0, 0.22);
 }
 
 .pwa-debug-info {

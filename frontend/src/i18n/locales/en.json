@@ -50,7 +50,8 @@
       "stateInstalled": "Installed",
       "stateInstallable": "Ready to install",
       "stateUnavailable": "Not available",
-      "clearCache": "Clear cache"
+      "clearCache": "Clear cache",
+      "clearCacheTitle": "Open tool to clear PWA cache and service worker"
     },
     "systemOnline": "System online",
     "metrics": {

@@ -50,7 +50,8 @@
       "stateInstalled": "Instalada",
       "stateInstallable": "Instalable",
       "stateUnavailable": "No disponible",
-      "clearCache": "Limpiar caché"
+      "clearCache": "Limpiar caché",
+      "clearCacheTitle": "Abrir herramienta para limpiar caché PWA y service worker"
     },
     "systemOnline": "Sistema en línea",
     "metrics": {

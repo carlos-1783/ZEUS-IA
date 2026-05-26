@@ -363,12 +363,26 @@ const createUserAccount = async (paymentIntentId) => {
       })
     })
 
+    if (!response.ok) {
+      let detail = `HTTP ${response.status}`
+      try {
+        const errBody = await response.json()
+        detail = errBody.detail || errBody.message || detail
+      } catch {
+        /* ignore */
+      }
+      console.error('Error creando cuenta:', detail)
+      cardError.value = typeof detail === 'string' ? detail : 'No se pudo crear la cuenta tras el pago'
+      return
+    }
+
     const result = await response.json()
 
-    if (!result.success) {
-      console.error('Error creando cuenta:', result)
-    } else {
+    if (result.success) {
       console.log('Cuenta creada exitosamente:', result)
+    } else {
+      console.error('Error creando cuenta:', result)
+      cardError.value = result.message || 'No se pudo crear la cuenta'
     }
   } catch (error) {
     console.error('Error en onboarding:', error)

@@ -438,7 +438,7 @@ const handleSubmit = async () => {
   
   try {
     const fullName = [form.first_name, form.last_name].filter(Boolean).join(' ').trim()
-    await api.register({
+    const result = await api.register({
       email: form.email.trim(),
       password: form.password,
       full_name: fullName,
@@ -446,6 +446,9 @@ const handleSubmit = async () => {
       company_name: form.company_name.trim(),
       business_type: form.business_type,
     });
+    if (result && result.success === false) {
+      throw { response: { data: { detail: result.message || 'Registro no completado' } } };
+    }
     router.push({
       name: 'AuthLogin',
       query: { email: form.email, registered: 'true' }

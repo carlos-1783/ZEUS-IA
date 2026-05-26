@@ -2,6 +2,8 @@
 🎯 Onboarding Endpoints
 Gestión de registro y activación de cuentas después del pago
 """
+import logging
+
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any
@@ -17,6 +19,7 @@ import secrets
 import string
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # PRICING MODEL - AUTHORITATIVE PRICES
@@ -115,7 +118,16 @@ def get_db():
 # ENDPOINTS
 # ============================================================================
 
-@router.post("/create-account")
+class CreateAccountResponse(BaseModel):
+    success: bool = True
+    user_id: int
+    company_id: Optional[int] = None
+    email: str
+    message: str = "Cuenta creada correctamente"
+    email_sent: bool = False
+
+
+@router.post("/create-account", response_model=CreateAccountResponse, status_code=201)
 async def create_account_after_payment(
     request: OnboardingRequest,
     db: Session = Depends(get_db)
@@ -168,15 +180,28 @@ async def create_account_after_payment(
         db.commit()
         db.refresh(new_user)
 
-        bootstrap_result = run_global_autonomous_bootstrap(
-            db,
-            user=new_user,
-            company_name=request.company_name,
-            sector=request.sector,
-            onboarding_completed=True,
-            billing_enabled=True,
-            source_event="onboarding.create_account",
-        )
+        company_id: Optional[int] = None
+        bootstrap_result: Dict[str, Any] = {}
+        try:
+            bootstrap_result = run_global_autonomous_bootstrap(
+                db,
+                user=new_user,
+                company_name=request.company_name,
+                sector=request.sector,
+                onboarding_completed=True,
+                billing_enabled=True,
+                source_event="onboarding.create_account",
+            )
+            if isinstance(bootstrap_result, dict):
+                company_id = bootstrap_result.get("company_id")
+            db.commit()
+        except Exception as bootstrap_err:
+            db.rollback()
+            logger.exception(
+                "Bootstrap post-pago falló user_id=%s (cuenta ya creada): %s",
+                new_user.id,
+                bootstrap_err,
+            )
         
         # 5. Guardar metadata del plan (podríamos crear tabla separada después)
         # Por ahora lo guardamos en logs
@@ -207,21 +232,14 @@ async def create_account_after_payment(
             plan=request.plan
         )
         
-        return {
-            "success": True,
-            "user_id": new_user.id,
-            "email": request.email,
-            "company_name": request.company_name,
-            "plan": request.plan,
-            "sector": request.sector,
-            "credentials": {
-                "email": request.email,
-                "password": temp_password
-            },
-            "email_sent": email_sent,
-            "bootstrap_result": bootstrap_result,
-            "message": "Cuenta creada exitosamente. Revisa tu email para las credenciales."
-        }
+        return CreateAccountResponse(
+            success=True,
+            user_id=new_user.id,
+            company_id=company_id,
+            email=request.email,
+            message="Cuenta creada exitosamente. Revisa tu email para las credenciales.",
+            email_sent=bool(email_sent),
+        )
         
     except HTTPException:
         raise

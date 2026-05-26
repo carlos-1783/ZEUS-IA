@@ -230,7 +230,7 @@ const finishSetup = async () => {
     if (!token) {
       throw new Error('Sesión expirada. Vuelve a iniciar sesión.')
     }
-    await api.post('/api/v1/auth/onboarding/profile', {
+    const result = await api.post('/api/v1/auth/onboarding/profile', {
       social_channels: form.social_channels,
       social_links: Object.fromEntries(
         form.social_channels
@@ -250,12 +250,23 @@ const finishSetup = async () => {
       uses_tpv: !!form.uses_tpv,
       business_hours: String(form.business_hours || '').trim(),
     }, token)
-    success.value = 'Configuración guardada. Redirigiendo al dashboard...'
+    if (result && result.success === false) {
+      throw new Error(result.message || 'No se pudo guardar la configuración')
+    }
+    const warn = Array.isArray(result?.warnings) && result.warnings.length
+      ? ` (${result.warnings.length} aviso(s) menor(es))`
+      : ''
+    success.value = (result?.message || 'Configuración guardada') + warn + '. Redirigiendo al dashboard...'
     setTimeout(() => {
       window.location.href = '/dashboard'
     }, 700)
   } catch (e: any) {
-    const msg = String(e?.message || '')
+    const detail = e?.detail ?? e?.data?.detail ?? e?.response?.data?.detail
+    const msg = typeof detail === 'string'
+      ? detail
+      : Array.isArray(detail)
+        ? detail.map((x) => x?.msg || x?.message || '').filter(Boolean).join(' ')
+        : String(e?.message || '')
     if (msg.toLowerCase().includes('unauthorized')) {
       error.value = 'Sesión expirada o inválida. Inicia sesión de nuevo.'
       setTimeout(() => {

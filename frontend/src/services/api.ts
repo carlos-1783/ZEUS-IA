@@ -136,15 +136,26 @@ const request = async (endpoint: string, options: RequestOptions = {}): Promise<
 
   if (!response.ok) {
     let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+    let errorData: Record<string, unknown> | null = null;
     try {
-      const errorData = await response.json();
-      errorMessage = errorData.detail ?? errorData.message ?? errorMessage;
+      errorData = await response.json();
+      const detail = errorData?.detail ?? errorData?.message;
+      if (typeof detail === 'string') {
+        errorMessage = detail;
+      } else if (Array.isArray(detail)) {
+        errorMessage = detail
+          .map((item: { msg?: string; message?: string }) => item?.msg || item?.message || '')
+          .filter(Boolean)
+          .join(' ') || errorMessage;
+      }
     } catch {
       /* ignore */
     }
     const error = new Error(errorMessage) as any;
     error.status = response.status;
     error.response = response;
+    error.data = errorData;
+    error.detail = errorData?.detail;
     throw error;
   }
 

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field, validator
-from typing import Optional, Union
+from typing import List, Optional, Union
 from datetime import datetime
 
 class UserBase(BaseModel):
@@ -24,6 +24,26 @@ class UserInDBBase(UserBase):
 
 class User(UserInDBBase):
     pass
+
+
+class RegisterResponse(BaseModel):
+    """Respuesta explícita de POST /auth/register (evita fallos de response_model vs ORM)."""
+
+    success: bool = True
+    user_id: int
+    company_id: Optional[int] = None
+    email: str
+    message: str = "Cuenta y empresa creadas correctamente"
+
+
+class OnboardingSuccessResponse(BaseModel):
+    """Respuesta unificada para pasos de onboarding autenticado."""
+
+    success: bool = True
+    company_id: Optional[int] = None
+    message: str = "Configuración guardada correctamente"
+    fallback_mode: bool = False
+    warnings: List[str] = Field(default_factory=list)
 
 class UserInDB(UserInDBBase):
     hashed_password: str

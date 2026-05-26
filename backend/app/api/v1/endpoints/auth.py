@@ -34,7 +34,8 @@ from app.schemas.token import (
     OnboardingProfileRequest,
 )
 from services.email_service import email_service
-from app.schemas.user import User as UserSchema
+from services.activity_logger import ActivityLogger
+from app.schemas.user import User as UserSchema, RegisterResponse, OnboardingSuccessResponse
 
 # Configurar logging
 logger = logging.getLogger(__name__)
@@ -273,8 +274,8 @@ async def login_for_access_token(
     return await create_tokens(db, user)
 
 @router.post(
-    "/register", 
-    response_model=UserSchema, 
+    "/register",
+    response_model=RegisterResponse,
     status_code=status.HTTP_201_CREATED,
     operation_id="auth_register_api_v1",
     summary="Register New User",
@@ -387,11 +388,25 @@ async def register_user(
     except Exception:
         logger.exception("emit_user_registered falló (no bloquea el registro)")
 
-    return db_user
+    logger.info(
+        "register ok user_id=%s company_id=%s email=%s",
+        db_user.id,
+        outcome.get("company_id"),
+        email_norm,
+    )
+    return RegisterResponse(
+        success=True,
+        user_id=db_user.id,
+        company_id=outcome.get("company_id"),
+        email=db_user.email,
+        message="Cuenta y empresa creadas correctamente",
+    )
 
 
 @router.post(
     "/onboarding/questionnaire",
+    response_model=OnboardingSuccessResponse,
+    status_code=status.HTTP_200_OK,
     summary="Cuestionario post-registro",
     description="Guarda empleados, uso TPV y horario; requiere sesión.",
 )
@@ -408,7 +423,11 @@ async def onboarding_questionnaire(
 
         result = apply_questionnaire_answers(db, current_user, body)
         if result.get("success"):
-            return {"success": True, "company_id": result.get("company_id")}
+            return OnboardingSuccessResponse(
+                success=True,
+                company_id=result.get("company_id"),
+                message="Cuestionario guardado correctamente",
+            )
         logger.warning("onboarding_questionnaire apply_questionnaire_answers=%s", result)
         # Forzar fallback si el motor devuelve success=False sin lanzar excepción.
         raise RuntimeError(result.get("error") or "apply_questionnaire_answers returned success=False")
@@ -465,13 +484,18 @@ async def onboarding_questionnaire(
                 detail="No se pudo guardar el cuestionario en este entorno. Revisa migraciones de BD.",
             )
 
-        return {"success": True, "company_id": company.id, "fallback_mode": True}
+        return OnboardingSuccessResponse(
+            success=True,
+            company_id=company.id,
+            message="Cuestionario guardado (modo compatible)",
+            fallback_mode=True,
+        )
     except HTTPException:
         raise
     except Exception as fatal_err:
         logger.exception("onboarding_questionnaire fatal: %s", fatal_err)
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="No se pudo guardar el cuestionario. Revisa configuración de la empresa.",
         )
 
@@ -524,6 +548,8 @@ def onboarding_status(
 
 @router.post(
     "/onboarding/profile",
+    response_model=OnboardingSuccessResponse,
+    status_code=status.HTTP_200_OK,
     summary="Perfil operativo post-registro",
     description="Guarda canales sociales y datos operativos base en metadata de la empresa.",
 )
@@ -536,61 +562,80 @@ def onboarding_profile(
     from app.models.company_employee import CompanyEmployee
     from app.models.time_tracking import EmployeeSchedule
 
-    try:
-        link = (
-            db.query(UserCompany)
-            .filter(UserCompany.user_id == current_user.id)
-            .order_by(UserCompany.id.asc())
-            .first()
+    warnings: list[str] = []
+
+    link = (
+        db.query(UserCompany)
+        .filter(UserCompany.user_id == current_user.id)
+        .order_by(UserCompany.id.asc())
+        .first()
+    )
+    if not link:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Usuario sin empresa vinculada. Completa el registro antes de configurar el perfil.",
         )
-        if not link:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Usuario sin empresa vinculada")
-        company = db.query(Company).filter(Company.id == link.company_id).first()
-        if not company:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Empresa no encontrada")
+    company = db.query(Company).filter(Company.id == link.company_id).first()
+    if not company:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Empresa no encontrada")
 
-        meta = company.metadata_ if isinstance(company.metadata_, dict) else {}
-        op = meta.get("operational_profile") if isinstance(meta.get("operational_profile"), dict) else {}
+    meta = company.metadata_ if isinstance(company.metadata_, dict) else {}
+    op = meta.get("operational_profile") if isinstance(meta.get("operational_profile"), dict) else {}
 
-        channels = body.social_channels or []
-        channels_norm = []
-        for c in channels:
-            s = str(c).strip().lower()
-            if s and s not in channels_norm:
-                channels_norm.append(s)
-        op["social_channels"] = channels_norm
-        links_raw = body.social_links or {}
-        links_norm: Dict[str, str] = {}
-        for ch in channels_norm:
-            v = str(links_raw.get(ch) or "").strip()
-            if not v:
-                continue
-            if not (v.startswith("http://") or v.startswith("https://")):
-                v = f"https://{v}"
-            links_norm[ch] = v
-        op["social_links"] = links_norm
-        op["whatsapp_number"] = (body.whatsapp_number or "").strip() or None
-        op["control_horario_policy"] = (body.control_horario_policy or "").strip() or None
-        op["updated_at"] = datetime.now(timezone.utc).isoformat()
+    channels = body.social_channels or []
+    channels_norm = []
+    for c in channels:
+        s = str(c).strip().lower()
+        if s and s not in channels_norm:
+            channels_norm.append(s)
+    op["social_channels"] = channels_norm
+    links_raw = body.social_links or {}
+    links_norm: Dict[str, str] = {}
+    for ch in channels_norm:
+        v = str(links_raw.get(ch) or "").strip()
+        if not v:
+            continue
+        if not (v.startswith("http://") or v.startswith("https://")):
+            v = f"https://{v}"
+        links_norm[ch] = v
+    op["social_links"] = links_norm
+    op["whatsapp_number"] = (body.whatsapp_number or "").strip() or None
+    op["control_horario_policy"] = (body.control_horario_policy or "").strip() or None
+    op["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-        # Permitir completar onboarding base desde este endpoint.
-        # Importante: evitar escribir en User aquí para no romper por drift de esquema entre entornos.
-        if body.employees_count is not None or body.uses_tpv is not None or body.business_hours:
-            q = meta.get("onboarding_questionnaire") if isinstance(meta.get("onboarding_questionnaire"), dict) else {}
-            if body.employees_count is not None:
-                q["employees_count"] = int(body.employees_count)
-            if body.uses_tpv is not None:
-                q["uses_tpv"] = bool(body.uses_tpv)
-            if body.business_hours:
-                q["business_hours"] = str(body.business_hours).strip()
-            q["completed_at"] = datetime.now(timezone.utc).isoformat()
-            q["saved_via"] = "onboarding_profile"
-            meta["onboarding_questionnaire"] = q
-            meta["onboarding_questionnaire_completed"] = True
+    if body.employees_count is not None or body.uses_tpv is not None or body.business_hours:
+        q = meta.get("onboarding_questionnaire") if isinstance(meta.get("onboarding_questionnaire"), dict) else {}
+        if body.employees_count is not None:
+            q["employees_count"] = int(body.employees_count)
+        if body.uses_tpv is not None:
+            q["uses_tpv"] = bool(body.uses_tpv)
+        if body.business_hours:
+            q["business_hours"] = str(body.business_hours).strip()
+        q["completed_at"] = datetime.now(timezone.utc).isoformat()
+        q["saved_via"] = "onboarding_profile"
+        meta["onboarding_questionnaire"] = q
+        meta["onboarding_questionnaire_completed"] = True
 
-        # Crear/actualizar empleados iniciales para Control Horario y TPV (sin tocar el titular U{user.id}-OWNER).
-        employees_rows = body.employees or []
-        if employees_rows:
+    meta["operational_profile"] = op
+    meta["onboarding_operational_profile_completed"] = True
+    company.metadata_ = meta
+    db.add(company)
+
+    try:
+        db.commit()
+        db.refresh(company)
+    except Exception as commit_err:
+        db.rollback()
+        logger.exception("onboarding_profile metadata commit failed: %s", commit_err)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No se pudo guardar la configuración de la empresa.",
+        )
+
+    company_id = company.id
+    employees_rows = body.employees or []
+    if employees_rows:
+        try:
             seeded = 0
             schedules_seeded = 0
             has_employee_schedules = False
@@ -605,106 +650,110 @@ def onboarding_profile(
                 if not full_name:
                     continue
                 employee_code = f"ONB-{idx:03d}"
-                ce = (
-                    db.query(CompanyEmployee)
-                    .filter(
-                        CompanyEmployee.company_id == company.id,
-                        CompanyEmployee.employee_code == employee_code,
-                    )
-                    .first()
-                )
-                if not ce:
-                    ce = CompanyEmployee(
-                        company_id=company.id,
-                        user_id=None,
-                        full_name=full_name[:255],
-                        role_title=role_title[:100],
-                        employee_code=employee_code,
-                        phone=phone[:32] if phone else None,
-                        is_active=True,
-                        source="onboarding_profile",
-                    )
-                else:
-                    ce.full_name = full_name[:255]
-                    ce.phone = phone[:32] if phone else None
-                    ce.role_title = role_title[:100]
-                    ce.is_active = True
-                    ce.source = ce.source or "onboarding_profile"
-                db.add(ce)
-                seeded += 1
-
-                if has_employee_schedules:
-                    for dow in range(5):  # L-V
-                        ex = (
-                            db.query(EmployeeSchedule)
-                            .filter(
-                                EmployeeSchedule.employee_id == employee_code,
-                                EmployeeSchedule.day_of_week == dow,
-                            )
-                            .first()
+                try:
+                    ce = (
+                        db.query(CompanyEmployee)
+                        .filter(
+                            CompanyEmployee.company_id == company_id,
+                            CompanyEmployee.employee_code == employee_code,
                         )
-                        if ex:
-                            continue
-                        db.add(
-                            EmployeeSchedule(
-                                employee_id=employee_code,
-                                user_id=current_user.id,
-                                day_of_week=dow,
-                                start_time="09:00",
-                                end_time="17:00",
-                                shift_type="completo",
-                                is_active=True,
-                            )
+                        .first()
+                    )
+                    if not ce:
+                        ce = CompanyEmployee(
+                            company_id=company_id,
+                            user_id=None,
+                            full_name=full_name[:255],
+                            role_title=role_title[:100],
+                            employee_code=employee_code,
+                            phone=phone[:32] if phone else None,
+                            is_active=True,
+                            source="onboarding_profile",
                         )
-                        schedules_seeded += 1
+                    else:
+                        ce.full_name = full_name[:255]
+                        ce.phone = phone[:32] if phone else None
+                        ce.role_title = role_title[:100]
+                        ce.is_active = True
+                        ce.source = ce.source or "onboarding_profile"
+                    db.add(ce)
+                    db.flush()
+                    seeded += 1
 
-            if isinstance(meta.get("onboarding_questionnaire"), dict):
-                meta["onboarding_questionnaire"]["employees_seeded"] = seeded
-                meta["onboarding_questionnaire"]["employee_schedules_seeded"] = schedules_seeded
+                    if has_employee_schedules:
+                        for dow in range(5):
+                            ex = (
+                                db.query(EmployeeSchedule)
+                                .filter(
+                                    EmployeeSchedule.employee_id == employee_code,
+                                    EmployeeSchedule.day_of_week == dow,
+                                )
+                                .first()
+                            )
+                            if ex:
+                                continue
+                            db.add(
+                                EmployeeSchedule(
+                                    employee_id=employee_code,
+                                    user_id=current_user.id,
+                                    day_of_week=dow,
+                                    start_time="09:00",
+                                    end_time="17:00",
+                                    shift_type="completo",
+                                    is_active=True,
+                                )
+                            )
+                            schedules_seeded += 1
+                except Exception as row_err:
+                    db.rollback()
+                    warnings.append(f"No se importó el empleado {full_name}: {row_err}")
+                    logger.warning("onboarding_profile employee row skipped: %s", row_err)
 
-        meta["operational_profile"] = op
-        meta["onboarding_operational_profile_completed"] = True
-        company.metadata_ = meta
-        db.add(company)
-
-        try:
-            db.commit()
-            return {"success": True, "company_id": company.id, "operational_profile": op}
-        except Exception as commit_err:
+            if seeded:
+                try:
+                    co2 = db.query(Company).filter(Company.id == company_id).first()
+                    if co2:
+                        m2 = co2.metadata_ if isinstance(co2.metadata_, dict) else {}
+                        q2 = m2.get("onboarding_questionnaire") if isinstance(m2.get("onboarding_questionnaire"), dict) else {}
+                        q2["employees_seeded"] = seeded
+                        q2["employee_schedules_seeded"] = schedules_seeded
+                        m2["onboarding_questionnaire"] = q2
+                        co2.metadata_ = m2
+                        db.add(co2)
+                        db.commit()
+                except Exception as emp_meta_err:
+                    db.rollback()
+                    warnings.append(f"Empleados guardados parcialmente; metadata no actualizada: {emp_meta_err}")
+        except Exception as emp_err:
             db.rollback()
-            logger.exception("onboarding_profile commit failed; retrying metadata-only fallback: %s", commit_err)
+            warnings.append(f"Importación de empleados omitida: {emp_err}")
+            logger.exception("onboarding_profile employees batch failed: %s", emp_err)
 
-            # Fallback: persistir solo metadata de empresa para no bloquear la finalización por diferencias de esquema en User.
-            company_retry = db.query(Company).filter(Company.id == link.company_id).first()
-            if not company_retry:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Empresa no encontrada")
-            company_retry.metadata_ = meta
-            db.add(company_retry)
-            try:
-                db.commit()
-                return {
-                    "success": True,
-                    "company_id": company_retry.id,
-                    "operational_profile": op,
-                    "fallback_mode": True,
-                }
-            except Exception as fallback_err:
-                db.rollback()
-                logger.exception("onboarding_profile metadata-only fallback failed: %s", fallback_err)
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="No se pudo guardar la configuración en este entorno. Revisa migraciones de BD.",
-                )
-    except HTTPException:
-        raise
-    except Exception as fatal_err:
-        # Evita que el middleware global devuelva el 500 genérico en este flujo.
-        db.rollback()
-        logger.exception("onboarding_profile fatal unexpected error: %s", fatal_err)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No se pudo completar la configuración inicial. Revisa el estado de la empresa y vuelve a intentar.",
+    try:
+        ActivityLogger.log_activity(
+            agent_name="ZEUS",
+            action_type="onboarding_profile_completed",
+            action_description="Perfil operativo de onboarding completado",
+            details={"company_id": company_id, "warnings": warnings},
+            user_email=current_user.email,
+            status="completed",
         )
+    except Exception:
+        logger.debug("ActivityLogger onboarding_profile_completed omitido")
+
+    logger.info(
+        "onboarding_profile ok user_id=%s company_id=%s warnings=%s",
+        current_user.id,
+        company_id,
+        len(warnings),
+    )
+    return OnboardingSuccessResponse(
+        success=True,
+        company_id=company_id,
+        message="Configuración guardada correctamente",
+        fallback_mode=bool(warnings),
+        warnings=warnings,
+    )
 
 
 # Tiempo de validez del token de reset (1 hora)

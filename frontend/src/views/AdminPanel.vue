@@ -262,16 +262,25 @@
                 </button>
               </div>
               <label>Confirmar email para eliminar</label>
+              <p class="admin-modal-hint">
+                Escribe exactamente: <strong>{{ editingCustomer.email }}</strong>
+              </p>
               <input
-                v-model="adminAction.confirmEmail"
+                v-model="deleteConfirmEmail"
                 type="email"
                 :placeholder="editingCustomer.email"
                 autocomplete="off"
+                @input="adminDeleteError = ''"
               >
+              <p v-if="deleteConfirmEmail && !canDeleteCustomer" class="admin-modal-hint warn">
+                El email no coincide. Copia y pega el correo mostrado arriba.
+              </p>
+              <p v-if="adminDeleteError" class="admin-modal-hint warn">{{ adminDeleteError }}</p>
               <button
                 type="button"
                 class="btn-action danger full-width"
-                :disabled="adminAction.busy || editingCustomer.is_superuser || !canDeleteCustomer"
+                :class="{ 'btn-muted': !canDeleteCustomer && !adminAction.busy }"
+                :disabled="adminAction.busy || editingCustomer.is_superuser"
                 @click="deleteCustomerPermanent"
               >
                 {{ adminAction.busy ? 'Procesando…' : 'Eliminar cuenta y empresa (irreversible)' }}
@@ -406,7 +415,9 @@ const customerDetail = ref({})
 const loadingCustomerDetail = ref(false)
 const editForm = ref({ company_name: '', plan: '', employees: '' })
 const savingEdit = ref(false)
-const adminAction = ref({ reason: 'test_account', confirmEmail: '', busy: false })
+const adminAction = ref({ reason: 'test_account', busy: false })
+const deleteConfirmEmail = ref('')
+const adminDeleteError = ref('')
 
 const deleteReasonOptions = [
   { value: 'test_account', label: 'Cuenta de prueba / test' },
@@ -433,7 +444,7 @@ const getAdminToken = () => {
 const canDeleteCustomer = computed(() => {
   if (!editingCustomer.value?.email) return false
   const expected = editingCustomer.value.email.trim().toLowerCase()
-  const typed = (adminAction.value.confirmEmail || '').trim().toLowerCase()
+  const typed = (deleteConfirmEmail.value || '').trim().toLowerCase()
   return typed.length > 0 && typed === expected
 })
 
@@ -885,7 +896,9 @@ const openEditFromView = () => {
 
 const openEditCustomer = (customer) => {
   editingCustomer.value = customer
-  adminAction.value = { reason: 'test_account', confirmEmail: '', busy: false }
+  adminAction.value = { reason: 'test_account', busy: false }
+  deleteConfirmEmail.value = ''
+  adminDeleteError.value = ''
   editForm.value = {
     company_name: customer.company_name && customer.company_name !== 'N/A' ? customer.company_name : '',
     plan: customer.plan && customer.plan !== 'none' ? customer.plan : '',
@@ -897,7 +910,9 @@ const openEditCustomer = (customer) => {
 
 const closeEditCustomer = () => {
   editingCustomer.value = null
-  adminAction.value = { reason: 'test_account', confirmEmail: '', busy: false }
+  adminAction.value = { reason: 'test_account', busy: false }
+  deleteConfirmEmail.value = ''
+  adminDeleteError.value = ''
 }
 
 const setCustomerActive = async (active) => {
@@ -938,7 +953,11 @@ const setCustomerActive = async (active) => {
 }
 
 const deleteCustomerPermanent = async () => {
-  if (!editingCustomer.value || !canDeleteCustomer.value) return
+  if (!editingCustomer.value) return
+  if (!canDeleteCustomer.value) {
+    adminDeleteError.value = `Escribe exactamente: ${editingCustomer.value.email}`
+    return
+  }
   const email = editingCustomer.value.email
   if (
     !confirm(
@@ -948,32 +967,52 @@ const deleteCustomerPermanent = async () => {
     return
   }
   adminAction.value.busy = true
+  adminDeleteError.value = ''
   try {
     const token = getAdminToken()
-    const response = await fetch(
-      adminApiUrl(`/api/v1/admin/customers/${editingCustomer.value.id}`),
-      {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          reason: adminAction.value.reason,
-          confirm_email: adminAction.value.confirmEmail.trim()
-        })
-      }
-    )
+    const payload = {
+      reason: adminAction.value.reason,
+      confirm_email: deleteConfirmEmail.value.trim()
+    }
+    const url = adminApiUrl(`/api/v1/admin/customers/${editingCustomer.value.id}/delete`)
+    let response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    })
+    if (!response.ok && response.status === 405) {
+      response = await fetch(
+        adminApiUrl(`/api/v1/admin/customers/${editingCustomer.value.id}`),
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        }
+      )
+    }
     if (!response.ok) {
       const err = await response.json().catch(() => ({}))
       const detail = err.detail
-      throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
+      const msg =
+        typeof detail === 'string'
+          ? detail
+          : Array.isArray(detail)
+            ? detail.map((d) => d.msg || d).join(' ')
+            : 'No se pudo eliminar la cuenta'
+      throw new Error(msg)
     }
     closeEditCustomer()
     await loadCustomers()
     alert('✅ Cuenta eliminada correctamente')
   } catch (e) {
-    alert('❌ ' + (e.message || 'No se pudo eliminar'))
+    adminDeleteError.value = e.message || 'No se pudo eliminar'
+    alert('❌ ' + adminDeleteError.value)
   } finally {
     adminAction.value.busy = false
   }
@@ -1626,6 +1665,13 @@ td {
 .admin-danger-zone .full-width {
   width: 100%;
   margin-top: 8px;
+}
+.btn-action.btn-muted {
+  opacity: 0.55;
+}
+.btn-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .admin-modal-hint.warn {
   color: #fbbf24;

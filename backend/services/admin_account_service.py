@@ -6,6 +6,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.user import User, RefreshToken, PasswordResetToken
@@ -13,7 +14,7 @@ from app.models.company import Company, UserCompany
 from app.models.agent_activity import AgentActivity
 from app.models.document_approval import DocumentApproval
 from app.models.customer import Customer, ContactPerson
-from app.models.erp import TPVSale, TPVSaleItem, TPVProduct
+from app.models.erp import TPVSale, TPVSaleItem, TPVProduct, TaxRate, FiscalProfile
 from app.models.chat_message import ChatMessage
 from app.models.time_tracking import (
     TimeTrackingRecord,
@@ -23,7 +24,14 @@ from app.models.time_tracking import (
     AttendanceReport,
 )
 from app.models.automation_readiness import AutomationReadiness
-
+from app.models.payroll_draft import PayrollDraft
+from app.models.user_settings import UserSettings
+from app.models.reservation import Reservation
+from app.models.tpv_operator_session import TPVOperatorSession
+from app.models.employee_work_session import EmployeeWorkSession
+from app.models.tpv_comanda_share import TPVComandaShare
+from app.models.company_employee import CompanyEmployee
+from app.models.crm_office import CustomerRecord, CrmActivityLog, CrmSaleLink
 logger = logging.getLogger(__name__)
 
 ALLOWED_DEACTIVATION_REASONS = frozenset(
@@ -61,6 +69,57 @@ def companies_exclusive_to_user(db: Session, user_id: int) -> List[int]:
     return exclusive
 
 
+def _purge_company_rows(db: Session, company_id: int, counts: Dict[str, int]) -> None:
+    def bump(key: str, n: int) -> None:
+        counts[key] = counts.get(key, 0) + n
+
+    cust_ids = [
+        r[0] for r in db.query(Customer.id).filter(Customer.company_id == company_id).all()
+    ]
+    if cust_ids:
+        record_ids = [
+            r[0]
+            for r in db.query(CustomerRecord.id)
+            .filter(CustomerRecord.customer_id.in_(cust_ids))
+            .all()
+        ]
+        if record_ids:
+            n = (
+                db.query(CrmSaleLink)
+                .filter(CrmSaleLink.customer_record_id.in_(record_ids))
+                .delete(synchronize_session=False)
+            )
+            bump("crm_sale_links", n)
+            n = (
+                db.query(CustomerRecord)
+                .filter(CustomerRecord.id.in_(record_ids))
+                .delete(synchronize_session=False)
+            )
+            bump("customer_records", n)
+        n = (
+            db.query(CrmActivityLog)
+            .filter(CrmActivityLog.company_id == company_id)
+            .delete(synchronize_session=False)
+        )
+        bump("crm_activity_logs", n)
+        n = db.query(ContactPerson).filter(ContactPerson.customer_id.in_(cust_ids)).delete(
+            synchronize_session=False
+        )
+        bump("contact_persons", n)
+        n = db.query(Customer).filter(Customer.id.in_(cust_ids)).delete(synchronize_session=False)
+        bump("customers_company", n)
+
+    n = db.query(CompanyEmployee).filter(CompanyEmployee.company_id == company_id).delete(
+        synchronize_session=False
+    )
+    bump("company_employees", n)
+
+    n = db.query(ChatMessage).filter(ChatMessage.company_id == company_id).delete(
+        synchronize_session=False
+    )
+    bump("chat_messages_company", n)
+
+
 def _purge_user_rows(db: Session, user: User) -> Dict[str, int]:
     uid = user.id
     email = user.email
@@ -81,6 +140,10 @@ def _purge_user_rows(db: Session, user: User) -> Dict[str, int]:
 
     sale_ids = [r[0] for r in db.query(TPVSale.id).filter(TPVSale.user_id == uid).all()]
     if sale_ids:
+        n = db.query(CrmSaleLink).filter(CrmSaleLink.tpv_sale_id.in_(sale_ids)).delete(
+            synchronize_session=False
+        )
+        bump("crm_sale_links", n)
         db.query(TPVSaleItem).filter(TPVSaleItem.tpv_sale_id.in_(sale_ids)).delete(
             synchronize_session=False
         )
@@ -123,6 +186,40 @@ def _purge_user_rows(db: Session, user: User) -> Dict[str, int]:
 
     n = db.query(ChatMessage).filter(ChatMessage.user_id == uid).delete(synchronize_session=False)
     bump("chat_messages", n)
+
+    for model, label in (
+        (UserSettings, "user_settings"),
+        (Reservation, "reservations"),
+        (TPVOperatorSession, "tpv_operator_sessions"),
+        (EmployeeWorkSession, "employee_work_sessions"),
+        (TaxRate, "tax_rates"),
+        (FiscalProfile, "fiscal_profiles"),
+    ):
+        n = db.query(model).filter(model.user_id == uid).delete(synchronize_session=False)
+        bump(label, n)
+
+    n = (
+        db.query(TPVComandaShare)
+        .filter(TPVComandaShare.owner_user_id == uid)
+        .delete(synchronize_session=False)
+    )
+    bump("tpv_comanda_shares", n)
+
+    n = (
+        db.query(PayrollDraft)
+        .filter(
+            (PayrollDraft.company_id == uid) | (PayrollDraft.employee_id == uid)
+        )
+        .delete(synchronize_session=False)
+    )
+    bump("payroll_drafts", n)
+
+    n = (
+        db.query(CompanyEmployee)
+        .filter(CompanyEmployee.user_id == uid)
+        .delete(synchronize_session=False)
+    )
+    bump("company_employees_user", n)
 
     return counts
 
@@ -185,12 +282,25 @@ def delete_user_account(
     row_counts["user_companies"] = bump_uc
 
     for cid in company_ids:
+        _purge_company_rows(db, cid, row_counts)
         co = db.query(Company).filter(Company.id == cid).first()
         if co:
             db.delete(co)
 
     db.delete(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        logger.exception("delete_user_account IntegrityError user_id=%s", uid)
+        raise ValueError(
+            "No se pudo eliminar la cuenta: quedan datos vinculados en la base de datos. "
+            "Prueba desactivar la cuenta o contacta soporte."
+        ) from exc
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("delete_user_account DB error user_id=%s", uid)
+        raise ValueError(f"Error al eliminar la cuenta: {exc}") from exc
 
     try:
         from services.activity_logger import ActivityLogger

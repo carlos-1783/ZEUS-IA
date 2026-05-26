@@ -212,12 +212,11 @@ async def toggle_admin_customer_status(
     return {"success": True, **out}
 
 
-@router.delete("/customers/{customer_id}")
-async def delete_admin_customer(
+async def _delete_admin_customer_impl(
     customer_id: int,
-    body: CustomerDeleteBody = Body(...),
-    current_user: User = Depends(get_current_active_superuser),
-    db: Session = Depends(get_db),
+    body: CustomerDeleteBody,
+    current_user: User,
+    db: Session,
 ) -> Dict[str, Any]:
     user = db.query(User).filter(User.id == customer_id).first()
     if not user:
@@ -245,6 +244,27 @@ async def delete_admin_customer(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return result
+
+
+@router.post("/customers/{customer_id}/delete")
+async def delete_admin_customer_post(
+    customer_id: int,
+    body: CustomerDeleteBody,
+    current_user: User = Depends(get_current_active_superuser),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Eliminar cuenta (POST evita proxies que descartan el body en DELETE)."""
+    return await _delete_admin_customer_impl(customer_id, body, current_user, db)
+
+
+@router.delete("/customers/{customer_id}")
+async def delete_admin_customer(
+    customer_id: int,
+    body: CustomerDeleteBody = Body(...),
+    current_user: User = Depends(get_current_active_superuser),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    return await _delete_admin_customer_impl(customer_id, body, current_user, db)
 
 
 @router.patch("/customers/{customer_id}")

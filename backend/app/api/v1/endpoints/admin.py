@@ -3,18 +3,39 @@
 Endpoints para el panel de administración (solo superusuarios)
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from collections import defaultdict
 
 from app.db.session import get_db
 from app.core.auth import get_current_active_superuser
 from app.models.user import User
+from services.admin_account_service import (
+    ALLOWED_DEACTIVATION_REASONS,
+    delete_user_account,
+    get_user_admin_detail,
+    set_user_active,
+)
 
 router = APIRouter()
+
+
+class CustomerStatusBody(BaseModel):
+    status: Optional[str] = Field(None, description="active | inactive")
+    is_active: Optional[bool] = None
+    reason: Optional[str] = Field(None, max_length=64)
+
+
+class CustomerDeleteBody(BaseModel):
+    reason: str = Field(
+        ...,
+        description="test_account | duplicate | customer_request | non_payment | inactive | fraud | other",
+    )
+    confirm_email: str = Field(..., description="Debe coincidir con el email del cliente")
 
 
 # Precios de los planes (deben coincidir con onboarding.py)
@@ -151,6 +172,79 @@ async def get_admin_customers(
             status_code=500,
             detail=f"Error obteniendo clientes: {str(e)}"
         )
+
+
+@router.get("/customers/{customer_id}")
+async def get_admin_customer_detail(
+    customer_id: int,
+    current_user: User = Depends(get_current_active_superuser),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    detail = get_user_admin_detail(db, customer_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    return {"success": True, "customer": detail}
+
+
+@router.patch("/customers/{customer_id}/toggle-status")
+@router.patch("/customers/{customer_id}/status")
+async def toggle_admin_customer_status(
+    customer_id: int,
+    body: CustomerStatusBody,
+    current_user: User = Depends(get_current_active_superuser),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    user = db.query(User).filter(User.id == customer_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    if user.is_superuser:
+        raise HTTPException(status_code=400, detail="No se puede cambiar el estado de un superusuario")
+    if body.is_active is not None:
+        active = bool(body.is_active)
+    elif body.status:
+        active = str(body.status).strip().lower() == "active"
+    else:
+        active = not bool(user.is_active)
+    try:
+        out = set_user_active(db, user, active=active, reason=body.reason)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"success": True, **out}
+
+
+@router.delete("/customers/{customer_id}")
+async def delete_admin_customer(
+    customer_id: int,
+    body: CustomerDeleteBody = Body(...),
+    current_user: User = Depends(get_current_active_superuser),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    user = db.query(User).filter(User.id == customer_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    if user.is_superuser:
+        raise HTTPException(status_code=400, detail="No se puede eliminar un superusuario")
+    if (body.confirm_email or "").strip().lower() != (user.email or "").strip().lower():
+        raise HTTPException(
+            status_code=400,
+            detail="El email de confirmación no coincide. Escríbelo exactamente para eliminar.",
+        )
+    reason = (body.reason or "").strip().lower()
+    if reason not in ALLOWED_DEACTIVATION_REASONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Motivo inválido. Opciones: {', '.join(sorted(ALLOWED_DEACTIVATION_REASONS))}",
+        )
+    try:
+        result = delete_user_account(
+            db,
+            user,
+            reason=reason,
+            actor_email=current_user.email,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return result
 
 
 @router.patch("/customers/{customer_id}")

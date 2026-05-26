@@ -423,6 +423,13 @@ function parseRegisterError(err) {
   if (status === 422) {
     return 'Algunos datos no son válidos. Revisa el formulario (sobre todo la contraseña).'
   }
+  if (status === 500) {
+    const msg = typeof detail === 'string' ? detail : ''
+    if (msg.toLowerCase().includes('cuenta creada') || msg.toLowerCase().includes('inicia sesión')) {
+      return null
+    }
+    return 'Error del servidor al confirmar el registro. Si ya creaste la cuenta, inicia sesión con tu correo.'
+  }
 
   return err?.message && err.message !== 'Bad Request' ? err.message : null
 }
@@ -449,14 +456,31 @@ const handleSubmit = async () => {
     if (result && result.success === false) {
       throw { response: { data: { detail: result.message || 'Registro no completado' } } };
     }
+    if (!result?.success && !result?.user_id) {
+      throw { response: { status: 500, data: { detail: 'Respuesta de registro incompleta' } } };
+    }
     router.push({
       name: 'AuthLogin',
       query: { email: form.email, registered: 'true' }
     });
   } catch (err) {
     console.error('Registration error:', err);
+    const parsed = parseRegisterError(err);
+    const status = err?.response?.status;
+    const detail = err?.response?.data?.detail;
+    const accountLikelyCreated =
+      status === 500 &&
+      typeof detail === 'string' &&
+      (detail.toLowerCase().includes('cuenta creada') || detail.toLowerCase().includes('inicia sesión'));
+    if (accountLikelyCreated) {
+      router.push({
+        name: 'AuthLogin',
+        query: { email: form.email, registered: 'true', note: 'account_created' }
+      });
+      return;
+    }
     error.value =
-      parseRegisterError(err) ||
+      parsed ||
       'Ocurrió un error al registrar la cuenta. Por favor, inténtalo de nuevo.'
   } finally {
     isLoading.value = false;

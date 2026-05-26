@@ -170,9 +170,40 @@
         </div>
       </section>
 
-      <!-- Modal Editar Cliente (empresa piloto: asignar Empresa y Plan) -->
+      <!-- Modal Ver Cliente -->
+      <div v-if="viewingCustomer" class="admin-modal-overlay" @click.self="closeViewCustomer">
+        <div class="admin-modal admin-modal-wide">
+          <h3>Detalle del cliente</h3>
+          <p class="admin-modal-email">{{ viewingCustomer.email }}</p>
+          <div v-if="loadingCustomerDetail" class="admin-modal-hint">Cargando…</div>
+          <div v-else class="admin-modal-form">
+            <p><strong>ID:</strong> {{ customerDetail.id }}</p>
+            <p><strong>Nombre:</strong> {{ customerDetail.full_name || '—' }}</p>
+            <p><strong>Empresa (perfil):</strong> {{ customerDetail.company_name || '—' }}</p>
+            <p><strong>Plan:</strong> {{ getPlanName(customerDetail.plan || 'none') }}</p>
+            <p><strong>Empleados:</strong> {{ customerDetail.employees ?? 0 }}</p>
+            <p><strong>Estado:</strong> {{ customerDetail.status === 'active' ? 'Activo' : 'Inactivo' }}</p>
+            <p><strong>Teléfono:</strong> {{ customerDetail.phone || '—' }}</p>
+            <p><strong>Registro:</strong> {{ formatDate(customerDetail.created_at) }}</p>
+            <div v-if="customerDetail.companies?.length" class="admin-companies-list">
+              <strong>Empresas vinculadas</strong>
+              <ul>
+                <li v-for="co in customerDetail.companies" :key="co.id">
+                  {{ co.name }} ({{ co.slug }}) — {{ co.status || 'activa' }}
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div class="admin-modal-actions">
+            <button type="button" class="btn-action" @click="closeViewCustomer">Cerrar</button>
+            <button type="button" class="btn-action primary" @click="openEditFromView">Editar / Gestionar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Editar Cliente -->
       <div v-if="editingCustomer" class="admin-modal-overlay" @click.self="closeEditCustomer">
-        <div class="admin-modal">
+        <div class="admin-modal admin-modal-wide">
           <h3>Editar cliente</h3>
           <p class="admin-modal-email">{{ editingCustomer.email }}</p>
           <div class="admin-modal-form">
@@ -198,6 +229,56 @@
                 <input v-model="editForm.public_site_slug" type="text" placeholder="mi-restaurante" class="slug-input">
                 <p class="admin-modal-hint">Los clientes verán: /p/{{ (editForm.public_site_slug || '').toLowerCase() || 'slug' }}</p>
               </template>
+            </div>
+
+            <div class="admin-danger-zone">
+              <h4>Zona superadmin</h4>
+              <p class="admin-modal-hint">
+                Desactiva cuentas inactivas o elimina registros de prueba/duplicados. La eliminación borra el usuario y empresas que solo le pertenecen.
+              </p>
+              <label>Motivo (desactivar / eliminar)</label>
+              <select v-model="adminAction.reason">
+                <option v-for="opt in deleteReasonOptions" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
+              <div class="admin-modal-actions inline-actions">
+                <button
+                  type="button"
+                  class="btn-action danger"
+                  :disabled="adminAction.busy || editingCustomer.is_superuser"
+                  @click="setCustomerActive(false)"
+                >
+                  {{ adminAction.busy ? '…' : 'Desactivar cuenta' }}
+                </button>
+                <button
+                  v-if="editingCustomer.status !== 'active'"
+                  type="button"
+                  class="btn-action"
+                  :disabled="adminAction.busy"
+                  @click="setCustomerActive(true)"
+                >
+                  Reactivar cuenta
+                </button>
+              </div>
+              <label>Confirmar email para eliminar</label>
+              <input
+                v-model="adminAction.confirmEmail"
+                type="email"
+                :placeholder="editingCustomer.email"
+                autocomplete="off"
+              >
+              <button
+                type="button"
+                class="btn-action danger full-width"
+                :disabled="adminAction.busy || editingCustomer.is_superuser || !canDeleteCustomer"
+                @click="deleteCustomerPermanent"
+              >
+                {{ adminAction.busy ? 'Procesando…' : 'Eliminar cuenta y empresa (irreversible)' }}
+              </button>
+              <p v-if="editingCustomer.is_superuser" class="admin-modal-hint warn">
+                No se puede modificar ni eliminar un superusuario desde aquí.
+              </p>
             </div>
           </div>
           <div class="admin-modal-actions">
@@ -286,7 +367,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { Chart, registerables } from 'chart.js'
@@ -320,8 +401,41 @@ const loading = ref(false)
 const error = ref(null)
 // Editar cliente (empresa piloto: asignar empresa y plan)
 const editingCustomer = ref(null)
+const viewingCustomer = ref(null)
+const customerDetail = ref({})
+const loadingCustomerDetail = ref(false)
 const editForm = ref({ company_name: '', plan: '', employees: '' })
 const savingEdit = ref(false)
+const adminAction = ref({ reason: 'test_account', confirmEmail: '', busy: false })
+
+const deleteReasonOptions = [
+  { value: 'test_account', label: 'Cuenta de prueba / test' },
+  { value: 'duplicate', label: 'Registro duplicado' },
+  { value: 'inactive', label: 'Cuenta inactiva / sin uso' },
+  { value: 'customer_request', label: 'Solicitud del cliente' },
+  { value: 'non_payment', label: 'Impago' },
+  { value: 'fraud', label: 'Fraude / abuso' },
+  { value: 'other', label: 'Otro motivo' }
+]
+
+const adminApiUrl = (path) => {
+  const base = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '')
+  const p = path.startsWith('/') ? path : `/${path}`
+  return base ? `${base}${p}` : p
+}
+
+const getAdminToken = () => {
+  const t = authStore.getToken ? authStore.getToken() : authStore.token
+  if (!t) throw new Error('No hay token de autenticación')
+  return t
+}
+
+const canDeleteCustomer = computed(() => {
+  if (!editingCustomer.value?.email) return false
+  const expected = editingCustomer.value.email.trim().toLowerCase()
+  const typed = (adminAction.value.confirmEmail || '').trim().toLowerCase()
+  return typed.length > 0 && typed === expected
+})
 
 // Revenue by plan
 const revenueByPlan = ref([])
@@ -728,40 +842,50 @@ const formatDate = (date) => {
   }
 }
 
-const viewCustomer = async (customer) => {
-  try {
-    const token = authStore.getToken ? authStore.getToken() : authStore.token
-    if (!token) {
-      alert('Error: No hay token de autenticación')
-      return
+const fetchCustomerDetail = async (customerId) => {
+  const token = getAdminToken()
+  const response = await fetch(adminApiUrl(`/api/v1/admin/customers/${customerId}`), {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
     }
-    
-    const response = await fetch(`/api/v1/admin/customers/${customer.id}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (response.ok) {
-      const data = await response.json()
-      // Mostrar modal con detalles (por ahora alert, se puede mejorar con componente modal)
-      alert(`📋 Detalles del Cliente\n\nEmpresa: ${data.company_name || customer.company_name}\nEmail: ${data.email || customer.email}\nPlan: ${data.plan || customer.plan}\nEmpleados: ${data.employees || customer.employees}\nEstado: ${data.status || customer.status}\nFecha registro: ${data.created_at || 'N/A'}`)
-    } else if (response.status === 404) {
-      // Si no existe endpoint, mostrar datos disponibles
-      alert(`📋 Detalles del Cliente\n\nEmpresa: ${customer.company_name}\nEmail: ${customer.email}\nPlan: ${customer.plan}\nEmpleados: ${customer.employees}\nEstado: ${customer.status}\nPróximo pago: ${formatDate(customer.next_payment)}`)
-    } else {
-      alert('⚠️ No se pudieron cargar los detalles completos')
-    }
-  } catch (error) {
-    console.error('Error cargando detalles del cliente:', error)
-    // Fallback a datos disponibles
-    alert(`📋 Detalles del Cliente\n\nEmpresa: ${customer.company_name}\nEmail: ${customer.email}\nPlan: ${customer.plan}\nEmpleados: ${customer.employees}\nEstado: ${customer.status}`)
+  })
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err.detail || 'No se pudieron cargar los detalles')
   }
+  const data = await response.json()
+  return data.customer || data
+}
+
+const viewCustomer = async (customer) => {
+  viewingCustomer.value = customer
+  loadingCustomerDetail.value = true
+  customerDetail.value = { ...customer }
+  try {
+    customerDetail.value = await fetchCustomerDetail(customer.id)
+  } catch (e) {
+    console.error('Error cargando detalles del cliente:', e)
+    customerDetail.value = { ...customer }
+  } finally {
+    loadingCustomerDetail.value = false
+  }
+}
+
+const closeViewCustomer = () => {
+  viewingCustomer.value = null
+  customerDetail.value = {}
+}
+
+const openEditFromView = () => {
+  const c = viewingCustomer.value
+  closeViewCustomer()
+  if (c) openEditCustomer(c)
 }
 
 const openEditCustomer = (customer) => {
   editingCustomer.value = customer
+  adminAction.value = { reason: 'test_account', confirmEmail: '', busy: false }
   editForm.value = {
     company_name: customer.company_name && customer.company_name !== 'N/A' ? customer.company_name : '',
     plan: customer.plan && customer.plan !== 'none' ? customer.plan : '',
@@ -773,6 +897,86 @@ const openEditCustomer = (customer) => {
 
 const closeEditCustomer = () => {
   editingCustomer.value = null
+  adminAction.value = { reason: 'test_account', confirmEmail: '', busy: false }
+}
+
+const setCustomerActive = async (active) => {
+  if (!editingCustomer.value) return
+  const label = active ? 'reactivar' : 'desactivar'
+  if (!active && !confirm(`¿${label.charAt(0).toUpperCase() + label.slice(1)} la cuenta ${editingCustomer.value.email}?`)) {
+    return
+  }
+  adminAction.value.busy = true
+  try {
+    const token = getAdminToken()
+    const response = await fetch(
+      adminApiUrl(`/api/v1/admin/customers/${editingCustomer.value.id}/status`),
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          is_active: active,
+          reason: adminAction.value.reason
+        })
+      }
+    )
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}))
+      throw new Error(err.detail || response.statusText)
+    }
+    editingCustomer.value.status = active ? 'active' : 'inactive'
+    await loadCustomers()
+    alert(active ? '✅ Cuenta reactivada' : '✅ Cuenta desactivada')
+  } catch (e) {
+    alert('❌ ' + (e.message || 'No se pudo cambiar el estado'))
+  } finally {
+    adminAction.value.busy = false
+  }
+}
+
+const deleteCustomerPermanent = async () => {
+  if (!editingCustomer.value || !canDeleteCustomer.value) return
+  const email = editingCustomer.value.email
+  if (
+    !confirm(
+      `ELIMINAR PERMANENTEMENTE:\n${email}\n\nSe borrarán el usuario y las empresas que solo le pertenezcan.\nEsta acción no se puede deshacer.`
+    )
+  ) {
+    return
+  }
+  adminAction.value.busy = true
+  try {
+    const token = getAdminToken()
+    const response = await fetch(
+      adminApiUrl(`/api/v1/admin/customers/${editingCustomer.value.id}`),
+      {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          reason: adminAction.value.reason,
+          confirm_email: adminAction.value.confirmEmail.trim()
+        })
+      }
+    )
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}))
+      const detail = err.detail
+      throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
+    }
+    closeEditCustomer()
+    await loadCustomers()
+    alert('✅ Cuenta eliminada correctamente')
+  } catch (e) {
+    alert('❌ ' + (e.message || 'No se pudo eliminar'))
+  } finally {
+    adminAction.value.busy = false
+  }
 }
 
 const saveEditCustomer = async () => {
@@ -784,8 +988,7 @@ const saveEditCustomer = async () => {
       alert('Error: No hay token de autenticación')
       return
     }
-    const base = import.meta.env.VITE_API_BASE_URL || ''
-    const url = `${base}/api/v1/admin/customers/${editingCustomer.value.id}`.replace(/([^:/])\/\/+/, '$1/')
+    const url = adminApiUrl(`/api/v1/admin/customers/${editingCustomer.value.id}`)
     const response = await fetch(url, {
       method: 'PATCH',
       headers: {
@@ -816,37 +1019,35 @@ const saveEditCustomer = async () => {
 }
 
 const toggleCustomerStatus = async (customer) => {
+  const newActive = customer.status !== 'active'
+  const label = newActive ? 'activar' : 'desactivar'
+  if (!confirm(`¿${label.charAt(0).toUpperCase() + label.slice(1)} ${customer.email}?`)) return
   try {
-    const token = authStore.getToken ? authStore.getToken() : authStore.token
-    if (!token) {
-      alert('Error: No hay token de autenticación')
-      return
+    const token = getAdminToken()
+    const response = await fetch(
+      adminApiUrl(`/api/v1/admin/customers/${customer.id}/toggle-status`),
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          is_active: newActive,
+          reason: newActive ? 'reactivated' : 'inactive'
+        })
+      }
+    )
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}))
+      throw new Error(err.detail || response.statusText)
     }
-    
-    const newStatus = customer.status === 'active' ? 'inactive' : 'active'
-    const response = await fetch(`/api/v1/admin/customers/${customer.id}/toggle-status`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ status: newStatus })
-    })
-    
-    if (response.ok) {
-      // Actualizar estado local
-      customer.status = newStatus
-      alert(`✅ Cliente ${newStatus === 'active' ? 'activado' : 'desactivado'} correctamente`)
-      // Recargar lista
-      await loadCustomers()
-    } else {
-      // Si no existe endpoint, actualizar solo localmente (temporal)
-      customer.status = newStatus
-      alert(`⚠️ Estado cambiado localmente. Endpoint no disponible aún.`)
-    }
+    customer.status = newActive ? 'active' : 'inactive'
+    await loadCustomers()
+    alert(`✅ Cliente ${newActive ? 'activado' : 'desactivado'}`)
   } catch (error) {
     console.error('Error cambiando estado del cliente:', error)
-    alert('⚠️ No se pudo cambiar el estado. Endpoint no disponible aún.')
+    alert('❌ ' + (error.message || 'No se pudo cambiar el estado'))
   }
 }
 
@@ -1400,6 +1601,40 @@ td {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
+}
+.admin-modal-wide {
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.admin-danger-zone {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(239, 68, 68, 0.35);
+}
+.admin-danger-zone h4 {
+  margin: 0 0 8px;
+  color: #f87171;
+  font-size: 0.95rem;
+}
+.admin-danger-zone .inline-actions {
+  margin: 10px 0;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.admin-danger-zone .full-width {
+  width: 100%;
+  margin-top: 8px;
+}
+.admin-modal-hint.warn {
+  color: #fbbf24;
+}
+.admin-companies-list ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.75);
 }
 .admin-modal-actions .btn-action.primary {
   background: #3b82f6;

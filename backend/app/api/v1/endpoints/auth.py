@@ -346,61 +346,99 @@ async def register_user(
             detail="Error guardando el registro. Inténtalo de nuevo.",
         )
 
-    # Bootstrap global (actividades ZEUS/THALOS, metadata) en hilo — sin run_chat (skip_self_test).
-    schedule_post_register_bootstrap(
-        db_user.id,
-        user_data.company_name.strip(),
-        user_data.business_type,
-    )
+    user_id_saved = int(db_user.id)
+    company_id_raw = outcome.get("company_id")
+    company_id_saved = int(company_id_raw) if company_id_raw is not None else None
+    company_name_saved = user_data.company_name.strip()
+    business_type_saved = user_data.business_type
+    email_saved = str(db_user.email)
 
-    validation = validate_onboarding_state(db, db_user.id)
-    if not validation.get("ok"):
-        logger.error(
-            "Validación onboarding fallida user_id=%s checks=%s",
-            db_user.id,
-            validation.get("checks"),
-        )
+    # Todo post-commit en segundo plano: la respuesta HTTP solo confirma el alta en BD.
+    import asyncio
+    import threading
 
-    try:
-        welcome_extra = await send_welcome_notifications(
-            user=db_user,
-            company_name=user_data.company_name.strip(),
-        )
-        em = welcome_extra.get("email")
-        if isinstance(em, dict) and not em.get("success"):
-            logger.warning(
-                "Email activación no enviado a %s: %s",
-                email_norm,
-                em.get("error"),
+    def _post_register_side_effects() -> None:
+        from app.db.session import SessionLocal
+
+        try:
+            schedule_post_register_bootstrap(
+                user_id_saved,
+                company_name_saved,
+                business_type_saved,
             )
-    except Exception as e:
-        logger.warning("Notificaciones bienvenida: %s", e)
+        except Exception as exc:
+            logger.warning("post_register_bootstrap: %s", exc)
 
-    try:
-        from services.event_bus import emit_user_registered
+        db_bg = SessionLocal()
+        try:
+            try:
+                validation = validate_onboarding_state(db_bg, user_id_saved)
+                if not validation.get("ok"):
+                    logger.warning(
+                        "Validación onboarding post-registro user_id=%s checks=%s",
+                        user_id_saved,
+                        validation.get("checks"),
+                    )
+            except Exception as exc:
+                logger.warning("validate_onboarding_state post-registro: %s", exc)
 
-        emit_user_registered(
-            user_id=db_user.id,
-            user_email=db_user.email,
-            company_name=user_data.company_name.strip(),
-            db=db,
-        )
-    except Exception:
-        logger.exception("emit_user_registered falló (no bloquea el registro)")
+            user_bg = db_bg.query(User).filter(User.id == user_id_saved).first()
+            if user_bg:
+                try:
+                    asyncio.run(
+                        send_welcome_notifications(
+                            user=user_bg,
+                            company_name=company_name_saved,
+                        )
+                    )
+                except Exception as exc:
+                    logger.warning("Notificaciones bienvenida (bg): %s", exc)
+
+            try:
+                from services.event_bus import emit_user_registered
+
+                emit_user_registered(
+                    user_id=user_id_saved,
+                    user_email=email_saved,
+                    company_name=company_name_saved,
+                    db=None,
+                )
+            except Exception:
+                logger.exception("emit_user_registered (bg)")
+        finally:
+            db_bg.close()
+
+    threading.Thread(target=_post_register_side_effects, daemon=True).start()
 
     logger.info(
         "register ok user_id=%s company_id=%s email=%s",
-        db_user.id,
-        outcome.get("company_id"),
+        user_id_saved,
+        company_id_saved,
         email_norm,
     )
-    return RegisterResponse(
-        success=True,
-        user_id=db_user.id,
-        company_id=outcome.get("company_id"),
-        email=db_user.email,
-        message="Cuenta y empresa creadas correctamente",
-    )
+    try:
+        return RegisterResponse(
+            success=True,
+            user_id=user_id_saved,
+            company_id=company_id_saved,
+            email=email_saved,
+            message="Cuenta y empresa creadas correctamente",
+        )
+    except Exception as exc:
+        logger.exception("register response build failed (user already saved): %s", exc)
+        existing = db.query(User).filter(User.email == email_norm).first()
+        if existing:
+            return RegisterResponse(
+                success=True,
+                user_id=int(existing.id),
+                company_id=company_id_saved,
+                email=str(existing.email),
+                message="Cuenta y empresa creadas correctamente",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Cuenta creada pero hubo un error al confirmar. Inicia sesión con tu correo.",
+        ) from exc
 
 
 @router.post(

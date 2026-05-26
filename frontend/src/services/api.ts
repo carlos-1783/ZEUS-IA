@@ -63,6 +63,19 @@ const request = async (endpoint: string, options: RequestOptions = {}): Promise<
     ? { ...(options.headers || {}) }
     : { 'Content-Type': 'application/json', ...(options.headers || {}) };
 
+  if (hadAuthHeader(options.headers) && !shouldSkipRefresh(endpoint)) {
+    try {
+      const authStore = useAuthStore();
+      await authStore.ensureAccessTokenFresh(300);
+      const fresh = authStore.getToken?.() ?? authStore.token;
+      if (fresh) {
+        (headers as Record<string, string>).Authorization = `Bearer ${fresh}`;
+      }
+    } catch {
+      /* continuar; 401 disparará refresh con mutex */
+    }
+  }
+
   let response: Response;
   try {
     const { _retry, ...fetchInit } = options;

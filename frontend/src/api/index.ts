@@ -374,6 +374,19 @@ const refreshToken = async (refreshTokenValue: string): Promise<AuthTokens> => {
         tokenService.setRefreshToken(tokens.refresh_token);
       }
 
+      try {
+        const { useAuthStore } = await import('@/stores/auth');
+        const store = useAuthStore();
+        store.setAuthTokens({
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token || tokenService.getRefreshToken() || '',
+          expires_in: tokens.expires_in,
+          token_type: tokens.token_type,
+        });
+      } catch {
+        /* pinia no disponible */
+      }
+
       if (tokens.expires_in) {
         const refreshTime = Math.max(tokens.expires_in - 300, 60);
         scheduleTokenRefresh(refreshTime);

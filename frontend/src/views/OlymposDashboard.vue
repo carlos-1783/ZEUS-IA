@@ -320,10 +320,9 @@ const loadTpvTablesFromApi = async () => {
     return
   }
   try {
+    await authStore.ensureAccessTokenFresh(300)
     const api = (await import('@/services/api')).default
-    const token = authStore.getToken?.() ?? authStore.token
-    if (!token) return
-    const data = await api.get('/api/v1/tpv/tables', token)
+    const data = await api.get('/api/v1/tpv/tables')
     if (data?.success && Array.isArray(data.tables)) {
       tpvTablesCount.value = data.tables.length
       tpvTablesPreview.value = data.tables.map((t) => {
@@ -413,6 +412,7 @@ const olymposAgents = ref([
 // Actualizar estado desde el backend (sin bloquear la UI)
 const updateAgentsFromBackend = async () => {
   try {
+    await authStore.ensureAccessTokenFresh(300)
     const api = (await import('@/services/api')).default
     const data = await api.get('/api/v1/agents/status')
     if (data) {

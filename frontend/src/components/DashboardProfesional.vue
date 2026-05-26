@@ -603,15 +603,14 @@ const loadBackendHealth = async () => {
 // Cargar datos unificados del dashboard desde endpoint unificado
 const loadDashboardMetrics = async () => {
   try {
-    const token = authStore.getToken ? authStore.getToken() : authStore.token
-    if (!token) {
+    if (!authStore.getToken?.() && !authStore.token) {
       console.warn('⚠️ No hay token, no se pueden cargar métricas')
       return
     }
+    await authStore.ensureAccessTokenFresh(300)
 
-    // Usar endpoint unificado /summary en lugar de /dashboard
     const api = (await import('@/services/api')).default
-    const data = await api.get('/api/v1/metrics/summary?days=30', token)
+    const data = await api.get('/api/v1/metrics/summary?days=30')
     
     if (data.success && data.metrics) {
       // Actualizar métricas
@@ -692,10 +691,10 @@ const applyAnalyticsPayload = (data) => {
 
 const loadFinancialAnalytics = async () => {
   try {
-    const token = authStore.getToken ? authStore.getToken() : authStore.token
-    if (!token) return
+    if (!authStore.getToken?.() && !authStore.token) return
+    await authStore.ensureAccessTokenFresh(300)
     const api = (await import('@/services/api')).default
-    const data = await api.get('/api/v1/analytics/summary?days=30', token)
+    const data = await api.get('/api/v1/analytics/summary?days=30')
     applyAnalyticsPayload(data)
   } catch (error) {
     console.error('❌ Error cargando analytics financieros:', error)
@@ -888,16 +887,16 @@ const agentsData = ref([
 
 // Cargar actividades reales de cada agente (últimas 24h) — requiere JWT (igual que /metrics/summary)
 const loadAgentsActivities = async () => {
-  const token = authStore.getToken ? authStore.getToken() : authStore.token
-  if (!token) {
+  if (!authStore.getToken?.() && !authStore.token) {
     console.warn('⚠️ No hay token, no se pueden cargar actividades de agentes')
     return
   }
+  await authStore.ensureAccessTokenFresh(300)
   const api = (await import('@/services/api')).default
   for (const agent of agentsData.value) {
     try {
       const agentName = agent.name.split(' ')[0].toUpperCase()
-      const data = await api.get(`/api/v1/activities/${agentName}?days=1`, token)
+      const data = await api.get(`/api/v1/activities/${agentName}?days=1`)
       if (data.success) {
         agent.activities_24h = data.total_activities || 0
       }

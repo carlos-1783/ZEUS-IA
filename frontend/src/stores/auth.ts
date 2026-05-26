@@ -110,13 +110,65 @@ export const useAuthStore = defineStore('auth', () => {
     return r === 'employee';
   });
 
-  // Token management
+  // Mutex: un solo refresh a la vez (evita 401 en paralelo cuando expira el JWT)
+  let refreshInFlight: Promise<boolean> | null = null;
+  let proactiveRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Token management — localStorage primero (axios/fetch actualizan ahí al refrescar)
   function getToken(): string | null {
-    return token.value || localStorage.getItem(TOKEN_KEY);
+    const stored = localStorage.getItem(TOKEN_KEY);
+    if (stored) {
+      token.value = stored;
+      return stored;
+    }
+    return token.value;
   }
 
   function getRefreshToken(): string | null {
-    return refreshToken.value || localStorage.getItem(REFRESH_TOKEN_KEY);
+    const stored = localStorage.getItem(REFRESH_TOKEN_KEY);
+    if (stored) {
+      refreshToken.value = stored;
+      return stored;
+    }
+    return refreshToken.value;
+  }
+
+  function scheduleProactiveTokenRefresh(accessToken: string): void {
+    if (proactiveRefreshTimer) {
+      clearTimeout(proactiveRefreshTimer);
+      proactiveRefreshTimer = null;
+    }
+    try {
+      const decoded = jwtDecode<JwtPayload>(accessToken);
+      if (!decoded.exp) return;
+      const now = Math.floor(Date.now() / 1000);
+      const ttlSec = decoded.exp - now;
+      const refreshInSec = Math.max(0, ttlSec - 300);
+      if (refreshInSec <= 0) {
+        void refreshAccessToken();
+        return;
+      }
+      proactiveRefreshTimer = setTimeout(() => {
+        void refreshAccessToken();
+      }, refreshInSec * 1000);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** Renueva el access token si expira en menos de `bufferSec` segundos. */
+  async function ensureAccessTokenFresh(bufferSec = 300): Promise<boolean> {
+    const current = getToken();
+    const rt = getRefreshToken();
+    if (!current || !rt) return false;
+    try {
+      const decoded = jwtDecode<JwtPayload>(current);
+      const now = Math.floor(Date.now() / 1000);
+      if (decoded.exp && decoded.exp - now > bufferSec) return true;
+    } catch {
+      return refreshAccessToken();
+    }
+    return refreshAccessToken();
   }
 
   function setAuthTokens(tokens: AuthTokens): boolean {
@@ -138,6 +190,8 @@ export const useAuthStore = defineStore('auth', () => {
         typedApi.setAuthToken(tokens.access_token);
       }
 
+      scheduleProactiveTokenRefresh(tokens.access_token);
+
       return true;
     } catch (err) {
       console.error('[AuthStore] Error setting auth tokens:', err);
@@ -148,6 +202,12 @@ export const useAuthStore = defineStore('auth', () => {
 
   function resetAuthState(): void {
     console.log('[AuthStore] Resetting auth state...');
+
+    if (proactiveRefreshTimer) {
+      clearTimeout(proactiveRefreshTimer);
+      proactiveRefreshTimer = null;
+    }
+    refreshInFlight = null;
     
     // Clear state
     token.value = null;
@@ -415,31 +475,17 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Refresh access token using refresh token
-  async function refreshAccessToken(): Promise<boolean> {
-    console.log('[AuthStore] Attempting to refresh access token...');
-
+  async function performTokenRefresh(): Promise<boolean> {
     const currentRefreshToken = getRefreshToken();
     if (!currentRefreshToken) {
       console.warn('[AuthStore] No refresh token available');
       return false;
     }
 
-    // Prevent multiple refresh attempts
-    if (isLoading.value) {
-      console.log('[AuthStore] Token refresh already in progress');
-      return false;
-    }
-
-    isLoading.value = true;
-
     try {
       const response = await typedApi.refreshToken(currentRefreshToken);
 
       if (response.access_token) {
-        console.log('[AuthStore] Token refresh successful');
-
-        // Update tokens
         const success = setAuthTokens({
           access_token: response.access_token,
           refresh_token: response.refresh_token || currentRefreshToken,
@@ -451,31 +497,35 @@ export const useAuthStore = defineStore('auth', () => {
           throw new Error('Failed to update tokens after refresh');
         }
 
-        // Update user data from new token
         updateUserFromToken(response.access_token);
-
         return true;
-      } else {
-        throw new Error('Invalid token refresh response');
       }
-
+      throw new Error('Invalid token refresh response');
     } catch (err) {
       console.error('[AuthStore] Token refresh failed:', err);
 
-      // If refresh fails, log the user out
-      if (err instanceof Error && 
-          (err.message.includes('401') || 
-           err.message.includes('invalid_grant') || 
-           err.message.includes('invalid_token') ||
-           err.message.includes('Network error'))) {
-        console.log('[AuthStore] Refresh token invalid or expired, logging out...');
+      if (
+        err instanceof Error &&
+        (err.message.includes('401') ||
+          err.message.includes('invalid_grant') ||
+          err.message.includes('invalid_token') ||
+          err.message.includes('Network error'))
+      ) {
         await logout();
       }
-
       return false;
-    } finally {
-      isLoading.value = false;
     }
+  }
+
+  // Refresh access token using refresh token (mutex compartido)
+  async function refreshAccessToken(): Promise<boolean> {
+    if (refreshInFlight) {
+      return refreshInFlight;
+    }
+    refreshInFlight = performTokenRefresh().finally(() => {
+      refreshInFlight = null;
+    });
+    return refreshInFlight;
   }
 
   // Performance: Flag para prevenir múltiples inicializaciones
@@ -530,12 +580,19 @@ export const useAuthStore = defineStore('auth', () => {
         isExpired: isTokenExpired
       });
 
-      // If token is expired, clear it but don't try to refresh during init
       if (isTokenExpired) {
-        console.log('[AuthStore] Token expired, clearing tokens');
-        resetAuthState();
-        hasInitialized = true;
-        return false;
+        console.log('[AuthStore] Access token expired, attempting refresh...');
+        const refreshed = await refreshAccessToken();
+        if (!refreshed) {
+          resetAuthState();
+          hasInitialized = true;
+          return false;
+        }
+        token.value = getToken();
+        refreshToken.value = getRefreshToken();
+        scheduleProactiveTokenRefresh(token.value!);
+      } else {
+        scheduleProactiveTokenRefresh(currentToken);
       }
 
       // Update state with current tokens
@@ -604,6 +661,7 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     initialize,
     refreshAccessToken,
+    ensureAccessTokenFresh,
     resetAuthState,
     getToken,
     getRefreshToken,

@@ -203,6 +203,10 @@ export const useAuthStore = defineStore('auth', () => {
   function resetAuthState(): void {
     console.log('[AuthStore] Resetting auth state...');
 
+    import('@/utils/postAuthRedirect')
+      .then(({ clearOnboardingSetupDone }) => clearOnboardingSetupDone())
+      .catch(() => {});
+
     if (proactiveRefreshTimer) {
       clearTimeout(proactiveRefreshTimer);
       proactiveRefreshTimer = null;

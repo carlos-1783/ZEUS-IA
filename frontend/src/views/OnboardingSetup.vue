@@ -101,6 +101,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
+import { markOnboardingSetupDone } from '@/utils/postAuthRedirect'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -256,10 +257,11 @@ const finishSetup = async () => {
     const warn = Array.isArray(result?.warnings) && result.warnings.length
       ? ` (${result.warnings.length} aviso(s) menor(es))`
       : ''
-    success.value = (result?.message || 'Configuración guardada') + warn + '. Redirigiendo al dashboard...'
+    markOnboardingSetupDone()
+    success.value = (result?.message || 'Configuración guardada') + warn + '. Redirigiendo al panel ZEUS...'
     setTimeout(() => {
-      window.location.href = '/dashboard'
-    }, 700)
+      router.replace('/dashboard')
+    }, 500)
   } catch (e: any) {
     const detail = e?.detail ?? e?.data?.detail ?? e?.response?.data?.detail
     const msg = typeof detail === 'string'

@@ -550,6 +550,7 @@ def onboarding_status(
     from app.models.company import Company, UserCompany
 
     questionnaire_completed = False
+    operational_profile_completed = False
     link = (
         db.query(UserCompany)
         .filter(UserCompany.user_id == current_user.id)
@@ -559,6 +560,11 @@ def onboarding_status(
     co = db.query(Company).filter(Company.id == link.company_id).first() if link else None
     if co and isinstance(co.metadata_, dict):
         questionnaire_completed = bool(co.metadata_.get("onboarding_questionnaire_completed"))
+        operational_profile_completed = bool(
+            co.metadata_.get("onboarding_operational_profile_completed")
+        )
+
+    setup_completed = questionnaire_completed or operational_profile_completed
 
     try:
         from services.onboarding_engine import validate_onboarding_state
@@ -581,6 +587,8 @@ def onboarding_status(
     return {
         "validation": v,
         "questionnaire_completed": questionnaire_completed,
+        "operational_profile_completed": operational_profile_completed,
+        "setup_completed": setup_completed,
     }
 
 

@@ -239,11 +239,13 @@ const nextStep = (): void => {
     }
   }
   if (step.value === 2) {
-    for (const c of form.social_channels) {
-      const url = String(form.social_links[c] || '').trim()
-      if (!url) {
-        error.value = `Falta la URL de ${c}`
-        return
+    if (form.social_channels.length) {
+      for (const c of form.social_channels) {
+        const url = String(form.social_links[c] || '').trim()
+        if (!url) {
+          error.value = `Falta la URL de ${c}`
+          return
+        }
       }
     }
     if (!String(form.email_gestor_fiscal || '').trim() || !/\S+@\S+\.\S+/.test(form.email_gestor_fiscal)) {
@@ -314,7 +316,12 @@ const finishSetup = async () => {
       }, 700)
       return
     }
-    error.value = msg || 'No se pudo guardar la configuración'
+    if (msg.includes('Error interno del servidor') || msg.includes('Internal Server')) {
+      error.value =
+        'Error al guardar en el servidor. Los datos principales pueden haberse guardado: recarga e inicia sesión, o reintenta en unos segundos.'
+    } else {
+      error.value = msg || 'No se pudo guardar la configuración'
+    }
   } finally {
     saving.value = false
   }

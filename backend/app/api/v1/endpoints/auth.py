@@ -620,16 +620,133 @@ def onboarding_status(
     summary="Perfil operativo post-registro",
     description="Guarda canales sociales y datos operativos base en metadata de la empresa.",
 )
+def _seed_onboarding_employees(
+    db: Session,
+    *,
+    company_id: int,
+    user_id: int,
+    employees_rows: list,
+) -> tuple[int, int, list[str]]:
+    """Importa empleados en savepoints; no hace rollback de la sesión principal."""
+    from app.models.company_employee import CompanyEmployee
+    from app.models.time_tracking import EmployeeSchedule
+
+    warnings: list[str] = []
+    seeded = 0
+    schedules_seeded = 0
+    if not employees_rows:
+        return seeded, schedules_seeded, warnings
+
+    try:
+        bind = db.get_bind()
+        insp = inspect(bind)
+        if not insp.has_table("company_employees"):
+            return 0, 0, ["Plantilla de empleados guardada en perfil (tabla RRHH pendiente en BD)."]
+        ce_columns = {c["name"] for c in insp.get_columns("company_employees")}
+        has_source_col = "source" in ce_columns
+        has_schedules = insp.has_table("employee_schedules")
+    except Exception as exc:
+        return 0, 0, [f"Importación de empleados omitida: {exc}"]
+
+    for idx, row in enumerate(employees_rows, start=1):
+        full_name = str(getattr(row, "full_name", "") or "").strip()
+        phone = str(getattr(row, "phone", "") or "").strip() or None
+        role_title = str(getattr(row, "role_title", "") or "").strip() or "employee"
+        if not full_name:
+            continue
+        employee_code = f"ONB-{idx:03d}"
+        try:
+            with db.begin_nested():
+                ce = (
+                    db.query(CompanyEmployee)
+                    .filter(
+                        CompanyEmployee.company_id == company_id,
+                        CompanyEmployee.employee_code == employee_code,
+                    )
+                    .first()
+                )
+                if not ce:
+                    ce_kwargs = dict(
+                        company_id=company_id,
+                        user_id=None,
+                        full_name=full_name[:255],
+                        role_title=role_title[:100],
+                        employee_code=employee_code,
+                        phone=phone[:32] if phone else None,
+                        is_active=True,
+                    )
+                    if has_source_col:
+                        ce_kwargs["source"] = "onboarding_profile"
+                    ce = CompanyEmployee(**ce_kwargs)
+                else:
+                    ce.full_name = full_name[:255]
+                    ce.phone = phone[:32] if phone else None
+                    ce.role_title = role_title[:100]
+                    ce.is_active = True
+                    if has_source_col:
+                        ce.source = ce.source or "onboarding_profile"
+                db.add(ce)
+                db.flush()
+                seeded += 1
+
+                if has_schedules:
+                    for dow in range(5):
+                        ex = (
+                            db.query(EmployeeSchedule)
+                            .filter(
+                                EmployeeSchedule.employee_id == employee_code,
+                                EmployeeSchedule.day_of_week == dow,
+                            )
+                            .first()
+                        )
+                        if ex:
+                            continue
+                        db.add(
+                            EmployeeSchedule(
+                                employee_id=employee_code,
+                                user_id=user_id,
+                                day_of_week=dow,
+                                start_time="09:00",
+                                end_time="17:00",
+                                shift_type="completo",
+                                is_active=True,
+                            )
+                        )
+                        schedules_seeded += 1
+        except Exception as row_err:
+            warnings.append(f"No se importó el empleado {full_name}: {row_err}")
+            logger.warning("onboarding_profile employee row skipped: %s", row_err)
+
+    return seeded, schedules_seeded, warnings
+
+
 def onboarding_profile(
     body: OnboardingProfileRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
+    try:
+        return _onboarding_profile_impl(body, db, current_user)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("onboarding_profile uncaught: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No se pudo guardar la configuración. Reintenta; si persiste, contacta soporte.",
+        ) from exc
+
+
+def _onboarding_profile_impl(
+    body: OnboardingProfileRequest,
+    db: Session,
+    current_user: User,
+) -> OnboardingSuccessResponse:
     from app.models.company import Company, UserCompany
-    from app.models.company_employee import CompanyEmployee
-    from app.models.time_tracking import EmployeeSchedule
 
     warnings: list[str] = []
+    user_id = int(current_user.id)
+    user_email = str(current_user.email or "")
 
     link = (
         db.query(UserCompany)
@@ -678,7 +795,7 @@ def onboarding_profile(
         current_user.employees = int(body.employees_count)
     if body.uses_tpv is not None:
         q["uses_tpv"] = bool(body.uses_tpv)
-    if body.business_hours:
+    if body.business_hours is not None:
         q["business_hours"] = str(body.business_hours).strip()
     q["completed_at"] = datetime.now(timezone.utc).isoformat()
     q["saved_via"] = "onboarding_profile"
@@ -727,102 +844,37 @@ def onboarding_profile(
             detail="No se pudo guardar la configuración de la empresa.",
         )
 
-    company_id = company.id
-    employees_rows = body.employees or []
-    if employees_rows:
+    company_id = int(company.id)
+    seeded, schedules_seeded, emp_warnings = _seed_onboarding_employees(
+        db,
+        company_id=company_id,
+        user_id=user_id,
+        employees_rows=body.employees or [],
+    )
+    warnings.extend(emp_warnings)
+
+    if seeded:
         try:
-            seeded = 0
-            schedules_seeded = 0
-            has_employee_schedules = False
-            try:
-                has_employee_schedules = inspect(db.get_bind()).has_table("employee_schedules")
-            except Exception:
-                has_employee_schedules = False
-            for idx, row in enumerate(employees_rows, start=1):
-                full_name = str(getattr(row, "full_name", "") or "").strip()
-                phone = str(getattr(row, "phone", "") or "").strip() or None
-                role_title = str(getattr(row, "role_title", "") or "").strip() or "employee"
-                if not full_name:
-                    continue
-                employee_code = f"ONB-{idx:03d}"
-                try:
-                    ce = (
-                        db.query(CompanyEmployee)
-                        .filter(
-                            CompanyEmployee.company_id == company_id,
-                            CompanyEmployee.employee_code == employee_code,
-                        )
-                        .first()
+            with db.begin_nested():
+                co2 = db.query(Company).filter(Company.id == company_id).first()
+                if co2:
+                    m2 = co2.metadata_ if isinstance(co2.metadata_, dict) else {}
+                    q2 = (
+                        m2.get("onboarding_questionnaire")
+                        if isinstance(m2.get("onboarding_questionnaire"), dict)
+                        else {}
                     )
-                    if not ce:
-                        ce = CompanyEmployee(
-                            company_id=company_id,
-                            user_id=None,
-                            full_name=full_name[:255],
-                            role_title=role_title[:100],
-                            employee_code=employee_code,
-                            phone=phone[:32] if phone else None,
-                            is_active=True,
-                            source="onboarding_profile",
-                        )
-                    else:
-                        ce.full_name = full_name[:255]
-                        ce.phone = phone[:32] if phone else None
-                        ce.role_title = role_title[:100]
-                        ce.is_active = True
-                        ce.source = ce.source or "onboarding_profile"
-                    db.add(ce)
-                    db.flush()
-                    seeded += 1
+                    q2["employees_seeded"] = seeded
+                    q2["employee_schedules_seeded"] = schedules_seeded
+                    m2["onboarding_questionnaire"] = q2
+                    from app.db.metadata_utils import set_company_metadata
 
-                    if has_employee_schedules:
-                        for dow in range(5):
-                            ex = (
-                                db.query(EmployeeSchedule)
-                                .filter(
-                                    EmployeeSchedule.employee_id == employee_code,
-                                    EmployeeSchedule.day_of_week == dow,
-                                )
-                                .first()
-                            )
-                            if ex:
-                                continue
-                            db.add(
-                                EmployeeSchedule(
-                                    employee_id=employee_code,
-                                    user_id=current_user.id,
-                                    day_of_week=dow,
-                                    start_time="09:00",
-                                    end_time="17:00",
-                                    shift_type="completo",
-                                    is_active=True,
-                                )
-                            )
-                            schedules_seeded += 1
-                except Exception as row_err:
-                    db.rollback()
-                    warnings.append(f"No se importó el empleado {full_name}: {row_err}")
-                    logger.warning("onboarding_profile employee row skipped: %s", row_err)
-
-            if seeded:
-                try:
-                    co2 = db.query(Company).filter(Company.id == company_id).first()
-                    if co2:
-                        m2 = co2.metadata_ if isinstance(co2.metadata_, dict) else {}
-                        q2 = m2.get("onboarding_questionnaire") if isinstance(m2.get("onboarding_questionnaire"), dict) else {}
-                        q2["employees_seeded"] = seeded
-                        q2["employee_schedules_seeded"] = schedules_seeded
-                        m2["onboarding_questionnaire"] = q2
-                        co2.metadata_ = m2
-                        db.add(co2)
-                        db.commit()
-                except Exception as emp_meta_err:
-                    db.rollback()
-                    warnings.append(f"Empleados guardados parcialmente; metadata no actualizada: {emp_meta_err}")
-        except Exception as emp_err:
-            db.rollback()
-            warnings.append(f"Importación de empleados omitida: {emp_err}")
-            logger.exception("onboarding_profile employees batch failed: %s", emp_err)
+                    set_company_metadata(co2, m2)
+                    db.add(co2)
+            db.commit()
+        except Exception as emp_meta_err:
+            warnings.append(f"Empleados guardados; metadata secundaria no actualizada: {emp_meta_err}")
+            logger.warning("onboarding_profile employee metadata: %s", emp_meta_err)
 
     try:
         ActivityLogger.log_activity(
@@ -830,7 +882,7 @@ def onboarding_profile(
             action_type="onboarding_profile_completed",
             action_description="Perfil operativo de onboarding completado",
             details={"company_id": company_id, "warnings": warnings},
-            user_email=current_user.email,
+            user_email=user_email,
             status="completed",
         )
     except Exception:
@@ -838,7 +890,7 @@ def onboarding_profile(
 
     logger.info(
         "onboarding_profile ok user_id=%s company_id=%s warnings=%s",
-        current_user.id,
+        user_id,
         company_id,
         len(warnings),
     )

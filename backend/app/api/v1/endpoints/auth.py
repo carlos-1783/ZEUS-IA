@@ -790,9 +790,10 @@ def _onboarding_profile_impl(
     op["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     q = meta.get("onboarding_questionnaire") if isinstance(meta.get("onboarding_questionnaire"), dict) else {}
+    employees_count_val: Optional[int] = None
     if body.employees_count is not None:
-        q["employees_count"] = int(body.employees_count)
-        current_user.employees = int(body.employees_count)
+        employees_count_val = int(body.employees_count)
+        q["employees_count"] = employees_count_val
     if body.uses_tpv is not None:
         q["uses_tpv"] = bool(body.uses_tpv)
     if body.business_hours is not None:
@@ -804,16 +805,10 @@ def _onboarding_profile_impl(
     meta["operational_profile"] = op
     meta["onboarding_operational_profile_completed"] = True
 
-    if body.email_gestor_fiscal:
-        current_user.email_gestor_fiscal = str(body.email_gestor_fiscal).strip().lower()
-    if body.autoriza_envio_documentos_a_asesores is not None:
-        current_user.autoriza_envio_documentos_a_asesores = bool(
-            body.autoriza_envio_documentos_a_asesores
-        )
-    elif body.email_gestor_fiscal and not getattr(
-        current_user, "autoriza_envio_documentos_a_asesores", None
-    ):
-        current_user.autoriza_envio_documentos_a_asesores = True
+    gestor_email = (
+        str(body.email_gestor_fiscal).strip().lower() if body.email_gestor_fiscal else None
+    )
+    gestor_autoriza = body.autoriza_envio_documentos_a_asesores
 
     import json as _json
 
@@ -832,56 +827,100 @@ def _onboarding_profile_impl(
     set_company_metadata(company, meta)
     db.add(company)
 
+    company_id = int(link.company_id)
+    core_saved = False
+
     try:
         db.commit()
         db.refresh(company)
         db.refresh(current_user)
+        core_saved = True
     except Exception as commit_err:
         db.rollback()
         logger.exception("onboarding_profile metadata commit failed: %s", commit_err)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="No se pudo guardar la configuración de la empresa.",
-        )
-
-    company_id = int(company.id)
-    seeded, schedules_seeded, emp_warnings = _seed_onboarding_employees(
-        db,
-        company_id=company_id,
-        user_id=user_id,
-        employees_rows=body.employees or [],
-    )
-    warnings.extend(emp_warnings)
-
-    if seeded:
         try:
-            with db.begin_nested():
-                co2 = db.query(Company).filter(Company.id == company_id).first()
-                if co2:
-                    m2 = co2.metadata_ if isinstance(co2.metadata_, dict) else {}
-                    q2 = (
-                        m2.get("onboarding_questionnaire")
-                        if isinstance(m2.get("onboarding_questionnaire"), dict)
-                        else {}
-                    )
-                    q2["employees_seeded"] = seeded
-                    q2["employee_schedules_seeded"] = schedules_seeded
-                    m2["onboarding_questionnaire"] = q2
-                    from app.db.metadata_utils import set_company_metadata
-
-                    set_company_metadata(co2, m2)
-                    db.add(co2)
+            cfg["onboarding_setup_fallback"] = True
+            cfg["onboarding_setup_fallback_reason"] = str(commit_err)[:500]
+            current_user.tpv_config = _json.dumps(cfg, ensure_ascii=False)
+            db.add(current_user)
             db.commit()
-        except Exception as emp_meta_err:
-            warnings.append(f"Empleados guardados; metadata secundaria no actualizada: {emp_meta_err}")
-            logger.warning("onboarding_profile employee metadata: %s", emp_meta_err)
+            db.refresh(current_user)
+            core_saved = True
+            warnings.append(
+                "Configuración principal guardada en modo compatible (revisa migraciones de BD)."
+            )
+        except Exception as fallback_err:
+            logger.exception("onboarding_profile fallback commit failed: %s", fallback_err)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="No se pudo guardar la configuración de la empresa.",
+            ) from fallback_err
+
+    if employees_count_val is not None or gestor_email or gestor_autoriza is not None:
+        try:
+            if employees_count_val is not None:
+                current_user.employees = employees_count_val
+            if gestor_email:
+                current_user.email_gestor_fiscal = gestor_email
+            if gestor_autoriza is not None:
+                current_user.autoriza_envio_documentos_a_asesores = bool(gestor_autoriza)
+            elif gestor_email and not getattr(
+                current_user, "autoriza_envio_documentos_a_asesores", None
+            ):
+                current_user.autoriza_envio_documentos_a_asesores = True
+            db.add(current_user)
+            db.commit()
+            db.refresh(current_user)
+        except Exception as user_extra_err:
+            db.rollback()
+            warnings.append(f"Campos de usuario (gestor/empleados) no persistidos: {user_extra_err}")
+            logger.warning("onboarding_profile user extra fields skipped: %s", user_extra_err)
+
+    try:
+        seeded, schedules_seeded, emp_warnings = _seed_onboarding_employees(
+            db,
+            company_id=company_id,
+            user_id=user_id,
+            employees_rows=body.employees or [],
+        )
+        warnings.extend(emp_warnings)
+
+        if seeded:
+            try:
+                with db.begin_nested():
+                    co2 = db.query(Company).filter(Company.id == company_id).first()
+                    if co2:
+                        m2 = co2.metadata_ if isinstance(co2.metadata_, dict) else {}
+                        q2 = (
+                            m2.get("onboarding_questionnaire")
+                            if isinstance(m2.get("onboarding_questionnaire"), dict)
+                            else {}
+                        )
+                        q2["employees_seeded"] = seeded
+                        q2["employee_schedules_seeded"] = schedules_seeded
+                        m2["onboarding_questionnaire"] = q2
+                        from app.db.metadata_utils import set_company_metadata
+
+                        set_company_metadata(co2, m2)
+                        db.add(co2)
+                db.commit()
+            except Exception as emp_meta_err:
+                db.rollback()
+                warnings.append(
+                    f"Empleados guardados; metadata secundaria no actualizada: {emp_meta_err}"
+                )
+                logger.warning("onboarding_profile employee metadata: %s", emp_meta_err)
+    except Exception as post_err:
+        db.rollback()
+        warnings.append(f"Importación de empleados omitida: {post_err}")
+        logger.warning("onboarding_profile post-commit skipped: %s", post_err)
 
     try:
         ActivityLogger.log_activity(
             agent_name="ZEUS",
             action_type="onboarding_profile_completed",
             action_description="Perfil operativo de onboarding completado",
-            details={"company_id": company_id, "warnings": warnings},
+            details={"company_id": company_id, "warnings": warnings, "core_saved": core_saved},
             user_email=user_email,
             status="completed",
         )
@@ -889,10 +928,11 @@ def _onboarding_profile_impl(
         logger.debug("ActivityLogger onboarding_profile_completed omitido")
 
     logger.info(
-        "onboarding_profile ok user_id=%s company_id=%s warnings=%s",
+        "onboarding_profile ok user_id=%s company_id=%s warnings=%s core_saved=%s",
         user_id,
         company_id,
         len(warnings),
+        core_saved,
     )
     return OnboardingSuccessResponse(
         success=True,

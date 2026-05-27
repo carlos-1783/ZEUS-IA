@@ -139,6 +139,12 @@ class OnboardingQuestionnaireRequest(BaseModel):
 class OnboardingProfileRequest(BaseModel):
     """Datos operativos adicionales para activar automatizaciones iniciales."""
 
+    @validator("email_gestor_fiscal", pre=True)
+    def empty_gestor_email_to_none(cls, v):
+        if v is None or (isinstance(v, str) and not str(v).strip()):
+            return None
+        return v
+
     class EmployeeInput(BaseModel):
         full_name: str = Field(..., min_length=1, max_length=255, description="Nombre del empleado")
         phone: Optional[str] = Field(default=None, max_length=32, description="Teléfono del empleado")

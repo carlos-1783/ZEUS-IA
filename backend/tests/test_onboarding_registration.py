@@ -77,3 +77,44 @@ def test_register_restaurant_creates_user_company_and_login(client: TestClient):
         headers={"Authorization": f"Bearer {tok}"},
     )
     assert st2.json().get("questionnaire_completed") is True
+
+
+def test_onboarding_profile_persists_setup(client: TestClient):
+    p = _register_payload()
+    r = client.post(f"{settings.API_V1_STR}/auth/register", json=p)
+    if r.status_code != 201:
+        pytest.skip(f"Registro no disponible: {r.status_code}")
+    login = client.post(
+        f"{settings.API_V1_STR}/auth/login",
+        data={"username": p["email"], "password": p["password"]},
+    )
+    tok = login.json().get("access_token")
+    prof = client.post(
+        f"{settings.API_V1_STR}/auth/onboarding/profile",
+        headers={"Authorization": f"Bearer {tok}"},
+        json={
+            "social_channels": [],
+            "employees_count": 1,
+            "employees": [
+                {
+                    "full_name": "Luis Ruiz",
+                    "phone": "+34624363349",
+                    "role_title": "administración",
+                }
+            ],
+            "uses_tpv": False,
+            "business_hours": "L-V 9:00 - 13:00",
+            "email_gestor_fiscal": "gestor@example.test",
+            "autoriza_envio_documentos_a_asesores": True,
+            "whatsapp_number": "+34624363349",
+        },
+    )
+    assert prof.status_code == 200, prof.text
+    data = prof.json()
+    assert data.get("success") is True
+    st = client.get(
+        f"{settings.API_V1_STR}/auth/onboarding/status",
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+    assert st.status_code == 200
+    assert st.json().get("setup_completed") is True

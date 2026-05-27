@@ -97,6 +97,7 @@
           <li><strong>Redes:</strong> {{ form.social_channels.join(', ') || '—' }}</li>
           <li><strong>Enlaces redes:</strong> {{ socialLinksSummary || '—' }}</li>
           <li><strong>WhatsApp:</strong> {{ form.whatsapp_number || '—' }}</li>
+          <li><strong>Gestor fiscal:</strong> {{ form.email_gestor_fiscal || '—' }}</li>
         </ul>
       </section>
 
@@ -132,7 +133,7 @@ const form = reactive({
   employees_count: 1,
   uses_tpv: true,
   business_hours: '',
-  social_channels: ['instagram', 'facebook'] as string[],
+  social_channels: [] as string[],
   social_links: {
     instagram: '',
     facebook: '',
@@ -269,6 +270,7 @@ const finishSetup = async () => {
     if (!token) {
       throw new Error('Sesión expirada. Vuelve a iniciar sesión.')
     }
+    const gestorEmail = String(form.email_gestor_fiscal || '').trim().toLowerCase()
     const result = await api.post('/api/v1/auth/onboarding/profile', {
       social_channels: form.social_channels,
       social_links: Object.fromEntries(
@@ -288,7 +290,7 @@ const finishSetup = async () => {
         .filter((e) => !!e.full_name),
       uses_tpv: !!form.uses_tpv,
       business_hours: String(form.business_hours || '').trim(),
-      email_gestor_fiscal: String(form.email_gestor_fiscal || '').trim().toLowerCase(),
+      email_gestor_fiscal: gestorEmail || null,
       autoriza_envio_documentos_a_asesores: !!form.autoriza_envio_documentos_a_asesores,
     }, token)
     if (result && result.success === false) {
@@ -303,6 +305,20 @@ const finishSetup = async () => {
       router.replace('/dashboard')
     }, 500)
   } catch (e: any) {
+    try {
+      const token2 = authStore.getToken ? authStore.getToken() : (authStore as any).token
+      if (token2) {
+        const st = await api.get('/api/v1/auth/onboarding/status', token2)
+        if (st?.setup_completed) {
+          markOnboardingSetupDone()
+          success.value = 'La configuración ya está guardada. Redirigiendo al panel...'
+          setTimeout(() => router.replace('/dashboard'), 500)
+          return
+        }
+      }
+    } catch {
+      /* ignore recovery probe */
+    }
     const detail = e?.detail ?? e?.data?.detail ?? e?.response?.data?.detail
     const msg = typeof detail === 'string'
       ? detail

@@ -440,7 +440,8 @@ def validate_onboarding_state(db: Session, user_id: int) -> Dict[str, Any]:
     )
     co = db.query(Company).filter(Company.id == link.company_id).first() if link else None
     company_ok = bool(co)
-    seed = (co.metadata_ or {}).get("onboarding_seed") if co and isinstance(co.metadata_, dict) else {}
+    seed = (co.metadata_ or {}).get("onboarding_seed") if co and isinstance(co.metadata_, dict) else None
+    seed = seed if isinstance(seed, dict) else {}
     products_n = db.query(TPVProduct).filter(TPVProduct.user_id == user_id).count()
     from app.models.company_employee import CompanyEmployee
 

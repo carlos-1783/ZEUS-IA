@@ -748,6 +748,11 @@ def _onboarding_profile_impl(
     user_id = int(current_user.id)
     user_email = str(current_user.email or "")
 
+    # Re-cargar el usuario desde esta sesión para evitar "Object already attached to session N"
+    current_user = db.query(User).filter(User.id == user_id).first()
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario no encontrado")
+
     link = (
         db.query(UserCompany)
         .filter(UserCompany.user_id == current_user.id)

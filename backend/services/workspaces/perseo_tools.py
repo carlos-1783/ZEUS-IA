@@ -8,8 +8,8 @@ from io import BytesIO
 from statistics import mean
 from typing import Any, Dict, List, Optional
 
-import requests
-from PIL import Image
+import requests  # pyright: ignore[reportMissingModuleSource]
+from PIL import Image  # pyright: ignore[reportMissingImports]
 
 from .base import log_tool_execution
 

@@ -764,5 +764,6 @@ class ZeusCore(BaseAgent):
         
         result = self._start_prelaunch_phase({"phase": "prelaunch", "origin": "auto-init"})
         self.prelaunch_plan = result.get("plan")
+        self.prelaunch_active = True
         return result
 

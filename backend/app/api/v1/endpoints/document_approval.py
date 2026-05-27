@@ -3,6 +3,8 @@
 Endpoints para aprobación de documentos generados por RAFAEL y JUSTICIA
 """
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any
@@ -14,6 +16,8 @@ from app.db.session import get_db
 from app.core.auth import get_current_active_user
 from app.models.user import User
 from services.legal_fiscal_firewall import firewall
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

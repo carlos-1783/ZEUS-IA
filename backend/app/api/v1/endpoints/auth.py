@@ -613,13 +613,6 @@ def onboarding_status(
     }
 
 
-@router.post(
-    "/onboarding/profile",
-    response_model=OnboardingSuccessResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Perfil operativo post-registro",
-    description="Guarda canales sociales y datos operativos base en metadata de la empresa.",
-)
 def _seed_onboarding_employees(
     db: Session,
     *,
@@ -720,6 +713,13 @@ def _seed_onboarding_employees(
     return seeded, schedules_seeded, warnings
 
 
+@router.post(
+    "/onboarding/profile",
+    response_model=OnboardingSuccessResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Perfil operativo post-registro",
+    description="Guarda canales sociales y datos operativos base en metadata de la empresa.",
+)
 def onboarding_profile(
     body: OnboardingProfileRequest,
     db: Session = Depends(get_db),

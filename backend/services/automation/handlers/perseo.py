@@ -110,6 +110,24 @@ def handle_perseo_task(activity: AgentActivity) -> Dict[str, Any]:
         if "prompt" in video_prompt:
             video_prompt["prompt"] = f"{video_prompt['prompt']}\nImagen de referencia: {image_url}"
 
+    # Registrar inicio de generación como actividad visible
+    from services.activity_logger import ActivityLogger as _AL
+    _user_email = getattr(activity, "user_email", None)
+    _AL.log_activity(
+        agent_name="PERSEO",
+        action_type="video_script_generated",
+        action_description="Guion y plan de lanzamiento generados por PERSEO (vídeo + distribución multicanal)",
+        details={
+            "activity_id": activity.id,
+            "action_type": activity.action_type,
+            "channels": list(deliverable.get("distribution_plan", {}).get("channels", {}).keys()),
+        },
+        user_email=_user_email,
+        status="in_progress",
+        priority="normal",
+        visible_to_client=True,
+    )
+
     video_result = generate_marketing_video(deliverable, agent, prefix, artifact_id=artifact_id)
     video_path = (
         video_result.get("relative_path")
@@ -151,6 +169,31 @@ def handle_perseo_task(activity: AgentActivity) -> Dict[str, Any]:
         },
     )
     markdown_path = utils.write_markdown(agent, prefix, markdown_content, artifact_id=artifact_id)
+
+    # Registrar resultado final en actividad visible al cliente
+    _AL.log_activity(
+        agent_name="PERSEO",
+        action_type="marketing_plan_completed",
+        action_description=(
+            f"Plan de marketing completado: guion, prompts IA y distribución multicanal listos"
+            + (f" | Vídeo generado: {Path(video_path).name}" if video_path else " | Vídeo pendiente")
+        ),
+        details={
+            "activity_id": activity.id,
+            "json_artifact": json_path,
+            "markdown_artifact": markdown_path,
+            "video_path": video_path,
+            "video_success": bool(video_path),
+        },
+        metrics={
+            "assets_generated": 3 + (1 if video_path else 0),
+            "video_generated": 1 if video_path else 0,
+        },
+        user_email=_user_email,
+        status="completed",
+        priority="normal",
+        visible_to_client=True,
+    )
 
     return {
         "status": "completed",

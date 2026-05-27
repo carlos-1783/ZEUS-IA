@@ -25,7 +25,7 @@ def _extract_palette(image: Image.Image, top: int = 5) -> List[str]:
     return [_hex_color(color[1]) for color in colors[:top]]
 
 
-def analyze_perseo_image(payload: Dict[str, Any]) -> Dict[str, Any]:
+def analyze_perseo_image(payload: Dict[str, Any], user_email: Optional[str] = None) -> Dict[str, Any]:
     """Analizar una imagen para extraer insights rápidos."""
     image_url = payload.get("image_url")
     goals = payload.get("goals", [])
@@ -69,13 +69,14 @@ def analyze_perseo_image(payload: Dict[str, Any]) -> Dict[str, Any]:
     log_tool_execution(
         agent="PERSEO",
         tool_name="image_analyzer",
-        description=f"Analizada imagen {image_url or 'sin URL'}",
+        description=f"Imagen analizada: dimensiones {width}x{height}, paleta extraída, {len(insights)} insight(s)",
         details={"goals": goals, "tags": tags, "result": result},
+        user_email=user_email,
     )
     return result
 
 
-def enhance_perseo_video(payload: Dict[str, Any]) -> Dict[str, Any]:
+def enhance_perseo_video(payload: Dict[str, Any], user_email: Optional[str] = None) -> Dict[str, Any]:
     """Recomendar mejoras para un vídeo."""
     duration = payload.get("duration_seconds", 45)
     tone = payload.get("tone", "energético")
@@ -109,13 +110,14 @@ def enhance_perseo_video(payload: Dict[str, Any]) -> Dict[str, Any]:
     log_tool_execution(
         agent="PERSEO",
         tool_name="video_enhancer",
-        description="Generado plan de mejora de vídeo",
+        description=f"Plan de mejora de vídeo generado: {platform}, {duration}s, tono '{tone}', {len(timeline)} bloques",
         details={"payload": payload, "result": result},
+        user_email=user_email,
     )
     return result
 
 
-def run_seo_audit(payload: Dict[str, Any]) -> Dict[str, Any]:
+def run_seo_audit(payload: Dict[str, Any], user_email: Optional[str] = None) -> Dict[str, Any]:
     """Auditoría técnica rápida."""
     keywords = payload.get("keywords", [])
     html_snapshot = (payload.get("html_snapshot") or "").lower()
@@ -150,14 +152,15 @@ def run_seo_audit(payload: Dict[str, Any]) -> Dict[str, Any]:
     log_tool_execution(
         agent="PERSEO",
         tool_name="seo_audit_engine",
-        description="Auditado sitio SEO",
+        description=f"Auditoría SEO ejecutada: score {result['score']}, keyword coverage {keyword_score}%, {len(issues)} issue(s)",
         details={"payload": payload, "result": result},
-        metrics={"score": result["score"]},
+        metrics={"score": result["score"], "keyword_score": keyword_score},
+        user_email=user_email,
     )
     return result
 
 
-def build_ads_blueprint(payload: Dict[str, Any]) -> Dict[str, Any]:
+def build_ads_blueprint(payload: Dict[str, Any], user_email: Optional[str] = None) -> Dict[str, Any]:
     """Crear blueprint multicanal para campañas."""
     budget = payload.get("budget", 1000)
     audience = payload.get("audience", "general")
@@ -190,8 +193,10 @@ def build_ads_blueprint(payload: Dict[str, Any]) -> Dict[str, Any]:
     log_tool_execution(
         agent="PERSEO",
         tool_name="ads_campaign_builder",
-        description="Blueprint de anuncios generado",
+        description=f"Blueprint de campaña generado: presupuesto {budget}€, objetivo '{objective}', audiencia '{audience}', {len(channel_mix)} canales",
         details={"payload": payload, "result": result},
+        metrics={"budget": budget, "channels": len(channel_mix)},
+        user_email=user_email,
     )
     return result
 

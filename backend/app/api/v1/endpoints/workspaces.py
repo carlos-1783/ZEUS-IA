@@ -148,33 +148,33 @@ class AfroditaContractRequest(BaseModel):
 @router.post("/perseo/image-analyzer")
 async def workspace_perseo_image(
     request: PerseoImageAnalyzerRequest,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
 ):
-    return {"success": True, "result": analyze_perseo_image(request.model_dump())}
+    return {"success": True, "result": analyze_perseo_image(request.model_dump(), user_email=current_user.email)}
 
 
 @router.post("/perseo/video-enhancer")
 async def workspace_perseo_video(
     request: PerseoVideoEnhancerRequest,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
 ):
-    return {"success": True, "result": enhance_perseo_video(request.model_dump())}
+    return {"success": True, "result": enhance_perseo_video(request.model_dump(), user_email=current_user.email)}
 
 
 @router.post("/perseo/seo-audit")
 async def workspace_perseo_seo(
     request: PerseoSeoAuditRequest,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
 ):
-    return {"success": True, "result": run_seo_audit(request.model_dump())}
+    return {"success": True, "result": run_seo_audit(request.model_dump(), user_email=current_user.email)}
 
 
 @router.post("/perseo/ads-builder")
 async def workspace_perseo_ads(
     request: PerseoAdsBuilderRequest,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
 ):
-    return {"success": True, "result": build_ads_blueprint(request.model_dump())}
+    return {"success": True, "result": build_ads_blueprint(request.model_dump(), user_email=current_user.email)}
 
 
 # ---------------------------------------------------------------------------

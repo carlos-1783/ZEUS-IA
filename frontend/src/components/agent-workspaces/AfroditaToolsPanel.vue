@@ -12,7 +12,7 @@
         <button :disabled="loading.face" @click="runFace">
           {{ loading.face ? 'Procesando…' : 'Registrar' }}
         </button>
-        <pre v-if="faceResult">{{ formatJson(faceResult) }}</pre>
+        <p v-if="faceResult" class="tool-text">{{ faceResult }}</p>
       </div>
       <div class="tool-card">
         <h5>Fichaje QR</h5>
@@ -20,7 +20,7 @@
         <button :disabled="loading.qr" @click="runQr">
           {{ loading.qr ? 'Validando…' : 'Validar' }}
         </button>
-        <pre v-if="qrResult">{{ formatJson(qrResult) }}</pre>
+        <p v-if="qrResult" class="tool-text">{{ qrResult }}</p>
       </div>
       <div class="tool-card">
         <h5>Gestor empleados</h5>
@@ -28,7 +28,7 @@
         <button :disabled="loading.schedule" @click="runSchedule">
           {{ loading.schedule ? 'Generando…' : 'Generar turnos' }}
         </button>
-        <pre v-if="scheduleResult">{{ formatJson(scheduleResult) }}</pre>
+        <p v-if="scheduleResult" class="tool-text">{{ scheduleResult }}</p>
       </div>
       <div class="tool-card">
         <h5>Contrato RRHH</h5>
@@ -42,7 +42,7 @@
         <button :disabled="loading.contract" @click="runContract">
           {{ loading.contract ? 'Compilando…' : 'Crear contrato' }}
         </button>
-        <pre v-if="contractResult">{{ formatJson(contractResult) }}</pre>
+        <p v-if="contractResult" class="tool-text">{{ contractResult }}</p>
       </div>
     </div>
     <p v-if="error" class="tool-error">{{ error }}</p>
@@ -61,12 +61,10 @@ const qrCode = ref('ZEUSCHECK|EMP-001|2025-01-01T10:00:00Z')
 const employeesInput = ref('Ana Torres:Soporte\nLuis Pérez:Logística')
 const contractForm = reactive({ employee_name: 'Ana Torres', role: 'Soporte', salary: 24000, contract_type: 'indefinido' })
 
-const faceResult = ref<any | null>(null)
-const qrResult = ref<any | null>(null)
-const scheduleResult = ref<any | null>(null)
-const contractResult = ref<any | null>(null)
-
-const formatJson = (value: unknown) => JSON.stringify(value, null, 2)
+const faceResult = ref<string | null>(null)
+const qrResult = ref<string | null>(null)
+const scheduleResult = ref<string | null>(null)
+const contractResult = ref<string | null>(null)
 
 const runFace = async () => {
   error.value = ''
@@ -76,11 +74,12 @@ const runFace = async () => {
       .split(',')
       .map((value) => Number(value.trim()))
       .filter((value) => !Number.isNaN(value))
-    faceResult.value = await workspaceTools.runAfroditaFaceCheckIn({
+    const out = await workspaceTools.runAfroditaFaceCheckIn({
       employee_id: faceForm.employee_id,
       embedding,
       timestamp: faceForm.timestamp,
     })
+    faceResult.value = String((out as any)?.text || 'Fichaje facial registrado.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -92,7 +91,8 @@ const runQr = async () => {
   error.value = ''
   loading.qr = true
   try {
-    qrResult.value = await workspaceTools.runAfroditaQrCheckIn({ qr_code: qrCode.value })
+    const out = await workspaceTools.runAfroditaQrCheckIn({ qr_code: qrCode.value })
+    qrResult.value = String((out as any)?.text || 'Fichaje QR validado.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -112,7 +112,8 @@ const runSchedule = async () => {
         const [name, role] = row.split(':')
         return { name: name?.trim(), role: role?.trim() }
       })
-    scheduleResult.value = await workspaceTools.runAfroditaEmployeeManager({ employees })
+    const out = await workspaceTools.runAfroditaEmployeeManager({ employees })
+    scheduleResult.value = String((out as any)?.text || 'Turnos generados correctamente.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -124,7 +125,8 @@ const runContract = async () => {
   error.value = ''
   loading.contract = true
   try {
-    contractResult.value = await workspaceTools.runAfroditaContract({ ...contractForm })
+    const out = await workspaceTools.runAfroditaContract({ ...contractForm })
+    contractResult.value = String((out as any)?.text || 'Contrato RRHH generado.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -171,14 +173,14 @@ const runContract = async () => {
   padding: 8px 10px;
   cursor: pointer;
 }
-.tool-card pre {
-  background: #0f172a;
-  color: #e2e8f0;
-  padding: 8px;
+.tool-text {
+  margin: 8px 0 0;
+  padding: 10px;
   border-radius: 8px;
-  max-height: 150px;
-  overflow: auto;
-  font-size: 12px;
+  background: #fdf2f8;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.4;
 }
 .tool-error {
   margin-top: 10px;

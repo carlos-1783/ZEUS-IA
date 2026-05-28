@@ -13,7 +13,7 @@
         <button :disabled="loading.signer" @click="runSigner">
           {{ loading.signer ? 'Firmando…' : 'Firmar' }}
         </button>
-        <pre v-if="signerResult">{{ formatJson(signerResult) }}</pre>
+        <p v-if="signerResult" class="tool-text">{{ signerResult }}</p>
       </div>
 
       <div class="tool-card">
@@ -24,7 +24,7 @@
         <button :disabled="loading.contract" @click="runContract">
           {{ loading.contract ? 'Generando…' : 'Generar' }}
         </button>
-        <pre v-if="contractResult">{{ formatJson(contractResult) }}</pre>
+        <p v-if="contractResult" class="tool-text">{{ contractResult }}</p>
       </div>
 
       <div class="tool-card">
@@ -34,7 +34,7 @@
         <button :disabled="loading.gdpr" @click="runGdpr">
           {{ loading.gdpr ? 'Auditando…' : 'Auditar' }}
         </button>
-        <pre v-if="gdprResult">{{ formatJson(gdprResult) }}</pre>
+        <p v-if="gdprResult" class="tool-text">{{ gdprResult }}</p>
       </div>
     </div>
     <p v-if="error" class="tool-error">{{ error }}</p>
@@ -63,11 +63,9 @@ const gdprForm = reactive({
   data_flows: 'Leads->CRM,CRM->Email',
 })
 
-const signerResult = ref<any | null>(null)
-const contractResult = ref<any | null>(null)
-const gdprResult = ref<any | null>(null)
-
-const formatJson = (value: unknown) => JSON.stringify(value, null, 2)
+const signerResult = ref<string | null>(null)
+const contractResult = ref<string | null>(null)
+const gdprResult = ref<string | null>(null)
 const csv = (value: string) =>
   value
     .split(',')
@@ -78,7 +76,8 @@ const runSigner = async () => {
   error.value = ''
   loading.signer = true
   try {
-    signerResult.value = await workspaceTools.runJusticiaSigner({ ...signerForm })
+    const out = await workspaceTools.runJusticiaSigner({ ...signerForm })
+    signerResult.value = String((out as any)?.text || 'Firma digital completada.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -90,11 +89,12 @@ const runContract = async () => {
   error.value = ''
   loading.contract = true
   try {
-    contractResult.value = await workspaceTools.runJusticiaContract({
+    const out = await workspaceTools.runJusticiaContract({
       scope: contractForm.scope,
       media_buying: contractForm.media_buying,
       parties: csv(contractForm.parties),
     })
+    contractResult.value = String((out as any)?.text || 'Contrato generado correctamente.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -106,10 +106,11 @@ const runGdpr = async () => {
   error.value = ''
   loading.gdpr = true
   try {
-    gdprResult.value = await workspaceTools.runJusticiaGdpr({
+    const out = await workspaceTools.runJusticiaGdpr({
       systems: csv(gdprForm.systems),
       data_flows: csv(gdprForm.data_flows),
     })
+    gdprResult.value = String((out as any)?.text || 'Auditoría GDPR completada.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -154,14 +155,14 @@ const runGdpr = async () => {
   padding: 8px 10px;
   cursor: pointer;
 }
-.tool-card pre {
-  background: #0f172a;
-  color: #e2e8f0;
-  padding: 8px;
+.tool-text {
+  margin: 8px 0 0;
+  padding: 10px;
   border-radius: 8px;
-  max-height: 150px;
-  overflow: auto;
-  font-size: 12px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.4;
 }
 .tool-error {
   margin-top: 10px;

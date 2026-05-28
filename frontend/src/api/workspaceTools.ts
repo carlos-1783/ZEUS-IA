@@ -25,7 +25,7 @@ const post = async (path: string, body: Payload) => {
     const detail = data?.detail || data?.error || 'Error ejecutando herramienta'
     throw new Error(detail)
   }
-  return data.result ?? data
+  return data
 }
 
 export const workspaceTools = {

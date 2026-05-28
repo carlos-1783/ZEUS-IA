@@ -168,6 +168,46 @@ def _text_for_ads(result: Dict[str, Any]) -> str:
     )
 
 
+def _text_generic(prefix: str, result: Dict[str, Any]) -> str:
+    keys = list(result.keys())[:4]
+    ktxt = ", ".join(keys) if keys else "sin detalles"
+    return f"{prefix} completado correctamente. Resultado validado ({ktxt})."
+
+
+def _persist_agent_tool_response(
+    db: Session,
+    *,
+    current_user: User,
+    agent_name: str,
+    workspace_category: str,
+    content_type: str,
+    title: str,
+    text: str,
+    result: Dict[str, Any],
+    event_name: str,
+    chain_steps: List[str],
+) -> Dict[str, Any]:
+    doc = persist_workspace_deliverable(
+        db,
+        user_id=current_user.id,
+        company_id=primary_company_id_for_user(db, current_user),
+        agent_name=agent_name,
+        workspace_category=workspace_category,
+        title=title,
+        content_type=content_type,
+        content={"copy": text, "format": "tool_result_text", "result": result},
+        status="draft",
+        visible_in_workspace=True,
+    )
+    _log_event_chain(
+        current_user=current_user,
+        event_name=event_name,
+        chain_steps=chain_steps,
+        details={"document_id": int(doc.id), "agent_name": agent_name},
+    )
+    return {"success": True, "text": text, "document_id": int(doc.id), "result": result}
+
+
 class RafaelQrRequest(BaseModel):
     data: str
     customer: Optional[str] = None
@@ -377,33 +417,89 @@ async def tool_generate_ads_plan(
 @router.post("/rafael/qr-reader")
 async def workspace_rafael_qr(
     request: RafaelQrRequest,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    return {"success": True, "result": read_qr_payload(request.model_dump())}
+    result = read_qr_payload(request.model_dump())
+    text = _text_generic("Lectura QR fiscal", result)
+    return _persist_agent_tool_response(
+        db,
+        current_user=current_user,
+        agent_name="RAFAEL",
+        workspace_category="fiscal_document",
+        content_type="fiscal_document",
+        title="Lectura QR RAFAEL",
+        text=text,
+        result=result,
+        event_name="rafael_qr_processed",
+        chain_steps=["trigger_fiscal_validation"],
+    )
 
 
 @router.post("/rafael/nfc-scanner")
 async def workspace_rafael_nfc(
     request: RafaelNfcRequest,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    return {"success": True, "result": scan_nfc_payload(request.model_dump())}
+    result = scan_nfc_payload(request.model_dump())
+    text = _text_generic("Lectura NFC fiscal", result)
+    return _persist_agent_tool_response(
+        db,
+        current_user=current_user,
+        agent_name="RAFAEL",
+        workspace_category="fiscal_document",
+        content_type="fiscal_document",
+        title="Lectura NFC RAFAEL",
+        text=text,
+        result=result,
+        event_name="rafael_nfc_scanned",
+        chain_steps=["trigger_fiscal_validation"],
+    )
 
 
 @router.post("/rafael/dni-ocr")
 async def workspace_rafael_dni(
     request: RafaelDniRequest,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    return {"success": True, "result": parse_dnie_mrz(request.model_dump())}
+    result = parse_dnie_mrz(request.model_dump())
+    text = _text_generic("Parser DNIe", result)
+    return _persist_agent_tool_response(
+        db,
+        current_user=current_user,
+        agent_name="RAFAEL",
+        workspace_category="fiscal_document",
+        content_type="fiscal_document",
+        title="Parser DNIe RAFAEL",
+        text=text,
+        result=result,
+        event_name="rafael_dnie_parsed",
+        chain_steps=["trigger_identity_validation"],
+    )
 
 
 @router.post("/rafael/forms")
 async def workspace_rafael_forms(
     request: RafaelFormsRequest,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    return {"success": True, "result": generate_fiscal_forms(request.model_dump())}
+    result = generate_fiscal_forms(request.model_dump())
+    text = _text_generic("Generación de modelos fiscales", result)
+    return _persist_agent_tool_response(
+        db,
+        current_user=current_user,
+        agent_name="RAFAEL",
+        workspace_category="fiscal_document",
+        content_type="fiscal_document",
+        title="Modelos fiscales RAFAEL",
+        text=text,
+        result=result,
+        event_name="rafael_forms_generated",
+        chain_steps=["trigger_tax_review"],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -414,25 +510,67 @@ async def workspace_rafael_forms(
 @router.post("/justicia/pdf-signer")
 async def workspace_justicia_signer(
     request: JusticiaSignerRequest,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    return {"success": True, "result": sign_pdf_document(request.model_dump())}
+    result = sign_pdf_document(request.model_dump())
+    text = _text_generic("Firma digital", result)
+    return _persist_agent_tool_response(
+        db,
+        current_user=current_user,
+        agent_name="JUSTICIA",
+        workspace_category="legal_document",
+        content_type="legal_document",
+        title="Firma digital JUSTICIA",
+        text=text,
+        result=result,
+        event_name="justicia_pdf_signed",
+        chain_steps=["trigger_legal_archive"],
+    )
 
 
 @router.post("/justicia/contract")
 async def workspace_justicia_contract(
     request: JusticiaContractRequest,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    return {"success": True, "result": generate_contract_kit(request.model_dump())}
+    result = generate_contract_kit(request.model_dump())
+    text = _text_generic("Generación de contrato legal", result)
+    return _persist_agent_tool_response(
+        db,
+        current_user=current_user,
+        agent_name="JUSTICIA",
+        workspace_category="legal_document",
+        content_type="legal_document",
+        title="Contrato JUSTICIA",
+        text=text,
+        result=result,
+        event_name="justicia_contract_generated",
+        chain_steps=["trigger_compliance_review"],
+    )
 
 
 @router.post("/justicia/gdpr-audit")
 async def workspace_justicia_gdpr(
     request: JusticiaGdprRequest,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    return {"success": True, "result": run_gdpr_audit(request.model_dump())}
+    result = run_gdpr_audit(request.model_dump())
+    text = _text_generic("Auditoría GDPR", result)
+    return _persist_agent_tool_response(
+        db,
+        current_user=current_user,
+        agent_name="JUSTICIA",
+        workspace_category="legal_document",
+        content_type="legal_document",
+        title="Auditoría GDPR JUSTICIA",
+        text=text,
+        result=result,
+        event_name="justicia_gdpr_audited",
+        chain_steps=["trigger_compliance_review"],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -443,25 +581,67 @@ async def workspace_justicia_gdpr(
 @router.post("/thalos/log-monitor")
 async def workspace_thalos_logs(
     request: ThalosLogRequest,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    return {"success": True, "result": monitor_security_logs(request.model_dump())}
+    result = monitor_security_logs(request.model_dump())
+    text = _text_generic("Monitor de logs de seguridad", result)
+    return _persist_agent_tool_response(
+        db,
+        current_user=current_user,
+        agent_name="THALOS",
+        workspace_category="legal_document",
+        content_type="legal_document",
+        title="Monitor de logs THALOS",
+        text=text,
+        result=result,
+        event_name="thalos_logs_monitored",
+        chain_steps=["trigger_security_followup"],
+    )
 
 
 @router.post("/thalos/threat-detector")
 async def workspace_thalos_threat(
     request: ThalosThreatRequest,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    return {"success": True, "result": detect_threat_events(request.model_dump())}
+    result = detect_threat_events(request.model_dump())
+    text = _text_generic("Detección de amenazas", result)
+    return _persist_agent_tool_response(
+        db,
+        current_user=current_user,
+        agent_name="THALOS",
+        workspace_category="legal_document",
+        content_type="legal_document",
+        title="Detección de amenazas THALOS",
+        text=text,
+        result=result,
+        event_name="thalos_threat_detected",
+        chain_steps=["trigger_security_followup"],
+    )
 
 
 @router.post("/thalos/credential-revoker")
 async def workspace_thalos_credentials(
     request: ThalosCredentialRequest,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    return {"success": True, "result": revoke_credentials(request.model_dump())}
+    result = revoke_credentials(request.model_dump())
+    text = _text_generic("Revocación de credenciales", result)
+    return _persist_agent_tool_response(
+        db,
+        current_user=current_user,
+        agent_name="THALOS",
+        workspace_category="legal_document",
+        content_type="legal_document",
+        title="Revocación de credenciales THALOS",
+        text=text,
+        result=result,
+        event_name="thalos_credentials_revoked",
+        chain_steps=["trigger_security_followup"],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -472,33 +652,89 @@ async def workspace_thalos_credentials(
 @router.post("/afrodita/face-check-in")
 async def workspace_afrodita_face(
     request: AfroditaFaceRequest,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    return {"success": True, "result": record_face_check_in(request.model_dump())}
+    result = record_face_check_in(request.model_dump())
+    text = _text_generic("Fichaje facial", result)
+    return _persist_agent_tool_response(
+        db,
+        current_user=current_user,
+        agent_name="AFRODITA",
+        workspace_category="hr_document",
+        content_type="hr_document",
+        title="Fichaje facial AFRODITA",
+        text=text,
+        result=result,
+        event_name="afrodita_face_checkin",
+        chain_steps=["trigger_shift_validation"],
+    )
 
 
 @router.post("/afrodita/qr-check-in")
 async def workspace_afrodita_qr(
     request: AfroditaQrRequest,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    return {"success": True, "result": handle_qr_check_in(request.model_dump())}
+    result = handle_qr_check_in(request.model_dump())
+    text = _text_generic("Fichaje QR", result)
+    return _persist_agent_tool_response(
+        db,
+        current_user=current_user,
+        agent_name="AFRODITA",
+        workspace_category="hr_document",
+        content_type="hr_document",
+        title="Fichaje QR AFRODITA",
+        text=text,
+        result=result,
+        event_name="afrodita_qr_checkin",
+        chain_steps=["trigger_shift_validation"],
+    )
 
 
 @router.post("/afrodita/employee-manager")
 async def workspace_afrodita_schedule(
     request: AfroditaScheduleRequest,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    return {"success": True, "result": build_employee_schedule(request.model_dump())}
+    result = build_employee_schedule(request.model_dump())
+    text = _text_generic("Generación de turnos", result)
+    return _persist_agent_tool_response(
+        db,
+        current_user=current_user,
+        agent_name="AFRODITA",
+        workspace_category="hr_document",
+        content_type="hr_document",
+        title="Turnos AFRODITA",
+        text=text,
+        result=result,
+        event_name="afrodita_schedule_generated",
+        chain_steps=["trigger_hr_sync"],
+    )
 
 
 @router.post("/afrodita/contract")
 async def workspace_afrodita_contract(
     request: AfroditaContractRequest,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    return {"success": True, "result": create_rrhh_contract(request.model_dump())}
+    result = create_rrhh_contract(request.model_dump())
+    text = _text_generic("Contrato RRHH", result)
+    return _persist_agent_tool_response(
+        db,
+        current_user=current_user,
+        agent_name="AFRODITA",
+        workspace_category="hr_document",
+        content_type="hr_document",
+        title="Contrato RRHH AFRODITA",
+        text=text,
+        result=result,
+        event_name="afrodita_contract_generated",
+        chain_steps=["trigger_hr_sync"],
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@
         <button :disabled="loading.logs" @click="runLogs">
           {{ loading.logs ? 'Analizando…' : 'Analizar' }}
         </button>
-        <pre v-if="logResult">{{ formatJson(logResult) }}</pre>
+        <p v-if="logResult" class="tool-text">{{ logResult }}</p>
       </div>
       <div class="tool-card">
         <h5>Detector de amenazas</h5>
@@ -19,7 +19,7 @@
         <button :disabled="loading.threats" @click="runThreats">
           {{ loading.threats ? 'Procesando…' : 'Calcular riesgo' }}
         </button>
-        <pre v-if="threatResult">{{ formatJson(threatResult) }}</pre>
+        <p v-if="threatResult" class="tool-text">{{ threatResult }}</p>
       </div>
       <div class="tool-card">
         <h5>Revocar credenciales</h5>
@@ -27,7 +27,7 @@
         <button :disabled="loading.credentials" @click="runCredentials">
           {{ loading.credentials ? 'Revocando…' : 'Revocar' }}
         </button>
-        <pre v-if="credentialResult">{{ formatJson(credentialResult) }}</pre>
+        <p v-if="credentialResult" class="tool-text">{{ credentialResult }}</p>
       </div>
     </div>
     <p v-if="error" class="tool-error">{{ error }}</p>
@@ -45,11 +45,9 @@ const logInput = ref('INFO Login ok\nWARN failed login user=demo\nSELECT * FROM 
 const eventsInput = ref('api:3\nwebsite:1')
 const credentialInput = ref('token-prod-1,token-prod-2')
 
-const logResult = ref<any | null>(null)
-const threatResult = ref<any | null>(null)
-const credentialResult = ref<any | null>(null)
-
-const formatJson = (value: unknown) => JSON.stringify(value, null, 2)
+const logResult = ref<string | null>(null)
+const threatResult = ref<string | null>(null)
+const credentialResult = ref<string | null>(null)
 const csv = (value: string) =>
   value
     .split(',')
@@ -60,9 +58,10 @@ const runLogs = async () => {
   error.value = ''
   loading.logs = true
   try {
-    logResult.value = await workspaceTools.runThalosLogMonitor({
+    const out = await workspaceTools.runThalosLogMonitor({
       logs: logInput.value.split('\n').filter(Boolean),
     })
+    logResult.value = String((out as any)?.text || 'Monitorización de logs completada.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -82,7 +81,8 @@ const runThreats = async () => {
         const [source, severity] = row.split(':')
         return { source, severity: Number(severity) || 1 }
       })
-    threatResult.value = await workspaceTools.runThalosThreatDetector({ events })
+    const out = await workspaceTools.runThalosThreatDetector({ events })
+    threatResult.value = String((out as any)?.text || 'Detección de amenazas completada.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -94,9 +94,10 @@ const runCredentials = async () => {
   error.value = ''
   loading.credentials = true
   try {
-    credentialResult.value = await workspaceTools.runThalosCredentialRevoker({
+    const out = await workspaceTools.runThalosCredentialRevoker({
       credential_ids: csv(credentialInput.value),
     })
+    credentialResult.value = String((out as any)?.text || 'Credenciales revocadas.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -143,14 +144,14 @@ const runCredentials = async () => {
   padding: 8px 10px;
   cursor: pointer;
 }
-.tool-card pre {
-  background: #0f172a;
-  color: #e2e8f0;
-  padding: 8px;
+.tool-text {
+  margin: 8px 0 0;
+  padding: 10px;
   border-radius: 8px;
-  max-height: 160px;
-  overflow: auto;
-  font-size: 12px;
+  background: #ecfeff;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.4;
 }
 .tool-error {
   margin-top: 10px;

@@ -9,19 +9,19 @@
         <h5>Lectura QR</h5>
         <textarea v-model="qrData" placeholder="ZEUS|Cliente|100|EUR"></textarea>
         <button :disabled="loading.qr" @click="runQr">Leer QR</button>
-        <pre v-if="qrResult">{{ formatJson(qrResult) }}</pre>
+        <p v-if="qrResult" class="tool-text">{{ qrResult }}</p>
       </div>
       <div class="tool-card">
         <h5>Lectura NFC</h5>
         <input v-model="nfcHex" placeholder="Payload HEX" />
         <button :disabled="loading.nfc" @click="runNfc">Escanear</button>
-        <pre v-if="nfcResult">{{ formatJson(nfcResult) }}</pre>
+        <p v-if="nfcResult" class="tool-text">{{ nfcResult }}</p>
       </div>
       <div class="tool-card">
         <h5>Parser DNIe (MRZ)</h5>
         <textarea v-model="mrz" placeholder="2 líneas MRZ"></textarea>
         <button :disabled="loading.mrz" @click="runMrz">Parsear</button>
-        <pre v-if="mrzResult">{{ formatJson(mrzResult) }}</pre>
+        <p v-if="mrzResult" class="tool-text">{{ mrzResult }}</p>
       </div>
       <div class="tool-card">
         <h5>Modelos 303/390</h5>
@@ -29,7 +29,7 @@
         <input type="number" v-model.number="forms.expenses" placeholder="Gastos trimestre" />
         <input type="number" v-model.number="forms.iva_type" placeholder="IVA %" />
         <button :disabled="loading.forms" @click="runForms">Generar</button>
-        <pre v-if="formsResult">{{ formatJson(formsResult) }}</pre>
+        <p v-if="formsResult" class="tool-text">{{ formsResult }}</p>
       </div>
     </div>
     <p v-if="error" class="tool-error">{{ error }}</p>
@@ -48,18 +48,17 @@ const nfcHex = ref('5a4555535f4941')
 const mrz = ref('IDESP0000000000<<<<<<<<<<<<<<<\n8001010M2501013ESP<<<<<<<<<<<')
 const forms = reactive({ revenue: 2500, expenses: 400, iva_type: 21 })
 
-const qrResult = ref<any | null>(null)
-const nfcResult = ref<any | null>(null)
-const mrzResult = ref<any | null>(null)
-const formsResult = ref<any | null>(null)
-
-const formatJson = (value: unknown) => JSON.stringify(value, null, 2)
+const qrResult = ref<string | null>(null)
+const nfcResult = ref<string | null>(null)
+const mrzResult = ref<string | null>(null)
+const formsResult = ref<string | null>(null)
 
 const runQr = async () => {
   error.value = ''
   loading.qr = true
   try {
-    qrResult.value = await workspaceTools.runRafaelQrReader({ data: qrData.value })
+    const out = await workspaceTools.runRafaelQrReader({ data: qrData.value })
+    qrResult.value = String((out as any)?.text || 'Lectura QR completada.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -71,7 +70,8 @@ const runNfc = async () => {
   error.value = ''
   loading.nfc = true
   try {
-    nfcResult.value = await workspaceTools.runRafaelNfcScanner({ payload_hex: nfcHex.value })
+    const out = await workspaceTools.runRafaelNfcScanner({ payload_hex: nfcHex.value })
+    nfcResult.value = String((out as any)?.text || 'Lectura NFC completada.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -83,7 +83,8 @@ const runMrz = async () => {
   error.value = ''
   loading.mrz = true
   try {
-    mrzResult.value = await workspaceTools.runRafaelDniParser({ mrz: mrz.value })
+    const out = await workspaceTools.runRafaelDniParser({ mrz: mrz.value })
+    mrzResult.value = String((out as any)?.text || 'DNIe procesado correctamente.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -95,7 +96,8 @@ const runForms = async () => {
   error.value = ''
   loading.forms = true
   try {
-    formsResult.value = await workspaceTools.runRafaelForms({ ...forms })
+    const out = await workspaceTools.runRafaelForms({ ...forms })
+    formsResult.value = String((out as any)?.text || 'Modelos fiscales generados.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -146,14 +148,14 @@ const runForms = async () => {
   cursor: pointer;
 }
 
-.tool-card pre {
-  background: #0f172a;
-  color: #e2e8f0;
-  padding: 8px;
+.tool-text {
+  margin: 8px 0 0;
+  padding: 10px;
   border-radius: 8px;
-  font-size: 12px;
-  max-height: 140px;
-  overflow: auto;
+  background: #fff7ed;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .tool-error {

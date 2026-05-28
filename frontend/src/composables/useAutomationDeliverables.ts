@@ -71,9 +71,11 @@ export function useAutomationDeliverables(agent: string) {
     try {
       const outputs = await fetchAutomationOutputs(agent);
       let merged = groupOutputs(outputs);
-      if (agent === 'PERSEO') {
+      const workspaceAgents = new Set(['PERSEO', 'RAFAEL', 'JUSTICIA', 'THALOS', 'AFRODITA']);
+      const agentKey = String(agent || '').toUpperCase();
+      if (workspaceAgents.has(agentKey)) {
         try {
-          const ws = await api.get('/api/v1/workspace/list?agent_name=PERSEO&limit=100');
+          const ws = await api.get(`/api/v1/workspace/list?agent_name=${encodeURIComponent(agentKey)}&limit=100`);
           if (ws?.success && Array.isArray(ws.items)) {
             const wsItems: DeliverableItem[] = ws.items.map((doc: Record<string, unknown>) => {
               const payload = (doc.document_payload || {}) as Record<string, unknown>;
@@ -88,7 +90,7 @@ export function useAutomationDeliverables(agent: string) {
               const created = doc.created_at ? new Date(String(doc.created_at)).getTime() / 1000 : 0;
               return {
                 id: `ws:${doc.id}`,
-                agent: 'PERSEO',
+                agent: agentKey,
                 createdAt: Number.isFinite(created) ? created : 0,
                 sizeBytes: 0,
                 files: {},
@@ -103,7 +105,7 @@ export function useAutomationDeliverables(agent: string) {
             merged = [...wsItems, ...merged].sort((a, b) => b.createdAt - a.createdAt);
           }
         } catch (e) {
-          console.warn('Workspace list PERSEO no disponible', e);
+          console.warn(`Workspace list ${agentKey} no disponible`, e);
         }
       }
       items.value = merged;

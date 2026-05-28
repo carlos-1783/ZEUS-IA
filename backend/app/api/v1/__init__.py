@@ -114,6 +114,7 @@ api_router.include_router(perseo_images.router, tags=["perseo-images"])
 api_router.include_router(teamflow.router, tags=["teamflow"])
 api_router.include_router(actions.router, tags=["actions"])
 api_router.include_router(workspaces.router, tags=["workspaces"])
+api_router.include_router(workspaces.tools_router, tags=["tools"])
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 api_router.include_router(payroll.router, tags=["payroll"])
 # Log webhooks router registration

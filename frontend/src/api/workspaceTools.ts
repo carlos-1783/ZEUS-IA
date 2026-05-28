@@ -30,13 +30,13 @@ const post = async (path: string, body: Payload) => {
 
 export const workspaceTools = {
   runPerseoImageAnalyzer: (payload: Payload) =>
-    post('/workspaces/perseo/image-analyzer', payload),
+    post('/tools/analyze-image', payload),
   runPerseoVideoEnhancer: (payload: Payload) =>
-    post('/workspaces/perseo/video-enhancer', payload),
+    post('/tools/improve-video', payload),
   runPerseoSeoAudit: (payload: Payload) =>
-    post('/workspaces/perseo/seo-audit', payload),
+    post('/tools/seo-audit', payload),
   runPerseoAdsBuilder: (payload: Payload) =>
-    post('/workspaces/perseo/ads-builder', payload),
+    post('/tools/generate-ads-plan', payload),
   runRafaelQrReader: (payload: Payload) =>
     post('/workspaces/rafael/qr-reader', payload),
   runRafaelNfcScanner: (payload: Payload) =>

@@ -223,7 +223,7 @@
 
     <!-- Botón Instalar PWA -->
     <button 
-      v-if="isInstallable && !isInstalled"
+      v-if="!isInstalled"
       @click="handleInstallPWA"
       class="pwa-install-toggle"
       title="Instalar ZEUS-IA como aplicación"
@@ -484,7 +484,9 @@ const handleInstallPWA = async () => {
   const installed = await promptInstall()
   if (installed) {
     showNotification('success', '✅ ZEUS-IA se está instalando...')
+    return
   }
+  showNotification('warning', '⚠️ Instalación automática no disponible. Usa el menú del navegador: Instalar aplicación.')
 }
 
 // Nota: El botón TPV ahora se muestra siempre para usuarios autenticados

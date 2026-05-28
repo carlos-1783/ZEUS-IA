@@ -13,7 +13,7 @@
         <button :disabled="loading.image" @click="runImageAnalyzer">
           {{ loading.image ? 'Analizando…' : 'Analizar' }}
         </button>
-        <pre v-if="imageResult">{{ formatJson(imageResult) }}</pre>
+        <p v-if="imageResult" class="tool-text">{{ imageResult }}</p>
       </div>
 
       <div class="tool-card">
@@ -27,7 +27,7 @@
         <button :disabled="loading.video" @click="runVideoEnhancer">
           {{ loading.video ? 'Calculando…' : 'Recomendar' }}
         </button>
-        <pre v-if="videoResult">{{ formatJson(videoResult) }}</pre>
+        <p v-if="videoResult" class="tool-text">{{ videoResult }}</p>
       </div>
 
       <div class="tool-card">
@@ -38,7 +38,7 @@
         <button :disabled="loading.seo" @click="runSeoAudit">
           {{ loading.seo ? 'Auditando…' : 'Auditar' }}
         </button>
-        <pre v-if="seoResult">{{ formatJson(seoResult) }}</pre>
+        <p v-if="seoResult" class="tool-text">{{ seoResult }}</p>
       </div>
 
       <div class="tool-card">
@@ -54,7 +54,7 @@
         <button :disabled="loading.ads" @click="runAdsBuilder">
           {{ loading.ads ? 'Generando…' : 'Generar plan' }}
         </button>
-        <pre v-if="adsResult">{{ formatJson(adsResult) }}</pre>
+        <p v-if="adsResult" class="tool-text">{{ adsResult }}</p>
       </div>
     </div>
     <p v-if="error" class="tool-error">{{ error }}</p>
@@ -73,10 +73,10 @@ const videoForm = reactive({ duration_seconds: 45, tone: 'energético', platform
 const seoForm = reactive({ url: '', keywords: '', html_snapshot: '' })
 const adsForm = reactive({ product: 'ZEUS IA', budget: 1000, audience: 'general', objective: 'leads' })
 
-const imageResult = ref<any | null>(null)
-const videoResult = ref<any | null>(null)
-const seoResult = ref<any | null>(null)
-const adsResult = ref<any | null>(null)
+const imageResult = ref<string | null>(null)
+const videoResult = ref<string | null>(null)
+const seoResult = ref<string | null>(null)
+const adsResult = ref<string | null>(null)
 
 const parseCsv = (value: string) =>
   value
@@ -84,17 +84,16 @@ const parseCsv = (value: string) =>
     .map((item) => item.trim())
     .filter(Boolean)
 
-const formatJson = (value: unknown) => JSON.stringify(value, null, 2)
-
 const runImageAnalyzer = async () => {
   error.value = ''
   loading.image = true
   try {
-    imageResult.value = await workspaceTools.runPerseoImageAnalyzer({
+    const out = await workspaceTools.runPerseoImageAnalyzer({
       image_url: imageForm.image_url || undefined,
       goals: parseCsv(imageForm.goals),
       tags: parseCsv(imageForm.tags),
     })
+    imageResult.value = String((out as any)?.text || 'Análisis completado.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -106,7 +105,8 @@ const runVideoEnhancer = async () => {
   error.value = ''
   loading.video = true
   try {
-    videoResult.value = await workspaceTools.runPerseoVideoEnhancer({ ...videoForm })
+    const out = await workspaceTools.runPerseoVideoEnhancer({ ...videoForm })
+    videoResult.value = String((out as any)?.text || 'Recomendación de vídeo generada.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -118,11 +118,12 @@ const runSeoAudit = async () => {
   error.value = ''
   loading.seo = true
   try {
-    seoResult.value = await workspaceTools.runPerseoSeoAudit({
+    const out = await workspaceTools.runPerseoSeoAudit({
       url: seoForm.url || undefined,
       keywords: parseCsv(seoForm.keywords),
       html_snapshot: seoForm.html_snapshot || undefined,
     })
+    seoResult.value = String((out as any)?.text || 'Auditoría SEO completada.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -134,7 +135,8 @@ const runAdsBuilder = async () => {
   error.value = ''
   loading.ads = true
   try {
-    adsResult.value = await workspaceTools.runPerseoAdsBuilder({ ...adsForm })
+    const out = await workspaceTools.runPerseoAdsBuilder({ ...adsForm })
+    adsResult.value = String((out as any)?.text || 'Plan de anuncios generado.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -199,14 +201,14 @@ const runAdsBuilder = async () => {
   cursor: pointer;
 }
 
-.tool-card pre {
-  background: #0f172a;
-  color: #e2e8f0;
+.tool-text {
+  margin: 8px 0 0;
   padding: 10px;
   border-radius: 10px;
-  font-size: 12px;
-  max-height: 160px;
-  overflow: auto;
+  background: #eff6ff;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .tool-error {

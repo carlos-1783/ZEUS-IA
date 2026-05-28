@@ -121,7 +121,7 @@
         <div class="header-right">
           <!-- Botón Instalar PWA -->
           <button 
-            v-if="isInstallable && !isInstalled"
+            v-if="!isInstalled"
             @click="handleInstallPWA"
             class="pwa-install-btn"
             :title="t('dashboardPro.pwa.installTitle')"
@@ -409,7 +409,10 @@ const handleInstallPWA = async () => {
   const installed = await promptInstall()
   if (installed) {
     console.log('✅ PWA instalación iniciada')
+    return
   }
+  // Fallback cuando beforeinstallprompt no está disponible.
+  alert('No se pudo mostrar el instalador automático.\n\nInstálala manualmente desde el menú del navegador:\n• Chrome/Edge: Menú (⋮) → Instalar aplicación\n• También puedes abrir /clear-pwa-cache.html y recargar.')
 }
 
 // Settings handlers

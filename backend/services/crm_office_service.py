@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import csv
 import uuid
+from io import StringIO
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
@@ -15,12 +17,19 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.company import UserCompany
 from app.models.customer import Customer, ContactPerson
 from app.models.crm_office import CrmActivityLog, CrmSaleLink, CustomerRecord
+from app.models.fiscal import TPVSale
 from app.models.user import User
 from app.schemas.customer import CustomerCreate
 from services.fiscal_engine import build_fiscal_items_from_cart, get_fiscal_profile, persist_fiscal_sale
 from services.tpv_service import PaymentMethod
 
 logger = logging.getLogger(__name__)
+
+ACTIVITY_TRANSLATIONS = {
+    "payment_created": "Cobro registrado",
+    "record_created": "Expediente creado",
+    "customer_created": "Cliente creado",
+}
 
 
 def company_ids_for_user(db: Session, user: User) -> List[int]:
@@ -216,6 +225,198 @@ def list_activity_for_customer(db: Session, user: User, customer_id: int, limit:
         .limit(limit)
     )
     return q.all()
+
+
+def translate_activity(action: str) -> str:
+    return ACTIVITY_TRANSLATIONS.get(action, action.replace("_", " ").capitalize())
+
+
+def list_cases_table(db: Session, user: User) -> List[Dict[str, Any]]:
+    cids = company_ids_for_user(db, user)
+    rows = (
+        db.query(CustomerRecord, Customer)
+        .join(Customer, Customer.id == CustomerRecord.customer_id)
+        .filter(_customer_scope_filter(user, cids))
+        .order_by(CustomerRecord.created_at.desc())
+        .all()
+    )
+    return [
+        {
+            "id": rec.id,
+            "client_id": cust.id,
+            "client_name": cust.name,
+            "title": rec.title,
+            "status": rec.status,
+            "amount": rec.amount,
+            "paid": rec.status == "paid",
+            "created_at": rec.created_at,
+        }
+        for rec, cust in rows
+    ]
+
+
+def list_payments_table(db: Session, user: User) -> List[Dict[str, Any]]:
+    cids = company_ids_for_user(db, user)
+    q = (
+        db.query(CrmSaleLink, TPVSale, CustomerRecord)
+        .join(TPVSale, TPVSale.id == CrmSaleLink.tpv_sale_id)
+        .join(CustomerRecord, CustomerRecord.id == CrmSaleLink.customer_record_id)
+        .join(Customer, Customer.id == CrmSaleLink.customer_id)
+        .filter(_customer_scope_filter(user, cids))
+        .order_by(CrmSaleLink.created_at.desc())
+    )
+    rows = q.all()
+    return [
+        {
+            "id": link.id,
+            "case_id": rec.id,
+            "amount": sale.total,
+            "method": sale.payment_method,
+            "status": "registered",
+            "created_at": link.created_at,
+        }
+        for link, sale, rec in rows
+    ]
+
+
+def update_customer(
+    db: Session,
+    user: User,
+    customer_id: int,
+    *,
+    name: Optional[str] = None,
+    email: Optional[str] = None,
+    phone: Optional[str] = None,
+    status: Optional[str] = None,
+) -> Customer:
+    customer = resolve_customer(db, user, customer_id)
+    cid = effective_company_id_for_crm(db, user, customer)
+    if email is not None:
+        normalized_email = email.strip().lower() or None
+        assert_email_unique_in_company(db, customer.company_id, normalized_email, exclude_customer_id=customer.id)
+        customer.email = normalized_email
+    if name is not None and name.strip():
+        customer.name = name.strip()[:100]
+    if phone is not None:
+        customer.phone = phone.strip()[:20] or None
+    if status is not None:
+        customer.is_active = status.lower().strip() != "inactive"
+    customer.updated_at = datetime.utcnow()
+    db.add(customer)
+    db.commit()
+    db.refresh(customer)
+    log_activity(
+        db,
+        company_id=cid,
+        user_id=user.id,
+        customer_id=customer.id,
+        record_id=None,
+        action="customer_updated",
+        summary=f"Cliente actualizado: {customer.name}",
+        payload={},
+    )
+    return customer
+
+
+def customers_to_csv(rows: List[Customer]) -> str:
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["id", "name", "email", "phone", "status", "created_at"])
+    for row in rows:
+        writer.writerow(
+            [
+                row.id,
+                row.name,
+                row.email or "",
+                row.phone or "",
+                "active" if row.is_active else "inactive",
+                row.created_at.isoformat() if row.created_at else "",
+            ]
+        )
+    return buffer.getvalue()
+
+
+def cases_to_csv(rows: List[Dict[str, Any]]) -> str:
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["id", "client_id", "title", "status", "amount", "paid", "created_at"])
+    for row in rows:
+        writer.writerow(
+            [
+                row["id"],
+                row["client_id"],
+                row["title"],
+                row["status"],
+                row["amount"],
+                "true" if row["paid"] else "false",
+                row["created_at"].isoformat() if row.get("created_at") else "",
+            ]
+        )
+    return buffer.getvalue()
+
+
+def payments_to_csv(rows: List[Dict[str, Any]]) -> str:
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["id", "case_id", "amount", "method", "status", "created_at"])
+    for row in rows:
+        writer.writerow(
+            [
+                row["id"],
+                row["case_id"],
+                row["amount"],
+                row["method"],
+                row["status"],
+                row["created_at"].isoformat() if row.get("created_at") else "",
+            ]
+        )
+    return buffer.getvalue()
+
+
+def import_customers_from_csv(db: Session, user: User, csv_text: str) -> Dict[str, int]:
+    cid = primary_company_id(db, user)
+    if cid is None:
+        raise HTTPException(status_code=400, detail="No hay empresa asociada para importar clientes.")
+    reader = csv.DictReader(StringIO(csv_text))
+    created = 0
+    updated = 0
+    for row in reader:
+        name = (row.get("name") or "").strip()
+        if not name:
+            continue
+        email = (row.get("email") or "").strip().lower() or None
+        phone = (row.get("phone") or "").strip() or None
+        status = ((row.get("status") or "active").strip().lower() or "active")
+        existing = None
+        if email:
+            existing = (
+                db.query(Customer)
+                .filter(Customer.company_id == cid)
+                .filter(Customer.email == email)
+                .first()
+            )
+        if existing:
+            existing.name = name[:100]
+            existing.phone = phone
+            existing.is_active = status != "inactive"
+            existing.updated_at = datetime.utcnow()
+            updated += 1
+        else:
+            assert_email_unique_in_company(db, cid, email)
+            db.add(
+                Customer(
+                    name=name[:100],
+                    email=email,
+                    phone=phone,
+                    company_id=cid,
+                    owner_user_id=user.id,
+                    is_active=status != "inactive",
+                    is_company=True,
+                )
+            )
+            created += 1
+    db.commit()
+    return {"created": created, "updated": updated}
 
 
 def create_record(
@@ -435,8 +636,15 @@ def register_record_charge(
         rec.updated_at = datetime.now(timezone.utc)
         if rec.status in ("open", "in_progress"):
             rec.status = "paid"
+        # Workflow: update client balance after payment registration.
+        customer_records = db.query(CustomerRecord).filter(CustomerRecord.customer_id == cust.id).all()
+        pending_balance = sum(Decimal(str(r.amount or 0)) for r in customer_records if r.status != "paid")
+        metadata = dict(cust.metadata_ or {})
+        metadata["balance_pending"] = str(max(pending_balance, Decimal("0")))
+        cust.metadata_ = metadata
         db.add(link)
         db.add(rec)
+        db.add(cust)
         db.commit()
 
         logger.info(

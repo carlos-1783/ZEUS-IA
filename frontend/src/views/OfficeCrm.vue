@@ -5,151 +5,139 @@
       <h1>{{ t('officeCrm.title') }}</h1>
       <p class="subtitle">{{ t('officeCrm.subtitle') }}</p>
     </header>
+    <p v-if="globalError" class="global-error">{{ globalError }}</p>
 
-    <p v-if="accessDenied" class="access-denied" role="alert">{{ accessDeniedMessage }}</p>
-    <p v-else-if="globalError" class="global-error" role="alert">
-      {{ globalError }}
-      <router-link v-if="sessionExpired" :to="{ name: 'AuthLogin', query: { redirect: '/office-crm' } }" class="error-login-link">
-        {{ t('officeCrm.loginAgain') }}
-      </router-link>
-    </p>
+    <section class="panel">
+      <div class="toolbar">
+        <h2>Clientes</h2>
+        <input v-model="clientSearch" placeholder="Buscar cliente..." />
+        <button class="btn-secondary" @click="downloadCsv('/api/v1/crm/export/clients', 'clients.csv')">Export CSV</button>
+        <button class="btn-secondary" @click="showImport = true">Import CSV</button>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th @click="sortClientsBy('name')">Nombre</th>
+            <th>Email</th>
+            <th>Teléfono</th>
+            <th @click="sortClientsBy('status')">Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="c in filteredClients" :key="c.id">
+            <td><input v-model="c.name" /></td>
+            <td><input v-model="c.email" /></td>
+            <td><input v-model="c.phone" /></td>
+            <td>
+              <select v-model="c.status">
+                <option value="active">active</option>
+                <option value="inactive">inactive</option>
+              </select>
+            </td>
+            <td class="actions">
+              <button class="btn-small" @click="saveClient(c)">Guardar</button>
+              <button class="btn-small" @click="openCustomer(c)">Ver</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
 
-    <div v-if="!accessDenied" class="crm-layout">
-      <section class="panel customers-panel">
-        <h2>{{ t('officeCrm.clients') }}</h2>
-        <div class="clients-toolbar">
-          <button type="button" class="btn-primary" @click="showNewCustomer = !showNewCustomer">
-            {{ showNewCustomer ? t('officeCrm.cancel') : t('officeCrm.newClient') }}
-          </button>
-          <button type="button" class="btn-secondary" @click="showImport = true">
-            {{ t('officeCrm.import.button') }}
-          </button>
+    <section class="panel" v-if="selectedCustomer">
+      <div class="toolbar">
+        <h2>Expedientes · {{ selectedCustomer.name }}</h2>
+        <input v-model="caseSearch" placeholder="Buscar expediente..." />
+        <button class="btn-secondary" @click="downloadCsv('/api/v1/crm/export/cases', 'cases.csv')">Export CSV</button>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Título</th>
+            <th>Status</th>
+            <th>Monto</th>
+            <th>Pagado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="r in filteredCases" :key="r.id">
+            <td><input v-model="r.title" /></td>
+            <td>
+              <select v-model="r.status">
+                <option value="open">open</option>
+                <option value="in_progress">in_progress</option>
+                <option value="paid">paid</option>
+                <option value="closed">closed</option>
+              </select>
+            </td>
+            <td><input v-model.number="r.amount" type="number" step="0.01" /></td>
+            <td>{{ r.paid ? 'Sí' : 'No' }}</td>
+            <td class="actions">
+              <button class="btn-small" @click="saveCase(r)">Guardar</button>
+              <button class="btn-small" @click="openCharge(r)">Cobrar</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel" v-if="selectedCustomer">
+      <div class="toolbar">
+        <h2>Cobros</h2>
+        <input v-model="paymentSearch" placeholder="Buscar cobro..." />
+        <button class="btn-secondary" @click="downloadCsv('/api/v1/crm/export/payments', 'payments.csv')">Export CSV</button>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Case</th>
+            <th>Monto</th>
+            <th>Método</th>
+            <th>Status</th>
+            <th>Fecha</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="p in filteredPayments" :key="p.id">
+            <td>{{ p.id }}</td>
+            <td>{{ p.case_id }}</td>
+            <td>{{ formatMoney(p.amount) }}</td>
+            <td>{{ p.method }}</td>
+            <td>{{ p.status }}</td>
+            <td>{{ formatDt(p.created_at) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div v-if="chargeRecord" class="charge-box">
+      <h4>{{ t('officeCrm.chargeTitle') }} — {{ chargeRecord.title }}</h4>
+      <form @submit.prevent="submitCharge">
+        <label>{{ t('officeCrm.baseAmount') }} (€) *</label>
+        <input v-model="chargeForm.base_amount" type="number" step="0.01" min="0.01" required />
+        <label>{{ t('officeCrm.paymentMethod') }}</label>
+        <select v-model="chargeForm.payment_method">
+          <option value="efectivo">efectivo</option>
+          <option value="tarjeta">tarjeta</option>
+          <option value="bizum">bizum</option>
+          <option value="transferencia">transferencia</option>
+        </select>
+        <label>{{ t('officeCrm.description') }}</label>
+        <input v-model="chargeForm.description" maxlength="200" />
+        <div class="charge-actions">
+          <button type="submit" class="btn-primary" :disabled="charging">{{ t('officeCrm.registerCharge') }}</button>
+          <button type="button" class="btn-secondary" @click="chargeRecord = null">{{ t('officeCrm.cancel') }}</button>
         </div>
-
-        <form v-if="showNewCustomer" class="form-card" @submit.prevent="createCustomer">
-          <label>{{ t('officeCrm.name') }} *</label>
-          <input v-model="newCustomer.name" required minlength="2" maxlength="100" />
-          <label>{{ t('officeCrm.email') }}</label>
-          <input v-model="newCustomer.email" type="email" />
-          <label>{{ t('officeCrm.phone') }}</label>
-          <input v-model="newCustomer.phone" maxlength="20" />
-          <label>{{ t('officeCrm.taxId') }}</label>
-          <input v-model="newCustomer.tax_id" maxlength="50" />
-          <label class="checkbox">
-            <input v-model="newCustomer.is_company" type="checkbox" />
-            {{ t('officeCrm.isCompany') }}
-          </label>
-          <button type="submit" class="btn-primary" :disabled="savingCustomer">{{ t('officeCrm.saveClient') }}</button>
-        </form>
-
-        <div v-if="loadingCustomers" class="muted">{{ t('officeCrm.loading') }}</div>
-        <ul v-else class="customer-list">
-          <li
-            v-for="c in customers"
-            :key="c.id"
-            :class="{ active: selectedCustomer?.id === c.id }"
-            @click="openCustomer(c)"
-          >
-            <span class="cust-name">{{ c.name }}</span>
-            <span v-if="c.email" class="cust-meta">{{ c.email }}</span>
-          </li>
-        </ul>
-        <p v-if="!loadingCustomers && !customers.length" class="muted">{{ t('officeCrm.noClients') }}</p>
-      </section>
-
-      <section v-if="selectedCustomer" class="panel detail-panel">
-        <h2>{{ selectedCustomer.name }}</h2>
-        <p class="meta-line">
-          <span v-if="selectedCustomer.email">{{ selectedCustomer.email }}</span>
-          <span v-if="selectedCustomer.phone"> · {{ selectedCustomer.phone }}</span>
-        </p>
-
-        <h3>{{ t('officeCrm.records') }}</h3>
-        <button type="button" class="btn-secondary" @click="showNewRecord = !showNewRecord">
-          {{ showNewRecord ? t('officeCrm.cancel') : t('officeCrm.newRecord') }}
-        </button>
-
-        <form v-if="showNewRecord" class="form-card" @submit.prevent="createRecord">
-          <label>{{ t('officeCrm.recordTitle') }} *</label>
-          <input v-model="newRecord.title" required maxlength="255" />
-          <label>{{ t('officeCrm.status') }}</label>
-          <select v-model="newRecord.status">
-            <option value="open">open</option>
-            <option value="in_progress">in_progress</option>
-            <option value="closed">closed</option>
-          </select>
-          <label>{{ t('officeCrm.amount') }}</label>
-          <input v-model.number="newRecord.amount" type="number" step="0.01" min="0" />
-          <label>{{ t('officeCrm.notes') }}</label>
-          <textarea v-model="newRecord.notes" rows="2" />
-          <button type="submit" class="btn-primary" :disabled="savingRecord">{{ t('officeCrm.createRecord') }}</button>
-        </form>
-
-        <div v-if="loadingRecords" class="muted">{{ t('officeCrm.loading') }}</div>
-        <table v-else-if="records.length" class="records-table">
-          <thead>
-            <tr>
-              <th>{{ t('officeCrm.recordTitle') }}</th>
-              <th>{{ t('officeCrm.status') }}</th>
-              <th>{{ t('officeCrm.amount') }}</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in records" :key="r.id">
-              <td>{{ r.title }}</td>
-              <td>{{ r.status }}</td>
-              <td>{{ formatMoney(r.amount) }}</td>
-              <td class="actions">
-                <button type="button" class="btn-small" @click="openCharge(r)">{{ t('officeCrm.charge') }}</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-else class="muted">{{ t('officeCrm.noRecords') }}</p>
-
-        <div v-if="chargeRecord" class="charge-box">
-          <h4>{{ t('officeCrm.chargeTitle') }} — {{ chargeRecord.title }}</h4>
-          <form @submit.prevent="submitCharge">
-            <label>{{ t('officeCrm.baseAmount') }} (€) *</label>
-            <input v-model="chargeForm.base_amount" type="number" step="0.01" min="0.01" required />
-            <label>{{ t('officeCrm.paymentMethod') }}</label>
-            <select v-model="chargeForm.payment_method">
-              <option value="efectivo">efectivo</option>
-              <option value="tarjeta">tarjeta</option>
-              <option value="bizum">bizum</option>
-              <option value="transferencia">transferencia</option>
-            </select>
-            <label>{{ t('officeCrm.description') }}</label>
-            <input v-model="chargeForm.description" maxlength="200" />
-            <div class="charge-actions">
-              <button type="submit" class="btn-primary" :disabled="charging">{{ t('officeCrm.registerCharge') }}</button>
-              <button type="button" class="btn-secondary" @click="chargeRecord = null">{{ t('officeCrm.cancel') }}</button>
-            </div>
-          </form>
-        </div>
-      </section>
-
-      <section v-if="selectedCustomer" class="panel activity-panel">
-        <h2>{{ t('officeCrm.activity') }}</h2>
-        <button type="button" class="btn-secondary" @click="loadActivity">{{ t('officeCrm.refreshActivity') }}</button>
-        <div v-if="loadingActivity" class="muted">{{ t('officeCrm.loading') }}</div>
-        <ul v-else class="activity-list">
-          <li v-for="a in activity" :key="a.id" class="activity-item">
-            <time class="activity-time">{{ formatDt(a.created_at) }}</time>
-            <span class="activity-action">{{ a.action }}</span>
-            <p v-if="a.summary" class="activity-summary">{{ a.summary }}</p>
-          </li>
-        </ul>
-        <p v-if="!loadingActivity && !activity.length" class="muted">{{ t('officeCrm.noActivity') }}</p>
-      </section>
+      </form>
     </div>
 
-    <CrmCustomerImport v-if="showImport" @close="showImport = false" @imported="onCustomersImported" />
+    <CrmCustomerImport v-if="showImport" @close="showImport = false" @imported="loadAll" />
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -158,6 +146,35 @@ import api from '@/services/api'
 import { isModuleVisible } from '@/utils/companyModules'
 import CrmCustomerImport from '@/components/CrmCustomerImport.vue'
 
+type SortDir = 'asc' | 'desc'
+
+type CrmCustomer = {
+  id: number
+  name: string
+  email?: string | null
+  phone?: string | null
+  is_active?: boolean
+  status: 'active' | 'inactive'
+}
+
+type CrmCase = {
+  id: number
+  customer_id: number
+  title: string
+  status: 'open' | 'in_progress' | 'paid' | 'closed' | string
+  amount: number
+  paid?: boolean
+}
+
+type CrmPayment = {
+  id: number
+  case_id: number
+  amount: number
+  method: string
+  status: string
+  created_at?: string | null
+}
+
 const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
@@ -165,36 +182,17 @@ const authStore = useAuthStore()
 const globalError = ref('')
 const sessionExpired = ref(false)
 const accessDenied = ref(false)
-const accessDeniedMessage = computed(() => t('officeCrm.accessDenied'))
-const loadingCustomers = ref(true)
-const loadingRecords = ref(false)
-const loadingActivity = ref(false)
-const customers = ref([])
-const selectedCustomer = ref(null)
-const records = ref([])
-const activity = ref([])
-const showNewCustomer = ref(false)
+const customers = ref<CrmCustomer[]>([])
+const selectedCustomer = ref<CrmCustomer | null>(null)
+const records = ref<CrmCase[]>([])
+const payments = ref<CrmPayment[]>([])
 const showImport = ref(false)
-const showNewRecord = ref(false)
-const savingCustomer = ref(false)
-const savingRecord = ref(false)
+const clientSearch = ref('')
+const caseSearch = ref('')
+const paymentSearch = ref('')
+const clientSort = reactive<{ key: keyof CrmCustomer; dir: SortDir }>({ key: 'name', dir: 'asc' })
 const charging = ref(false)
-const chargeRecord = ref(null)
-
-const newCustomer = reactive({
-  name: '',
-  email: '',
-  phone: '',
-  tax_id: '',
-  is_company: true,
-})
-
-const newRecord = reactive({
-  title: '',
-  status: 'open',
-  amount: 0,
-  notes: '',
-})
+const chargeRecord = ref<CrmCase | null>(null)
 
 const chargeForm = reactive({
   base_amount: '',
@@ -202,22 +200,24 @@ const chargeForm = reactive({
   description: '',
 })
 
-function formatMoney(v) {
+function formatMoney(v: unknown): string {
   const n = Number(v)
   if (Number.isNaN(n)) return '—'
   return n.toLocaleString(undefined, { style: 'currency', currency: 'EUR' })
 }
 
-function formatDt(iso) {
+function formatDt(iso: unknown): string {
   if (!iso) return '—'
   try {
-    return new Date(iso).toLocaleString()
+    const value =
+      typeof iso === 'string' || typeof iso === 'number' || iso instanceof Date ? iso : String(iso)
+    return new Date(value).toLocaleString()
   } catch {
     return String(iso)
   }
 }
 
-async function errMessage(e) {
+async function errMessage(e: any): Promise<string> {
   if (e?.status === 401) {
     sessionExpired.value = true
     return t('officeCrm.sessionExpired')
@@ -238,122 +238,111 @@ async function errMessage(e) {
   return e?.message || t('officeCrm.errorGeneric')
 }
 
-async function onCustomersImported() {
-  showImport.value = false
-  await loadCustomers()
-}
-
 async function loadCustomers() {
-  globalError.value = ''
-  loadingCustomers.value = true
   try {
     const res = await api.get('/api/v1/crm/customers')
-    customers.value = Array.isArray(res?.data) ? res.data : []
+    customers.value = (Array.isArray(res?.data) ? res.data : []).map((c: Partial<CrmCustomer> & { id: number; name: string }) => ({
+      ...c,
+      status: c?.is_active === false ? 'inactive' : 'active',
+    })) as CrmCustomer[]
   } catch (e) {
     globalError.value = await errMessage(e)
-    customers.value = []
-  } finally {
-    loadingCustomers.value = false
   }
 }
 
-async function createCustomer() {
-  savingCustomer.value = true
-  globalError.value = ''
+async function saveClient(client: CrmCustomer) {
   try {
-    const body = {
-      name: newCustomer.name.trim(),
-      email: newCustomer.email?.trim() || null,
-      phone: newCustomer.phone?.trim() || null,
-      tax_id: newCustomer.tax_id?.trim() || null,
-      is_company: newCustomer.is_company,
-      is_active: true,
-      contacts: [],
-    }
-    const res = await api.post('/api/v1/crm/customers', body)
-    const created = res?.id != null ? res : res?.data
-    if (created?.id) {
-      await loadCustomers()
-      const row = customers.value.find((x) => x.id === created.id)
-      if (row) await openCustomer(row)
-      showNewCustomer.value = false
-      newCustomer.name = ''
-      newCustomer.email = ''
-      newCustomer.phone = ''
-      newCustomer.tax_id = ''
-    }
+    await api.patch(`/api/v1/crm/customers/${client.id}`, {
+      name: client.name,
+      email: client.email || null,
+      phone: client.phone || null,
+      is_active: client.status !== 'inactive',
+    })
   } catch (e) {
     globalError.value = await errMessage(e)
-  } finally {
-    savingCustomer.value = false
   }
 }
 
-async function openCustomer(c) {
-  globalError.value = ''
+async function openCustomer(c: CrmCustomer) {
   selectedCustomer.value = c
-  records.value = []
-  activity.value = []
-  showNewRecord.value = false
-  chargeRecord.value = null
-  loadingRecords.value = true
-  loadingActivity.value = true
   try {
-    const [recRes, actRes] = await Promise.all([
+    const [recRes, payRes] = await Promise.all([
       api.get(`/api/v1/crm/customers/${c.id}/records`),
-      api.get(`/api/v1/crm/customers/${c.id}/activity`),
+      api.get('/api/v1/crm/table/payments'),
     ])
-    records.value = Array.isArray(recRes?.data) ? recRes.data : []
-    activity.value = Array.isArray(actRes?.data) ? actRes.data : []
+    records.value = (Array.isArray(recRes?.data) ? recRes.data : []) as CrmCase[]
+    payments.value = ((Array.isArray(payRes?.data) ? payRes.data : []) as CrmPayment[]).filter((p) =>
+      records.value.some((r) => r.id === p.case_id),
+    )
   } catch (e) {
     globalError.value = await errMessage(e)
-  } finally {
-    loadingRecords.value = false
-    loadingActivity.value = false
   }
 }
 
-async function loadActivity() {
-  if (!selectedCustomer.value) return
-  loadingActivity.value = true
+async function saveCase(row: CrmCase) {
   try {
-    const actRes = await api.get(`/api/v1/crm/customers/${selectedCustomer.value.id}/activity`)
-    activity.value = Array.isArray(actRes?.data) ? actRes.data : []
+    await api.patch(`/api/v1/crm/records/${row.id}`, {
+      title: row.title,
+      status: row.status,
+      amount: Number(row.amount || 0),
+    })
+    row.paid = row.status === 'paid'
   } catch (e) {
     globalError.value = await errMessage(e)
-  } finally {
-    loadingActivity.value = false
   }
 }
 
-async function createRecord() {
-  if (!selectedCustomer.value) return
-  savingRecord.value = true
-  globalError.value = ''
+function sortClientsBy(key: keyof CrmCustomer) {
+  if (clientSort.key === key) {
+    clientSort.dir = clientSort.dir === 'asc' ? 'desc' : 'asc'
+  } else {
+    clientSort.key = key
+    clientSort.dir = 'asc'
+  }
+}
+
+const filteredClients = computed(() => {
+  const term = clientSearch.value.trim().toLowerCase()
+  return [...customers.value]
+    .filter((c) => !term || [c.name, c.email, c.phone].some((v) => String(v || '').toLowerCase().includes(term)))
+    .sort((a, b) => {
+      const av = String(a?.[clientSort.key] || '').toLowerCase()
+      const bv = String(b?.[clientSort.key] || '').toLowerCase()
+      return clientSort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
+    })
+})
+
+const filteredCases = computed(() => {
+  const term = caseSearch.value.trim().toLowerCase()
+  return records.value.filter((r) =>
+    !term || [r.title, r.status, String(r.amount || '')].some((v) => String(v).toLowerCase().includes(term)),
+  )
+})
+
+const filteredPayments = computed(() => {
+  const term = paymentSearch.value.trim().toLowerCase()
+  return payments.value.filter((p) =>
+    !term || [p.method, p.status, String(p.amount || ''), String(p.case_id || '')].some((v) => String(v).toLowerCase().includes(term)),
+  )
+})
+
+async function downloadCsv(endpoint: string, filename: string) {
   try {
-    const body = {
-      title: newRecord.title.trim(),
-      status: newRecord.status,
-      amount: newRecord.amount,
-      notes: newRecord.notes?.trim() || null,
-    }
-    await api.post(`/api/v1/crm/customers/${selectedCustomer.value.id}/records`, body)
-    newRecord.title = ''
-    newRecord.status = 'open'
-    newRecord.amount = 0
-    newRecord.notes = ''
-    showNewRecord.value = false
-    const recRes = await api.get(`/api/v1/crm/customers/${selectedCustomer.value.id}/records`)
-    records.value = Array.isArray(recRes?.data) ? recRes.data : []
-    await loadActivity()
+    const blob = await api.getBlob(endpoint)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   } catch (e) {
     globalError.value = await errMessage(e)
-  } finally {
-    savingRecord.value = false
   }
 }
 
-function openCharge(r) {
+function openCharge(r: CrmCase) {
   chargeRecord.value = r
   chargeForm.base_amount = r.amount && Number(r.amount) > 0 ? String(r.amount) : '10'
   chargeForm.payment_method = 'efectivo'
@@ -378,9 +367,9 @@ async function submitCharge() {
       consumption_type: 'onsite',
     })
     chargeRecord.value = null
-    const recRes = await api.get(`/api/v1/crm/customers/${selectedCustomer.value.id}/records`)
-    records.value = Array.isArray(recRes?.data) ? recRes.data : []
-    await loadActivity()
+    if (selectedCustomer.value) {
+      await openCustomer(selectedCustomer.value)
+    }
   } catch (e) {
     globalError.value = await errMessage(e)
   } finally {
@@ -405,17 +394,75 @@ async function bootstrapPage() {
   })
   if (!canCrm) {
     accessDenied.value = true
-    loadingCustomers.value = false
+    globalError.value = t('officeCrm.accessDenied')
     return
   }
 
+  await loadAll()
+}
+
+async function loadAll() {
   await loadCustomers()
+  if (selectedCustomer.value) {
+    const selected = customers.value.find((x) => x.id === selectedCustomer.value!.id)
+    if (selected) {
+      await openCustomer(selected)
+    }
+  }
 }
 
 onMounted(bootstrapPage)
 </script>
 
 <style scoped>
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.panel {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.data-table th,
+.data-table td {
+  border: 1px solid #e2e8f0;
+  padding: 8px;
+}
+.data-table th {
+  cursor: pointer;
+  background: #f8fafc;
+}
+.data-table input,
+.data-table select {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 6px;
+}
+.actions {
+  display: flex;
+  gap: 6px;
+}
+.btn-small {
+  border: none;
+  background: #1d4ed8;
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.global-error {
+  margin: 12px 0;
+  color: #b91c1c;
+}
 .error-login-link {
   display: inline-block;
   margin-left: 0.5rem;

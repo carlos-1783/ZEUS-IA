@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, File, Path, Query, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from io import BytesIO
 
 from app.core.auth import get_current_active_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.customer import CustomerCreate, CustomerOut
+from app.schemas.customer import CustomerCreate, CustomerOut, CustomerUpdate
 from app.schemas.crm_office import (
     CrmActivityOut,
     CrmListResponse,
@@ -43,6 +45,25 @@ def crm_create_customer(
     current_user: User = Depends(get_current_active_user),
 ):
     customer = crm_svc.create_customer(db, current_user, customer_in)
+    return CustomerOut.model_validate(customer)
+
+
+@router.patch("/customers/{customer_id}", response_model=CustomerOut)
+def crm_update_customer(
+    customer_id: int = Path(..., ge=1),
+    body: CustomerUpdate = ...,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    customer = crm_svc.update_customer(
+        db,
+        current_user,
+        customer_id,
+        name=body.name,
+        email=body.email,
+        phone=body.phone,
+        status="active" if body.is_active is not False else "inactive",
+    )
     return CustomerOut.model_validate(customer)
 
 
@@ -139,4 +160,75 @@ def crm_list_activity(
     current_user: User = Depends(get_current_active_user),
 ):
     rows = crm_svc.list_activity_for_customer(db, current_user, customer_id, limit=limit)
-    return CrmListResponse(success=True, data=[CrmActivityOut.model_validate(r) for r in rows])
+    translated = []
+    for row in rows:
+        out = CrmActivityOut.model_validate(row).model_dump()
+        out["action_human"] = crm_svc.translate_activity(out["action"])
+        translated.append(out)
+    return CrmListResponse(success=True, data=translated)
+
+
+@router.get("/table/cases", response_model=CrmListResponse)
+def crm_table_cases(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    return CrmListResponse(success=True, data=crm_svc.list_cases_table(db, current_user))
+
+
+@router.get("/table/payments", response_model=CrmListResponse)
+def crm_table_payments(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    return CrmListResponse(success=True, data=crm_svc.list_payments_table(db, current_user))
+
+
+@router.get("/export/clients")
+def crm_export_clients(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    content = crm_svc.customers_to_csv(crm_svc.list_customers(db, current_user))
+    return StreamingResponse(
+        BytesIO(content.encode("utf-8")),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=clients.csv"},
+    )
+
+
+@router.get("/export/cases")
+def crm_export_cases(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    content = crm_svc.cases_to_csv(crm_svc.list_cases_table(db, current_user))
+    return StreamingResponse(
+        BytesIO(content.encode("utf-8")),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=cases.csv"},
+    )
+
+
+@router.get("/export/payments")
+def crm_export_payments(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    content = crm_svc.payments_to_csv(crm_svc.list_payments_table(db, current_user))
+    return StreamingResponse(
+        BytesIO(content.encode("utf-8")),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=payments.csv"},
+    )
+
+
+@router.post("/import/clients", response_model=CrmListResponse)
+async def crm_import_clients(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    payload = (await file.read()).decode("utf-8", errors="ignore")
+    result = crm_svc.import_customers_from_csv(db, current_user, payload)
+    return CrmListResponse(success=True, data=[result])

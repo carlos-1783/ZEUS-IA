@@ -187,6 +187,7 @@ def _persist_assistant(
     agent_name: str,
     thread_id: str,
     text: str,
+    company_id: Optional[int] = None,
 ) -> None:
     chat_db.save_message(
         db,
@@ -195,6 +196,7 @@ def _persist_assistant(
         thread_id=thread_id,
         role="assistant",
         message=text or "",
+        company_id=company_id,
     )
 
 
@@ -281,7 +283,9 @@ async def chat_with_agent(
 
             context = enrich_chat_context(db, current_user, context)
 
-        company_id = context.get("company_id") or context.get("user_email")
+        company_id = context.get("company_id")
+        if not isinstance(company_id, int):
+            company_id = chat_db.resolve_company_id(db, current_user)
 
         chat_db.save_message(
             db,
@@ -290,6 +294,7 @@ async def chat_with_agent(
             thread_id=thread_id,
             role="user",
             message=request.message,
+            company_id=company_id,
         )
 
         # ZEUS Core: intent → task → ejecución real (CRM, campaña, email) antes del LLM.
@@ -306,7 +311,34 @@ async def chat_with_agent(
             )
             if bridge and bridge.get("handled"):
                 bridge_msg = bridge.get("message", "") or ""
-                _persist_assistant(db, current_user, agent_name, thread_id, bridge_msg)
+                _persist_assistant(
+                    db,
+                    current_user,
+                    agent_name,
+                    thread_id,
+                    bridge_msg,
+                    company_id=company_id,
+                )
+                try:
+                    ActivityLogger.log_activity(
+                        agent_name=agent_name,
+                        action_type="chat_request_processed",
+                        action_description=f"Chat procesado por {agent_name}",
+                        details={
+                            "request_type": "chat",
+                            "thread_id": thread_id,
+                            "user_id": current_user.id,
+                            "executed_action": bool(bridge.get("executed")),
+                            "needs_confirmation": bool(bridge.get("needs_confirmation")),
+                        },
+                        metrics={"chat_messages": 1},
+                        user_email=current_user.email,
+                        status="completed" if bridge.get("success") else "failed",
+                        priority="normal",
+                        visible_to_client=True,
+                    )
+                except Exception:
+                    logger.exception("ActivityLogger bridge chat omitido")
                 return ChatResponse(
                     agent=agent_name,
                     message=bridge_msg,
@@ -418,7 +450,14 @@ async def chat_with_agent(
             except Exception:
                 logger.exception("ActivityLogger tras chat OK omitido (BD u otro fallo)")
             ok_msg = result.get("message", "Sin respuesta") or ""
-            _persist_assistant(db, current_user, agent_name, thread_id, ok_msg)
+            _persist_assistant(
+                db,
+                current_user,
+                agent_name,
+                thread_id,
+                ok_msg,
+                company_id=company_id,
+            )
             return ChatResponse(
                 agent=agent_name,
                 message=ok_msg,
@@ -449,7 +488,14 @@ async def chat_with_agent(
         fail_msg = (result.get("message") or "").strip() or (
             result.get("error") or ""
         ).strip() or f"Error: {result.get('error', 'Error desconocido')}"
-        _persist_assistant(db, current_user, agent_name, thread_id, fail_msg)
+        _persist_assistant(
+            db,
+            current_user,
+            agent_name,
+            thread_id,
+            fail_msg,
+            company_id=company_id,
+        )
         return ChatResponse(
             agent=agent_name,
             message=fail_msg,
@@ -475,7 +521,14 @@ async def chat_with_agent(
         except Exception:
             logger.exception("ActivityLogger tras excepción chat omitido")
         exc_msg = f"Error interno: {str(e)}"
-        _persist_assistant(db, current_user, agent_name, thread_id, exc_msg)
+        _persist_assistant(
+            db,
+            current_user,
+            agent_name,
+            thread_id,
+            exc_msg,
+            company_id=chat_db.resolve_company_id(db, current_user),
+        )
         return ChatResponse(
             agent=agent_name,
             message=exc_msg,
@@ -484,7 +537,10 @@ async def chat_with_agent(
         )
 
 @router.post("/agents/communicate")
-async def communicate_agents(request: AgentCommunicationRequest):
+async def communicate_agents(
+    request: AgentCommunicationRequest,
+    current_user: User = Depends(get_current_active_user),
+):
     """
     Endpoint para comunicación entre agentes
     
@@ -507,11 +563,27 @@ async def communicate_agents(request: AgentCommunicationRequest):
         message=request.message,
         context=request.context or {}
     )
+    try:
+        ActivityLogger.log_activity(
+            agent_name="ZEUS CORE",
+            action_type="agents_communicate",
+            action_description=f"Comunicación entre agentes {request.from_agent} -> {request.to_agent}",
+            details={"context": request.context or {}},
+            user_email=current_user.email,
+            status="completed",
+            priority="normal",
+            visible_to_client=True,
+        )
+    except Exception:
+        logger.exception("ActivityLogger agents_communicate omitido")
     
     return result
 
 @router.post("/agents/coordinate")
-async def coordinate_agents(request: MultiAgentTaskRequest):
+async def coordinate_agents(
+    request: MultiAgentTaskRequest,
+    current_user: User = Depends(get_current_active_user),
+):
     """
     Endpoint para coordinar tareas multi-agente
     
@@ -533,6 +605,22 @@ async def coordinate_agents(request: MultiAgentTaskRequest):
         required_agents=request.required_agents,
         context=request.context or {}
     )
+    try:
+        ActivityLogger.log_activity(
+            agent_name="ZEUS CORE",
+            action_type="agents_coordinate",
+            action_description="Coordinación multiagente ejecutada",
+            details={
+                "required_agents": request.required_agents,
+                "task_description": request.task_description[:500],
+            },
+            user_email=current_user.email,
+            status="completed",
+            priority="normal",
+            visible_to_client=True,
+        )
+    except Exception:
+        logger.exception("ActivityLogger agents_coordinate omitido")
     
     return result
 

@@ -14,6 +14,8 @@ from app.schemas.erp import (
 )
 from app.core.security import get_current_active_user
 from app.models.user import User
+from services.event_bus import emit_payment_registered
+import services.crm_office_service as crm_svc
 
 router = APIRouter()
 
@@ -300,6 +302,23 @@ def create_payment(
     
     db.commit()
     db.refresh(payment)
+    try:
+        emit_payment_registered(
+            user_id=current_user.id,
+            user_email=getattr(current_user, "email", None),
+            company_id=crm_svc.primary_company_id(db, current_user),
+            customer_id=getattr(invoice, "customer_id", None),
+            ticket_id=getattr(invoice, "invoice_number", None),
+            tpv_sale_id=None,
+            payment_method=str(payment.method) if getattr(payment, "method", None) else None,
+            amount=float(payment.amount) if getattr(payment, "amount", None) is not None else None,
+            service_name="invoice_payment",
+            source="INVOICES_MODULE",
+            db=db,
+        )
+    except Exception:
+        # No bloquear el flujo de facturación por trazabilidad/evento
+        pass
     
     return {"success": True, "data": payment}
 

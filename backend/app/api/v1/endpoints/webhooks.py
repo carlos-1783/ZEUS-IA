@@ -18,6 +18,7 @@ from app.db.session import SessionLocal
 from app.models.user import User
 from services.activity_logger import ActivityLogger
 from services.email_service import email_service
+from services.event_bus import emit_payment_registered
 from services.global_company_bootstrap import run_global_autonomous_bootstrap
 from services.stripe_service import stripe_service
 from services.whatsapp_service import whatsapp_service
@@ -323,6 +324,25 @@ async def stripe_webhook_handler(
             status="completed",
             priority="critical"
         )
+        try:
+            company_id = None
+            if isinstance(bootstrap_result, dict):
+                company_id = bootstrap_result.get("company_id")
+            emit_payment_registered(
+                user_id=user.id,
+                user_email=customer_email,
+                company_id=company_id,
+                customer_id=None,
+                ticket_id=payment_intent_id,
+                tpv_sale_id=None,
+                payment_method="stripe",
+                amount=float(amount) if amount is not None else None,
+                service_name="stripe_webhook",
+                source="STRIPE_WEBHOOK",
+                db=db,
+            )
+        except Exception:
+            logger.exception("[WEBHOOK] emit_payment_registered falló")
         
         return {
             "received": True,

@@ -13,6 +13,8 @@ from app.core.auth import get_current_active_user
 from app.db.session import get_db
 from app.models.user import User
 from sqlalchemy.orm import Session
+from services import chat_persistence_service as chat_db
+from services.activity_logger import ActivityLogger
 from services.teamflow_engine import teamflow_engine
 
 
@@ -105,19 +107,58 @@ async def execute_from_chat(
 ):
     """Ejecuta intent → task → acción (mismo puente que el chat de ZEUS Core)."""
     from services.zeus_orchestrator_service import try_handle_zeus_chat
+    thread_id = request.thread_id or "main"
+    company_id = chat_db.resolve_company_id(db, current_user)
+    chat_db.save_message(
+        db,
+        user=current_user,
+        agent_name="ZEUS CORE",
+        thread_id=thread_id,
+        role="user",
+        message=request.message,
+        company_id=company_id,
+    )
 
     bridge = await try_handle_zeus_chat(
         db,
         current_user,
         request.message,
-        {"thread_id": request.thread_id or "main"},
+        {"thread_id": thread_id},
         force_execute=request.force_execute,
+    )
+    out_msg = (
+        (bridge or {}).get("message")
+        or "No se detectó una acción ejecutable en el mensaje."
+    )
+    chat_db.save_message(
+        db,
+        user=current_user,
+        agent_name="ZEUS CORE",
+        thread_id=thread_id,
+        role="assistant",
+        message=str(out_msg),
+        company_id=company_id,
+    )
+    ActivityLogger.log_activity(
+        agent_name="ZEUS CORE",
+        action_type="teamflow_execute_from_chat",
+        action_description="Ejecución operativa desde TeamFlow/chat",
+        details={
+            "thread_id": thread_id,
+            "handled": bool((bridge or {}).get("handled")),
+            "executed": bool((bridge or {}).get("executed")),
+            "force_execute": bool(request.force_execute),
+        },
+        user_email=current_user.email,
+        status="completed",
+        priority="normal",
+        visible_to_client=True,
     )
     if not bridge or not bridge.get("handled"):
         return {
             "success": True,
             "handled": False,
-            "message": "No se detectó una acción ejecutable en el mensaje.",
+            "message": out_msg,
         }
     return {"success": bridge.get("success", False), **bridge}
 

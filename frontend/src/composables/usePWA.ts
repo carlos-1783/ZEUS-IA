@@ -5,6 +5,12 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
+declare global {
+  interface Window {
+    __zeusDeferredInstallPrompt?: BeforeInstallPromptEvent | null
+  }
+}
+
 /**
  * Composable para manejar la instalación de la PWA
  * Detecta cuando la app puede ser instalada y proporciona métodos para mostrar el prompt
@@ -14,25 +20,21 @@ export function usePWA() {
   const isInstalled = ref(false)
   const deferredPrompt = ref<BeforeInstallPromptEvent | null>(null)
 
+  const isStandaloneMode = () =>
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.matchMedia('(display-mode: fullscreen)').matches ||
+    ((window.navigator as any).standalone === true)
+
   // Detectar si la app ya está instalada
   const checkIfInstalled = () => {
-    // Para móviles
-    if (window.matchMedia('(display-mode: standalone)').matches) {
+    if (isStandaloneMode()) {
       isInstalled.value = true
+      localStorage.setItem('zeus-pwa-installed', 'true')
       return true
     }
-    
-    // Para escritorio (Windows)
-    if ((window.navigator as any).standalone === false) {
-      isInstalled.value = false
-    }
-    
-    // Detectar desde localStorage (puede no ser 100% preciso)
-    if (localStorage.getItem('zeus-pwa-installed') === 'true') {
-      isInstalled.value = true
-      return true
-    }
-    
+
+    // Evitar falso positivo por localStorage residual: si no hay modo standalone, no está instalada.
+    isInstalled.value = false
     return false
   }
 
@@ -41,6 +43,7 @@ export function usePWA() {
     console.log('📱 PWA: Evento beforeinstallprompt recibido!')
     e.preventDefault()
     deferredPrompt.value = e as BeforeInstallPromptEvent
+    window.__zeusDeferredInstallPrompt = deferredPrompt.value
     isInstallable.value = true
     console.log('✅ PWA: isInstallable establecido en true')
   }
@@ -50,6 +53,7 @@ export function usePWA() {
     isInstalled.value = true
     isInstallable.value = false
     deferredPrompt.value = null
+    window.__zeusDeferredInstallPrompt = null
     localStorage.setItem('zeus-pwa-installed', 'true')
     console.log('✅ PWA instalada')
   }
@@ -93,6 +97,12 @@ export function usePWA() {
     // Si el usuario ya lo rechazó o el navegador ya lo procesó, no se volverá a disparar
     // hasta que se limpien los datos del sitio o se instale la app
     
+    // Recuperar prompt capturado previamente (si el evento llegó antes de montar el componente)
+    if (window.__zeusDeferredInstallPrompt) {
+      deferredPrompt.value = window.__zeusDeferredInstallPrompt
+      isInstallable.value = true
+    }
+
     // Escuchar evento beforeinstallprompt (solo Chrome/Edge)
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
     console.log('🔧 usePWA: Listener de beforeinstallprompt agregado')

@@ -486,7 +486,20 @@ async def workspace_rafael_forms(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
+    from services.zeus_office_mode import validate_tax_model_303
+
     result = generate_fiscal_forms(request.model_dump())
+    period = request.model_dump().get("quarter") or "Q1"
+    validate_tax_model_303(
+        {
+            "modelo_303": {
+                **(result.get("modelo_303") or {}),
+                "period": period,
+                "vat_collected": (result.get("modelo_303") or {}).get("cuota"),
+                "vat_paid": 0,
+            }
+        }
+    )
     text = _text_generic("Generación de modelos fiscales", result)
     return _persist_agent_tool_response(
         db,

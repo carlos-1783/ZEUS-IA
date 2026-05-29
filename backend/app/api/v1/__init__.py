@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     customers,
     crm,
     crm_import,
+    office_mode,
     company,
     test,
     zeus_core,
@@ -57,6 +58,7 @@ api_router.include_router(system.router, prefix="/system", tags=["system"])
 api_router.include_router(customers.router, prefix="/customers", tags=["customers"])
 api_router.include_router(crm.router, prefix="/crm", tags=["crm-office"])
 api_router.include_router(crm_import.router, prefix="/crm/import", tags=["crm-import"])
+api_router.include_router(office_mode.router, prefix="/office", tags=["office-mode"])
 api_router.include_router(company.router, prefix="/company", tags=["company"])
 
 # Test endpoints

@@ -217,6 +217,10 @@ def persist_workspace_deliverable(
     status: str = "draft",
     visible_in_workspace: bool = True,
 ) -> DocumentApproval:
+    from services.zeus_office_mode import assert_deliverable_content, require_company_id
+
+    require_company_id(company_id, context="entregable de workspace")
+    assert_deliverable_content(content, title=title)
     agent_name = agent_name.upper().strip()
     payload = build_structured_payload(
         title=title,

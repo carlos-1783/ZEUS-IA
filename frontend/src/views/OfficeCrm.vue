@@ -11,8 +11,10 @@
       <div class="toolbar">
         <h2>Clientes</h2>
         <input v-model="clientSearch" placeholder="Buscar cliente..." />
-        <button class="btn-secondary" @click="downloadCsv('/api/v1/crm/export/clients', 'clients.csv')">Export CSV</button>
-        <button class="btn-secondary" @click="showImport = true">Import CSV</button>
+        <button class="btn-secondary" @click="downloadCsv('/api/v1/crm/export/clients', 'clients.csv')">CSV</button>
+        <button class="btn-secondary" @click="downloadExcel('clients')">Excel</button>
+        <button class="btn-secondary" @click="showImport = true">Importar</button>
+        <button class="btn-primary" @click="showNewClient = !showNewClient">Nuevo cliente</button>
       </div>
       <table class="data-table">
         <thead>
@@ -42,13 +44,21 @@
           </tr>
         </tbody>
       </table>
+      <form v-if="showNewClient" class="inline-form" @submit.prevent="createClient">
+        <input v-model="newClient.name" placeholder="Nombre *" required />
+        <input v-model="newClient.email" type="email" placeholder="Email *" required />
+        <input v-model="newClient.phone" placeholder="Teléfono" />
+        <button type="submit" class="btn-small">Crear cliente</button>
+      </form>
     </section>
 
     <section class="panel" v-if="selectedCustomer">
       <div class="toolbar">
         <h2>Expedientes · {{ selectedCustomer.name }}</h2>
         <input v-model="caseSearch" placeholder="Buscar expediente..." />
-        <button class="btn-secondary" @click="downloadCsv('/api/v1/crm/export/cases', 'cases.csv')">Export CSV</button>
+        <button class="btn-secondary" @click="downloadCsv('/api/v1/crm/export/cases', 'cases.csv')">CSV</button>
+        <button class="btn-secondary" @click="downloadExcel('cases')">Excel</button>
+        <button class="btn-primary" @click="showNewCase = !showNewCase">Nuevo expediente</button>
       </div>
       <table class="data-table">
         <thead>
@@ -80,36 +90,55 @@
           </tr>
         </tbody>
       </table>
+      <form v-if="showNewCase" class="inline-form" @submit.prevent="createCase">
+        <input v-model="newCase.title" placeholder="Título expediente *" required />
+        <input v-model.number="newCase.amount" type="number" step="0.01" min="0" placeholder="Importe" />
+        <button type="submit" class="btn-small">Crear</button>
+      </form>
     </section>
 
     <section class="panel" v-if="selectedCustomer">
       <div class="toolbar">
         <h2>Cobros</h2>
         <input v-model="paymentSearch" placeholder="Buscar cobro..." />
-        <button class="btn-secondary" @click="downloadCsv('/api/v1/crm/export/payments', 'payments.csv')">Export CSV</button>
+        <button class="btn-secondary" @click="downloadCsv('/api/v1/crm/export/payments', 'payments.csv')">CSV</button>
+        <button class="btn-secondary" @click="downloadExcel('payments')">Excel</button>
       </div>
       <table class="data-table">
         <thead>
           <tr>
-            <th>ID</th>
-            <th>Case</th>
+            <th>Expediente</th>
             <th>Monto</th>
             <th>Método</th>
-            <th>Status</th>
+            <th>Estado</th>
             <th>Fecha</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="p in filteredPayments" :key="p.id">
-            <td>{{ p.id }}</td>
-            <td>{{ p.case_id }}</td>
+            <td>{{ p.case_title || '—' }}</td>
             <td>{{ formatMoney(p.amount) }}</td>
-            <td>{{ p.method }}</td>
-            <td>{{ p.status }}</td>
+            <td>{{ p.method_human || p.method }}</td>
+            <td>{{ p.status_human || p.status }}</td>
             <td>{{ formatDt(p.created_at) }}</td>
           </tr>
         </tbody>
       </table>
+    </section>
+
+    <section class="panel" v-if="selectedCustomer">
+      <div class="toolbar">
+        <h2>Actividad reciente</h2>
+        <button class="btn-secondary" @click="loadActivity">Actualizar</button>
+      </div>
+      <ul class="activity-list">
+        <li v-for="a in activity" :key="a.id" class="activity-item">
+          <time>{{ formatDt(a.created_at) }}</time>
+          <strong>{{ a.action_human || a.action }}</strong>
+          <p v-if="a.summary">{{ a.summary }}</p>
+        </li>
+      </ul>
+      <p v-if="!activity.length" class="muted">Sin actividad registrada.</p>
     </section>
 
     <div v-if="chargeRecord" class="charge-box">
@@ -169,10 +198,21 @@ type CrmCase = {
 type CrmPayment = {
   id: number
   case_id: number
+  case_title?: string
   amount: number
   method: string
+  method_human?: string
   status: string
+  status_human?: string
   created_at?: string | null
+}
+
+type CrmActivity = {
+  id: number
+  action: string
+  action_human?: string
+  summary?: string
+  created_at?: string
 }
 
 const { t } = useI18n()
@@ -186,7 +226,12 @@ const customers = ref<CrmCustomer[]>([])
 const selectedCustomer = ref<CrmCustomer | null>(null)
 const records = ref<CrmCase[]>([])
 const payments = ref<CrmPayment[]>([])
+const activity = ref<CrmActivity[]>([])
 const showImport = ref(false)
+const showNewClient = ref(false)
+const showNewCase = ref(false)
+const newClient = reactive({ name: '', email: '', phone: '' })
+const newCase = reactive({ title: '', amount: 0 })
 const clientSearch = ref('')
 const caseSearch = ref('')
 const paymentSearch = ref('')
@@ -250,7 +295,35 @@ async function loadCustomers() {
   }
 }
 
+async function createClient() {
+  if (!newClient.name.trim() || !newClient.email.trim()) {
+    globalError.value = 'Nombre y email son obligatorios.'
+    return
+  }
+  try {
+    await api.post('/api/v1/crm/customers', {
+      name: newClient.name.trim(),
+      email: newClient.email.trim(),
+      phone: newClient.phone?.trim() || null,
+      is_active: true,
+      is_company: true,
+      contacts: [],
+    })
+    newClient.name = ''
+    newClient.email = ''
+    newClient.phone = ''
+    showNewClient.value = false
+    await loadCustomers()
+  } catch (e) {
+    globalError.value = await errMessage(e)
+  }
+}
+
 async function saveClient(client: CrmCustomer) {
+  if (!client.email?.trim()) {
+    globalError.value = 'El email del cliente es obligatorio.'
+    return
+  }
   try {
     await api.patch(`/api/v1/crm/customers/${client.id}`, {
       name: client.name,
@@ -263,6 +336,16 @@ async function saveClient(client: CrmCustomer) {
   }
 }
 
+async function loadActivity() {
+  if (!selectedCustomer.value) return
+  try {
+    const actRes = await api.get(`/api/v1/crm/customers/${selectedCustomer.value.id}/activity`)
+    activity.value = Array.isArray(actRes?.data) ? actRes.data : []
+  } catch (e) {
+    globalError.value = await errMessage(e)
+  }
+}
+
 async function openCustomer(c: CrmCustomer) {
   selectedCustomer.value = c
   try {
@@ -270,10 +353,31 @@ async function openCustomer(c: CrmCustomer) {
       api.get(`/api/v1/crm/customers/${c.id}/records`),
       api.get('/api/v1/crm/table/payments'),
     ])
-    records.value = (Array.isArray(recRes?.data) ? recRes.data : []) as CrmCase[]
+    records.value = (Array.isArray(recRes?.data) ? recRes.data : []).map((r: CrmCase) => ({
+      ...r,
+      paid: r.status === 'paid',
+    }))
     payments.value = ((Array.isArray(payRes?.data) ? payRes.data : []) as CrmPayment[]).filter((p) =>
       records.value.some((r) => r.id === p.case_id),
     )
+    await loadActivity()
+  } catch (e) {
+    globalError.value = await errMessage(e)
+  }
+}
+
+async function createCase() {
+  if (!selectedCustomer.value || !newCase.title.trim()) return
+  try {
+    await api.post(`/api/v1/crm/customers/${selectedCustomer.value.id}/records`, {
+      title: newCase.title.trim(),
+      status: 'open',
+      amount: Number(newCase.amount || 0),
+    })
+    newCase.title = ''
+    newCase.amount = 0
+    showNewCase.value = false
+    await openCustomer(selectedCustomer.value)
   } catch (e) {
     globalError.value = await errMessage(e)
   }
@@ -325,6 +429,22 @@ const filteredPayments = computed(() => {
     !term || [p.method, p.status, String(p.amount || ''), String(p.case_id || '')].some((v) => String(v).toLowerCase().includes(term)),
   )
 })
+
+async function downloadExcel(entity: string) {
+  try {
+    const blob = await api.getBlob(`/api/v1/office/export/${entity}/excel`)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${entity}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    globalError.value = await errMessage(e)
+  }
+}
 
 async function downloadCsv(endpoint: string, filename: string) {
   try {
@@ -468,5 +588,51 @@ onMounted(bootstrapPage)
   margin-left: 0.5rem;
   color: #2563eb;
   font-weight: 600;
+}
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.inline-form input {
+  flex: 1;
+  min-width: 140px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 8px;
+}
+.activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.activity-item {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 10px 0;
+}
+.activity-item time {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+}
+.muted {
+  color: #64748b;
+  font-size: 14px;
+}
+.btn-primary {
+  border: none;
+  background: #1d4ed8;
+  color: #fff;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.btn-secondary {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
 }
 </style>

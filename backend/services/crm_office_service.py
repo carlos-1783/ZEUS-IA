@@ -22,14 +22,15 @@ from app.models.user import User
 from app.schemas.customer import CustomerCreate
 from services.fiscal_engine import build_fiscal_items_from_cart, get_fiscal_profile, persist_fiscal_sale
 from services.tpv_service import PaymentMethod
+from services.zeus_office_mode import (
+    assert_non_empty_record,
+    payment_status_human,
+    require_company_id,
+    translate_activity,
+    validate_customer_record,
+)
 
 logger = logging.getLogger(__name__)
-
-ACTIVITY_TRANSLATIONS = {
-    "payment_created": "Cobro registrado",
-    "record_created": "Expediente creado",
-    "customer_created": "Cliente creado",
-}
 
 
 def company_ids_for_user(db: Session, user: User) -> List[int]:
@@ -148,6 +149,12 @@ def log_activity(
 def create_customer(db: Session, user: User, customer_in: CustomerCreate) -> Customer:
     """Alta de cliente CRM (multi-empresa, contactos opcionales, log de actividad)."""
     cid = primary_company_id(db, user)
+    require_company_id(cid, context="alta de cliente")
+    validate_customer_record(
+        name=customer_in.name,
+        email=customer_in.email,
+        for_create=True,
+    )
     assert_email_unique_in_company(db, cid, customer_in.email)
 
     contacts_data = list(customer_in.contacts or [])
@@ -227,10 +234,6 @@ def list_activity_for_customer(db: Session, user: User, customer_id: int, limit:
     return q.all()
 
 
-def translate_activity(action: str) -> str:
-    return ACTIVITY_TRANSLATIONS.get(action, action.replace("_", " ").capitalize())
-
-
 def list_cases_table(db: Session, user: User) -> List[Dict[str, Any]]:
     cids = company_ids_for_user(db, user)
     rows = (
@@ -270,9 +273,12 @@ def list_payments_table(db: Session, user: User) -> List[Dict[str, Any]]:
         {
             "id": link.id,
             "case_id": rec.id,
+            "case_title": rec.title,
             "amount": sale.total,
             "method": sale.payment_method,
             "status": "registered",
+            "status_human": payment_status_human("registered"),
+            "method_human": str(sale.payment_method or "").replace("_", " ").capitalize(),
             "created_at": link.created_at,
         }
         for link, sale, rec in rows
@@ -289,6 +295,12 @@ def update_customer(
     phone: Optional[str] = None,
     status: Optional[str] = None,
 ) -> Customer:
+    validate_customer_record(
+        customer_id=customer_id,
+        name=name,
+        email=email,
+        for_create=False,
+    )
     customer = resolve_customer(db, user, customer_id)
     cid = effective_company_id_for_crm(db, user, customer)
     if email is not None:
@@ -429,8 +441,10 @@ def create_record(
     amount: Decimal = Decimal("0"),
     notes: Optional[str] = None,
 ) -> CustomerRecord:
+    assert_non_empty_record(title, entity="expediente")
     cust = resolve_customer(db, user, customer_id)
     cid = effective_company_id_for_crm(db, user, cust)
+    require_company_id(cid, context="expediente")
     rec = CustomerRecord(
         company_id=cid,
         customer_id=cust.id,
@@ -693,7 +707,7 @@ def register_record_charge(
     )
 
     try:
-        from services.event_bus import emit_payment_created
+        from services.event_bus import emit_cashflow_updated, emit_payment_created
 
         totals = ticket.get("totals") or {}
         emit_payment_created(
@@ -706,6 +720,16 @@ def register_record_charge(
             payment_method=pm.value,
             amount=totals.get("total"),
             service_name=line_name,
+            db=db,
+        )
+        emit_cashflow_updated(
+            user_id=user.id,
+            user_email=getattr(user, "email", None),
+            company_id=cid,
+            amount=float(totals.get("total") or base_amount),
+            direction="in",
+            source="CMR",
+            customer_id=cust.id,
             db=db,
         )
     except Exception:

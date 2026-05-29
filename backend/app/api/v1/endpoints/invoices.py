@@ -14,8 +14,13 @@ from app.schemas.erp import (
 )
 from app.core.security import get_current_active_user
 from app.models.user import User
-from services.event_bus import emit_payment_registered
+from services.event_bus import emit_cashflow_updated, emit_payment_registered
 import services.crm_office_service as crm_svc
+from services.zeus_office_mode import (
+    require_company_id,
+    validate_invoice_logical,
+    validate_payment_logical,
+)
 
 router = APIRouter()
 
@@ -211,6 +216,17 @@ def create_invoice(
     totals = calculate_invoice_totals(invoice, db)
     for key, value in totals.items():
         setattr(invoice, key, value)
+
+    company_id = crm_svc.primary_company_id(db, current_user)
+    require_company_id(company_id, context="facturación")
+    validate_invoice_logical(
+        customer_id=invoice_in.customer_id,
+        issue_date=invoice.issue_date,
+        subtotal=float(totals["subtotal"]),
+        tax_amount=float(totals["tax_amount"]),
+        total=float(totals["total"]),
+        status_value=str(invoice.status.value if hasattr(invoice.status, "value") else invoice.status),
+    )
     
     db.commit()
     db.refresh(invoice)
@@ -277,6 +293,13 @@ def create_payment(
     Record a payment for an invoice
     """
     invoice = get_invoice_or_404(db, invoice_id, current_user)
+
+    validate_payment_logical(
+        invoice_id=invoice_id,
+        amount=float(payment_in.amount),
+        method=str(payment_in.method.value if hasattr(payment_in.method, "value") else payment_in.method),
+        payment_date=payment_in.payment_date or datetime.utcnow().date(),
+    )
     
     # Create payment
     payment = Payment(
@@ -303,19 +326,33 @@ def create_payment(
     db.commit()
     db.refresh(payment)
     try:
+        cid = crm_svc.primary_company_id(db, current_user)
+        amt = float(payment.amount) if getattr(payment, "amount", None) is not None else None
         emit_payment_registered(
             user_id=current_user.id,
             user_email=getattr(current_user, "email", None),
-            company_id=crm_svc.primary_company_id(db, current_user),
+            company_id=cid,
             customer_id=getattr(invoice, "customer_id", None),
             ticket_id=getattr(invoice, "invoice_number", None),
             tpv_sale_id=None,
             payment_method=str(payment.method) if getattr(payment, "method", None) else None,
-            amount=float(payment.amount) if getattr(payment, "amount", None) is not None else None,
+            amount=amt,
             service_name="invoice_payment",
             source="INVOICES_MODULE",
             db=db,
         )
+        if amt is not None:
+            emit_cashflow_updated(
+                user_id=current_user.id,
+                user_email=getattr(current_user, "email", None),
+                company_id=cid,
+                amount=amt,
+                direction="in",
+                source="INVOICES_MODULE",
+                customer_id=getattr(invoice, "customer_id", None),
+                invoice_id=invoice_id,
+                db=db,
+            )
     except Exception:
         # No bloquear el flujo de facturación por trazabilidad/evento
         pass

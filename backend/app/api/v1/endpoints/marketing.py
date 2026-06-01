@@ -2,12 +2,17 @@
 📊 Marketing Automation Endpoints
 Endpoints para Google Ads, Meta Ads, Analytics
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from sqlalchemy.orm import Session
 
-# Importar servicio
+from app.core.auth import get_current_active_user
+from app.db.session import get_db
+from app.models.user import User
+from app.schemas.marketing_integrations import MarketingIntegrationsIn, MarketingIntegrationsOut
+from services import marketing_integrations_service as mi_svc
 from services.marketing_service import marketing_service
 
 router = APIRouter()
@@ -177,4 +182,42 @@ async def generate_marketing_report(period_days: int = 30):
 async def marketing_status():
     """Obtener estado del servicio de marketing"""
     return marketing_service.get_status()
+
+
+# ============================================================================
+# MARKETING INTEGRATIONS V1
+# ============================================================================
+
+
+@router.get("/integrations", response_model=MarketingIntegrationsOut)
+def get_marketing_integrations(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Integraciones sociales y ads por empresa (company_id obligatorio)."""
+    data = mi_svc.get_integrations(db, current_user)
+    return MarketingIntegrationsOut(**data)
+
+
+@router.put("/integrations", response_model=MarketingIntegrationsOut)
+def save_marketing_integrations(
+    body: MarketingIntegrationsIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    on_save: validate_inputs → store_integrations → log_activity:marketing_connected
+    """
+    payload = body.model_dump()
+    data = mi_svc.store_integrations(db, current_user, payload)
+    return MarketingIntegrationsOut(**data)
+
+
+@router.get("/integrations/metrics")
+def get_marketing_integration_metrics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Métricas agregadas (ad_spend, leads, CPL, engagement)."""
+    return {"success": True, "data": mi_svc.collect_metrics_snapshot(db, current_user)}
 

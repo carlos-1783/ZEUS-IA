@@ -409,6 +409,7 @@
     </section>
 
     <PerseoToolsPanel />
+    <MarketingIntegrationsPanel />
 
     <footer class="workspace-footer">
       <p>
@@ -426,6 +427,7 @@ import { useAutomationDeliverables } from '@/composables/useAutomationDeliverabl
 import api from '@/services/api';
 import { resolveWorkspaceMediaUrl } from '@/utils/resolveWorkspaceMediaUrl';
 import PerseoToolsPanel from './PerseoToolsPanel.vue';
+import MarketingIntegrationsPanel from './MarketingIntegrationsPanel.vue';
 
 const {
   items: deliverables,

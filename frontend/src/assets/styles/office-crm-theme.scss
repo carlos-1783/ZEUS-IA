@@ -240,6 +240,81 @@
   font-size: 0.8rem;
 }
 
+// Tabla CRM profesional (data-table) + inputs de toolbar/formularios
+.office-crm .toolbar h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #0f172a;
+}
+
+.office-crm .toolbar input,
+.office-crm .data-table input,
+.office-crm .data-table select,
+.office-crm .inline-form input,
+.office-crm .inline-form select,
+.office-crm .charge-box input,
+.office-crm .charge-box select {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+  caret-color: #0f172a;
+  -webkit-text-fill-color: #0f172a;
+}
+
+.office-crm .toolbar input::placeholder,
+.office-crm .inline-form input::placeholder,
+.office-crm .charge-box input::placeholder {
+  color: #64748b !important;
+  opacity: 1 !important;
+}
+
+.office-crm .data-table select option,
+.office-crm .inline-form select option,
+.office-crm .charge-box select option {
+  color: #0f172a;
+  background-color: #ffffff;
+}
+
+.office-crm .data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.office-crm .data-table th,
+.office-crm .data-table td {
+  text-align: left;
+  padding: 0.5rem 0.35rem;
+  border: 1px solid #e2e8f0;
+}
+
+.office-crm .data-table th {
+  color: #334155 !important;
+  font-weight: 600;
+  font-size: 0.8rem;
+  background: #f8fafc !important;
+  cursor: pointer;
+}
+
+.office-crm .data-table td {
+  color: #0f172a;
+}
+
+.office-crm .charge-box label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #475569;
+  margin-top: 0.35rem;
+}
+
+.office-crm .toolbar input:-webkit-autofill,
+.office-crm .data-table input:-webkit-autofill,
+.office-crm .inline-form input:-webkit-autofill,
+.office-crm .charge-box input:-webkit-autofill {
+  -webkit-text-fill-color: #0f172a !important;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+}
+
 .office-crm .charge-box {
   margin-top: 1rem;
   padding: 0.85rem;
@@ -326,6 +401,40 @@
 [data-theme='dark'] .office-crm .records-table th,
 [data-theme='dark'] .office-crm .records-table td {
   border-color: #334155;
+}
+
+[data-theme='dark'] .office-crm .toolbar h2 {
+  color: #f1f5f9;
+}
+
+[data-theme='dark'] .office-crm .data-table th,
+[data-theme='dark'] .office-crm .data-table td {
+  border-color: #334155;
+}
+
+[data-theme='dark'] .office-crm .data-table th {
+  color: #334155 !important;
+  background: #f8fafc !important;
+}
+
+[data-theme='dark'] .office-crm .data-table td {
+  color: #e2e8f0;
+}
+
+[data-theme='dark'] .office-crm .toolbar input,
+[data-theme='dark'] .office-crm .data-table input,
+[data-theme='dark'] .office-crm .data-table select,
+[data-theme='dark'] .office-crm .inline-form input,
+[data-theme='dark'] .office-crm .inline-form select,
+[data-theme='dark'] .office-crm .charge-box input,
+[data-theme='dark'] .office-crm .charge-box select {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+  -webkit-text-fill-color: #0f172a;
+}
+
+[data-theme='dark'] .office-crm .charge-box label {
+  color: #cbd5e1;
 }
 
 .office-crm .clients-toolbar {

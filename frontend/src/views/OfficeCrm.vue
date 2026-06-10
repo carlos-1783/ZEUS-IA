@@ -560,6 +560,10 @@ onMounted(bootstrapPage)
 .data-table th {
   cursor: pointer;
   background: #f8fafc;
+  color: #334155;
+}
+.data-table td {
+  color: #0f172a;
 }
 .data-table input,
 .data-table select {
@@ -567,6 +571,36 @@ onMounted(bootstrapPage)
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   padding: 6px;
+  color: #0f172a;
+  background: #fff;
+}
+.toolbar input {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 8px;
+  color: #0f172a;
+  background: #fff;
+}
+.toolbar input::placeholder {
+  color: #64748b;
+}
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.inline-form input {
+  flex: 1;
+  min-width: 140px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 8px;
+  color: #0f172a;
+  background: #fff;
+}
+.inline-form input::placeholder {
+  color: #64748b;
 }
 .actions {
   display: flex;
@@ -588,19 +622,6 @@ onMounted(bootstrapPage)
   margin-left: 0.5rem;
   color: #2563eb;
   font-weight: 600;
-}
-.inline-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-.inline-form input {
-  flex: 1;
-  min-width: 140px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  padding: 8px;
 }
 .activity-list {
   list-style: none;

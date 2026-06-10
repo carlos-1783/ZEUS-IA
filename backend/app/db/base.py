@@ -63,7 +63,8 @@ def create_tables():
             from app.models.user_settings import UserSettings
             from app.models.company import Company, UserCompany
             from app.models.customer import Customer
-            from app.models.erp import Invoice, Product, Payment, TPVProduct, TaxRate, FiscalProfile, TPVSale, TPVSaleItem
+            from app.models.erp import Invoice, Product, Payment, TPVProduct
+            from app.models.fiscal import TaxRate, FiscalProfile, TPVSale, TPVSaleItem
             from app.models.agent_activity import AgentActivity
             from app.models.document_approval import DocumentApproval
             from app.models.agent_memory import AgentOperationalState, AgentDecisionLog, AgentShortTermBuffer

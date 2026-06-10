@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models.agent_activity import AgentActivity
 from app.models.customer import Customer
-from app.models.erp import TPVSale
+from app.models.fiscal import TPVSale
 from app.models.user import User
 import services.crm_office_service as crm_svc
 

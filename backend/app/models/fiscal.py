@@ -3,7 +3,7 @@ ZEUS_TPV_FULL_FISCAL_INFRASTRUCTURE_ES_003
 Modelos fiscales: tipos de IVA, perfiles fiscales, ventas TPV y líneas con snapshot inmutable.
 Preparado para modelo 303, recargo de equivalencia e inspección AEAT.
 """
-from sqlalchemy import Column, Integer, String, Numeric, Boolean, ForeignKey, DateTime, Text
+from sqlalchemy import Column, Integer, String, Numeric, Boolean, ForeignKey, DateTime, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.base import Base
@@ -43,6 +43,7 @@ class TPVSale(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True)
     ticket_id = Column(String(100), nullable=False, unique=True, index=True)
     document_type = Column(String(20), nullable=False)  # ticket, factura
     sale_date = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -50,11 +51,19 @@ class TPVSale(Base):
     consumption_type = Column(String(20), nullable=True)  # onsite, takeaway
     subtotal = Column(Numeric(12, 2), nullable=False)
     tax_amount = Column(Numeric(12, 2), nullable=False)
-    recargo_amount = Column(Numeric(12, 2), nullable=True)
+    recargo_amount = Column(Numeric(12, 2), nullable=True, default=0)
     total = Column(Numeric(12, 2), nullable=False)
+    customer_data = Column(JSON, nullable=True)
+    work_session_id = Column(
+        Integer,
+        ForeignKey("employee_work_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     user = relationship("User", backref="tpv_sales")
+    company = relationship("Company", foreign_keys=[company_id])
     items = relationship("TPVSaleItem", back_populates="sale", cascade="all, delete-orphan")
 
 
@@ -64,16 +73,16 @@ class TPVSaleItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     tpv_sale_id = Column(Integer, ForeignKey("tpv_sales.id", ondelete="CASCADE"), nullable=False, index=True)
-    product_id = Column(String(100), nullable=True)
+    product_id = Column(String(100), nullable=False)
     product_name = Column(String(200), nullable=False)
-    quantity = Column(Numeric(12, 4), nullable=False)
-    unit_price = Column(Numeric(12, 4), nullable=False)
+    quantity = Column(Numeric(10, 2), nullable=False)
+    unit_price = Column(Numeric(10, 2), nullable=False)
     tax_rate_snapshot = Column(Numeric(5, 4), nullable=False)
     tax_amount = Column(Numeric(12, 2), nullable=False)
     base_amount = Column(Numeric(12, 2), nullable=False)
     recargo_rate_snapshot = Column(Numeric(5, 4), nullable=True)
-    recargo_amount = Column(Numeric(12, 2), nullable=True)
-    consumption_type = Column(String(20), nullable=True)
+    recargo_amount = Column(Numeric(12, 2), nullable=True, default=0)
+    consumption_type = Column(String(20), nullable=True)  # onsite, takeaway
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     sale = relationship("TPVSale", back_populates="items")

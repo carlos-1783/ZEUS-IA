@@ -52,7 +52,7 @@
       </form>
     </section>
 
-    <section class="panel" v-if="selectedCustomer">
+    <section class="panel" v-if="selectedCustomer" ref="casesPanelRef">
       <div class="toolbar">
         <h2>Expedientes · {{ selectedCustomer.name }}</h2>
         <input v-model="caseSearch" placeholder="Buscar expediente..." />
@@ -71,7 +71,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="r in filteredCases" :key="r.id">
+          <tr v-for="r in filteredCases" :key="r.id" :class="{ 'case-row-active': chargeRecord?.id === r.id }">
             <td><input v-model="r.title" /></td>
             <td>
               <select v-model="r.status">
@@ -84,8 +84,10 @@
             <td><input v-model.number="r.amount" type="number" step="0.01" /></td>
             <td>{{ r.paid ? 'Sí' : 'No' }}</td>
             <td class="actions">
-              <button class="btn-small" @click="saveCase(r)">Guardar</button>
-              <button class="btn-small" @click="openCharge(r)">Cobrar</button>
+              <button type="button" class="btn-small" @click="saveCase(r)">Guardar</button>
+              <button type="button" class="btn-small" @click="openCharge(r)">
+                {{ chargeRecord?.id === r.id ? 'Ocultar cobro' : 'Cobrar' }}
+              </button>
             </td>
           </tr>
         </tbody>
@@ -95,6 +97,27 @@
         <input v-model.number="newCase.amount" type="number" step="0.01" min="0" placeholder="Importe" />
         <button type="submit" class="btn-small">Crear</button>
       </form>
+
+      <div v-if="chargeRecord" ref="chargeBoxRef" class="charge-box">
+        <h4>{{ t('officeCrm.chargeTitle') }} — {{ chargeRecord.title }}</h4>
+        <form @submit.prevent="submitCharge">
+          <label>{{ t('officeCrm.baseAmount') }} (€) *</label>
+          <input v-model="chargeForm.base_amount" type="number" step="0.01" min="0.01" required />
+          <label>{{ t('officeCrm.paymentMethod') }}</label>
+          <select v-model="chargeForm.payment_method">
+            <option value="efectivo">efectivo</option>
+            <option value="tarjeta">tarjeta</option>
+            <option value="bizum">bizum</option>
+            <option value="transferencia">transferencia</option>
+          </select>
+          <label>{{ t('officeCrm.description') }}</label>
+          <input v-model="chargeForm.description" maxlength="200" />
+          <div class="charge-actions">
+            <button type="submit" class="btn-primary" :disabled="charging">{{ t('officeCrm.registerCharge') }}</button>
+            <button type="button" class="btn-secondary" @click="closeCharge">{{ t('officeCrm.cancel') }}</button>
+          </div>
+        </form>
+      </div>
     </section>
 
     <section class="panel" v-if="selectedCustomer">
@@ -141,33 +164,12 @@
       <p v-if="!activity.length" class="muted">Sin actividad registrada.</p>
     </section>
 
-    <div v-if="chargeRecord" class="charge-box">
-      <h4>{{ t('officeCrm.chargeTitle') }} — {{ chargeRecord.title }}</h4>
-      <form @submit.prevent="submitCharge">
-        <label>{{ t('officeCrm.baseAmount') }} (€) *</label>
-        <input v-model="chargeForm.base_amount" type="number" step="0.01" min="0.01" required />
-        <label>{{ t('officeCrm.paymentMethod') }}</label>
-        <select v-model="chargeForm.payment_method">
-          <option value="efectivo">efectivo</option>
-          <option value="tarjeta">tarjeta</option>
-          <option value="bizum">bizum</option>
-          <option value="transferencia">transferencia</option>
-        </select>
-        <label>{{ t('officeCrm.description') }}</label>
-        <input v-model="chargeForm.description" maxlength="200" />
-        <div class="charge-actions">
-          <button type="submit" class="btn-primary" :disabled="charging">{{ t('officeCrm.registerCharge') }}</button>
-          <button type="button" class="btn-secondary" @click="chargeRecord = null">{{ t('officeCrm.cancel') }}</button>
-        </div>
-      </form>
-    </div>
-
     <CrmCustomerImport v-if="showImport" @close="showImport = false" @imported="loadAll" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -238,6 +240,8 @@ const paymentSearch = ref('')
 const clientSort = reactive<{ key: keyof CrmCustomer; dir: SortDir }>({ key: 'name', dir: 'asc' })
 const charging = ref(false)
 const chargeRecord = ref<CrmCase | null>(null)
+const casesPanelRef = ref<HTMLElement | null>(null)
+const chargeBoxRef = ref<HTMLElement | null>(null)
 
 const chargeForm = reactive({
   base_amount: '',
@@ -346,21 +350,28 @@ async function loadActivity() {
   }
 }
 
+async function loadCustomerData(customerId: number) {
+  const [recRes, payRes] = await Promise.all([
+    api.get(`/api/v1/crm/customers/${customerId}/records`),
+    api.get('/api/v1/crm/table/payments'),
+  ])
+  records.value = (Array.isArray(recRes?.data) ? recRes.data : []).map((r: CrmCase) => ({
+    ...r,
+    paid: r.status === 'paid',
+  }))
+  payments.value = ((Array.isArray(payRes?.data) ? payRes.data : []) as CrmPayment[]).filter((p) =>
+    records.value.some((r) => r.id === p.case_id),
+  )
+  await loadActivity()
+}
+
 async function openCustomer(c: CrmCustomer) {
   selectedCustomer.value = c
+  chargeRecord.value = null
   try {
-    const [recRes, payRes] = await Promise.all([
-      api.get(`/api/v1/crm/customers/${c.id}/records`),
-      api.get('/api/v1/crm/table/payments'),
-    ])
-    records.value = (Array.isArray(recRes?.data) ? recRes.data : []).map((r: CrmCase) => ({
-      ...r,
-      paid: r.status === 'paid',
-    }))
-    payments.value = ((Array.isArray(payRes?.data) ? payRes.data : []) as CrmPayment[]).filter((p) =>
-      records.value.some((r) => r.id === p.case_id),
-    )
-    await loadActivity()
+    await loadCustomerData(c.id)
+    await nextTick()
+    casesPanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   } catch (e) {
     globalError.value = await errMessage(e)
   }
@@ -462,11 +473,25 @@ async function downloadCsv(endpoint: string, filename: string) {
   }
 }
 
-function openCharge(r: CrmCase) {
-  chargeRecord.value = r
+function closeCharge() {
+  chargeRecord.value = null
+}
+
+async function openCharge(r: CrmCase) {
+  if (chargeRecord.value?.id === r.id) {
+    closeCharge()
+    return
+  }
+
+  chargeRecord.value = null
   chargeForm.base_amount = r.amount && Number(r.amount) > 0 ? String(r.amount) : '10'
   chargeForm.payment_method = 'efectivo'
   chargeForm.description = r.title
+
+  await nextTick()
+  chargeRecord.value = { ...r }
+  await nextTick()
+  chargeBoxRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
 }
 
 async function submitCharge() {
@@ -488,7 +513,7 @@ async function submitCharge() {
     })
     chargeRecord.value = null
     if (selectedCustomer.value) {
-      await openCustomer(selectedCustomer.value)
+      await loadCustomerData(selectedCustomer.value.id)
     }
   } catch (e) {
     globalError.value = await errMessage(e)
@@ -526,7 +551,13 @@ async function loadAll() {
   if (selectedCustomer.value) {
     const selected = customers.value.find((x) => x.id === selectedCustomer.value!.id)
     if (selected) {
-      await openCustomer(selected)
+      selectedCustomer.value = selected
+      chargeRecord.value = null
+      try {
+        await loadCustomerData(selected.id)
+      } catch (e) {
+        globalError.value = await errMessage(e)
+      }
     }
   }
 }
@@ -655,5 +686,37 @@ onMounted(bootstrapPage)
   border-radius: 6px;
   padding: 8px 12px;
   cursor: pointer;
+}
+.case-row-active {
+  background: #eff6ff;
+}
+.charge-box {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.charge-box label {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #475569;
+}
+.charge-box input,
+.charge-box select {
+  width: 100%;
+  margin-top: 4px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 8px;
+  color: #0f172a;
+  background: #fff;
+}
+.charge-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
 }
 </style>

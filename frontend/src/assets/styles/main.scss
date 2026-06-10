@@ -364,3 +364,45 @@ body {
   background: #93c5fd;
   color: #0f172a;
 }
+
+// Panel integraciones PERSEO — fondo claro dentro del dashboard oscuro
+.marketing-integrations,
+.marketing-integrations header h4,
+.marketing-integrations header p,
+.marketing-integrations legend,
+.marketing-integrations label,
+.marketing-integrations .connect,
+.marketing-integrations .inline-check {
+  color: #0f172a !important;
+}
+
+.marketing-integrations header p,
+.marketing-integrations .muted {
+  color: #64748b !important;
+}
+
+.marketing-integrations input:not([type='checkbox']) {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+  -webkit-text-fill-color: #0f172a;
+  caret-color: #0f172a;
+}
+
+.marketing-integrations input:not([type='checkbox'])::placeholder {
+  color: #64748b !important;
+  opacity: 1 !important;
+}
+
+.marketing-integrations .metrics-box,
+.marketing-integrations .metrics-box li {
+  color: #334155 !important;
+}
+
+.marketing-integrations .metrics-box h5 {
+  color: #831843 !important;
+}
+
+.marketing-integrations .btn-secondary {
+  color: #334155 !important;
+  background-color: #ffffff !important;
+}

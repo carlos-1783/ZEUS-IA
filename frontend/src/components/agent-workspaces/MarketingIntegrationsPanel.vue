@@ -212,12 +212,35 @@ onMounted(load)
   border: 1px solid rgba(236, 72, 153, 0.35);
   border-radius: 16px;
   background: #fff;
+  color: #0f172a;
 }
+
+.marketing-integrations header h4 {
+  margin: 0 0 4px;
+  color: #0f172a;
+}
+
+.marketing-integrations header p {
+  margin: 0;
+  color: #475569;
+}
+
 .block {
   border: none;
   margin: 16px 0;
   padding: 0;
 }
+
+.block legend {
+  font-weight: 600;
+  color: #334155;
+  padding: 0 4px;
+}
+
+.block label {
+  color: #0f172a;
+}
+
 .platform-row {
   display: grid;
   grid-template-columns: 140px 1fr auto;
@@ -230,18 +253,36 @@ onMounted(load)
   align-items: center;
   gap: 8px;
   font-weight: 600;
+  color: #0f172a;
 }
 .platform-row input[type='text'],
 .platform-row input:not([type='checkbox']) {
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   padding: 8px;
+  color: #0f172a;
+  background: #fff;
+  caret-color: #0f172a;
+  -webkit-text-fill-color: #0f172a;
 }
+
+.platform-row input:not([type='checkbox'])::placeholder {
+  color: #64748b;
+  opacity: 1;
+}
+
+.platform-row input:not([type='checkbox']):disabled {
+  background: #f1f5f9;
+  color: #64748b;
+  -webkit-text-fill-color: #64748b;
+}
+
 .inline-check {
   font-size: 13px;
   display: flex;
   align-items: center;
   gap: 6px;
+  color: #334155;
 }
 .actions {
   display: flex;
@@ -259,6 +300,7 @@ onMounted(load)
 .btn-secondary {
   border: 1px solid #cbd5e1;
   background: #fff;
+  color: #334155;
   border-radius: 8px;
   padding: 10px 16px;
   cursor: pointer;
@@ -278,5 +320,25 @@ onMounted(load)
   border-radius: 10px;
   padding: 12px;
   margin-top: 12px;
+  color: #0f172a;
+}
+
+.metrics-box h5 {
+  margin: 0 0 8px;
+  color: #831843;
+}
+
+.metrics-box ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #334155;
+}
+
+.metrics-box li {
+  margin-bottom: 4px;
+}
+
+.metrics-box .muted {
+  color: #64748b;
 }
 </style>

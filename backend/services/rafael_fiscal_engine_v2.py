@@ -94,6 +94,73 @@ def validate_file_size(file_path: str) -> int:
     return size
 
 
+def _sql_error_hint(exc: Exception) -> str:
+    orig = getattr(exc, "orig", exc)
+    text = str(orig).strip()
+    if len(text) > 180:
+        text = text[:177] + "..."
+    return text or "error de esquema"
+
+
+def _query_period_invoices(
+    db: Session,
+    *,
+    company_id: int,
+    start: datetime,
+    end: datetime,
+) -> List[Invoice]:
+    try:
+        return (
+            db.query(Invoice)
+            .filter(
+                Invoice.company_id == company_id,
+                Invoice.issue_date >= start,
+                Invoice.issue_date <= end,
+            )
+            .all()
+        )
+    except (OperationalError, ProgrammingError) as exc:
+        db.rollback()
+        em = str(getattr(exc, "orig", exc)).lower()
+        if "company_id" in em or "does not exist" in em or "undefinedcolumn" in em:
+            logger.warning("invoices.company_id ausente; consulta legacy sin filtro empresa")
+            return (
+                db.query(Invoice)
+                .filter(
+                    Invoice.issue_date >= start,
+                    Invoice.issue_date <= end,
+                )
+                .all()
+            )
+        raise
+
+
+def _query_period_expenses(
+    db: Session,
+    *,
+    company_id: int,
+    start: datetime,
+    end: datetime,
+) -> List[Expense]:
+    try:
+        return (
+            db.query(Expense)
+            .filter(
+                Expense.company_id == company_id,
+                Expense.issue_date >= start,
+                Expense.issue_date <= end,
+            )
+            .all()
+        )
+    except (OperationalError, ProgrammingError) as exc:
+        db.rollback()
+        em = str(getattr(exc, "orig", exc)).lower()
+        if "expenses" in em or "does not exist" in em or "undefinedcolumn" in em or "relation" in em:
+            logger.warning("Tabla/columnas expenses ausentes; IVA soportado = 0")
+            return []
+        raise
+
+
 def fetch_period_financials(
     db: Session,
     *,
@@ -104,24 +171,8 @@ def fetch_period_financials(
     start, end = _quarter_bounds(year, quarter)
     period = f"{year}-Q{quarter}"
 
-    invoices = (
-        db.query(Invoice)
-        .filter(
-            Invoice.company_id == company_id,
-            Invoice.issue_date >= start,
-            Invoice.issue_date <= end,
-        )
-        .all()
-    )
-    expenses = (
-        db.query(Expense)
-        .filter(
-            Expense.company_id == company_id,
-            Expense.issue_date >= start,
-            Expense.issue_date <= end,
-        )
-        .all()
-    )
+    invoices = _query_period_invoices(db, company_id=company_id, start=start, end=end)
+    expenses = _query_period_expenses(db, company_id=company_id, start=start, end=end)
 
     if not invoices and not expenses:
         raise HTTPException(
@@ -139,7 +190,12 @@ def fetch_period_financials(
 
     vat_breakdown: Dict[str, float] = {}
     for inv in invoices:
-        for item in inv.items or []:
+        try:
+            line_items = inv.items or []
+        except (OperationalError, ProgrammingError):
+            db.rollback()
+            line_items = []
+        for item in line_items:
             rate = round(float(item.tax_rate or 0), 2)
             key = str(int(rate)) if rate == int(rate) else str(rate)
             vat_breakdown[key] = vat_breakdown.get(key, 0.0) + float(item.tax_amount or 0)
@@ -367,13 +423,20 @@ def generate_model_303_flow(
     cid = require_company_id(company_id, context="modelo 303")
     assert_user_company_access(db, user, cid)
 
+    from app.db.base import ensure_schema_patches
+
+    ensure_schema_patches()
+
     try:
         model = fetch_period_financials(db, company_id=cid, year=year, quarter=quarter)
     except (OperationalError, ProgrammingError) as exc:
         logger.exception("Consulta fiscal falló (esquema BD)")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Base de datos pendiente de actualizar para el modelo 303. Reintenta en unos minutos.",
+            detail=(
+                "No se pudo leer datos fiscales del periodo. "
+                f"Detalle técnico: {_sql_error_hint(exc)}"
+            ),
         ) from exc
 
     company = db.query(Company).filter(Company.id == cid).first()

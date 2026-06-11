@@ -17,7 +17,7 @@ from app.core.security_middleware import SecurityMiddleware
 # Import your existing app
 from app.core.config import settings
 from app.api.v1 import api_router
-from app.db.base import create_tables
+from app.db.base import create_tables, ensure_schema_patches
 from services.automation import start_agent_automation, stop_agent_automation
 from app.db.initial_superuser import ensure_initial_superuser
 from app.db.session import SessionLocal
@@ -232,6 +232,7 @@ async def startup_event():
         "on",
     )
     if not skip_db:
+        ensure_schema_patches()
         create_tables()
         ensure_initial_superuser()
     else:

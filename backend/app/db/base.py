@@ -40,6 +40,23 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
+
+def ensure_schema_patches():
+    """Migraciones idempotentes (legacy sin Alembic real). Seguro llamar en cada arranque."""
+    try:
+        print("[SCHEMA] Aplicando parches de esquema...")
+        _migrate_user_columns()
+        _migrate_document_approvals_columns()
+        _migrate_rafael_fiscal_tables()
+        _migrate_tpv_company_columns()
+        _migrate_smart_time_control_tables()
+        print("[SCHEMA] Parches de esquema completados")
+    except Exception as e:
+        logger.warning("ensure_schema_patches: %s", e)
+        import traceback
+        traceback.print_exc()
+
+
 def create_tables():
     """Crear todas las tablas en la base de datos"""
     import time
@@ -51,13 +68,7 @@ def create_tables():
         try:
             print(f"[DATABASE] Intento {attempt + 1}/{max_retries}: Creando tablas...")
             
-            # IMPORTANTE: Ejecutar migración ANTES de crear tablas
-            # Esto asegura que las columnas existan antes de que SQLAlchemy intente usarlas
-            _migrate_user_columns()
-            _migrate_document_approvals_columns()
-            _migrate_rafael_fiscal_tables()
-            _migrate_tpv_company_columns()
-            _migrate_smart_time_control_tables()
+            ensure_schema_patches()
 
             # Importar modelos aquí para evitar importación circular
             from app.models.user import User, RefreshToken, PasswordResetToken
@@ -90,12 +101,7 @@ def create_tables():
             Base.metadata.create_all(bind=engine)
             print("[DATABASE] [OK] Tablas creadas correctamente")
             
-            # Ejecutar migración nuevamente después de crear tablas (por si acaso)
-            _migrate_user_columns()
-            _migrate_document_approvals_columns()
-            _migrate_rafael_fiscal_tables()
-            _migrate_tpv_company_columns()
-            _migrate_smart_time_control_tables()
+            ensure_schema_patches()
             return  # Éxito, salir de la función
             
         except Exception as e:
@@ -414,14 +420,14 @@ def _migrate_rafael_fiscal_tables():
 
 
 def _migrate_tpv_company_columns():
-    """Alinea tpv_products/tpv_sales con columnas company_id esperadas por el ORM."""
+    """Alinea tablas multi-tenant con company_id (TPV + facturas)."""
     from sqlalchemy import inspect, text
     from sqlalchemy.exc import OperationalError, ProgrammingError
 
     try:
         inspector = inspect(engine)
         is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
-        tables = ("tpv_products", "tpv_sales")
+        tables = ("tpv_products", "tpv_sales", "invoices")
         for table_name in tables:
             if table_name not in inspector.get_table_names():
                 continue
@@ -461,6 +467,26 @@ def _migrate_tpv_company_columns():
                     print(f"[MIGRATION] [OK] Índice {idx_name} creado")
             except Exception as e:
                 print(f"[MIGRATION] [WARN] No se pudo crear índice company_id en {table_name}: {e}")
+
+        if "invoices" in inspector.get_table_names():
+            inv_cols = {c["name"] for c in inspector.get_columns("invoices")}
+            if "company_id" in inv_cols and "created_by" in inv_cols:
+                try:
+                    with engine.begin() as conn:
+                        conn.execute(
+                            text(
+                                """
+                                UPDATE invoices SET company_id = (
+                                    SELECT uc.company_id FROM user_companies uc
+                                    WHERE uc.user_id = invoices.created_by
+                                    ORDER BY uc.id ASC LIMIT 1
+                                ) WHERE company_id IS NULL AND created_by IS NOT NULL
+                                """
+                            )
+                        )
+                    print("[MIGRATION] [OK] invoices.company_id backfill desde created_by")
+                except Exception as e:
+                    print(f"[MIGRATION] [WARN] backfill invoices.company_id: {e}")
     except Exception as e:
         print(f"[MIGRATION] [WARN] No se pudo verificar tpv company_id: {e}")
         import traceback

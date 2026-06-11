@@ -128,6 +128,83 @@ def emit_payment_registered(
         logger.warning("event_payment_registered activity log failed: %s", e)
 
 
+def emit_invoice_generated(
+    *,
+    user_id: int,
+    user_email: Optional[str],
+    company_id: Optional[int],
+    invoice_id: int,
+    file_path: str,
+    file_size: int,
+    db: Optional[Session] = None,
+) -> None:
+    _ = db
+    payload: Dict[str, Any] = {
+        "user_id": user_id,
+        "company_id": company_id,
+        "invoice_id": invoice_id,
+        "file_path": file_path,
+        "file_size": file_size,
+    }
+    logger.info("event invoice_generated %s", payload)
+    try:
+        from services.activity_logger import ActivityLogger
+        from services.zeus_office_mode import translate_activity
+
+        ActivityLogger.log_activity(
+            agent_name="RAFAEL",
+            action_type="invoice_generated",
+            action_description=translate_activity("invoice_generated"),
+            details=payload,
+            user_email=user_email,
+            status="completed",
+            priority="normal",
+            visible_to_client=True,
+        )
+    except Exception as e:
+        logger.warning("emit_invoice_generated failed: %s", e)
+
+
+def emit_model_303_generated(
+    *,
+    user_id: int,
+    user_email: Optional[str],
+    company_id: Optional[int],
+    period: str,
+    file_path: str,
+    file_size: int,
+    resultado: float,
+    db: Optional[Session] = None,
+) -> None:
+    _ = db
+    payload: Dict[str, Any] = {
+        "user_id": user_id,
+        "company_id": company_id,
+        "period": period,
+        "file_path": file_path,
+        "file_size": file_size,
+        "resultado": resultado,
+    }
+    logger.info("event model_303_generated %s", payload)
+    try:
+        from services.activity_logger import ActivityLogger
+        from services.zeus_office_mode import translate_activity
+
+        ActivityLogger.log_activity(
+            agent_name="RAFAEL",
+            action_type="tax_model_303_generated",
+            action_description=translate_activity("tax_model_303_generated"),
+            details=payload,
+            metrics={"resultado": resultado},
+            user_email=user_email,
+            status="completed",
+            priority="normal",
+            visible_to_client=True,
+        )
+    except Exception as e:
+        logger.warning("emit_model_303_generated failed: %s", e)
+
+
 def emit_cashflow_updated(
     *,
     user_id: int,

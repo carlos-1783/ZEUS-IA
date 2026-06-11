@@ -75,7 +75,9 @@ ACTIVITY_HUMAN: Dict[str, str] = {
     "invoice_created": "Factura creada",
     "invoice_paid": "Factura pagada",
     "cashflow_updated": "Cashflow actualizado",
+    "invoice_generated": "Factura generada correctamente",
     "tax_model_303_generated": "Modelo 303 generado",
+    "fiscal_document_stored": "Documento fiscal almacenado",
     "tax_model_390_generated": "Modelo 390 generado",
 }
 

@@ -224,6 +224,9 @@ class RafaelDniRequest(BaseModel):
 
 
 class RafaelFormsRequest(BaseModel):
+    company_id: Optional[int] = None
+    year: Optional[int] = None
+    quarter: Optional[int] = Field(default=None, ge=1, le=4)
     revenue: float = 0
     expenses: float = 0
     iva_type: float = 21
@@ -486,21 +489,41 @@ async def workspace_rafael_forms(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    from services.zeus_office_mode import validate_tax_model_303
+    from datetime import datetime
 
-    result = generate_fiscal_forms(request.model_dump())
-    period = request.model_dump().get("quarter") or "Q1"
-    validate_tax_model_303(
-        {
-            "modelo_303": {
-                **(result.get("modelo_303") or {}),
-                "period": period,
-                "vat_collected": (result.get("modelo_303") or {}).get("cuota"),
-                "vat_paid": 0,
-            }
+    import services.crm_office_service as crm_svc
+    from services.rafael_fiscal_engine_v2 import generate_model_303_flow
+
+    payload = request.model_dump()
+    company_id = payload.get("company_id") or crm_svc.primary_company_id(db, current_user)
+    year = payload.get("year") or datetime.utcnow().year
+    quarter = payload.get("quarter") or ((datetime.utcnow().month - 1) // 3 + 1)
+
+    if company_id:
+        result = generate_model_303_flow(
+            db,
+            user=current_user,
+            company_id=int(company_id),
+            year=int(year),
+            quarter=int(quarter),
+        )
+        text = (
+            f"Modelo 303 {result.get('modelo_303', {}).get('period', '')} generado. "
+            f"IVA devengado: {result.get('modelo_303', {}).get('iva_devengado', 0)} €. "
+            f"Resultado: {result.get('modelo_303', {}).get('resultado', 0)} €. "
+            f"Archivo: {result.get('file_size', 0)} bytes."
+        )
+        return {
+            "success": True,
+            "text": text,
+            "document_id": result.get("document_id"),
+            "file_url": result.get("file_url"),
+            "file_size": result.get("file_size"),
+            "result": result,
         }
-    )
-    text = _text_generic("Generación de modelos fiscales", result)
+
+    result = generate_fiscal_forms(payload)
+    text = _text_generic("Generación de modelos fiscales (borrador manual)", result)
     return _persist_agent_tool_response(
         db,
         current_user=current_user,

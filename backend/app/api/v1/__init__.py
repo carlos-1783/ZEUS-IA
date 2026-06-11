@@ -35,6 +35,8 @@ from app.api.v1.endpoints import (
     control_horario,
     webhooks,
     payroll,
+    rafael_fiscal,
+    expenses,
     public as public_site,
     user_settings,
     user_account,
@@ -119,6 +121,8 @@ api_router.include_router(workspaces.router, tags=["workspaces"])
 api_router.include_router(workspaces.tools_router, tags=["tools"])
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 api_router.include_router(payroll.router, tags=["payroll"])
+api_router.include_router(rafael_fiscal.router, prefix="/rafael-fiscal", tags=["rafael-fiscal"])
+api_router.include_router(expenses.router, prefix="/expenses", tags=["expenses"])
 # Log webhooks router registration
 import logging
 logger = logging.getLogger(__name__)

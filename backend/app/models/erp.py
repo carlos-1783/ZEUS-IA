@@ -144,6 +144,7 @@ class Invoice(Base):
     invoice_number = Column(String(50), unique=True, index=True, nullable=False)
     
     # References
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
     
     # Invoice details

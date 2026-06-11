@@ -24,12 +24,12 @@
         <p v-if="mrzResult" class="tool-text">{{ mrzResult }}</p>
       </div>
       <div class="tool-card">
-        <h5>Modelos 303/390</h5>
-        <input type="number" v-model.number="forms.revenue" placeholder="Ingresos trimestre" />
-        <input type="number" v-model.number="forms.expenses" placeholder="Gastos trimestre" />
-        <input type="number" v-model.number="forms.iva_type" placeholder="IVA %" />
-        <button :disabled="loading.forms" @click="runForms">Generar</button>
+        <h5>Modelo 303 (Excel real)</h5>
+        <input type="number" v-model.number="forms.year" placeholder="Año" />
+        <input type="number" v-model.number="forms.quarter" min="1" max="4" placeholder="Trimestre (1-4)" />
+        <button :disabled="loading.forms" @click="runForms">Generar Excel 303</button>
         <p v-if="formsResult" class="tool-text">{{ formsResult }}</p>
+        <a v-if="formsFileUrl" class="download-link" :href="formsFileUrl" target="_blank" rel="noopener">Descargar archivo</a>
       </div>
     </div>
     <p v-if="error" class="tool-error">{{ error }}</p>
@@ -38,6 +38,7 @@
 
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
+import { API_BASE_URL } from '@/config/index'
 import { workspaceTools } from '@/api/workspaceTools'
 
 const loading = reactive({ qr: false, nfc: false, mrz: false, forms: false })
@@ -46,12 +47,17 @@ const error = ref('')
 const qrData = ref('ZEUS|Cliente Demo|1200|EUR')
 const nfcHex = ref('5a4555535f4941')
 const mrz = ref('IDESP0000000000<<<<<<<<<<<<<<<\n8001010M2501013ESP<<<<<<<<<<<')
-const forms = reactive({ revenue: 2500, expenses: 400, iva_type: 21 })
+const now = new Date()
+const forms = reactive({
+  year: now.getFullYear(),
+  quarter: Math.floor(now.getMonth() / 3) + 1,
+})
 
 const qrResult = ref<string | null>(null)
 const nfcResult = ref<string | null>(null)
 const mrzResult = ref<string | null>(null)
 const formsResult = ref<string | null>(null)
+const formsFileUrl = ref<string | null>(null)
 
 const runQr = async () => {
   error.value = ''
@@ -95,9 +101,14 @@ const runMrz = async () => {
 const runForms = async () => {
   error.value = ''
   loading.forms = true
+  formsFileUrl.value = null
   try {
     const out = await workspaceTools.runRafaelForms({ ...forms })
-    formsResult.value = String((out as any)?.text || 'Modelos fiscales generados.')
+    formsResult.value = String((out as any)?.text || 'Modelo 303 generado.')
+    const url = (out as any)?.file_url || (out as any)?.result?.file_url
+    if (url) {
+      formsFileUrl.value = url.startsWith('http') ? url : `${API_BASE_URL}${url}`
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -161,6 +172,13 @@ const runForms = async () => {
 .tool-error {
   margin-top: 12px;
   color: #991b1b;
+}
+.download-link {
+  display: inline-block;
+  margin-top: 8px;
+  color: #1d4ed8;
+  font-weight: 600;
+  font-size: 13px;
 }
 </style>
 

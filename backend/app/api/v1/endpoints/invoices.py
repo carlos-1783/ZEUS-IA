@@ -171,6 +171,9 @@ def create_invoice(
                 detail=f"Customer with ID {invoice_in.customer_id} not found"
             )
     
+    company_id = crm_svc.primary_company_id(db, current_user)
+    require_company_id(company_id, context="facturación")
+
     # Generate invoice number (in a real app, use a proper sequence)
     invoice_number = f"INV-{datetime.utcnow().strftime('%Y%m%d')}-{db.query(func.count(Invoice.id)).scalar() + 1}"
     
@@ -179,6 +182,7 @@ def create_invoice(
     invoice = Invoice(
         **invoice_data,
         invoice_number=invoice_number,
+        company_id=company_id,
         created_by=current_user.id
     )
     
@@ -217,8 +221,6 @@ def create_invoice(
     for key, value in totals.items():
         setattr(invoice, key, value)
 
-    company_id = crm_svc.primary_company_id(db, current_user)
-    require_company_id(company_id, context="facturación")
     validate_invoice_logical(
         customer_id=invoice_in.customer_id,
         issue_date=invoice.issue_date,

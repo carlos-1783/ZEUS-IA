@@ -48,6 +48,9 @@ class DocumentApproval(Base):
     ticket_id = Column(String(100), nullable=True, index=True)  # ID del ticket TPV que generó este documento
     fiscal_document_type = Column(String(50), nullable=True)  # ticket, factura, modelo_303, resumen_diario, etc.
     export_format = Column(String(20), nullable=True)  # json, xml, pdf
+    file_path = Column(String(500), nullable=True)
+    file_size_bytes = Column(Integer, nullable=True)
+    mime_type = Column(String(100), nullable=True)
     exported_at = Column(DateTime(timezone=True), nullable=True)  # Timestamp de exportación
     filed_external_at = Column(DateTime(timezone=True), nullable=True)  # Timestamp de presentación externa (Hacienda)
     
@@ -84,6 +87,9 @@ class DocumentApproval(Base):
             "ticket_id": self.ticket_id,
             "fiscal_document_type": self.fiscal_document_type,
             "export_format": self.export_format,
+            "file_path": getattr(self, "file_path", None),
+            "file_size_bytes": getattr(self, "file_size_bytes", None),
+            "mime_type": getattr(self, "mime_type", None),
             "exported_at": self.exported_at.isoformat() if self.exported_at else None,
             "filed_external_at": self.filed_external_at.isoformat() if self.filed_external_at else None,
             "audit_log": json.loads(self.audit_log_json) if self.audit_log_json else []

@@ -24,6 +24,9 @@ export interface DeliverableItem {
   isWorkspace?: boolean;
   workspacePayload?: Record<string, unknown>;
   displayTitle?: string;
+  fileUrl?: string;
+  mimeType?: string;
+  fiscalDocType?: string;
 }
 
 const EXTENSION_REGEX = /\.(json|md|markdown)$/i;
@@ -80,22 +83,50 @@ export function useAutomationDeliverables(agent: string) {
             const wsItems: DeliverableItem[] = ws.items.map((doc: Record<string, unknown>) => {
               const payload = (doc.document_payload || {}) as Record<string, unknown>;
               const content = (payload.content || {}) as Record<string, unknown>;
+              const fileSize = Number(
+                doc.file_size_bytes ?? content.file_size ?? 0,
+              );
+              const fileUrl =
+                (typeof content.file_url === 'string' && content.file_url) ||
+                (typeof doc.file_path === 'string' && doc.file_path
+                  ? `/static/${String(doc.file_path).split('/static/').pop()}`
+                  : '') ||
+                '';
+              const hasRealFile = fileSize > 0 && !!fileUrl;
               const hasUsefulContent =
+                hasRealFile ||
                 (typeof payload.title === 'string' && payload.title.trim().length > 0) ||
                 (typeof content.copy === 'string' && content.copy.trim().length > 0) ||
                 (typeof content.body === 'string' && content.body.trim().length > 0);
               if (!hasUsefulContent) {
                 return null as unknown as DeliverableItem;
               }
+              if (agentKey === 'RAFAEL' && !hasRealFile && fileSize <= 0) {
+                const isLegacyJsonOnly =
+                  !content.only_real_file &&
+                  !(content.file_path || content.file_url);
+                if (isLegacyJsonOnly) {
+                  return null as unknown as DeliverableItem;
+                }
+              }
               const created = doc.created_at ? new Date(String(doc.created_at)).getTime() / 1000 : 0;
               return {
                 id: `ws:${doc.id}`,
                 agent: agentKey,
                 createdAt: Number.isFinite(created) ? created : 0,
-                sizeBytes: 0,
+                sizeBytes: fileSize,
                 files: {},
                 isWorkspace: true,
                 workspacePayload: payload,
+                fileUrl: fileUrl || undefined,
+                mimeType:
+                  (typeof doc.mime_type === 'string' && doc.mime_type) ||
+                  (typeof content.mime_type === 'string' && content.mime_type) ||
+                  undefined,
+                fiscalDocType:
+                  (typeof doc.fiscal_document_type === 'string' && doc.fiscal_document_type) ||
+                  (typeof content.fiscal_document_type === 'string' && content.fiscal_document_type) ||
+                  undefined,
                 displayTitle:
                   (typeof payload.title === 'string' && payload.title) ||
                   (typeof doc.document_type === 'string' && doc.document_type) ||

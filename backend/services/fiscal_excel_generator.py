@@ -19,7 +19,7 @@ def generate_model_303_xlsx_v1(
     """Escribe XLSX del modelo 303. Devuelve ruta absoluta."""
     try:
         from openpyxl import Workbook  # pyright: ignore[reportMissingModuleSource]
-        from openpyxl.styles import Font
+        from openpyxl.styles import Font  # pyright: ignore[reportMissingModuleSource]
     except ImportError as exc:
         raise RuntimeError("openpyxl no disponible para generar modelo 303") from exc
 

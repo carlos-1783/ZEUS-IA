@@ -43,9 +43,9 @@ def generate_invoice_pdf_v1(
     pdf_path = output_path.with_suffix(".pdf")
 
     try:
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib.units import cm
-        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import A4  # pyright: ignore[reportMissingModuleSource]
+        from reportlab.lib.units import cm  # pyright: ignore[reportMissingModuleSource]
+        from reportlab.pdfgen import canvas  # pyright: ignore[reportMissingModuleSource]
     except ImportError as exc:
         raise RuntimeError("reportlab no disponible para generar PDF de factura") from exc
 

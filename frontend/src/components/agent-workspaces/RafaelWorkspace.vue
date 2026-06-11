@@ -32,9 +32,8 @@
               <span>{{ formatSize(item.sizeBytes) }}</span>
             </div>
             <div class="tags">
-              <span class="tag">Factura</span>
-              <span class="tag">Modelo 303/390</span>
-              <span class="tag">Cashflow</span>
+              <span v-if="fiscalTag(item)" class="tag">{{ fiscalTag(item) }}</span>
+              <span v-if="item.fileUrl" class="tag tag-file">Archivo real</span>
             </div>
           </li>
         </ul>
@@ -48,6 +47,13 @@
             <p v-if="currentDetails.summary" class="details-summary">{{ currentDetails.summary }}</p>
           </div>
           <div class="actions">
+            <a
+              v-if="fiscalDownloadUrl"
+              :href="fiscalDownloadUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn primary"
+            >{{ fiscalDownloadLabel }}</a>
             <a
               v-if="currentDeliverable?.files.json"
               :href="buildDownloadLink(currentDeliverable.files.json)"
@@ -64,6 +70,21 @@
             >Markdown</a>
           </div>
         </header>
+
+        <section v-if="currentDetails?.workspace_deliverable" class="card workspace-fiscal-card">
+          <h5>📄 Documento fiscal</h5>
+          <p v-if="workspaceFiscalSummary" class="fiscal-summary">{{ workspaceFiscalSummary }}</p>
+          <p v-if="!fiscalDownloadUrl" class="note">
+            Borrador sin archivo descargable. Regenera desde «Generar Excel 303» o genera el PDF de una factura.
+          </p>
+          <a
+            v-if="fiscalDownloadUrl"
+            :href="fiscalDownloadUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn primary"
+          >{{ fiscalDownloadLabel }}</a>
+        </section>
 
         <div class="cards">
           <section class="card" v-if="currentDetails.invoice_template">
@@ -149,8 +170,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, computed, watch } from 'vue';
-import { useAutomationDeliverables } from '@/composables/useAutomationDeliverables';
+import { onMounted, ref, computed } from 'vue';
+import { API_BASE_URL } from '@/config/index';
+import { useAutomationDeliverables, type DeliverableItem } from '@/composables/useAutomationDeliverables';
 import RafaelToolsPanel from './RafaelToolsPanel.vue';
 import DocumentApprovalPanel from '@/components/DocumentApprovalPanel.vue';
 
@@ -198,17 +220,62 @@ const loadDetails = async () => {
   }
 };
 
-const selectDeliverable = (id: string) => {
-  if (selectedId.value !== id) {
-    selectedId.value = id;
-  }
+const selectDeliverable = async (id: string) => {
+  selectedId.value = id;
+  await loadDetails();
 };
 
-const formatTitle = (item?: { id: string }) => {
+const formatTitle = (item?: DeliverableItem | null) => {
   if (!item) return 'Paquete fiscal';
+  if (item.displayTitle) return item.displayTitle;
   const parts = item.id.split('/');
   return parts[parts.length - 1].replace(/_/g, ' ').replace(/\d{8}T\d{6}Z$/, '').trim() || 'Paquete fiscal';
 };
+
+const fiscalTag = (item: DeliverableItem) => {
+  const t = (item.fiscalDocType || '').toLowerCase();
+  if (t.includes('303')) return 'Modelo 303';
+  if (t.includes('factura') || t === 'invoice') return 'Factura PDF';
+  if (t.includes('390')) return 'Modelo 390';
+  return item.fileUrl ? 'Fiscal' : '';
+};
+
+const workspaceFiscalContent = computed(() => {
+  const payload = currentDetails.value?.payload as Record<string, unknown> | undefined;
+  const content = (payload?.content || {}) as Record<string, unknown>;
+  return content;
+});
+
+const fiscalDownloadUrl = computed(() => {
+  const fromItem = currentDeliverable.value?.fileUrl;
+  const fromContent = workspaceFiscalContent.value?.file_url;
+  const raw = (fromItem || fromContent) as string | undefined;
+  if (!raw) return '';
+  if (raw.startsWith('http')) return raw;
+  return `${API_BASE_URL}${raw.startsWith('/') ? raw : `/${raw}`}`;
+});
+
+const fiscalDownloadLabel = computed(() => {
+  const mime = currentDeliverable.value?.mimeType || workspaceFiscalContent.value?.mime_type;
+  if (typeof mime === 'string' && mime.includes('pdf')) return 'Descargar PDF';
+  if (typeof mime === 'string' && mime.includes('spreadsheet')) return 'Descargar Excel 303';
+  const url = fiscalDownloadUrl.value.toLowerCase();
+  if (url.endsWith('.pdf')) return 'Descargar PDF';
+  if (url.endsWith('.xlsx')) return 'Descargar Excel 303';
+  return 'Descargar archivo';
+});
+
+const workspaceFiscalSummary = computed(() => {
+  const c = workspaceFiscalContent.value;
+  if (!c || typeof c !== 'object') return '';
+  const parts: string[] = [];
+  if (c.period) parts.push(`Periodo: ${c.period}`);
+  if (c.iva_devengado != null) parts.push(`IVA devengado: ${c.iva_devengado} €`);
+  if (c.iva_soportado != null) parts.push(`IVA soportado: ${c.iva_soportado} €`);
+  if (c.resultado != null) parts.push(`Resultado: ${c.resultado} €`);
+  if (c.total != null) parts.push(`Total: ${c.total} €`);
+  return parts.join(' · ');
+});
 
 const formatDate = (timestamp: number) =>
   new Date(timestamp * 1000).toLocaleString('es-ES', {
@@ -232,8 +299,6 @@ const formatSize = (bytes: number) => {
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value ?? 0);
-
-watch(selectedId, loadDetails);
 
 onMounted(async () => {
   await reload();
@@ -419,6 +484,26 @@ onMounted(async () => {
   color: #b45309;
   font-weight: 600;
   text-decoration: none;
+}
+.btn.primary {
+  background: #d97706;
+  border-color: #b45309;
+  color: #fff;
+}
+.workspace-fiscal-card {
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 16px;
+  padding: 20px;
+  background: #fffbeb;
+}
+.fiscal-summary {
+  color: #475569;
+  font-size: 14px;
+  margin: 8px 0 12px;
+}
+.tag-file {
+  background: rgba(34, 197, 94, 0.2);
+  color: #166534;
 }
 
 .cards {

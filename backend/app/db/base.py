@@ -55,6 +55,7 @@ def create_tables():
             # Esto asegura que las columnas existan antes de que SQLAlchemy intente usarlas
             _migrate_user_columns()
             _migrate_document_approvals_columns()
+            _migrate_rafael_fiscal_tables()
             _migrate_tpv_company_columns()
             _migrate_smart_time_control_tables()
 
@@ -92,6 +93,7 @@ def create_tables():
             # Ejecutar migración nuevamente después de crear tablas (por si acaso)
             _migrate_user_columns()
             _migrate_document_approvals_columns()
+            _migrate_rafael_fiscal_tables()
             _migrate_tpv_company_columns()
             _migrate_smart_time_control_tables()
             return  # Éxito, salir de la función
@@ -244,6 +246,9 @@ def _migrate_document_approvals_columns():
             "audit_log_json": "TEXT",
             "company_id": "INTEGER",
             "visible_in_workspace": vis_sql,
+            "file_path": "VARCHAR(500)" if is_postgres else "TEXT",
+            "file_size_bytes": "INTEGER",
+            "mime_type": "VARCHAR(100)" if is_postgres else "TEXT",
         }
 
         added = []
@@ -323,6 +328,89 @@ def _migrate_document_approvals_columns():
         print(f"[MIGRATION] [WARN] No se pudo verificar document_approvals: {e}")
         import traceback
         traceback.print_exc()
+
+
+def _migrate_rafael_fiscal_tables():
+    """Tabla expenses y metadatos de archivo fiscal (RAFAEL v2) si Alembic no corrió."""
+    from sqlalchemy import inspect, text
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+
+    try:
+        inspector = inspect(engine)
+        tables = set(inspector.get_table_names())
+        is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
+
+        if "expenses" not in tables:
+            try:
+                from app.models.expense import Expense
+
+                Expense.__table__.create(bind=engine, checkfirst=True)
+                print("[MIGRATION] [OK] Tabla expenses creada")
+            except Exception as e:
+                print(f"[MIGRATION] [WARN] No se pudo crear expenses con ORM: {e}")
+                try:
+                    with engine.begin() as conn:
+                        if is_postgres:
+                            conn.execute(
+                                text(
+                                    """
+                                    CREATE TABLE IF NOT EXISTS expenses (
+                                        id SERIAL PRIMARY KEY,
+                                        company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                                        supplier_name VARCHAR(200) NOT NULL,
+                                        description TEXT,
+                                        issue_date TIMESTAMP NOT NULL,
+                                        base_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+                                        tax_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+                                        tax_rate DOUBLE PRECISION NOT NULL DEFAULT 21,
+                                        category VARCHAR(100),
+                                        invoice_ref VARCHAR(100),
+                                        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                                        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                                    )
+                                    """
+                                )
+                            )
+                            conn.execute(
+                                text(
+                                    "CREATE INDEX IF NOT EXISTS ix_expenses_company_id ON expenses (company_id)"
+                                )
+                            )
+                        else:
+                            conn.execute(
+                                text(
+                                    """
+                                    CREATE TABLE IF NOT EXISTS expenses (
+                                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                        company_id INTEGER NOT NULL,
+                                        supplier_name TEXT NOT NULL,
+                                        description TEXT,
+                                        issue_date TIMESTAMP NOT NULL,
+                                        base_amount REAL NOT NULL DEFAULT 0,
+                                        tax_amount REAL NOT NULL DEFAULT 0,
+                                        tax_rate REAL NOT NULL DEFAULT 21,
+                                        category TEXT,
+                                        invoice_ref TEXT,
+                                        created_by INTEGER,
+                                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                                        FOREIGN KEY(company_id) REFERENCES companies(id) ON DELETE CASCADE,
+                                        FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL
+                                    )
+                                    """
+                                )
+                            )
+                            conn.execute(
+                                text(
+                                    "CREATE INDEX IF NOT EXISTS ix_expenses_company_id ON expenses(company_id)"
+                                )
+                            )
+                    print("[MIGRATION] [OK] Tabla expenses creada (SQL)")
+                except (OperationalError, ProgrammingError) as sql_err:
+                    print(f"[MIGRATION] [WARN] No se pudo crear expenses: {sql_err}")
+        else:
+            print("[MIGRATION] [OK] Tabla expenses ya existe")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] No se pudo verificar tablas fiscales RAFAEL: {e}")
 
 
 def _migrate_tpv_company_columns():

@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -224,9 +225,17 @@ def register_fiscal_workspace_document(
             }
         ],
     )
-    db.add(doc)
-    db.commit()
-    db.refresh(doc)
+    try:
+        db.add(doc)
+        db.commit()
+        db.refresh(doc)
+    except (OperationalError, ProgrammingError) as exc:
+        db.rollback()
+        logger.exception("No se pudo guardar documento fiscal (esquema BD)")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Base de datos pendiente de actualizar para documentos fiscales. Reintenta en unos minutos.",
+        ) from exc
     return doc
 
 
@@ -358,25 +367,38 @@ def generate_model_303_flow(
     cid = require_company_id(company_id, context="modelo 303")
     assert_user_company_access(db, user, cid)
 
-    model = fetch_period_financials(db, company_id=cid, year=year, quarter=quarter)
+    try:
+        model = fetch_period_financials(db, company_id=cid, year=year, quarter=quarter)
+    except (OperationalError, ProgrammingError) as exc:
+        logger.exception("Consulta fiscal falló (esquema BD)")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Base de datos pendiente de actualizar para el modelo 303. Reintenta en unos minutos.",
+        ) from exc
 
     company = db.query(Company).filter(Company.id == cid).first()
     company_name = (company.company_name if company else f"Empresa {cid}") or f"Empresa {cid}"
 
     out_dir = _fiscal_root() / str(cid) / "model_303"
     filename = f"modelo_303_{model.period}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
-    xlsx_path = generate_model_303_xlsx_v1(
-        output_path=out_dir / filename,
-        company_name=company_name,
-        period=model.period,
-        model_data={
-            "base_imponible": model.base_imponible,
-            "iva_devengado": model.iva_devengado,
-            "iva_soportado": model.iva_soportado,
-            "resultado": model.resultado,
-            "vat_breakdown": model.vat_breakdown,
-        },
-    )
+    try:
+        xlsx_path = generate_model_303_xlsx_v1(
+            output_path=out_dir / filename,
+            company_name=company_name,
+            period=model.period,
+            model_data={
+                "base_imponible": model.base_imponible,
+                "iva_devengado": model.iva_devengado,
+                "iva_soportado": model.iva_soportado,
+                "resultado": model.resultado,
+                "vat_breakdown": model.vat_breakdown,
+            },
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
     file_size = validate_file_size(xlsx_path)
 
     doc = register_fiscal_workspace_document(

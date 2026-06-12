@@ -17,6 +17,7 @@ from app.core.security_middleware import SecurityMiddleware
 # Import your existing app
 from app.core.config import settings
 from app.api.v1 import api_router
+from app.api.v1.endpoints import checkin as checkin_v1
 from app.db.base import create_tables, ensure_schema_patches
 from services.automation import start_agent_automation, stop_agent_automation
 from app.db.initial_superuser import ensure_initial_superuser
@@ -110,6 +111,8 @@ async def uncaught_exception_guard(request: Request, call_next):
 
 # Include API routes - IMPORTANTE: Debe estar ANTES del catch-all
 app.include_router(api_router, prefix="/api/v1")
+# Alias spec zeus_time_cost_engine_v1: POST /api/checkin
+app.include_router(checkin_v1.router, prefix="/api/checkin", tags=["checkin"])
 
 
 @app.get("/api/v1", include_in_schema=False)

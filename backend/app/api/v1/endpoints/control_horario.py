@@ -571,6 +571,25 @@ async def get_control_horario_bootstrap(
         "integrations": {"afrodita_activity_feed": True, "tpv_sales_window": True},
     }
 
+    cost_engine: Dict[str, Any] = {}
+    cid = _primary_company_id(db, current_user)
+    if cid:
+        try:
+            from services.time_cost_engine_v1 import (
+                get_active_sessions,
+                get_cost_analytics,
+                refresh_partial_costs,
+            )
+
+            refresh_partial_costs(db, company_id=cid)
+            cost_engine = get_cost_analytics(db, user=current_user, company_id=cid)
+            cost_engine["active_sessions"] = get_active_sessions(
+                db, user=current_user, company_id=cid
+            )
+            cost_engine["company_id"] = cid
+        except Exception as e:
+            logger.warning("cost_engine bootstrap omitido: %s", e)
+
     return {
         "success": True,
         "info": info,
@@ -580,6 +599,7 @@ async def get_control_horario_bootstrap(
         "total_active": status_data.get("total_active", 0),
         "employees_source": employees_source,
         "smart": smart_payload,
+        "cost_engine": cost_engine,
     }
 
 

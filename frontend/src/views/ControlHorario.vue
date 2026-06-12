@@ -128,6 +128,40 @@
         </ul>
       </div>
 
+      <div v-if="costEngine && costEngine.company_id" class="cost-engine-panel">
+        <h3>💶 Coste laboral (tiempo real)</h3>
+        <div class="metrics-panel cost-metrics-inline">
+          <div class="metric-card">
+            <div class="metric-icon">⏱️</div>
+            <div class="metric-content">
+              <h4>Horas hoy</h4>
+              <p class="metric-value">{{ hoursWorkedToday != null ? hoursWorkedToday + 'h' : '—' }}</p>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon">💰</div>
+            <div class="metric-content">
+              <h4>Coste hoy</h4>
+              <p class="metric-value">{{ realTimeCostTotal != null ? realTimeCostTotal + ' €' : '—' }}</p>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon">👷</div>
+            <div class="metric-content">
+              <h4>Sesiones activas</h4>
+              <p class="metric-value">{{ costEngine.active_employees ?? activeCostSessions.length }}</p>
+            </div>
+          </div>
+        </div>
+        <ul v-if="activeCostSessions.length" class="active-sessions-list">
+          <li v-for="s in activeCostSessions" :key="s.session_id">
+            <strong>{{ s.employee_name || s.employee_id }}</strong>
+            — {{ s.hours }}h · {{ s.real_time_cost_eur }} €
+          </li>
+        </ul>
+        <p v-else class="no-active-sessions">Sin sesiones activas con coste calculado.</p>
+      </div>
+
       <div v-if="smartTpv && smartTpv.ok" class="tpv-hint-panel">
         <h3>{{ $t('controlHorario.tpvStaffing') }}</h3>
         <p class="tpv-hint-text">
@@ -281,6 +315,7 @@ const currentLocation = ref({ latitude: null, longitude: null })
 const smartAlerts = ref([])
 const smartTpv = ref(null)
 const todayHoursByEmployee = ref({})
+const costEngine = ref(null)
 let refreshTimer = null
 
 // Métodos disponibles
@@ -302,6 +337,23 @@ const employeesInside = computed(() => {
 const attendanceRate = computed(() => {
   if (employees.value.length === 0) return 0
   return Math.round((employeesInside.value / employees.value.length) * 100)
+})
+
+const activeCostSessions = computed(() => {
+  const sessions = costEngine.value?.active_sessions
+  return Array.isArray(sessions) ? sessions : []
+})
+
+const realTimeCostTotal = computed(() => {
+  const v = costEngine.value?.total_cost_today
+  if (v == null || Number.isNaN(Number(v))) return null
+  return Math.round(Number(v) * 100) / 100
+})
+
+const hoursWorkedToday = computed(() => {
+  const v = costEngine.value?.total_hours_today
+  if (v == null || Number.isNaN(Number(v))) return null
+  return Math.round(Number(v) * 100) / 100
 })
 
 const jornadaActiva = computed(() => !!(authStore.user && authStore.user.jornada && authStore.user.jornada.in_turno))
@@ -429,6 +481,8 @@ const checkStatus = async () => {
       smart.today_completed_hours_by_employee && typeof smart.today_completed_hours_by_employee === 'object'
         ? smart.today_completed_hours_by_employee
         : {}
+
+    costEngine.value = bootstrap?.cost_engine?.company_id ? bootstrap.cost_engine : null
     
   } catch (err) {
     console.error('Error cargando estado:', err)
@@ -1093,6 +1147,42 @@ onUnmounted(() => {
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   grid-column: 1 / -1;
+}
+
+.cost-engine-panel {
+  grid-column: 1 / -1;
+  background: white;
+  padding: 20px 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.cost-engine-panel h3 {
+  margin: 0 0 16px;
+  color: #1f2937;
+}
+
+.cost-metrics-inline {
+  grid-column: auto;
+  margin-bottom: 12px;
+}
+
+.active-sessions-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.active-sessions-list li {
+  padding: 8px 0;
+  border-top: 1px solid #e5e7eb;
+  color: #374151;
+}
+
+.no-active-sessions {
+  margin: 0;
+  color: #6b7280;
+  font-size: 14px;
 }
 
 .metric-card {

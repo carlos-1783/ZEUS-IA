@@ -33,6 +33,7 @@ from app.api.v1.endpoints import (
     tpv,
     admin,
     control_horario,
+    checkin,
     webhooks,
     payroll,
     rafael_fiscal,
@@ -106,6 +107,9 @@ api_router.include_router(public_site.router, prefix="/p", tags=["public-site"])
 
 # Control Horario Universal Enterprise
 api_router.include_router(control_horario.router, prefix="/control-horario", tags=["control-horario"])
+
+# Time & cost engine v1 (fichajes + coste laboral)
+api_router.include_router(checkin.router, prefix="/checkin", tags=["checkin"])
 
 # Admin Panel (solo superusuarios)
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])

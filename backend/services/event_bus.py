@@ -349,3 +349,160 @@ def emit_time_control_event(
         )
     except Exception as e:
         logger.warning("event_time_control activity log failed: %s", e)
+
+
+def _log_time_cost_activity(
+    *,
+    action_type: str,
+    description: str,
+    user_email: Optional[str],
+    payload: Dict[str, Any],
+) -> None:
+    try:
+        from services.activity_logger import ActivityLogger
+
+        ActivityLogger.log_activity(
+            agent_name="AFRODITA",
+            action_type=action_type,
+            action_description=description,
+            details=payload,
+            user_email=user_email,
+            status="completed",
+            priority="normal",
+            visible_to_client=True,
+        )
+    except Exception as e:
+        logger.warning("%s activity log failed: %s", action_type, e)
+
+
+def emit_employee_checked_in(
+    *,
+    user_id: int,
+    user_email: Optional[str],
+    company_id: int,
+    employee_id: str,
+    checkin_id: int,
+    db: Optional[Session] = None,
+) -> None:
+    _ = db
+    payload = {
+        "user_id": user_id,
+        "company_id": company_id,
+        "employee_id": employee_id,
+        "checkin_id": checkin_id,
+    }
+    logger.info("event employee_checked_in %s", payload)
+    _log_time_cost_activity(
+        action_type="checkin_registered",
+        description=f"Fichaje registrado ({employee_id})",
+        user_email=user_email,
+        payload=payload,
+    )
+
+
+def emit_session_started(
+    *,
+    user_id: int,
+    user_email: Optional[str],
+    company_id: int,
+    employee_id: str,
+    session_id: int,
+    db: Optional[Session] = None,
+) -> None:
+    _ = db
+    payload = {
+        "user_id": user_id,
+        "company_id": company_id,
+        "employee_id": employee_id,
+        "session_id": session_id,
+    }
+    logger.info("event session_started %s", payload)
+    _log_time_cost_activity(
+        action_type="session_created",
+        description=f"Sesión laboral iniciada ({employee_id})",
+        user_email=user_email,
+        payload=payload,
+    )
+
+
+def emit_session_closed(
+    *,
+    user_id: int,
+    user_email: Optional[str],
+    company_id: int,
+    employee_id: str,
+    session_id: int,
+    total_hours: Optional[float],
+    total_cost: Optional[float],
+    db: Optional[Session] = None,
+) -> None:
+    _ = db
+    payload = {
+        "user_id": user_id,
+        "company_id": company_id,
+        "employee_id": employee_id,
+        "session_id": session_id,
+        "total_hours": total_hours,
+        "total_cost": total_cost,
+    }
+    logger.info("event session_closed %s", payload)
+    _log_time_cost_activity(
+        action_type="session_closed",
+        description=f"Sesión laboral cerrada ({employee_id})",
+        user_email=user_email,
+        payload=payload,
+    )
+
+
+def emit_cost_updated(
+    *,
+    user_id: int,
+    user_email: Optional[str],
+    company_id: int,
+    employee_id: str,
+    cost: float,
+    hours: Optional[float],
+    db: Optional[Session] = None,
+) -> None:
+    _ = db
+    payload = {
+        "user_id": user_id,
+        "company_id": company_id,
+        "employee_id": employee_id,
+        "cost_eur": cost,
+        "hours": hours,
+    }
+    logger.info("event cost_updated %s", payload)
+    _log_time_cost_activity(
+        action_type="cost_calculated",
+        description=f"Coste laboral actualizado ({employee_id})",
+        user_email=user_email,
+        payload=payload,
+    )
+
+
+def emit_alert_triggered(
+    *,
+    user_id: int,
+    user_email: Optional[str],
+    company_id: int,
+    employee_id: str,
+    alert_type: str,
+    detail: str,
+    db: Optional[Session] = None,
+) -> None:
+    _ = db
+    payload = {
+        "user_id": user_id,
+        "company_id": company_id,
+        "employee_id": employee_id,
+        "alert_type": alert_type,
+        "detail": detail,
+    }
+    logger.info("event alert_triggered %s", payload)
+    _log_time_cost_activity(
+        action_type="alert_triggered",
+        description=f"Alerta control horario: {alert_type}",
+        user_email=user_email,
+        payload=payload,
+    )

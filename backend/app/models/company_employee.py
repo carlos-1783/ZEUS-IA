@@ -1,6 +1,6 @@
 """Empleados reales por empresa (RRHH / control horario / TPV)."""
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -26,6 +26,7 @@ class CompanyEmployee(Base):
     employee_code = Column(String(80), nullable=False, index=True)
     phone = Column(String(32), nullable=True)
     tpv_pin_hash = Column(String(255), nullable=True)
+    hourly_rate = Column(Float, nullable=True, default=0.0)
     is_active = Column(Boolean, nullable=False, default=True)
     source = Column(String(50), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

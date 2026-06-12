@@ -50,6 +50,7 @@ def ensure_schema_patches():
         _migrate_rafael_fiscal_tables()
         _migrate_tpv_company_columns()
         _migrate_smart_time_control_tables()
+        _migrate_time_cost_engine_v1()
         print("[SCHEMA] Parches de esquema completados")
     except Exception as e:
         logger.warning("ensure_schema_patches: %s", e)
@@ -89,6 +90,7 @@ def create_tables():
             from app.models.crm_office import CrmActivityLog, CrmSaleLink, CustomerRecord
             from app.models.chat_message import ChatMessage
             from app.models.employee_work_session import EmployeeWorkSession
+            from app.models.time_cost_checkin import TimeCostCheckin
             from app.models.tpv_operator_session import TPVOperatorSession
             from app.models.time_tracking import (
                 TimeTrackingRecord,
@@ -531,6 +533,70 @@ def _migrate_smart_time_control_tables():
             print("[MIGRATION] [INFO] time_control_alerts se creará vía create_all si el modelo está importado")
     except Exception as e:
         print(f"[MIGRATION] [WARN] smart time control migrate: {e}")
+
+
+def _migrate_time_cost_engine_v1():
+    """Columnas coste laboral + tabla time_cost_checkins (legacy sin Alembic)."""
+    from sqlalchemy import inspect, text
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+
+    try:
+        inspector = inspect(engine)
+        tables = set(inspector.get_table_names())
+        is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
+
+        if "company_employees" in tables:
+            cols = {c["name"] for c in inspector.get_columns("company_employees")}
+            if "hourly_rate" not in cols:
+                try:
+                    with engine.begin() as conn:
+                        if is_postgres:
+                            conn.execute(
+                                text(
+                                    "ALTER TABLE company_employees "
+                                    "ADD COLUMN IF NOT EXISTS hourly_rate DOUBLE PRECISION DEFAULT 0"
+                                )
+                            )
+                        else:
+                            conn.execute(text("ALTER TABLE company_employees ADD COLUMN hourly_rate FLOAT DEFAULT 0"))
+                    print("[MIGRATION] [OK] company_employees.hourly_rate agregada")
+                except (OperationalError, ProgrammingError) as e:
+                    em = str(e).lower()
+                    if "duplicate column" not in em and "already exists" not in em:
+                        print(f"[MIGRATION] [WARN] hourly_rate: {e}")
+
+        if "employee_work_sessions" in tables:
+            cols = {c["name"] for c in inspector.get_columns("employee_work_sessions")}
+            for col_name, ddl_pg, ddl_sqlite in (
+                ("total_hours", "DOUBLE PRECISION", "FLOAT"),
+                ("total_cost", "DOUBLE PRECISION", "FLOAT"),
+                ("partial_cost", "DOUBLE PRECISION", "FLOAT"),
+                ("pause_minutes", "DOUBLE PRECISION DEFAULT 0", "FLOAT DEFAULT 0"),
+            ):
+                if col_name not in cols:
+                    try:
+                        with engine.begin() as conn:
+                            if is_postgres:
+                                conn.execute(
+                                    text(
+                                        f'ALTER TABLE employee_work_sessions '
+                                        f'ADD COLUMN IF NOT EXISTS "{col_name}" {ddl_pg}'
+                                    )
+                                )
+                            else:
+                                conn.execute(
+                                    text(f"ALTER TABLE employee_work_sessions ADD COLUMN {col_name} {ddl_sqlite}")
+                                )
+                        print(f"[MIGRATION] [OK] employee_work_sessions.{col_name} agregada")
+                    except (OperationalError, ProgrammingError) as e:
+                        em = str(e).lower()
+                        if "duplicate column" not in em and "already exists" not in em:
+                            print(f"[MIGRATION] [WARN] employee_work_sessions.{col_name}: {e}")
+
+        if "time_cost_checkins" not in tables:
+            print("[MIGRATION] [INFO] time_cost_checkins se creará vía create_all si el modelo está importado")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] time cost engine v1 migrate: {e}")
 
 
 def _migrate_firewall_columns_legacy():

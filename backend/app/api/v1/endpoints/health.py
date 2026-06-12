@@ -50,12 +50,25 @@ async def detailed_health_check(db: Session = Depends(get_db)) -> Dict[str, Any]
         "cors_origins": len(settings.BACKEND_CORS_ORIGINS) if settings.BACKEND_CORS_ORIGINS else 0
     }
     
+    fiscal_schema: Dict[str, Any] = {"status": "unknown"}
+    try:
+        from services.fiscal_db_compat import fiscal_schema_gaps
+
+        gaps = fiscal_schema_gaps()
+        fiscal_schema = {
+            "status": "ok" if not gaps else "gaps",
+            "gaps": gaps,
+        }
+    except Exception as exc:
+        fiscal_schema = {"status": "error", "detail": str(exc)}
+
     return {
         "status": "healthy" if db_status == "healthy" else "unhealthy",
         "timestamp": datetime.utcnow().isoformat(),
         "version": settings.VERSION,
         "environment": settings.ENVIRONMENT,
         "database": db_status,
+        "fiscal_schema": fiscal_schema,
         "system": system_metrics,
         "environment_variables": env_check
     }

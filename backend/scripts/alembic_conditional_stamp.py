@@ -40,6 +40,20 @@ def _run_stamp_head() -> int:
     return subprocess.call([exe, "stamp", "head"], cwd=cwd)
 
 
+def _apply_runtime_schema_patches() -> None:
+    try:
+        from app.db.base import ensure_schema_patches
+
+        ensure_schema_patches()
+        from services.fiscal_db_compat import fiscal_schema_gaps
+
+        gaps = fiscal_schema_gaps()
+        if gaps:
+            print(f"alembic_conditional_stamp: aviso esquema fiscal: {', '.join(gaps)}")
+    except Exception as exc:
+        print(f"alembic_conditional_stamp: ensure_schema_patches falló: {exc}")
+
+
 def main() -> int:
     url = os.environ.get("DATABASE_URL") or os.environ.get("SQLALCHEMY_DATABASE_URI")
     if not url:
@@ -74,17 +88,20 @@ def main() -> int:
 
         if not has_av:
             print(
-                "alembic_conditional_stamp: legacy — users existe, sin alembic_version -> stamp head"
+                "alembic_conditional_stamp: legacy — users existe, sin alembic_version -> parches + stamp head"
             )
+            _apply_runtime_schema_patches()
             return _run_stamp_head()
 
         n = conn.execute(text("SELECT COUNT(*) FROM alembic_version")).scalar()
         if n == 0:
             print(
-                "alembic_conditional_stamp: legacy — alembic_version vacío -> stamp head"
+                "alembic_conditional_stamp: legacy — alembic_version vacío -> parches + stamp head"
             )
+            _apply_runtime_schema_patches()
             return _run_stamp_head()
 
+    _apply_runtime_schema_patches()
     print("alembic_conditional_stamp: alembic_version ya definida; sin stamp")
     return 0
 

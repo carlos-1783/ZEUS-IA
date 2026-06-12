@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
@@ -22,7 +21,6 @@ from app.models.company import Company, UserCompany
 from app.models.customer import Customer
 from app.models.document_approval import DocumentApproval
 from app.models.erp import Invoice, InvoiceItem
-from app.models.expense import Expense
 from app.models.user import User
 from services.fiscal_excel_generator import generate_model_303_xlsx_v1
 from services.fiscal_pdf_generator import generate_invoice_pdf_v1
@@ -102,65 +100,6 @@ def _sql_error_hint(exc: Exception) -> str:
     return text or "error de esquema"
 
 
-def _query_period_invoices(
-    db: Session,
-    *,
-    company_id: int,
-    start: datetime,
-    end: datetime,
-) -> List[Invoice]:
-    try:
-        return (
-            db.query(Invoice)
-            .filter(
-                Invoice.company_id == company_id,
-                Invoice.issue_date >= start,
-                Invoice.issue_date <= end,
-            )
-            .all()
-        )
-    except (OperationalError, ProgrammingError) as exc:
-        db.rollback()
-        em = str(getattr(exc, "orig", exc)).lower()
-        if "company_id" in em or "does not exist" in em or "undefinedcolumn" in em:
-            logger.warning("invoices.company_id ausente; consulta legacy sin filtro empresa")
-            return (
-                db.query(Invoice)
-                .filter(
-                    Invoice.issue_date >= start,
-                    Invoice.issue_date <= end,
-                )
-                .all()
-            )
-        raise
-
-
-def _query_period_expenses(
-    db: Session,
-    *,
-    company_id: int,
-    start: datetime,
-    end: datetime,
-) -> List[Expense]:
-    try:
-        return (
-            db.query(Expense)
-            .filter(
-                Expense.company_id == company_id,
-                Expense.issue_date >= start,
-                Expense.issue_date <= end,
-            )
-            .all()
-        )
-    except (OperationalError, ProgrammingError) as exc:
-        db.rollback()
-        em = str(getattr(exc, "orig", exc)).lower()
-        if "expenses" in em or "does not exist" in em or "undefinedcolumn" in em or "relation" in em:
-            logger.warning("Tabla/columnas expenses ausentes; IVA soportado = 0")
-            return []
-        raise
-
-
 def fetch_period_financials(
     db: Session,
     *,
@@ -168,37 +107,40 @@ def fetch_period_financials(
     year: int,
     quarter: int,
 ) -> Model303Result:
+    from services.fiscal_db_compat import (
+        fetch_expense_totals_sql,
+        fetch_invoice_totals_sql,
+        fetch_vat_breakdown_sql,
+    )
+
     start, end = _quarter_bounds(year, quarter)
     period = f"{year}-Q{quarter}"
 
-    invoices = _query_period_invoices(db, company_id=company_id, start=start, end=end)
-    expenses = _query_period_expenses(db, company_id=company_id, start=start, end=end)
+    try:
+        base_imponible, iva_devengado, invoice_count = fetch_invoice_totals_sql(
+            db, company_id=company_id, start=start, end=end
+        )
+        iva_soportado, expense_count = fetch_expense_totals_sql(
+            db, company_id=company_id, start=start, end=end
+        )
+    except (OperationalError, ProgrammingError) as exc:
+        db.rollback()
+        raise
 
-    if not invoices and not expenses:
+    if invoice_count == 0 and expense_count == 0:
         raise HTTPException(
             status_code=422,
             detail="No hay datos financieros en el periodo (facturas ni gastos).",
         )
 
-    base_imponible = sum(float(i.subtotal or 0) for i in invoices)
-    iva_devengado = sum(float(i.tax_amount or 0) for i in invoices)
-    iva_soportado = sum(float(e.tax_amount or 0) for e in expenses)
     resultado = round(iva_devengado - iva_soportado, 2)
 
     if base_imponible == 0 and iva_devengado == 0 and iva_soportado == 0:
         raise HTTPException(status_code=422, detail="Totales fiscales en cero; no se genera modelo 303.")
 
-    vat_breakdown: Dict[str, float] = {}
-    for inv in invoices:
-        try:
-            line_items = inv.items or []
-        except (OperationalError, ProgrammingError):
-            db.rollback()
-            line_items = []
-        for item in line_items:
-            rate = round(float(item.tax_rate or 0), 2)
-            key = str(int(rate)) if rate == int(rate) else str(rate)
-            vat_breakdown[key] = vat_breakdown.get(key, 0.0) + float(item.tax_amount or 0)
+    vat_breakdown = fetch_vat_breakdown_sql(
+        db, company_id=company_id, start=start, end=end
+    )
 
     return Model303Result(
         company_id=company_id,
@@ -209,8 +151,8 @@ def fetch_period_financials(
         iva_devengado=round(iva_devengado, 2),
         iva_soportado=round(iva_soportado, 2),
         resultado=resultado,
-        invoice_count=len(invoices),
-        expense_count=len(expenses),
+        invoice_count=invoice_count,
+        expense_count=expense_count,
         vat_breakdown=vat_breakdown,
     )
 
@@ -259,39 +201,44 @@ def register_fiscal_workspace_document(
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    doc = DocumentApproval(
-        user_id=user.id,
-        company_id=company_id,
-        agent_name="RAFAEL",
-        document_type="fiscal_document",
-        document_payload=payload,
-        status="draft",
-        visible_in_workspace=True,
-        fiscal_document_type=fiscal_document_type,
-        export_format=export_format,
-        file_path=file_path,
-        file_size_bytes=file_size,
-        mime_type=mime_type,
-        audit_log=[
-            {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "event": "fiscal_document_stored",
-                "agent": "RAFAEL",
-                "file_size": file_size,
-            }
-        ],
-    )
+    from app.db.base import ensure_schema_patches
+    from services.fiscal_db_compat import insert_document_approval_row
+
+    ensure_schema_patches()
+    audit = [
+        {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "event": "fiscal_document_stored",
+            "agent": "RAFAEL",
+            "file_size": file_size,
+        }
+    ]
     try:
-        db.add(doc)
-        db.commit()
-        db.refresh(doc)
-    except (OperationalError, ProgrammingError) as exc:
-        db.rollback()
-        logger.exception("No se pudo guardar documento fiscal (esquema BD)")
+        doc_id = insert_document_approval_row(
+            db,
+            user_id=user.id,
+            company_id=company_id,
+            agent_name="RAFAEL",
+            document_type="fiscal_document",
+            payload=payload,
+            status="draft",
+            fiscal_document_type=fiscal_document_type,
+            export_format=export_format,
+            file_path=file_path,
+            file_size=file_size,
+            mime_type=mime_type,
+            audit_log=audit,
+            visible_in_workspace=True,
+        )
+    except RuntimeError as exc:
+        logger.exception("No se pudo guardar documento fiscal")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Base de datos pendiente de actualizar para documentos fiscales. Reintenta en unos minutos.",
+            detail=str(exc),
         ) from exc
+
+    doc = DocumentApproval()
+    doc.id = doc_id
     return doc
 
 
@@ -429,6 +376,8 @@ def generate_model_303_flow(
 
     try:
         model = fetch_period_financials(db, company_id=cid, year=year, quarter=quarter)
+    except HTTPException:
+        raise
     except (OperationalError, ProgrammingError) as exc:
         logger.exception("Consulta fiscal falló (esquema BD)")
         raise HTTPException(

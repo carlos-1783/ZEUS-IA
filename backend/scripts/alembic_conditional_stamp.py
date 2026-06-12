@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 
 # No usar `python -m alembic`: en /app la carpeta local `alembic/` (migraciones) oculta el paquete
 # instalado y Python no encuentra __main__.py.
@@ -40,8 +41,20 @@ def _run_stamp_head() -> int:
     return subprocess.call([exe, "stamp", "head"], cwd=cwd)
 
 
+def _bootstrap_import_path() -> str:
+    env_root = (os.environ.get("ZEUS_APP_ROOT") or "").strip()
+    if env_root and os.path.isfile(os.path.join(env_root, "alembic.ini")):
+        backend_root = env_root
+    else:
+        backend_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if backend_root not in sys.path:
+        sys.path.insert(0, backend_root)
+    return backend_root
+
+
 def _apply_runtime_schema_patches() -> None:
     try:
+        _bootstrap_import_path()
         from app.db.base import ensure_schema_patches
 
         ensure_schema_patches()

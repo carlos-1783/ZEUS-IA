@@ -199,11 +199,43 @@ onMounted(async () => {
   }
   try {
     const status = await api.get('/api/v1/auth/onboarding/status', token)
+    if (status?.setup_completed) {
+      markOnboardingSetupDone()
+      router.replace('/dashboard')
+      return
+    }
     if (status?.email_gestor_fiscal) {
       form.email_gestor_fiscal = String(status.email_gestor_fiscal)
     }
     if (status?.autoriza_envio_documentos_a_asesores != null) {
       form.autoriza_envio_documentos_a_asesores = !!status.autoriza_envio_documentos_a_asesores
+    }
+    const q = status?.existing_questionnaire
+    if (q && typeof q === 'object') {
+      if (q.employees_count != null) form.employees_count = Number(q.employees_count) || 0
+      if (q.uses_tpv != null) form.uses_tpv = !!q.uses_tpv
+      if (typeof q.business_hours === 'string' && q.business_hours.trim()) {
+        form.business_hours = q.business_hours.trim()
+      }
+    }
+    const op = status?.existing_operational_profile
+    if (op && typeof op === 'object') {
+      if (typeof op.whatsapp_number === 'string' && op.whatsapp_number.trim()) {
+        form.whatsapp_number = op.whatsapp_number.trim()
+      }
+      if (typeof op.control_horario_policy === 'string' && op.control_horario_policy.trim()) {
+        form.control_horario_policy = op.control_horario_policy.trim()
+      }
+      const links = op.social_links
+      if (links && typeof links === 'object') {
+        const channels = Object.keys(links).filter((k) => String(links[k] || '').trim())
+        if (channels.length) {
+          form.social_channels = channels
+          for (const ch of channels) {
+            form.social_links[ch] = String(links[ch] || '').trim()
+          }
+        }
+      }
     }
   } catch {
     /* ignore */

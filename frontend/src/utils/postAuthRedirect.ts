@@ -47,6 +47,13 @@ export async function resolvePostAuthPath(
     return '/onboarding-setup'
   } catch (e) {
     console.warn('postAuthRedirect: no se pudo leer onboarding/status', e)
+    try {
+      if (sessionStorage.getItem(ONBOARDING_DONE_KEY) === '1') {
+        return fallback
+      }
+    } catch {
+      /* ignore */
+    }
     if (fallback === '/dashboard') {
       return '/onboarding-setup'
     }

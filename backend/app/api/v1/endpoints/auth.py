@@ -548,9 +548,12 @@ def onboarding_status(
     current_user: User = Depends(get_current_active_user),
 ):
     from app.models.company import Company, UserCompany
+    from app.models.company_employee import CompanyEmployee
+    from app.models.erp import TPVProduct
 
     questionnaire_completed = False
     operational_profile_completed = False
+    setup_inferred = False
     link = (
         db.query(UserCompany)
         .filter(UserCompany.user_id == current_user.id)
@@ -558,11 +561,21 @@ def onboarding_status(
         .first()
     )
     co = db.query(Company).filter(Company.id == link.company_id).first() if link else None
+    meta: dict = {}
+    existing_questionnaire: dict = {}
+    existing_operational_profile: dict = {}
     if co and isinstance(co.metadata_, dict):
-        questionnaire_completed = bool(co.metadata_.get("onboarding_questionnaire_completed"))
+        meta = co.metadata_
+        questionnaire_completed = bool(meta.get("onboarding_questionnaire_completed"))
         operational_profile_completed = bool(
-            co.metadata_.get("onboarding_operational_profile_completed")
+            meta.get("onboarding_operational_profile_completed")
         )
+        q = meta.get("onboarding_questionnaire")
+        op = meta.get("operational_profile")
+        if isinstance(q, dict):
+            existing_questionnaire = q
+        if isinstance(op, dict):
+            existing_operational_profile = op
 
     user_onboarding_backup = False
     try:
@@ -577,6 +590,32 @@ def onboarding_status(
     setup_completed = (
         questionnaire_completed or operational_profile_completed or user_onboarding_backup
     )
+
+    if not setup_completed and co:
+        ce_count = (
+            db.query(CompanyEmployee)
+            .filter(CompanyEmployee.company_id == co.id)
+            .count()
+        )
+        tpv_products = (
+            db.query(TPVProduct)
+            .filter(TPVProduct.user_id == current_user.id)
+            .count()
+        )
+        has_profile_data = bool(
+            existing_operational_profile.get("updated_at")
+            or existing_operational_profile.get("social_links")
+            or existing_questionnaire.get("completed_at")
+            or existing_questionnaire.get("business_hours")
+        )
+        if (
+            getattr(co, "pilot_company", False)
+            or ce_count >= 1
+            or (tpv_products >= 1 and getattr(current_user, "tpv_business_profile", None))
+            or has_profile_data
+        ):
+            setup_completed = True
+            setup_inferred = True
 
     try:
         from services.onboarding_engine import validate_onboarding_state
@@ -601,7 +640,12 @@ def onboarding_status(
         "questionnaire_completed": questionnaire_completed,
         "operational_profile_completed": operational_profile_completed,
         "setup_completed": setup_completed,
+        "setup_inferred": setup_inferred,
         "user_onboarding_backup": user_onboarding_backup,
+        "company_name": co.company_name if co else None,
+        "pilot_company": bool(getattr(co, "pilot_company", False)) if co else False,
+        "existing_questionnaire": existing_questionnaire,
+        "existing_operational_profile": existing_operational_profile,
         "email_gestor_fiscal": getattr(current_user, "email_gestor_fiscal", None),
         "autoriza_envio_documentos_a_asesores": bool(
             getattr(current_user, "autoriza_envio_documentos_a_asesores", False)

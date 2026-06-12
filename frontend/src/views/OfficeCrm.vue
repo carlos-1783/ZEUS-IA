@@ -52,13 +52,49 @@
       </form>
     </section>
 
-    <section class="panel" v-if="selectedCustomer" ref="casesPanelRef">
-      <div class="toolbar">
-        <h2>Expedientes · {{ selectedCustomer.name }}</h2>
-        <input v-model="caseSearch" placeholder="Buscar expediente..." />
+    <div v-if="clientSessions.length" class="client-dock" role="tablist" :aria-label="t('officeCrm.openClients')">
+      <button
+        v-for="session in clientSessions"
+        :key="session.customerId"
+        type="button"
+        role="tab"
+        class="dock-tab"
+        :class="{
+          'dock-tab--active': activeSessionId === session.customerId && !session.minimized,
+          'dock-tab--minimized': session.minimized,
+        }"
+        :aria-selected="activeSessionId === session.customerId && !session.minimized"
+        @click="focusSession(session.customerId)"
+      >
+        <span class="dock-tab-label">{{ session.customer.name }}</span>
+        <span v-if="session.minimized" class="dock-tab-badge">{{ t('officeCrm.minimize') }}</span>
+        <button
+          type="button"
+          class="dock-tab-close"
+          :title="t('officeCrm.closeClient')"
+          @click.stop="closeSession(session.customerId)"
+        >
+          ×
+        </button>
+      </button>
+    </div>
+
+    <section
+      v-if="activeSession && !activeSession.minimized"
+      class="panel panel--customer"
+      ref="casesPanelRef"
+    >
+      <div class="toolbar toolbar--customer">
+        <h2>{{ t('officeCrm.records') }} · {{ activeSession.customer.name }}</h2>
+        <input v-model="activeSession.caseSearch" placeholder="Buscar expediente..." />
         <button class="btn-secondary" @click="downloadCsv('/api/v1/crm/export/cases', 'cases.csv')">CSV</button>
         <button class="btn-secondary" @click="downloadExcel('cases')">Excel</button>
-        <button class="btn-primary" @click="showNewCase = !showNewCase">Nuevo expediente</button>
+        <button class="btn-primary" @click="activeSession.showNewCase = !activeSession.showNewCase">
+          {{ t('officeCrm.newRecord') }}
+        </button>
+        <button type="button" class="btn-secondary" @click="minimizeActiveSession">
+          {{ t('officeCrm.minimize') }}
+        </button>
       </div>
       <table class="data-table">
         <thead>
@@ -71,7 +107,11 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="r in filteredCases" :key="r.id" :class="{ 'case-row-active': chargeRecord?.id === r.id }">
+          <tr
+            v-for="r in filteredCases"
+            :key="r.id"
+            :class="{ 'case-row-active': chargeRecord?.id === r.id }"
+          >
             <td><input v-model="r.title" /></td>
             <td>
               <select v-model="r.status">
@@ -92,7 +132,7 @@
           </tr>
         </tbody>
       </table>
-      <form v-if="showNewCase" class="inline-form" @submit.prevent="createCase">
+      <form v-if="activeSession.showNewCase" class="inline-form" @submit.prevent="createCase">
         <input v-model="newCase.title" placeholder="Título expediente *" required />
         <input v-model.number="newCase.amount" type="number" step="0.01" min="0" placeholder="Importe" />
         <button type="submit" class="btn-small">Crear</button>
@@ -120,10 +160,10 @@
       </div>
     </section>
 
-    <section class="panel" v-if="selectedCustomer">
+    <section v-if="activeSession && !activeSession.minimized" class="panel">
       <div class="toolbar">
         <h2>Cobros</h2>
-        <input v-model="paymentSearch" placeholder="Buscar cobro..." />
+        <input v-model="activeSession.paymentSearch" placeholder="Buscar cobro..." />
         <button class="btn-secondary" @click="downloadCsv('/api/v1/crm/export/payments', 'payments.csv')">CSV</button>
         <button class="btn-secondary" @click="downloadExcel('payments')">Excel</button>
       </div>
@@ -149,20 +189,22 @@
       </table>
     </section>
 
-    <section class="panel" v-if="selectedCustomer">
+    <section v-if="activeSession && !activeSession.minimized" class="panel">
       <div class="toolbar">
         <h2>Actividad reciente</h2>
         <button class="btn-secondary" @click="loadActivity">Actualizar</button>
       </div>
       <ul class="activity-list">
-        <li v-for="a in activity" :key="a.id" class="activity-item">
+        <li v-for="a in activeSession.activity" :key="a.id" class="activity-item">
           <time>{{ formatDt(a.created_at) }}</time>
           <strong>{{ a.action_human || a.action }}</strong>
           <p v-if="a.summary">{{ a.summary }}</p>
         </li>
       </ul>
-      <p v-if="!activity.length" class="muted">Sin actividad registrada.</p>
+      <p v-if="!activeSession.activity.length" class="muted">Sin actividad registrada.</p>
     </section>
+
+    <p v-if="activeSession?.minimized" class="minimized-hint">{{ t('officeCrm.minimizedHint') }}</p>
 
     <CrmCustomerImport v-if="showImport" @close="showImport = false" @imported="loadAll" />
   </div>
@@ -217,6 +259,19 @@ type CrmActivity = {
   created_at?: string
 }
 
+type ClientSession = {
+  customerId: number
+  customer: CrmCustomer
+  minimized: boolean
+  records: CrmCase[]
+  payments: CrmPayment[]
+  activity: CrmActivity[]
+  chargeRecordId: number | null
+  caseSearch: string
+  paymentSearch: string
+  showNewCase: boolean
+}
+
 const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
@@ -225,23 +280,27 @@ const globalError = ref('')
 const sessionExpired = ref(false)
 const accessDenied = ref(false)
 const customers = ref<CrmCustomer[]>([])
-const selectedCustomer = ref<CrmCustomer | null>(null)
-const records = ref<CrmCase[]>([])
-const payments = ref<CrmPayment[]>([])
-const activity = ref<CrmActivity[]>([])
+const clientSessions = ref<ClientSession[]>([])
+const activeSessionId = ref<number | null>(null)
 const showImport = ref(false)
 const showNewClient = ref(false)
-const showNewCase = ref(false)
 const newClient = reactive({ name: '', email: '', phone: '' })
 const newCase = reactive({ title: '', amount: 0 })
 const clientSearch = ref('')
-const caseSearch = ref('')
-const paymentSearch = ref('')
 const clientSort = reactive<{ key: keyof CrmCustomer; dir: SortDir }>({ key: 'name', dir: 'asc' })
 const charging = ref(false)
-const chargeRecord = ref<CrmCase | null>(null)
 const casesPanelRef = ref<HTMLElement | null>(null)
 const chargeBoxRef = ref<HTMLElement | null>(null)
+
+const activeSession = computed(() =>
+  clientSessions.value.find((s) => s.customerId === activeSessionId.value) ?? null,
+)
+
+const chargeRecord = computed(() => {
+  const session = activeSession.value
+  if (!session || session.chargeRecordId == null) return null
+  return session.records.find((r) => r.id === session.chargeRecordId) ?? null
+})
 
 const chargeForm = reactive({
   base_amount: '',
@@ -341,35 +400,112 @@ async function saveClient(client: CrmCustomer) {
 }
 
 async function loadActivity() {
-  if (!selectedCustomer.value) return
+  const session = activeSession.value
+  if (!session) return
   try {
-    const actRes = await api.get(`/api/v1/crm/customers/${selectedCustomer.value.id}/activity`)
-    activity.value = Array.isArray(actRes?.data) ? actRes.data : []
+    const actRes = await api.get(`/api/v1/crm/customers/${session.customerId}/activity`)
+    session.activity = Array.isArray(actRes?.data) ? actRes.data : []
   } catch (e) {
     globalError.value = await errMessage(e)
   }
 }
 
-async function loadCustomerData(customerId: number) {
+async function loadSessionData(session: ClientSession) {
   const [recRes, payRes] = await Promise.all([
-    api.get(`/api/v1/crm/customers/${customerId}/records`),
+    api.get(`/api/v1/crm/customers/${session.customerId}/records`),
     api.get('/api/v1/crm/table/payments'),
   ])
-  records.value = (Array.isArray(recRes?.data) ? recRes.data : []).map((r: CrmCase) => ({
+  session.records = (Array.isArray(recRes?.data) ? recRes.data : []).map((r: CrmCase) => ({
     ...r,
     paid: r.status === 'paid',
   }))
-  payments.value = ((Array.isArray(payRes?.data) ? payRes.data : []) as CrmPayment[]).filter((p) =>
-    records.value.some((r) => r.id === p.case_id),
+  session.payments = ((Array.isArray(payRes?.data) ? payRes.data : []) as CrmPayment[]).filter((p) =>
+    session.records.some((r) => r.id === p.case_id),
   )
-  await loadActivity()
+  const actRes = await api.get(`/api/v1/crm/customers/${session.customerId}/activity`)
+  session.activity = Array.isArray(actRes?.data) ? actRes.data : []
+}
+
+function minimizeActiveSession() {
+  const session = activeSession.value
+  if (session) session.minimized = true
+}
+
+function focusSession(customerId: number) {
+  const session = clientSessions.value.find((s) => s.customerId === customerId)
+  if (!session) return
+
+  if (activeSessionId.value === customerId && !session.minimized) {
+    session.minimized = true
+    session.chargeRecordId = null
+    return
+  }
+
+  clientSessions.value.forEach((s) => {
+    s.minimized = s.customerId !== customerId
+    if (s.customerId !== customerId) s.chargeRecordId = null
+  })
+  session.minimized = false
+  activeSessionId.value = customerId
+  nextTick(() => {
+    casesPanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+}
+
+function closeSession(customerId: number) {
+  const idx = clientSessions.value.findIndex((s) => s.customerId === customerId)
+  if (idx === -1) return
+  clientSessions.value.splice(idx, 1)
+  if (activeSessionId.value !== customerId) return
+
+  const remaining = clientSessions.value
+  if (!remaining.length) {
+    activeSessionId.value = null
+    return
+  }
+  const next = remaining.find((s) => !s.minimized) ?? remaining[remaining.length - 1]
+  next.minimized = false
+  activeSessionId.value = next.customerId
 }
 
 async function openCustomer(c: CrmCustomer) {
-  selectedCustomer.value = c
-  chargeRecord.value = null
+  globalError.value = ''
+  let session = clientSessions.value.find((s) => s.customerId === c.id)
+
+  if (session) {
+    clientSessions.value.forEach((s) => {
+      if (s.customerId !== c.id) {
+        s.minimized = true
+        s.chargeRecordId = null
+      }
+    })
+    session.minimized = false
+    session.customer = { ...c, status: c.status }
+    session.chargeRecordId = null
+    activeSessionId.value = c.id
+  } else {
+    clientSessions.value.forEach((s) => {
+      s.minimized = true
+      s.chargeRecordId = null
+    })
+    session = {
+      customerId: c.id,
+      customer: { ...c },
+      minimized: false,
+      records: [],
+      payments: [],
+      activity: [],
+      chargeRecordId: null,
+      caseSearch: '',
+      paymentSearch: '',
+      showNewCase: false,
+    }
+    clientSessions.value.push(session)
+    activeSessionId.value = c.id
+  }
+
   try {
-    await loadCustomerData(c.id)
+    await loadSessionData(session)
     await nextTick()
     casesPanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   } catch (e) {
@@ -378,17 +514,18 @@ async function openCustomer(c: CrmCustomer) {
 }
 
 async function createCase() {
-  if (!selectedCustomer.value || !newCase.title.trim()) return
+  const session = activeSession.value
+  if (!session || !newCase.title.trim()) return
   try {
-    await api.post(`/api/v1/crm/customers/${selectedCustomer.value.id}/records`, {
+    await api.post(`/api/v1/crm/customers/${session.customerId}/records`, {
       title: newCase.title.trim(),
       status: 'open',
       amount: Number(newCase.amount || 0),
     })
     newCase.title = ''
     newCase.amount = 0
-    showNewCase.value = false
-    await openCustomer(selectedCustomer.value)
+    session.showNewCase = false
+    await loadSessionData(session)
   } catch (e) {
     globalError.value = await errMessage(e)
   }
@@ -428,15 +565,19 @@ const filteredClients = computed(() => {
 })
 
 const filteredCases = computed(() => {
-  const term = caseSearch.value.trim().toLowerCase()
-  return records.value.filter((r) =>
+  const session = activeSession.value
+  if (!session) return []
+  const term = session.caseSearch.trim().toLowerCase()
+  return session.records.filter((r) =>
     !term || [r.title, r.status, String(r.amount || '')].some((v) => String(v).toLowerCase().includes(term)),
   )
 })
 
 const filteredPayments = computed(() => {
-  const term = paymentSearch.value.trim().toLowerCase()
-  return payments.value.filter((p) =>
+  const session = activeSession.value
+  if (!session) return []
+  const term = session.paymentSearch.trim().toLowerCase()
+  return session.payments.filter((p) =>
     !term || [p.method, p.status, String(p.amount || ''), String(p.case_id || '')].some((v) => String(v).toLowerCase().includes(term)),
   )
 })
@@ -474,22 +615,26 @@ async function downloadCsv(endpoint: string, filename: string) {
 }
 
 function closeCharge() {
-  chargeRecord.value = null
+  const session = activeSession.value
+  if (session) session.chargeRecordId = null
 }
 
 async function openCharge(r: CrmCase) {
-  if (chargeRecord.value?.id === r.id) {
+  const session = activeSession.value
+  if (!session) return
+
+  if (session.chargeRecordId === r.id) {
     closeCharge()
     return
   }
 
-  chargeRecord.value = null
+  session.chargeRecordId = null
   chargeForm.base_amount = r.amount && Number(r.amount) > 0 ? String(r.amount) : '10'
   chargeForm.payment_method = 'efectivo'
   chargeForm.description = r.title
 
   await nextTick()
-  chargeRecord.value = { ...r }
+  session.chargeRecordId = r.id
   await nextTick()
   chargeBoxRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
 }
@@ -511,9 +656,10 @@ async function submitCharge() {
       iva_rate: 21,
       consumption_type: 'onsite',
     })
-    chargeRecord.value = null
-    if (selectedCustomer.value) {
-      await loadCustomerData(selectedCustomer.value.id)
+    closeCharge()
+    const session = activeSession.value
+    if (session) {
+      await loadSessionData(session)
     }
   } catch (e) {
     globalError.value = await errMessage(e)
@@ -548,16 +694,14 @@ async function bootstrapPage() {
 
 async function loadAll() {
   await loadCustomers()
-  if (selectedCustomer.value) {
-    const selected = customers.value.find((x) => x.id === selectedCustomer.value!.id)
-    if (selected) {
-      selectedCustomer.value = selected
-      chargeRecord.value = null
-      try {
-        await loadCustomerData(selected.id)
-      } catch (e) {
-        globalError.value = await errMessage(e)
-      }
+  for (const session of clientSessions.value) {
+    const selected = customers.value.find((x) => x.id === session.customerId)
+    if (!selected) continue
+    session.customer = { ...selected, status: selected.status }
+    try {
+      await loadSessionData(session)
+    } catch (e) {
+      globalError.value = await errMessage(e)
     }
   }
 }

@@ -87,6 +87,91 @@
   color: #0f172a;
 }
 
+.office-crm .client-dock {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.65rem 0.75rem;
+  background: #f1f5f9;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 10px;
+  position: sticky;
+  top: 0.5rem;
+  z-index: 5;
+}
+
+.office-crm .dock-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 8px;
+  padding: 0.35rem 0.55rem 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  max-width: 220px;
+}
+
+.office-crm .dock-tab--active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.25);
+}
+
+.office-crm .dock-tab--minimized {
+  opacity: 0.82;
+  border-style: dashed;
+}
+
+.office-crm .dock-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.office-crm .dock-tab-badge {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+  background: #e2e8f0;
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+}
+
+.office-crm .dock-tab-close {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.office-crm .dock-tab-close:hover {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.office-crm .toolbar--customer {
+  flex-wrap: wrap;
+}
+
+.office-crm .minimized-hint {
+  margin: 0 0 1rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  color: #92400e;
+  font-size: 0.875rem;
+}
+
 .office-crm .panel h3,
 .office-crm .panel h4 {
   margin: 1rem 0 0.5rem;
@@ -405,6 +490,33 @@
 
 [data-theme='dark'] .office-crm .toolbar h2 {
   color: #f1f5f9;
+}
+
+[data-theme='dark'] .office-crm .client-dock {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+[data-theme='dark'] .office-crm .dock-tab {
+  background: #1e293b;
+  border-color: #475569;
+  color: #f1f5f9;
+}
+
+[data-theme='dark'] .office-crm .dock-tab--active {
+  background: #1e3a5f;
+  border-color: #3b82f6;
+}
+
+[data-theme='dark'] .office-crm .dock-tab-badge {
+  background: #334155;
+  color: #cbd5e1;
+}
+
+[data-theme='dark'] .office-crm .minimized-hint {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.45);
+  color: #fcd34d;
 }
 
 [data-theme='dark'] .office-crm .data-table th,

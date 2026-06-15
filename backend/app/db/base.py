@@ -51,6 +51,7 @@ def ensure_schema_patches():
         _migrate_tpv_company_columns()
         _migrate_smart_time_control_tables()
         _migrate_time_cost_engine_v1()
+        _migrate_cashflow_ledger()
         print("[SCHEMA] Parches de esquema completados")
     except Exception as e:
         logger.warning("ensure_schema_patches: %s", e)
@@ -91,6 +92,7 @@ def create_tables():
             from app.models.chat_message import ChatMessage
             from app.models.employee_work_session import EmployeeWorkSession
             from app.models.time_cost_checkin import TimeCostCheckin
+            from app.models.cashflow_ledger import CashflowLedgerEntry
             from app.models.tpv_operator_session import TPVOperatorSession
             from app.models.time_tracking import (
                 TimeTrackingRecord,
@@ -597,6 +599,19 @@ def _migrate_time_cost_engine_v1():
             print("[MIGRATION] [INFO] time_cost_checkins se creará vía create_all si el modelo está importado")
     except Exception as e:
         print(f"[MIGRATION] [WARN] time cost engine v1 migrate: {e}")
+
+
+def _migrate_cashflow_ledger():
+    """Tabla cashflow_ledger si falta (legacy sin Alembic)."""
+    from sqlalchemy import inspect
+
+    try:
+        inspector = inspect(engine)
+        if "cashflow_ledger" in inspector.get_table_names():
+            return
+        print("[MIGRATION] [INFO] cashflow_ledger se creará vía create_all si el modelo está importado")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] cashflow_ledger migrate: {e}")
 
 
 def _migrate_firewall_columns_legacy():

@@ -23,12 +23,23 @@ from .thalos import (
     handle_thalos_backup,
 )
 from .generic_internal import handle_generic_internal, GENERIC_INTERNAL_HANDLER_NAME
+from .zeus_orchestrator import (
+    handle_campaign_created,
+    handle_campaign_sent,
+    handle_crm_customers_summary,
+)
+
+
+def _normalize_agent_key(agent: str) -> str:
+    key = (agent or "").strip().upper()
+    if key == "ZEUS CORE":
+        return "ZEUS"
+    return key
 
 
 HandlerType = Callable[[AgentActivity], Dict[str, object]]
 
-# Action types that use GENERIC_INTERNAL_HANDLER (persist payload, no simulation)
-# These are internal actions that need persistence but don't require external execution
+# Action types that use GENERIC_INTERNAL_HANDLER
 GENERIC_INTERNAL_ACTION_TYPES = frozenset({
     # ZEUS internal
     "autonomo_paperwork_prepare",
@@ -49,8 +60,32 @@ GENERIC_INTERNAL_ACTION_TYPES = frozenset({
 })
 
 HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
+    "ZEUS": {
+        "coordination": handle_zeus_task,
+        "task_delegated": handle_zeus_task,
+        "crm_customers_summary": handle_crm_customers_summary,
+        "campaign_sent": handle_campaign_sent,
+        "zeus_launch_started": handle_zeus_launch_started,
+        "automation_readiness_evaluate": handle_automation_readiness_evaluate,
+        "payroll_draft_generate": handle_payroll_draft_generate,
+        "autonomo_paperwork_prepare": handle_generic_internal,
+        "pricing_review": handle_generic_internal,
+        "stripe_readiness_check": handle_generic_internal,
+        "daily_internal_log": handle_generic_internal,
+        "system_friction_detected": handle_generic_internal,
+    },
+    "ZEUS CORE": {
+        "coordination": handle_zeus_task,
+        "task_delegated": handle_zeus_task,
+        "crm_customers_summary": handle_crm_customers_summary,
+        "campaign_sent": handle_campaign_sent,
+        "zeus_launch_started": handle_zeus_launch_started,
+        "automation_readiness_evaluate": handle_automation_readiness_evaluate,
+        "payroll_draft_generate": handle_payroll_draft_generate,
+    },
     "PERSEO": {
         "task_assigned": handle_perseo_task,
+        "campaign_created": handle_campaign_created,
     },
     "RAFAEL": {
         "task_assigned": handle_rafael_task,
@@ -63,20 +98,6 @@ HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
     "AFRODITA": {
         "task_assigned": handle_afrodita_task,
     },
-    "ZEUS": {
-        "coordination": handle_zeus_task,
-        "task_delegated": handle_zeus_task,
-        "zeus_launch_started": handle_zeus_launch_started,
-        "automation_readiness_evaluate": handle_automation_readiness_evaluate,
-        "payroll_draft_generate": handle_payroll_draft_generate,
-        "autonomo_paperwork_prepare": handle_generic_internal,
-        "pricing_review": handle_generic_internal,
-        "stripe_readiness_check": handle_generic_internal,
-        "daily_internal_log": handle_generic_internal,
-        "system_friction_detected": handle_generic_internal,
-    },
-    # Critical action types mapped to generic handler (will be blocked if not in GENERIC_INTERNAL_ACTION_TYPES)
-    # These will use GENERIC_INTERNAL_HANDLER via resolve_handler fallback
     "THALOS": {
         "security_scan": handle_thalos_security_scan,
         "task_assigned": handle_thalos_alerts,
@@ -86,9 +107,11 @@ HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
 
 
 def resolve_handler(agent: str, action_type: str) -> Optional[HandlerType]:
-    agent_handlers = HANDLER_MAP.get(agent.upper())
-    if agent_handlers and action_type in agent_handlers:
-        return agent_handlers.get(action_type)
+    normalized = _normalize_agent_key(agent)
+    for key in (normalized, (agent or "").strip().upper()):
+        agent_handlers = HANDLER_MAP.get(key)
+        if agent_handlers and action_type in agent_handlers:
+            return agent_handlers.get(action_type)
     if action_type in GENERIC_INTERNAL_ACTION_TYPES:
         return handle_generic_internal
     return None

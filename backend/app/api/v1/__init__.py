@@ -34,6 +34,8 @@ from app.api.v1.endpoints import (
     admin,
     control_horario,
     checkin,
+    cashflow,
+    invoices,
     webhooks,
     payroll,
     rafael_fiscal,
@@ -110,6 +112,12 @@ api_router.include_router(control_horario.router, prefix="/control-horario", tag
 
 # Time & cost engine v1 (fichajes + coste laboral)
 api_router.include_router(checkin.router, prefix="/checkin", tags=["checkin"])
+
+# Cashflow ledger (movimientos reales)
+api_router.include_router(cashflow.router, prefix="/cashflow", tags=["cashflow"])
+
+# ERP Invoices & payments
+api_router.include_router(invoices.router, prefix="/invoices", tags=["invoices"])
 
 # Admin Panel (solo superusuarios)
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])

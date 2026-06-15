@@ -311,8 +311,9 @@ def create_payment(
     )
     
     db.add(payment)
-    
-    # Update invoice status based on payment
+    db.flush()
+
+    # Update invoice status based on payment (payment now visible in totals)
     totals = calculate_invoice_totals(invoice, db)
     
     if payment.status == PaymentStatus.COMPLETED:
@@ -343,7 +344,7 @@ def create_payment(
             source="INVOICES_MODULE",
             db=db,
         )
-        if amt is not None:
+        if amt is not None and cid is not None:
             emit_cashflow_updated(
                 user_id=current_user.id,
                 user_email=getattr(current_user, "email", None),
@@ -353,6 +354,7 @@ def create_payment(
                 source="INVOICES_MODULE",
                 customer_id=getattr(invoice, "customer_id", None),
                 invoice_id=invoice_id,
+                payment_method=str(payment.method) if getattr(payment, "method", None) else None,
                 db=db,
             )
     except Exception:

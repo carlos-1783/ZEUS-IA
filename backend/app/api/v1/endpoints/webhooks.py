@@ -341,6 +341,20 @@ async def stripe_webhook_handler(
                 source="STRIPE_WEBHOOK",
                 db=db,
             )
+            if company_id and amount is not None and float(amount) > 0:
+                from services.event_bus import emit_cashflow_updated
+
+                emit_cashflow_updated(
+                    user_id=user.id,
+                    user_email=customer_email,
+                    company_id=company_id,
+                    amount=float(amount),
+                    direction="in",
+                    source="STRIPE_WEBHOOK",
+                    ticket_id=payment_intent_id,
+                    payment_method="stripe",
+                    db=db,
+                )
         except Exception:
             logger.exception("[WEBHOOK] emit_payment_registered falló")
         

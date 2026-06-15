@@ -1238,18 +1238,34 @@ async def process_sale(
         (result.get("ticket") or {}).get("accounting_sent"),
     )
     try:
-        from services.event_bus import emit_sale_created
+        from services.event_bus import emit_sale_created, emit_cashflow_updated
 
         tk = result.get("ticket_id") or (result.get("ticket") or {}).get("id")
+        ticket = result.get("ticket") or {}
+        totals = ticket.get("totals") or {}
+        sale_total = float(totals.get("total") or 0)
         emit_sale_created(
             user_id=current_user.id,
             user_email=getattr(current_user, "email", None),
             company_id=primary_cid,
             ticket_id=str(tk) if tk is not None else None,
-            tpv_sale_id=(result.get("ticket") or {}).get("fiscal_snapshot_id"),
+            tpv_sale_id=ticket.get("fiscal_snapshot_id"),
             payment_method=request.payment_method,
             db=db,
         )
+        if primary_cid and sale_total > 0:
+            emit_cashflow_updated(
+                user_id=current_user.id,
+                user_email=getattr(current_user, "email", None),
+                company_id=primary_cid,
+                amount=sale_total,
+                direction="in",
+                source="TPV",
+                tpv_sale_id=ticket.get("fiscal_snapshot_id"),
+                ticket_id=str(tk) if tk is not None else None,
+                payment_method=request.payment_method,
+                db=db,
+            )
     except Exception:
         logger.exception("emit_sale_created falló (no bloquea la venta)")
     return result

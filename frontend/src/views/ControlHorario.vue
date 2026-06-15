@@ -75,6 +75,16 @@
               :placeholder="$t('controlHorario.employeePhonePlaceholder')"
             />
           </div>
+          <div v-if="selectedMethod === 'code'" class="employee-selector">
+            <label>PIN empleado</label>
+            <input
+              v-model="employeePin"
+              type="password"
+              class="employee-select"
+              placeholder="PIN TPV"
+              autocomplete="off"
+            />
+          </div>
 
           <div v-if="selectedMethod === 'location' && config.gps_required" class="location-info">
             <p>📍 {{ $t('controlHorario.gpsRequired') }}</p>
@@ -316,7 +326,10 @@ const smartAlerts = ref([])
 const smartTpv = ref(null)
 const todayHoursByEmployee = ref({})
 const costEngine = ref(null)
+const employeePin = ref('')
 let refreshTimer = null
+
+const V1_METHOD_MAP = { qr: 'qr', code: 'pin', location: 'geo', remote: 'device', face: 'device' }
 
 // Métodos disponibles
 const availableMethods = computed(() => [
@@ -492,29 +505,47 @@ const checkStatus = async () => {
   }
 }
 
+const postCheckinV1 = async (type) => {
+  const token = authStore.getToken ? authStore.getToken() : authStore.token
+  if (!token) throw new Error('No hay token')
+  const cid = costEngine.value?.company_id
+  if (!cid) throw new Error('No hay empresa asociada. Configura la empresa antes de fichar.')
+  const method = V1_METHOD_MAP[selectedMethod.value] || 'device'
+  const body = {
+    company_id: cid,
+    employee_id: selectedEmployee.value,
+    type,
+    method
+  }
+  if (method === 'qr') {
+    body.qr_token = `ui-${selectedEmployee.value}-${Date.now()}`
+  }
+  if (method === 'pin') {
+    const pin = (employeePin.value || '').trim()
+    if (!pin) throw new Error('PIN requerido para fichaje por código.')
+    body.pin = pin
+  }
+  if (method === 'geo') {
+    body.lat = currentLocation.value.latitude
+    body.lng = currentLocation.value.longitude
+  }
+  if (method === 'device') {
+    body.device_id = (navigator.userAgent || 'browser').slice(0, 128)
+  }
+  const api = (await import('@/services/api')).default
+  return api.post('/api/v1/checkin', body, token)
+}
+
 const handleCheckIn = async () => {
   if (!selectedEmployee.value || !selectedMethod.value) return
   
   checking.value = true
   try {
-    const token = authStore.getToken ? authStore.getToken() : authStore.token
-    if (!token) throw new Error('No hay token')
-    
-    const api = (await import('@/services/api')).default
-    const data = await api.post('/api/v1/control-horario/check-in', {
-      employee_id: selectedEmployee.value,
-      employee_phone: employeePhone.value,
-      method: selectedMethod.value,
-      location: currentLocation.value.latitude ? 'GPS Location' : null,
-      latitude: currentLocation.value.latitude,
-      longitude: currentLocation.value.longitude
-    }, token)
-    
-    alert(`✅ ${data.message || 'Entrada registrada correctamente'}`)
-    
-    // Actualizar estado
+    const data = await postCheckinV1('entrada')
+    alert(`✅ Entrada registrada — coste parcial: ${data.cost_eur ?? '—'} €`)
     await checkStatus()
     selectedEmployee.value = ''
+    employeePin.value = ''
     
   } catch (err) {
     console.error('Error en check-in:', err)
@@ -548,21 +579,8 @@ const handleBreakStart = async () => {
   if (!selectedEmployee.value) return
   checking.value = true
   try {
-    const token = authStore.getToken ? authStore.getToken() : authStore.token
-    if (!token) throw new Error('No hay token')
-    const api = (await import('@/services/api')).default
-    const data = await api.post(
-      '/api/v1/control-horario/break-start',
-      {
-        employee_id: selectedEmployee.value,
-        employee_phone: employeePhone.value,
-        location: currentLocation.value.latitude ? 'GPS Location' : null,
-        latitude: currentLocation.value.latitude,
-        longitude: currentLocation.value.longitude
-      },
-      token
-    )
-    alert(`✅ ${data.message || 'OK'}`)
+    const data = await postCheckinV1('pausa_inicio')
+    alert(`✅ ${data.success ? 'Pausa iniciada' : 'OK'}`)
     await checkStatus()
   } catch (err) {
     console.error(err)
@@ -576,21 +594,8 @@ const handleBreakEnd = async () => {
   if (!selectedEmployee.value) return
   checking.value = true
   try {
-    const token = authStore.getToken ? authStore.getToken() : authStore.token
-    if (!token) throw new Error('No hay token')
-    const api = (await import('@/services/api')).default
-    const data = await api.post(
-      '/api/v1/control-horario/break-end',
-      {
-        employee_id: selectedEmployee.value,
-        employee_phone: employeePhone.value,
-        location: currentLocation.value.latitude ? 'GPS Location' : null,
-        latitude: currentLocation.value.latitude,
-        longitude: currentLocation.value.longitude
-      },
-      token
-    )
-    alert(`✅ ${data.message || 'OK'}`)
+    const data = await postCheckinV1('pausa_fin')
+    alert(`✅ ${data.success ? 'Pausa finalizada' : 'OK'}`)
     await checkStatus()
   } catch (err) {
     console.error(err)
@@ -605,25 +610,11 @@ const handleCheckOut = async () => {
   
   checking.value = true
   try {
-    const token = authStore.getToken ? authStore.getToken() : authStore.token
-    if (!token) throw new Error('No hay token')
-    
-    const api = (await import('@/services/api')).default
-    const data = await api.post('/api/v1/control-horario/check-out', {
-      employee_id: selectedEmployee.value,
-      employee_phone: employeePhone.value,
-      method: selectedMethod.value || 'code',
-      location: currentLocation.value.latitude ? 'GPS Location' : null,
-      latitude: currentLocation.value.latitude,
-      longitude: currentLocation.value.longitude
-    }, token)
-    
-    const hours = data.hours_worked || 0
-    alert(`✅ ${data.message || 'Salida registrada correctamente'}\n⏰ Horas trabajadas: ${hours}h`)
-    
-    // Actualizar estado
+    const data = await postCheckinV1('salida')
+    alert(`✅ Salida registrada — ${data.hours ?? '—'}h · ${data.cost_eur ?? '—'} €`)
     await checkStatus()
     selectedEmployee.value = ''
+    employeePin.value = ''
     
   } catch (err) {
     console.error('Error en check-out:', err)

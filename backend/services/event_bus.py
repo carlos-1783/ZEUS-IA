@@ -128,6 +128,43 @@ def emit_payment_registered(
         logger.warning("event_payment_registered activity log failed: %s", e)
 
 
+def emit_client_created(
+    *,
+    user_id: int,
+    user_email: Optional[str],
+    company_id: int,
+    customer_id: int,
+    customer_name: Optional[str] = None,
+    customer_email: Optional[str] = None,
+    db: Optional[Session] = None,
+) -> None:
+    """Evento canónico: cliente CRM creado."""
+    payload: Dict[str, Any] = {
+        "user_id": user_id,
+        "company_id": company_id,
+        "customer_id": customer_id,
+        "customer_name": customer_name,
+        "customer_email": customer_email,
+    }
+    logger.info("event client_created %s", payload)
+    try:
+        from services.activity_logger import ActivityLogger
+
+        ActivityLogger.log_activity(
+            agent_name="ZEUS CORE",
+            action_type="client_created",
+            action_description=f"Cliente creado: {customer_name or customer_id}",
+            details=payload,
+            user_email=user_email,
+            status="completed",
+            priority="normal",
+            visible_to_client=True,
+        )
+    except Exception as e:
+        logger.warning("event client_created activity log failed: %s", e)
+    _ = db
+
+
 def emit_invoice_generated(
     *,
     user_id: int,
@@ -215,20 +252,50 @@ def emit_cashflow_updated(
     source: str = "OFFICE",
     customer_id: Optional[int] = None,
     invoice_id: Optional[int] = None,
+    tpv_sale_id: Optional[int] = None,
+    ticket_id: Optional[str] = None,
+    payment_method: Optional[str] = None,
     db: Optional[Session] = None,
 ) -> None:
-    """Actualiza trazabilidad de cashflow tras cobros/facturas."""
-    _ = db
+    """Persiste movimiento en cashflow_ledger y registra actividad."""
     payload: Dict[str, Any] = {
         "user_id": user_id,
         "company_id": company_id,
         "customer_id": customer_id,
         "invoice_id": invoice_id,
+        "tpv_sale_id": tpv_sale_id,
+        "ticket_id": ticket_id,
         "amount": amount,
         "direction": direction,
         "source": source,
+        "payment_method": payment_method,
     }
     logger.info("event cashflow_updated %s", payload)
+
+    ledger_id = None
+    if db is not None and company_id is not None and float(amount or 0) > 0:
+        try:
+            from services.cashflow_ledger_service import record_movement
+
+            entry = record_movement(
+                db,
+                company_id=int(company_id),
+                amount=float(amount),
+                direction=direction,
+                source=source,
+                user_id=user_id,
+                customer_id=customer_id,
+                invoice_id=invoice_id,
+                tpv_sale_id=tpv_sale_id,
+                ticket_id=ticket_id,
+                payment_method=payment_method,
+                auto_commit=True,
+            )
+            ledger_id = entry.id
+            payload["ledger_entry_id"] = ledger_id
+        except Exception as e:
+            logger.warning("cashflow_ledger persist failed: %s", e)
+
     try:
         from services.activity_logger import ActivityLogger
 
@@ -237,7 +304,7 @@ def emit_cashflow_updated(
             action_type="cashflow_updated",
             action_description=f"Cashflow actualizado ({direction}): {amount:.2f} €",
             details=payload,
-            metrics={"amount": amount},
+            metrics={"amount": amount, "ledger_entry_id": ledger_id},
             user_email=user_email,
             status="completed",
             priority="normal",

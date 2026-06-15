@@ -192,6 +192,20 @@ def create_customer(db: Session, user: User, customer_in: CustomerCreate) -> Cus
             summary=f"Cliente creado: {customer.name}",
             payload={"customer_id": customer.id},
         )
+        try:
+            from services.event_bus import emit_client_created
+
+            emit_client_created(
+                user_id=user.id,
+                user_email=getattr(user, "email", None),
+                company_id=log_cid,
+                customer_id=customer.id,
+                customer_name=customer.name,
+                customer_email=customer.email,
+                db=db,
+            )
+        except Exception:
+            logger.exception("emit_client_created falló customer_id=%s", customer.id)
 
     return customer
 
@@ -707,9 +721,10 @@ def register_record_charge(
     )
 
     try:
-        from services.event_bus import emit_cashflow_updated, emit_payment_created
+        from services.event_bus import emit_cashflow_updated, emit_payment_created, emit_payment_registered
 
         totals = ticket.get("totals") or {}
+        amt = totals.get("total")
         emit_payment_created(
             user_id=user.id,
             user_email=getattr(user, "email", None),
@@ -718,8 +733,21 @@ def register_record_charge(
             ticket_id=ticket_id,
             tpv_sale_id=tpv_sale_id,
             payment_method=pm.value,
-            amount=totals.get("total"),
+            amount=amt,
             service_name=line_name,
+            db=db,
+        )
+        emit_payment_registered(
+            user_id=user.id,
+            user_email=getattr(user, "email", None),
+            company_id=cid,
+            customer_id=cust.id,
+            ticket_id=ticket_id,
+            tpv_sale_id=tpv_sale_id,
+            payment_method=pm.value,
+            amount=float(amt) if amt is not None else None,
+            service_name=line_name,
+            source="CMR",
             db=db,
         )
         emit_cashflow_updated(

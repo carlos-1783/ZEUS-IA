@@ -2,36 +2,36 @@
   <section class="tools-panel">
     <header>
       <h4>🧾 Automatizaciones fiscales</h4>
-      <p>Procesa entradas comunes de RAFAEL desde un único lugar.</p>
+      <p>Escaneo físico real → CRM, factura y cashflow. Sin simulaciones.</p>
+      <router-link to="/scan" class="scan-link">Abrir hub de escaneo completo →</router-link>
     </header>
-    <div class="tools-grid">
-      <div class="tool-card">
-        <h5>Lectura QR</h5>
-        <textarea v-model="qrData" placeholder="ZEUS|Cliente|100|EUR"></textarea>
-        <button :disabled="loading.qr" @click="runQr">Leer QR</button>
-        <p v-if="qrResult" class="tool-text">{{ qrResult }}</p>
-      </div>
-      <div class="tool-card">
-        <h5>Lectura NFC</h5>
-        <input v-model="nfcHex" placeholder="Payload HEX" />
-        <button :disabled="loading.nfc" @click="runNfc">Escanear</button>
-        <p v-if="nfcResult" class="tool-text">{{ nfcResult }}</p>
-      </div>
-      <div class="tool-card">
-        <h5>Parser DNIe (MRZ)</h5>
-        <textarea v-model="mrz" placeholder="2 líneas MRZ"></textarea>
-        <button :disabled="loading.mrz" @click="runMrz">Parsear</button>
-        <p v-if="mrzResult" class="tool-text">{{ mrzResult }}</p>
-      </div>
-      <div class="tool-card">
-        <h5>Modelo 303 (Excel real)</h5>
+
+    <nav class="scan-tabs">
+      <button type="button" :class="{ active: tab === 'qr' }" @click="tab = 'qr'">Cámara QR</button>
+      <button type="button" :class="{ active: tab === 'nfc' }" @click="tab = 'nfc'">NFC</button>
+      <button type="button" :class="{ active: tab === 'dni' }" @click="tab = 'dni'">DNI / MRZ</button>
+    </nav>
+
+    <div class="scan-panel">
+      <ScannerQR v-if="tab === 'qr'" @scanned="onScanResult" @error="onScanError" />
+      <RafaelScannerNFC v-else-if="tab === 'nfc'" @scanned="onScanResult" @error="onScanError" />
+      <ParserDNI v-else @parsed="onScanResult" @error="onScanError" />
+    </div>
+
+    <p v-if="lastMessage" class="tool-success">{{ lastMessage }}</p>
+    <pre v-if="lastPayload" class="tool-detail">{{ formatPayload(lastPayload) }}</pre>
+
+    <div class="forms-section">
+      <h5>Modelo 303 (Excel real)</h5>
+      <div class="forms-row">
         <input type="number" v-model.number="forms.year" placeholder="Año" />
         <input type="number" v-model.number="forms.quarter" min="1" max="4" placeholder="Trimestre (1-4)" />
         <button :disabled="loading.forms" @click="runForms">Generar Excel 303</button>
-        <p v-if="formsResult" class="tool-text">{{ formsResult }}</p>
-        <a v-if="formsFileUrl" class="download-link" :href="formsFileUrl" target="_blank" rel="noopener">Descargar archivo</a>
       </div>
+      <p v-if="formsResult" class="tool-text">{{ formsResult }}</p>
+      <a v-if="formsFileUrl" class="download-link" :href="formsFileUrl" target="_blank" rel="noopener">Descargar archivo</a>
     </div>
+
     <p v-if="error" class="tool-error">{{ error }}</p>
   </section>
 </template>
@@ -40,62 +40,46 @@
 import { reactive, ref } from 'vue'
 import { API_BASE_URL } from '@/config/index'
 import { workspaceTools } from '@/api/workspaceTools'
+import ScannerQR from '@/components/scan/ScannerQR.vue'
+import RafaelScannerNFC from '@/components/scan/RafaelScannerNFC.vue'
+import ParserDNI from '@/components/scan/ParserDNI.vue'
 
-const loading = reactive({ qr: false, nfc: false, mrz: false, forms: false })
+const tab = ref<'qr' | 'nfc' | 'dni'>('qr')
+const loading = reactive({ forms: false })
 const error = ref('')
+const lastMessage = ref('')
+const lastPayload = ref<Record<string, unknown> | null>(null)
 
-const qrData = ref('ZEUS|Cliente Demo|1200|EUR')
-const nfcHex = ref('5a4555535f4941')
-const mrz = ref('IDESP0000000000<<<<<<<<<<<<<<<\n8001010M2501013ESP<<<<<<<<<<<')
 const now = new Date()
 const forms = reactive({
   year: now.getFullYear(),
   quarter: Math.floor(now.getMonth() / 3) + 1,
 })
-
-const qrResult = ref<string | null>(null)
-const nfcResult = ref<string | null>(null)
-const mrzResult = ref<string | null>(null)
 const formsResult = ref<string | null>(null)
 const formsFileUrl = ref<string | null>(null)
 
-const runQr = async () => {
+function formatPayload(payload: Record<string, unknown>) {
+  return JSON.stringify(payload, null, 2)
+}
+
+function onScanResult(result: Record<string, unknown>) {
   error.value = ''
-  loading.qr = true
-  try {
-    const out = await workspaceTools.runRafaelQrReader({ data: qrData.value })
-    qrResult.value = String((out as any)?.text || 'Lectura QR completada.')
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    loading.qr = false
+  lastPayload.value = result
+  lastMessage.value = String(result.message || 'Operación completada')
+  if (result.invoice_id) {
+    lastMessage.value += ` · Factura #${result.invoice_id}`
+  }
+  if (result.customer_id) {
+    lastMessage.value += ` · Cliente #${result.customer_id}`
+  }
+  if (result.needs_approval) {
+    lastMessage.value += ` · Pendiente aprobación #${result.approval_id}`
   }
 }
 
-const runNfc = async () => {
-  error.value = ''
-  loading.nfc = true
-  try {
-    const out = await workspaceTools.runRafaelNfcScanner({ payload_hex: nfcHex.value })
-    nfcResult.value = String((out as any)?.text || 'Lectura NFC completada.')
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    loading.nfc = false
-  }
-}
-
-const runMrz = async () => {
-  error.value = ''
-  loading.mrz = true
-  try {
-    const out = await workspaceTools.runRafaelDniParser({ mrz: mrz.value })
-    mrzResult.value = String((out as any)?.text || 'DNIe procesado correctamente.')
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    loading.mrz = false
-  }
+function onScanError(msg: string) {
+  error.value = msg
+  lastMessage.value = ''
 }
 
 const runForms = async () => {
@@ -126,36 +110,91 @@ const runForms = async () => {
   background: #fffaf4;
 }
 
-.tools-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
+header p { margin: 4px 0 0; color: #64748b; font-size: 14px; }
+.scan-link {
+  display: inline-block;
+  margin-top: 8px;
+  color: #1d4ed8;
+  font-weight: 600;
+  font-size: 13px;
+  text-decoration: none;
 }
 
-.tool-card {
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  border-radius: 12px;
-  padding: 14px;
+.scan-tabs {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  margin: 16px 0 12px;
+  flex-wrap: wrap;
+}
+.scan-tabs button {
+  border: 1px solid rgba(245, 158, 11, 0.5);
   background: #fff;
+  color: #92400e;
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+}
+.scan-tabs button.active {
+  background: #d97706;
+  color: #fff;
+  border-color: #d97706;
 }
 
-.tool-card textarea,
-.tool-card input {
+.scan-panel {
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 14px;
+  padding: 12px;
+  background: #0f172a;
+  margin-bottom: 14px;
+}
+
+.tool-success {
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #ecfdf5;
+  color: #065f46;
+  font-size: 13px;
+  font-weight: 600;
+}
+.tool-detail {
+  margin: 0 0 14px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 11px;
+  overflow: auto;
+  max-height: 180px;
+}
+
+.forms-section {
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(245, 158, 11, 0.4);
+}
+.forms-section h5 { margin: 0 0 8px; }
+.forms-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.forms-row input {
   border: 1px solid rgba(148, 163, 184, 0.5);
   border-radius: 8px;
   padding: 8px;
   font-size: 13px;
+  width: 100px;
 }
-
-.tool-card button {
+.forms-row button {
   border: none;
   border-radius: 8px;
   background: #d97706;
   color: white;
-  padding: 6px 10px;
+  padding: 8px 12px;
   cursor: pointer;
 }
 
@@ -166,13 +205,8 @@ const runForms = async () => {
   background: #fff7ed;
   color: #0f172a;
   font-size: 13px;
-  line-height: 1.4;
 }
-
-.tool-error {
-  margin-top: 12px;
-  color: #991b1b;
-}
+.tool-error { margin-top: 12px; color: #991b1b; }
 .download-link {
   display: inline-block;
   margin-top: 8px;
@@ -181,4 +215,3 @@ const runForms = async () => {
   font-size: 13px;
 }
 </style>
-

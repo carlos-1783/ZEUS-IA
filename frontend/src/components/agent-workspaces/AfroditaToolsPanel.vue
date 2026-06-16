@@ -187,4 +187,3 @@ const runContract = async () => {
   color: #b91c1c;
 }
 </style>
-

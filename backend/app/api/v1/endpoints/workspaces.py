@@ -174,6 +174,35 @@ def _text_generic(prefix: str, result: Dict[str, Any]) -> str:
     return f"{prefix} completado correctamente. Resultado validado ({ktxt})."
 
 
+def _text_scan_flow(flow: Dict[str, Any], *, label: str) -> str:
+    if flow.get("needs_approval"):
+        return (
+            f"{label}: acción registrada, pendiente de aprobación humana "
+            f"(ID {flow.get('approval_id')}). {flow.get('message', '')}"
+        )
+    parts = [str(flow.get("message") or f"{label} ejecutado en producción.")]
+    if flow.get("customer_id"):
+        parts.append(f"Cliente ID {flow['customer_id']}.")
+    if flow.get("invoice_id"):
+        parts.append(f"Factura ID {flow['invoice_id']}.")
+    if flow.get("cashflow_updated"):
+        parts.append("Cashflow actualizado.")
+    if flow.get("lead_score") is not None:
+        parts.append(f"Score {flow['lead_score']}.")
+    if flow.get("employee_id"):
+        parts.append(f"Empleado {flow['employee_id']}, fichaje {flow.get('checkin_type', 'ok')}.")
+    if flow.get("scan_event_id"):
+        parts.append(f"Evento scan #{flow['scan_event_id']} persistido.")
+    return " ".join(parts)
+
+
+def _decode_hex_payload(payload_hex: str) -> str:
+    try:
+        return bytes.fromhex(payload_hex.strip()).decode("utf-8", errors="ignore").strip()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="payload_hex NFC inválido.") from exc
+
+
 def _persist_agent_tool_response(
     db: Session,
     *,
@@ -423,8 +452,10 @@ async def workspace_rafael_qr(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    result = read_qr_payload(request.model_dump())
-    text = _text_generic("Lectura QR fiscal", result)
+    from services.scan_flow_service_v1 import process_qr_scan
+
+    flow = process_qr_scan(db, current_user, data=request.data.strip())
+    text = _text_scan_flow(flow, label="Lectura QR fiscal")
     return _persist_agent_tool_response(
         db,
         current_user=current_user,
@@ -433,9 +464,9 @@ async def workspace_rafael_qr(
         content_type="fiscal_document",
         title="Lectura QR RAFAEL",
         text=text,
-        result=result,
-        event_name="rafael_qr_processed",
-        chain_steps=["trigger_fiscal_validation"],
+        result=flow,
+        event_name="qr_scan_detected",
+        chain_steps=["create_or_update_customer", "generate_invoice", "update_cashflow"],
     )
 
 
@@ -445,8 +476,24 @@ async def workspace_rafael_nfc(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    result = scan_nfc_payload(request.model_dump())
-    text = _text_generic("Lectura NFC fiscal", result)
+    from services.scan_flow_service_v1 import process_nfc_scan, process_qr_scan
+
+    decoded = _decode_hex_payload(request.payload_hex) if request.payload_hex else ""
+    if decoded.upper().startswith(("ZEUS|", "ZEUSQR|")):
+        flow = process_qr_scan(db, current_user, data=decoded)
+        label = "Lectura NFC→QR fiscal"
+    elif decoded.upper().startswith("ZEUSCHECK|"):
+        flow = process_nfc_scan(db, current_user, text=decoded, payload_hex=request.payload_hex)
+        label = "Fichaje NFC"
+    else:
+        flow = process_nfc_scan(
+            db,
+            current_user,
+            text=decoded or None,
+            payload_hex=request.payload_hex,
+        )
+        label = "Lectura NFC"
+    text = _text_scan_flow(flow, label=label)
     return _persist_agent_tool_response(
         db,
         current_user=current_user,
@@ -455,9 +502,9 @@ async def workspace_rafael_nfc(
         content_type="fiscal_document",
         title="Lectura NFC RAFAEL",
         text=text,
-        result=result,
-        event_name="rafael_nfc_scanned",
-        chain_steps=["trigger_fiscal_validation"],
+        result=flow,
+        event_name="nfc_detected",
+        chain_steps=["checkin_or_link", "update_cashflow"],
     )
 
 
@@ -467,8 +514,10 @@ async def workspace_rafael_dni(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    result = parse_dnie_mrz(request.model_dump())
-    text = _text_generic("Parser DNIe", result)
+    from services.scan_flow_service_v1 import process_dni_scan
+
+    flow = process_dni_scan(db, current_user, mrz=request.mrz.strip())
+    text = _text_scan_flow(flow, label="Parser DNIe")
     return _persist_agent_tool_response(
         db,
         current_user=current_user,
@@ -477,9 +526,9 @@ async def workspace_rafael_dni(
         content_type="fiscal_document",
         title="Parser DNIe RAFAEL",
         text=text,
-        result=result,
-        event_name="rafael_dnie_parsed",
-        chain_steps=["trigger_identity_validation"],
+        result=flow,
+        event_name="dni_detected",
+        chain_steps=["crm.create_customer", "assign_score", "schedule_followup"],
     )
 
 
@@ -713,8 +762,14 @@ async def workspace_afrodita_qr(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    result = handle_qr_check_in(request.model_dump())
-    text = _text_generic("Fichaje QR", result)
+    from services.scan_flow_service_v1 import process_nfc_scan, process_qr_scan
+
+    code = (request.qr_code or "").strip()
+    if code.upper().startswith(("ZEUS|", "ZEUSQR|")):
+        flow = process_qr_scan(db, current_user, data=code)
+    else:
+        flow = process_nfc_scan(db, current_user, text=code, checkin_type="entrada")
+    text = _text_scan_flow(flow, label="Fichaje QR/NFC")
     return _persist_agent_tool_response(
         db,
         current_user=current_user,
@@ -723,9 +778,9 @@ async def workspace_afrodita_qr(
         content_type="hr_document",
         title="Fichaje QR AFRODITA",
         text=text,
-        result=result,
-        event_name="afrodita_qr_checkin",
-        chain_steps=["trigger_shift_validation"],
+        result=flow,
+        event_name="nfc_detected",
+        chain_steps=["checkin_employee", "calculate_cost"],
     )
 
 

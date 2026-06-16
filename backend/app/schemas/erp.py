@@ -1,8 +1,7 @@
 from datetime import datetime, date
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any
 from enum import Enum
-from pydantic import BaseModel, Field, validator, condecimal
-from decimal import Decimal
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # Enums for schemas (matching the model enums)
 class ProductCategory(str, Enum):
@@ -72,8 +71,7 @@ class ProductBase(BaseModel):
     category: ProductCategory = Field(ProductCategory.GOODS, description="Product category")
     status: ProductStatus = Field(ProductStatus.ACTIVE, description="Product status")
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ProductVariantBase(BaseModel):
     sku: str = Field(..., min_length=1, max_length=50, description="Variant SKU")
@@ -86,8 +84,7 @@ class ProductVariantBase(BaseModel):
     # Inventory
     quantity_on_hand: float = Field(0.0, ge=0, description="Current stock level for this variant")
     
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 class InventoryMovementBase(BaseModel):
     movement_type: InventoryMovementType = Field(..., description="Type of inventory movement")
@@ -98,8 +95,9 @@ class InventoryMovementBase(BaseModel):
     reference: Optional[str] = Field(None, max_length=100, description="Reference number")
     notes: Optional[str] = Field(None, description="Additional notes")
     
-    @validator('quantity')
-    def validate_quantity(cls, v):
+    @field_validator('quantity')
+    @classmethod
+    def validate_quantity(cls, v: float) -> float:
         if v == 0:
             raise ValueError("Quantity cannot be zero")
         return v
@@ -112,11 +110,11 @@ class InvoiceBase(BaseModel):
     due_date: Optional[date] = Field(None, description="Due date for payment")
     notes: Optional[str] = Field(None, description="Additional notes")
     
-    @validator('due_date')
-    def validate_due_date(cls, v, values):
-        if v and 'issue_date' in values and v < values['issue_date']:
+    @model_validator(mode='after')
+    def validate_due_date(self) -> 'InvoiceBase':
+        if self.due_date and self.due_date < self.issue_date:
             raise ValueError("Due date cannot be before issue date")
-        return v
+        return self
 
 class InvoiceItemBase(BaseModel):
     product_id: Optional[int] = Field(None, gt=0, description="Product ID if applicable")
@@ -126,8 +124,9 @@ class InvoiceItemBase(BaseModel):
     tax_rate: float = Field(0.0, ge=0, le=100, description="Tax rate in percentage")
     discount: float = Field(0.0, ge=0, description="Discount amount")
     
-    @validator('quantity')
-    def validate_quantity(cls, v):
+    @field_validator('quantity')
+    @classmethod
+    def validate_quantity(cls, v: float) -> float:
         if v <= 0:
             raise ValueError("Quantity must be greater than zero")
         return v
@@ -142,14 +141,40 @@ class PaymentBase(BaseModel):
     payment_date: date = Field(default_factory=date.today, description="Date of payment")
 
 # Create schemas
+class ProductVariantCreate(ProductVariantBase):
+    pass
+
 class ProductCreate(ProductBase):
     variants: Optional[List['ProductVariantCreate']] = Field(
         None, 
         description="List of product variants"
     )
 
-class ProductVariantCreate(ProductVariantBase):
-    pass
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "sku": "PROD-001",
+                "name": "Premium Widget",
+                "description": "High-quality widget for all your needs",
+                "price": 99.99,
+                "cost": 49.99,
+                "tax_rate": 13.0,
+                "track_inventory": True,
+                "quantity_on_hand": 100,
+                "low_stock_threshold": 10,
+                "category": "goods",
+                "status": "active",
+                "variants": [
+                    {
+                        "sku": "PROD-001-RED",
+                        "name": "Red",
+                        "price_override": 109.99,
+                        "quantity_on_hand": 50
+                    }
+                ]
+            }
+        }
+    )
 
 class InventoryMovementCreate(InventoryMovementBase):
     pass
@@ -160,15 +185,39 @@ class InvoiceItemCreate(InvoiceItemBase):
 class InvoiceCreate(InvoiceBase):
     items: List[InvoiceItemCreate] = Field(
         ..., 
-        min_items=1, 
+        min_length=1, 
         description="List of invoice items"
     )
     
-    @validator('items')
-    def validate_items(cls, v):
+    @field_validator('items')
+    @classmethod
+    def validate_items(cls, v: List[InvoiceItemCreate]) -> List[InvoiceItemCreate]:
         if not v:
             raise ValueError("At least one item is required")
         return v
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "customer_id": 1,
+                "invoice_type": "invoice",
+                "status": "draft",
+                "issue_date": "2025-07-02",
+                "due_date": "2025-08-02",
+                "notes": "Thank you for your business!",
+                "items": [
+                    {
+                        "product_id": 1,
+                        "description": "Premium Widget",
+                        "quantity": 2,
+                        "unit_price": 99.99,
+                        "tax_rate": 13.0,
+                        "discount": 0.0
+                    }
+                ]
+            }
+        }
+    )
 
 class PaymentCreate(PaymentBase):
     pass
@@ -275,51 +324,4 @@ class PaymentResponse(BaseModel):
     success: bool = True
     data: PaymentInDB
 
-# Update forward references
-ProductCreate.update_forward_refs()
-
-# Update schema examples for documentation
-ProductCreate.Config.schema_extra = {
-    "example": {
-        "sku": "PROD-001",
-        "name": "Premium Widget",
-        "description": "High-quality widget for all your needs",
-        "price": 99.99,
-        "cost": 49.99,
-        "tax_rate": 13.0,
-        "track_inventory": True,
-        "quantity_on_hand": 100,
-        "low_stock_threshold": 10,
-        "category": "goods",
-        "status": "active",
-        "variants": [
-            {
-                "sku": "PROD-001-RED",
-                "name": "Red",
-                "price_override": 109.99,
-                "quantity_on_hand": 50
-            }
-        ]
-    }
-}
-
-InvoiceCreate.Config.schema_extra = {
-    "example": {
-        "customer_id": 1,
-        "invoice_type": "invoice",
-        "status": "draft",
-        "issue_date": "2025-07-02",
-        "due_date": "2025-08-02",
-        "notes": "Thank you for your business!",
-        "items": [
-            {
-                "product_id": 1,
-                "description": "Premium Widget",
-                "quantity": 2,
-                "unit_price": 99.99,
-                "tax_rate": 13.0,
-                "discount": 0.0
-            }
-        ]
-    }
-}
+ProductCreate.model_rebuild()

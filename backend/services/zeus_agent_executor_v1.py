@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 from app.schemas.customer import CustomerCreate
 from app.schemas.zeus_action import ZeusAction
-from app.schemas.zeus_task import ZeusExecutionResult, ZeusExecutionStepResult
 from services import zeus_orchestrator_handlers as orch
 from services.cashflow_ledger_service import get_balance, get_summary
 from services.zeus_core_metrics_v1 import get_core_metrics
@@ -41,6 +40,7 @@ def track_leads_summary(db: Session, user: User) -> Dict[str, Any]:
     }
 
 
+async def execute_agent_action(
     db: Session,
     *,
     user: User,

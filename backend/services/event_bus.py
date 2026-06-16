@@ -573,3 +573,52 @@ def emit_alert_triggered(
         user_email=user_email,
         payload=payload,
     )
+
+
+def emit_scan_detected(
+    *,
+    user_id: int,
+    user_email: Optional[str],
+    company_id: int,
+    scan_type: str,
+    agent_name: str,
+    trigger: str,
+    details: Dict[str, Any],
+    db: Optional[Session] = None,
+) -> None:
+    """Evento canónico: escaneo físico detectado (QR/NFC/DNI)."""
+    _ = db
+    payload: Dict[str, Any] = {
+        "user_id": user_id,
+        "company_id": company_id,
+        "scan_type": scan_type,
+        "agent_name": agent_name,
+        "trigger": trigger,
+        **details,
+    }
+    logger.info("event scan_detected %s", payload)
+    try:
+        from services.activity_logger import ActivityLogger
+
+        ActivityLogger.log_activity(
+            agent_name=agent_name,
+            action_type=f"event_{trigger}",
+            action_description=f"Escaneo {scan_type}: {trigger}",
+            details=payload,
+            user_email=user_email,
+            status="completed",
+            priority="normal",
+            visible_to_client=True,
+        )
+        ActivityLogger.log_activity(
+            agent_name="ZEUS CORE",
+            action_type=f"event_{trigger}",
+            action_description=f"Pipeline scan → {agent_name}",
+            details=payload,
+            user_email=user_email,
+            status="completed",
+            priority="normal",
+            visible_to_client=True,
+        )
+    except Exception as e:
+        logger.warning("emit_scan_detected activity log failed: %s", e)

@@ -23,11 +23,11 @@ from services.zeus_office_mode import require_company_id
 
 logger = logging.getLogger(__name__)
 
-VALID_METHODS = frozenset({"qr", "pin", "geo", "device"})
+VALID_METHODS = frozenset({"qr", "pin", "geo", "device", "nfc"})
 VALID_TYPES = frozenset({"entrada", "salida", "pausa_inicio", "pausa_fin"})
 MAX_SESSION_HOURS = 16
 ALERT_EXCESS_HOURS = 12
-V1_TO_RECORD_METHOD = {"geo": "location", "device": "remote", "pin": "code", "qr": "qr"}
+V1_TO_RECORD_METHOD = {"geo": "location", "device": "remote", "pin": "code", "qr": "qr", "nfc": "qr"}
 
 
 def _now() -> datetime:
@@ -86,6 +86,8 @@ def _validate_method_payload(method: str, metadata: Dict[str, Any]) -> None:
             raise HTTPException(status_code=422, detail="lat y lng requeridos para método geo.")
     if m == "device" and not str(metadata.get("device_id") or "").strip():
         raise HTTPException(status_code=422, detail="device_id requerido para método device.")
+    if m == "nfc" and not str(metadata.get("nfc_token") or metadata.get("qr_token") or "").strip():
+        raise HTTPException(status_code=422, detail="nfc_token requerido para método nfc.")
 
 
 def _verify_pin(emp: CompanyEmployee, pin: str) -> None:

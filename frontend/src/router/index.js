@@ -45,6 +45,7 @@ const Privacidad = () => import('../views/legal/Privacidad.vue')
 const LandingPage = () => import('../views/LandingPage.vue')
 const PublicStore = () => import('../views/public/PublicStore.vue')
 const OnboardingSetup = () => import('../views/OnboardingSetup.vue')
+const ScanHub = () => import('../views/ScanHub.vue')
 
 // Routes that don't require authentication
 const publicRoutes = [
@@ -252,6 +253,15 @@ const router = createRouter({
       }
     },
     {
+      path: '/scan',
+      name: 'ScanHub',
+      component: ScanHub,
+      meta: {
+        title: 'Escaneo físico - ZEUS-IA',
+        requiresAuth: true
+      }
+    },
+    {
       path: '/settings',
       name: 'UserSettings',
       component: () => import('../views/SettingsView.vue'),
@@ -425,7 +435,7 @@ router.beforeEach(async (to, from, next) => {
   }
 
   // Empleado: solo TPV y control horario (resto de rutas protegidas → TPV)
-  const employeeAllowedRoutes = new Set(['TPV', 'ControlHorario'])
+  const employeeAllowedRoutes = new Set(['TPV', 'ControlHorario', 'ScanHub'])
   if (requiresAuth && authStore.isAuthenticated && authStore.isEmployee) {
     if (!employeeAllowedRoutes.has(to.name)) {
       next('/tpv')

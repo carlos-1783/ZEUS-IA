@@ -36,6 +36,7 @@ from app.api.v1.endpoints import (
     checkin,
     cashflow,
     invoices,
+    scan,
     zeus_core_v2,
     webhooks,
     payroll,
@@ -119,6 +120,9 @@ api_router.include_router(cashflow.router, prefix="/cashflow", tags=["cashflow"]
 
 # ERP Invoices & payments
 api_router.include_router(invoices.router, prefix="/invoices", tags=["invoices"])
+
+# Physical scan flows (QR / NFC / DNI)
+api_router.include_router(scan.router, prefix="/scan", tags=["scan"])
 
 # ZEUS final closure v2
 api_router.include_router(zeus_core_v2.router, prefix="/zeus-core", tags=["zeus-core-v2"])

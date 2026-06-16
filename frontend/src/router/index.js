@@ -509,10 +509,26 @@ router.beforeEach(async (to, from, next) => {
   next()
 })
 
-// Handle navigation errors
+// Handle navigation errors (stale chunk after deploy)
 router.onError((error) => {
+  const message = String(error?.message || error || '')
+  const isChunkLoadFailure =
+    message.includes('Failed to fetch dynamically imported module') ||
+    message.includes('Importing a module script failed') ||
+    message.includes('Loading chunk') ||
+    error?.name === 'ChunkLoadError'
+
+  if (isChunkLoadFailure) {
+    const reloadKey = 'zeus-chunk-reload'
+    if (!sessionStorage.getItem(reloadKey)) {
+      sessionStorage.setItem(reloadKey, '1')
+      window.location.reload()
+      return
+    }
+    sessionStorage.removeItem(reloadKey)
+  }
+
   console.error('Router error:', error)
-  // You can add more sophisticated error handling here
 })
 
 export default router

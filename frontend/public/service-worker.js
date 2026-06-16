@@ -1,9 +1,8 @@
 // ZEUS-IA Enterprise - Service Worker
-// Versión: 1.0.0
-// Estrategia: Cache-first para máxima velocidad
+// Versión: 1.1.0 — network-first para assets tras deploy (evita chunks 404)
 
-const CACHE_NAME = 'zeus-enterprise-v1';
-const RUNTIME_CACHE = 'zeus-runtime-v1';
+const CACHE_NAME = 'zeus-enterprise-v2';
+const RUNTIME_CACHE = 'zeus-runtime-v2';
 
 // Recursos estáticos para cachear en la instalación
 const STATIC_ASSETS = [
@@ -70,6 +69,24 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Service worker: siempre red
+  if (url.pathname.endsWith('service-worker.js')) {
+    event.respondWith(networkOnlyStrategy(request));
+    return;
+  }
+
+  // Assets con hash: network-first (evita chunks obsoletos tras deploy)
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(networkFirstStrategy(request));
+    return;
+  }
+
+  // HTML / navegación: network-first
+  if (request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/') {
+    event.respondWith(networkFirstStrategy(request));
+    return;
+  }
+
   // API: network-first
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(networkFirstStrategy(request));
@@ -116,6 +133,11 @@ async function cacheFirstStrategy(request) {
     
     throw error;
   }
+}
+
+// Estrategia Network-Only: sin cache (service worker)
+async function networkOnlyStrategy(request) {
+  return fetch(request);
 }
 
 // Estrategia Network-First: Intentar red primero, luego cache

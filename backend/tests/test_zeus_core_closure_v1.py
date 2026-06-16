@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-import pytest
+import pytest  # pyright: ignore[reportMissingImports]
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 

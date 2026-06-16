@@ -55,6 +55,21 @@ _TPV_RE = re.compile(
     re.I,
 )
 
+_CASHFLOW_RE = re.compile(
+    r"(cashflow|caja|flujo|balance|tesorer[ií]a).{0,40}?(hoy|actual|empresa|resumen)?",
+    re.I,
+)
+
+_METRICS_RE = re.compile(
+    r"(m[eé]trica|revenue|ingreso|coste|costo|staff|producto|margen).{0,50}?(core|zeus|empresa|resumen)?",
+    re.I,
+)
+
+_CREATE_CUSTOMER_RE = re.compile(
+    r"(crea|crear|alta|nuevo).{0,30}?cliente",
+    re.I,
+)
+
 _OPERATIONAL_RE = re.compile(
     r"(envi[aá]|mandar|campa[nñ]a|oferta|descuento|cliente|venta|tpv|caja|turno|"
     r"jornada|fichaje|importar|confirmar|promoci[oó]n)",
@@ -92,6 +107,33 @@ def parse_intent(message: str) -> ZeusTaskObject:
             action="confirm_pending",
             raw_message=text,
             confidence=0.95,
+        )
+
+    if _CREATE_CUSTOMER_RE.search(text):
+        return ZeusTaskObject(
+            intent="create_customer",
+            action="create_customer",
+            raw_message=text,
+            confidence=0.8,
+            metadata={"name": _extract_name_from_create(text), "email": _extract_email(text)},
+        )
+
+    if _CASHFLOW_RE.search(text):
+        return ZeusTaskObject(
+            intent="get_cashflow",
+            action="get_cashflow",
+            raw_message=text,
+            confidence=0.84,
+            metadata={"days": _extract_days(text) or 30},
+        )
+
+    if _METRICS_RE.search(text):
+        return ZeusTaskObject(
+            intent="get_metrics",
+            action="get_metrics",
+            raw_message=text,
+            confidence=0.84,
+            metadata={"days": _extract_days(text) or 30},
         )
 
     if _LIST_CUSTOMERS_RE.search(text):
@@ -214,3 +256,15 @@ def _default_offer_message(discount: Optional[float]) -> str:
         f"Contáctanos para activarla antes de que finalice la promoción.</p>"
         f"<p>Saludos,<br/>Tu equipo</p>"
     )
+
+
+def _extract_email(text: str) -> Optional[str]:
+    m = re.search(r"[\w.+-]+@[\w.-]+\.\w+", text)
+    return m.group(0) if m else None
+
+
+def _extract_name_from_create(text: str) -> Optional[str]:
+    m = re.search(r"cliente\s+([A-Za-zÀ-ÿ][\w\s'.-]{2,60})", text, re.I)
+    if m:
+        return m.group(1).strip()
+    return None

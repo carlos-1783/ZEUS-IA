@@ -93,6 +93,8 @@ def create_tables():
             from app.models.employee_work_session import EmployeeWorkSession
             from app.models.time_cost_checkin import TimeCostCheckin
             from app.models.cashflow_ledger import CashflowLedgerEntry
+            from app.models.crm_lead import CrmLead
+            from app.models.zeus_pending_approval import ZeusPendingApproval
             from app.models.tpv_operator_session import TPVOperatorSession
             from app.models.time_tracking import (
                 TimeTrackingRecord,

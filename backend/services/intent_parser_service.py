@@ -54,6 +54,10 @@ def _map_intent_to_action_type(intent: str, legacy_action: Optional[str]) -> str
         "tpv_sales_summary": "tpv_sales_summary",
         "tpv_sales_today": "tpv_sales_summary",
         "shift_status": "shift_status",
+        "create_customer": "create_customer",
+        "get_cashflow": "get_cashflow",
+        "get_metrics": "get_metrics",
+        "create_customer": "create_customer",
     }
     if intent in mapping:
         return mapping[intent]
@@ -75,6 +79,12 @@ def _modules_for_intent(intent: str) -> List[str]:
         return ["tpv", "activity_log"]
     if intent == "shift_status":
         return ["hr_agent", "activity_log"]
+    if intent == "create_customer":
+        return ["crm_agent", "activity_log"]
+    if intent == "get_cashflow":
+        return ["analytics", "activity_log"]
+    if intent == "get_metrics":
+        return ["analytics", "activity_log"]
     if intent == "confirm_pending":
         return ["activity_log"]
     return []

@@ -36,6 +36,7 @@ from app.api.v1.endpoints import (
     checkin,
     cashflow,
     invoices,
+    zeus_core_v2,
     webhooks,
     payroll,
     rafael_fiscal,
@@ -118,6 +119,9 @@ api_router.include_router(cashflow.router, prefix="/cashflow", tags=["cashflow"]
 
 # ERP Invoices & payments
 api_router.include_router(invoices.router, prefix="/invoices", tags=["invoices"])
+
+# ZEUS final closure v2
+api_router.include_router(zeus_core_v2.router, prefix="/zeus-core", tags=["zeus-core-v2"])
 
 # Admin Panel (solo superusuarios)
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])

@@ -423,6 +423,70 @@ def execute_shift_status(db: Session, user: User, action: ZeusAction) -> ZeusExe
     )
 
 
+def execute_create_customer(db: Session, user: User, action: ZeusAction) -> ZeusExecutionResult:
+    from app.schemas.customer import CustomerCreate
+
+    name = str(action.payload.get("name") or "").strip()
+    email = str(action.payload.get("email") or "").strip()
+    if not name or not email:
+        return ZeusExecutionResult(
+            success=False,
+            intent="create_customer",
+            message="Indica nombre y email del cliente (ej: crear cliente Juan juan@empresa.com).",
+            executed=False,
+        )
+    cust = crm_svc.create_customer(
+        db,
+        user,
+        CustomerCreate(name=name, email=email, phone=action.payload.get("phone")),
+    )
+    return ZeusExecutionResult(
+        success=True,
+        intent="create_customer",
+        message=f"Cliente creado: {cust.name} (ID {cust.id})",
+        executed=True,
+        metrics={"customer_id": cust.id},
+        steps=[
+            ZeusExecutionStepResult(agent=AGENT_CRM, step="create_customer", success=True, detail=str(cust.id)),
+        ],
+    )
+
+
+def execute_get_cashflow(db: Session, user: User, action: ZeusAction) -> ZeusExecutionResult:
+    from services.cashflow_ledger_service import get_balance, get_summary
+
+    cid = action.company_id or crm_svc.primary_company_id(db, user)
+    days = int(action.payload.get("days") or 30)
+    bal = get_balance(db, company_id=cid)
+    summary = get_summary(db, company_id=cid, days=days)
+    return ZeusExecutionResult(
+        success=True,
+        intent="get_cashflow",
+        message=f"Balance cashflow: {bal:.2f} € (periodo {days}d: entrada {summary.get('total_in', 0):.2f} €)",
+        executed=True,
+        metrics={"balance": bal, **summary},
+        steps=[ZeusExecutionStepResult(agent=AGENT_ANALYTICS, step="cashflow", success=True, detail=str(bal))],
+    )
+
+
+def execute_get_core_metrics(db: Session, user: User, action: ZeusAction) -> ZeusExecutionResult:
+    from services.zeus_core_metrics_v1 import get_core_metrics
+
+    days = int(action.payload.get("days") or 30)
+    m = get_core_metrics(db, user=user, days=days)
+    return ZeusExecutionResult(
+        success=True,
+        intent="get_metrics",
+        message=(
+            f"Revenue {m['revenue']}€ · Staff cost {m['staff_cost']}€ · "
+            f"Product cost {m['product_cost']}€ · Cashflow {m['cashflow_balance']}€"
+        ),
+        executed=True,
+        metrics=m,
+        steps=[ZeusExecutionStepResult(agent=AGENT_ANALYTICS, step="core_metrics", success=True, detail="ok")],
+    )
+
+
 def _action_to_task(action: ZeusAction) -> ZeusTaskObject:
     return ZeusTaskObject(
         intent="create_campaign_send",

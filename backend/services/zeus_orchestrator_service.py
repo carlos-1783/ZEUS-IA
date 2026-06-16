@@ -160,6 +160,15 @@ async def execute_action(
     if at == "shift_status":
         return handlers.execute_shift_status(db, user, action)
 
+    if at == "create_customer":
+        return handlers.execute_create_customer(db, user, action)
+
+    if at == "get_cashflow":
+        return handlers.execute_get_cashflow(db, user, action)
+
+    if at == "get_metrics":
+        return handlers.execute_get_core_metrics(db, user, action)
+
     return ZeusExecutionResult(
         success=False,
         intent="unknown",

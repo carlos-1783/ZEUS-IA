@@ -7,6 +7,7 @@ import {
 import apiClient from '@/api/apiClient';
 import tokenService from '@/api/tokenService';
 import api from '@/services/api';
+import { fetchThalosWorkspaceItems } from '@/api/thalos_workspace_api';
 
 export interface DeliverableFiles {
   json?: AutomationOutput;
@@ -139,6 +140,37 @@ export function useAutomationDeliverables(agent: string) {
           console.warn(`Workspace list ${agentKey} no disponible`, e);
         }
       }
+      if (agentKey === 'THALOS') {
+        try {
+          const th = await fetchThalosWorkspaceItems(100);
+          if (th?.success && Array.isArray(th.items)) {
+            const thItems: DeliverableItem[] = th.items.map((item) => {
+              const created = item.created_at ? new Date(item.created_at).getTime() / 1000 : 0;
+              const sizeBytes = Math.max((item.data_size_kb || 1) * 1024, 1024);
+              return {
+                id: `thalos:${item.id}`,
+                agent: 'THALOS',
+                createdAt: Number.isFinite(created) ? created : 0,
+                sizeBytes,
+                files: {},
+                isWorkspace: true,
+                displayTitle: item.title || `THALOS ${item.type}`,
+                workspacePayload: {
+                  title: item.title,
+                  content: item.payload,
+                  thalos_item_type: item.type,
+                  thalos_status: item.status,
+                  format: 'thalos_workspace_v1',
+                  file_size: sizeBytes,
+                },
+              };
+            });
+            merged = [...thItems, ...merged].sort((a, b) => b.createdAt - a.createdAt);
+          }
+        } catch (e) {
+          console.warn('THALOS workspace items no disponibles', e);
+        }
+      }
       items.value = merged;
     } catch (err) {
       console.error(`Error fetching outputs for agent ${agent}`, err);
@@ -158,6 +190,31 @@ export function useAutomationDeliverables(agent: string) {
 
   const fetchDeliverableData = async (deliverable: DeliverableItem) => {
     if (deliverable.isWorkspace && deliverable.workspacePayload) {
+      const payload = deliverable.workspacePayload;
+      const content = (payload.content || {}) as Record<string, unknown>;
+      if (deliverable.id.startsWith('thalos:') || payload.thalos_item_type) {
+        const scan = (content.real_scan || content.result || content) as Record<string, unknown>;
+        const alerts = (scan.pattern_alerts as unknown[]) || [];
+        return {
+          executed_at: scan.executed_at || content.executed_at,
+          pattern_alerts: scan.pattern_alerts,
+          failed_login_candidates: scan.failed_login_candidates,
+          risk_level: scan.risk_level,
+          result: `Riesgo: ${String(scan.risk_level || 'ok')} · ${alerts.length} alertas`,
+          checks: content.checks || scan.checks,
+          missing: content.missing || scan.missing,
+          recommendations: content.recommendations || scan.recommendation,
+          configuration: content.configuration,
+          actions_performed: content.actions_performed,
+          backup_created: content.backup_created ?? scan.backup_created,
+          backup_path: content.backup_path ?? scan.backup_path,
+          source_exists: content.source_exists ?? scan.source_exists,
+          notes: content.notes ?? scan.notes,
+        };
+      }
+      if (content.format === 'thalos_workspace_v1') {
+        return content;
+      }
       return {
         workspace_deliverable: true,
         payload: deliverable.workspacePayload,

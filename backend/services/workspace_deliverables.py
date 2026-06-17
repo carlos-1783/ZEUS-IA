@@ -29,6 +29,7 @@ AGENT_WORKSPACE_CATEGORY: Dict[str, str] = {
     "RAFAEL": "fiscal_document",
     "JUSTICIA": "legal_document",
     "AFRODITA": "hr_document",
+    "THALOS": "legal_document",
 }
 
 DEFAULT_CONTENT_TYPE: Dict[str, str] = {
@@ -36,6 +37,7 @@ DEFAULT_CONTENT_TYPE: Dict[str, str] = {
     "RAFAEL": "fiscal_document",
     "JUSTICIA": "legal_document",
     "AFRODITA": "hr_document",
+    "THALOS": "legal_document",
 }
 
 

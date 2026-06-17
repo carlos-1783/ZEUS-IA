@@ -65,6 +65,20 @@
         </header>
 
         <div class="details-grid">
+          <section class="card" v-if="currentDetails.pattern_alerts?.length">
+            <header class="card-header">
+              <h5>🔍 Alertas detectadas (scan real)</h5>
+              <span class="badge" :class="currentDetails.risk_level === 'critical' ? 'warn' : 'ok'">
+                {{ currentDetails.risk_level || 'ok' }}
+              </span>
+            </header>
+            <ul>
+              <li v-for="(a, i) in currentDetails.pattern_alerts" :key="i">
+                {{ a.pattern }} — {{ a.agent }} / {{ a.action_type }}
+              </li>
+            </ul>
+          </section>
+
           <section class="card" v-if="currentDetails.checks">
             <header class="card-header">
               <h5>✅ Auditoría de Variables Críticas</h5>
@@ -162,7 +176,7 @@
     </footer>
   </div>
 
-  <ThalosToolsPanel />
+  <ThalosToolsPanel @refreshed="reload" />
 </template>
 
 <script setup lang="ts">

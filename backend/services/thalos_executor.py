@@ -158,6 +158,7 @@ def execute_action(
     action: str,
     *,
     company_id: Optional[int] = None,
+    user_id: Optional[int] = None,
     user_email: Optional[str] = None,
     ip_address: Optional[str] = None,
     hours: int = 24,
@@ -168,32 +169,41 @@ def execute_action(
     if not settings.THALOS_EXECUTION_ENABLED:
         return _disabled(action)
 
+    result: Dict[str, Any]
     if action == "detect_suspicious_activity":
         scan = thalos_security_engine.scan_logs(db, hours=hours, company_id=company_id)
         _log_action(db, action=action, status="completed", details=scan, company_id=company_id)
-        return {"status": "completed", "action": action, "executed": True, "result": scan}
-
-    if action == "audit_cashflow_anomaly":
+        result = {"status": "completed", "action": action, "executed": True, "result": scan}
+    elif action == "audit_cashflow_anomaly":
         cid = company_id or payload.get("company_id")
         if not cid:
             return {"status": "error", "action": action, "executed": False, "reason": "company_id required"}
         cf = thalos_security_engine.detect_cashflow_anomaly(db, company_id=int(cid))
         _log_action(db, action=action, status="completed", details=cf, company_id=int(cid))
-        return {"status": "completed", "action": action, "executed": True, "result": cf}
-
-    if action == "trigger_backup":
+        result = {"status": "completed", "action": action, "executed": True, "result": cf}
+    elif action == "trigger_backup":
         bk = thalos_backup_service.create_backup()
         _log_action(db, action=action, status="completed", details=bk, company_id=company_id)
-        return {"status": "completed", "action": action, "executed": True, "result": bk}
-
-    if action == "block_user":
+        result = {"status": "completed", "action": action, "executed": True, "result": bk}
+    elif action == "block_user":
         email = user_email or payload.get("email") or payload.get("user_email")
         if not email:
             return {"status": "error", "action": action, "executed": False, "reason": "user_email required"}
         return block_user(db, user_email=str(email), company_id=company_id)
-
-    if action == "alert_admin":
+    elif action == "alert_admin":
         msg = payload.get("message") or "THALOS security alert"
-        return alert_admin(db, message=str(msg), severity=payload.get("severity", "high"), company_id=company_id)
+        result = alert_admin(db, message=str(msg), severity=payload.get("severity", "high"), company_id=company_id)
+    else:
+        return {"status": "error", "action": action, "executed": False, "reason": "unknown_action"}
 
-    return {"status": "error", "action": action, "executed": False, "reason": "unknown_action"}
+    if user_id:
+        from services.thalos_workspace_writer_v1 import write_from_action_result
+
+        write_from_action_result(
+            db,
+            user_id=user_id,
+            company_id=company_id,
+            action=action,
+            result=result,
+        )
+    return result

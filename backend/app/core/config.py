@@ -99,8 +99,13 @@ class Settings(BaseSettings):
         "1",
         "yes",
     )
+    THALOS_WORKSPACE_WRITE_ENABLED: bool = os.getenv("THALOS_WORKSPACE_WRITE_ENABLED", "true").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
 
-    # zeus_total_system_closure_v1 — control global (default observación, no bloqueo)
+    # zeus_total_system_closure_v1
     ZEUS_TOTAL_SYSTEM_CLOSURE_ENABLED: bool = os.getenv(
         "ZEUS_TOTAL_SYSTEM_CLOSURE_ENABLED", "false"
     ).lower() in ("true", "1", "yes")

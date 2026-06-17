@@ -8,6 +8,7 @@ from app.models.agent_activity import AgentActivity
 from app.db.session import SessionLocal
 from services.thalos_executor import execute_action
 from services.thalos_monitoring_service import run_monitoring_cycle
+from services.thalos_workspace_writer_v1 import write_for_activity
 
 
 def _payload(activity: AgentActivity) -> Dict[str, Any]:
@@ -35,6 +36,7 @@ def handle_thalos_v1_detect(activity: AgentActivity) -> Dict[str, Any]:
             hours=int(p.get("hours", 24)),
             company_id=p.get("company_id"),
         )
+        write_for_activity(db, activity, action="detect_suspicious_activity", result=result)
         db.commit()
         return _wrap_result(activity, result)
     except Exception:
@@ -54,6 +56,7 @@ def handle_thalos_v1_cashflow(activity: AgentActivity) -> Dict[str, Any]:
             company_id=p.get("company_id"),
             payload=p,
         )
+        write_for_activity(db, activity, action="audit_cashflow_anomaly", result=result)
         db.commit()
         return _wrap_result(activity, result)
     except Exception:
@@ -67,6 +70,7 @@ def handle_thalos_v1_backup(activity: AgentActivity) -> Dict[str, Any]:
     db = SessionLocal()
     try:
         result = execute_action(db, "trigger_backup")
+        write_for_activity(db, activity, action="trigger_backup", result=result)
         db.commit()
         return _wrap_result(activity, result)
     except Exception:
@@ -87,6 +91,7 @@ def handle_thalos_v1_block(activity: AgentActivity) -> Dict[str, Any]:
             company_id=p.get("company_id"),
             payload=p,
         )
+        write_for_activity(db, activity, action="block_user", result=result)
         db.commit()
         return _wrap_result(activity, result)
     except Exception:
@@ -106,6 +111,7 @@ def handle_thalos_v1_alert(activity: AgentActivity) -> Dict[str, Any]:
             company_id=p.get("company_id"),
             payload=p,
         )
+        write_for_activity(db, activity, action="alert_admin", result=result)
         db.commit()
         return _wrap_result(activity, result)
     except Exception:
@@ -123,6 +129,13 @@ def handle_thalos_v1_monitor(activity: AgentActivity) -> Dict[str, Any]:
             db,
             company_id=p.get("company_id"),
             auto_execute=bool(p.get("auto_execute")),
+            force_scan=True,
+        )
+        write_for_activity(
+            db,
+            activity,
+            action="security_monitor",
+            result={"status": "completed", "executed": True, "result": cycle},
         )
         db.commit()
         return {

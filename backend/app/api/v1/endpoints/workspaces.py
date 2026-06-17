@@ -671,6 +671,26 @@ async def workspace_thalos_logs(
 ):
     result = monitor_security_logs(request.model_dump())
     text = _text_generic("Monitor de logs de seguridad", result)
+    cid = primary_company_id_for_user(db, current_user)
+    try:
+        from services.thalos_security_engine import scan_logs
+        from services.thalos_workspace_writer_v1 import write_workspace_item
+
+        real_scan = scan_logs(db, hours=24, company_id=cid)
+        merged = {**result, "real_scan": real_scan}
+        write_workspace_item(
+            db,
+            user_id=current_user.id,
+            company_id=cid,
+            item_type="audit",
+            payload=merged,
+            title="Auditoría THALOS (logs + scan real)",
+            source="workspace_log_monitor",
+            persist_document=False,
+        )
+        db.flush()
+    except Exception:
+        pass
     return _persist_agent_tool_response(
         db,
         current_user=current_user,

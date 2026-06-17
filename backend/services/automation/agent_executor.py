@@ -79,8 +79,10 @@ class AgentAutomationExecutor:
             session.close()
 
     def _handle_activity(self, session, activity: AgentActivity) -> None:
+        from services.legacy_handler_guard_v1 import audit_legacy_handler_path
         from services.unified_agent_runtime import run_workspace_task
 
+        audit_legacy_handler_path(activity)
         result = run_workspace_task(activity)
         agent = (activity.agent_name or "").upper()
         status = result.get("status", "completed")

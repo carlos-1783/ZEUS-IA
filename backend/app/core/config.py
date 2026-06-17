@@ -86,6 +86,29 @@ class Settings(BaseSettings):
         os.path.join(STATIC_DIR, "uploads", "perseo"),
     )
     PERSEO_IMAGE_MAX_BYTES: int = int(os.getenv("PERSEO_IMAGE_MAX_BYTES", str(5 * 1024 * 1024)))
+
+    # THALOS v1 — ejecución real detrás de flags (thalos_safe_audit_v1)
+    THALOS_EXECUTION_ENABLED: bool = os.getenv("THALOS_EXECUTION_ENABLED", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    THALOS_AUTO_BLOCK: bool = os.getenv("THALOS_AUTO_BLOCK", "false").lower() in ("true", "1", "yes")
+    THALOS_REAL_MONITORING: bool = os.getenv("THALOS_REAL_MONITORING", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+
+    # zeus_total_system_closure_v1 — control global (default observación, no bloqueo)
+    ZEUS_TOTAL_SYSTEM_CLOSURE_ENABLED: bool = os.getenv(
+        "ZEUS_TOTAL_SYSTEM_CLOSURE_ENABLED", "false"
+    ).lower() in ("true", "1", "yes")
+    ZEUS_CORE_GUARD_ENFORCE: bool = os.getenv("ZEUS_CORE_GUARD_ENFORCE", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
     
     # Security - Configuración de JWT SEGURA PARA PRODUCCIÓN
     # IMPORTANTE: En producción, SIEMPRE usar variables de entorno para SECRET_KEY

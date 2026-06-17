@@ -57,6 +57,41 @@ async def execute_agent_action(
         agent_u = "ZEUS"
     act = (action or "").strip().lower()
     data = dict(payload or {})
+
+    from services.zeus_core_guard_v1 import (
+        SIMULATED_HANDLER_ACTIONS,
+        guard_enforce,
+        validate_critical_action,
+    )
+
+    gr = validate_critical_action(
+        "agents",
+        act,
+        target_user=user,
+        company_id=crm_svc.primary_company_id(db, user) if user else None,
+        actor_id=user.id if user else None,
+        actor_email=user.email if user else None,
+        layer="agent",
+        db=db,
+        payload=data,
+    )
+    if act in SIMULATED_HANDLER_ACTIONS:
+        return {
+            "success": True,
+            "executed": False,
+            "execution_mode": "simulated",
+            "message": gr.human_message or "Acción simulada — sin mutación de BD",
+            "guard": gr.to_dict(),
+        }
+    if not gr.allowed and guard_enforce():
+        return {
+            "success": False,
+            "executed": False,
+            "execution_mode": "blocked",
+            "message": gr.human_message,
+            "guard": gr.to_dict(),
+        }
+
     cid = crm_svc.primary_company_id(db, user)
 
     if requires_approval(act, data) and not force_execute:

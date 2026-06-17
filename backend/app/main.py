@@ -80,6 +80,11 @@ app.add_middleware(
 )
 app.add_middleware(SecurityMiddleware)
 
+if settings.THALOS_REAL_MONITORING:
+    from app.middleware.thalos_login_audit_middleware import ThalosLoginAuditMiddleware
+
+    app.add_middleware(ThalosLoginAuditMiddleware)
+
 
 @app.middleware("http")
 async def uncaught_exception_guard(request: Request, call_next):
@@ -243,6 +248,11 @@ async def startup_event():
             "ZEUS_SKIP_STARTUP_DB_INIT activo: no se ejecutan create_tables ni ensure_initial_superuser."
         )
     await start_agent_automation()
+    if settings.ZEUS_TOTAL_SYSTEM_CLOSURE_ENABLED:
+        from services.zeus_runtime_guard_v1 import attach_runtime_guard
+
+        attach_runtime_guard()
+        logger.info("Runtime guard attached (ZEUS_TOTAL_SYSTEM_CLOSURE_ENABLED)")
     if _should_run_startup_launch_activity():
         _execute_zeus_launch_started()
     else:

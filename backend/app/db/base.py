@@ -96,6 +96,8 @@ def create_tables():
             from app.models.crm_lead import CrmLead
             from app.models.zeus_pending_approval import ZeusPendingApproval
             from app.models.scan_event import ScanEvent
+            from app.models.thalos_security_event import ThalosSecurityEvent, ThalosLoginAttempt
+            from app.models.zeus_closure_audit import ZeusClosureAudit
             from app.models.tpv_operator_session import TPVOperatorSession
             from app.models.time_tracking import (
                 TimeTrackingRecord,

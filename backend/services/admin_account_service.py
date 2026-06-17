@@ -230,8 +230,33 @@ def set_user_active(
     *,
     active: bool,
     reason: Optional[str] = None,
+    actor_email: Optional[str] = None,
 ) -> Dict[str, Any]:
-    if user.is_superuser:
+    if not active:
+        from services.user_service_v1 import secure_deactivate
+
+        if user.is_superuser:
+            raise ValueError("No se puede desactivar un superusuario")
+        secured = secure_deactivate(
+            db,
+            user,
+            reason=reason or "deactivated",
+            actor_email=actor_email,
+        )
+        if not secured.get("executed"):
+            raise ValueError(secured.get("human_message") or "Desactivación bloqueada por guard")
+        db.commit()
+        db.refresh(user)
+        return {
+            "success": True,
+            "user_id": user.id,
+            "email": user.email,
+            "status": "inactive",
+            "reason": reason or "deactivated",
+            "guard": secured.get("guard"),
+        }
+
+    if user.is_superuser and not active:
         raise ValueError("No se puede desactivar un superusuario")
     user.is_active = bool(active)
     meta_note = reason or ("reactivated" if active else "deactivated")
@@ -262,6 +287,26 @@ def delete_user_account(
     actor_email: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Elimina usuario y empresas exclusivas. No borra superusuarios."""
+    from services.zeus_core_guard_v1 import apply_guard, validate_critical_action
+
+    gr = validate_critical_action(
+        "users",
+        "delete_user",
+        target_user=user,
+        actor_email=actor_email,
+        layer="service",
+        db=db,
+        payload={"reason": reason},
+    )
+    try:
+        apply_guard(gr, db=db)
+    except Exception as exc:
+        from services.zeus_core_guard_v1 import ZeusGuardViolation
+
+        if isinstance(exc, ZeusGuardViolation):
+            raise ValueError(exc.result.human_message) from exc
+        raise
+
     if user.is_superuser:
         raise ValueError("No se puede eliminar un superusuario")
 

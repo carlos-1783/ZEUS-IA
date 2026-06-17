@@ -22,6 +22,14 @@ from .thalos import (
     handle_thalos_alerts,
     handle_thalos_backup,
 )
+from .thalos_v1 import (
+    handle_thalos_v1_alert,
+    handle_thalos_v1_backup,
+    handle_thalos_v1_block,
+    handle_thalos_v1_cashflow,
+    handle_thalos_v1_detect,
+    handle_thalos_v1_monitor,
+)
 from .generic_internal import handle_generic_internal, GENERIC_INTERNAL_HANDLER_NAME
 from .zeus_orchestrator import (
     handle_campaign_created,
@@ -102,6 +110,14 @@ HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
         "security_scan": handle_thalos_security_scan,
         "task_assigned": handle_thalos_alerts,
         "backup_created": handle_thalos_backup,
+        # THALOS v1 — acciones reales (paralelas, no sustituyen legacy)
+        "detect_suspicious_activity": handle_thalos_v1_detect,
+        "scan_security_logs": handle_thalos_v1_detect,
+        "audit_cashflow_anomaly": handle_thalos_v1_cashflow,
+        "trigger_backup": handle_thalos_v1_backup,
+        "block_user": handle_thalos_v1_block,
+        "alert_admin": handle_thalos_v1_alert,
+        "security_monitor": handle_thalos_v1_monitor,
     },
 }
 

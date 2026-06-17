@@ -37,6 +37,20 @@ def record_movement(
     amt = abs(float(amount or 0))
     if amt <= 0:
         raise ValueError("amount debe ser > 0 para registrar cashflow")
+    from services.financial_integrity_v1 import assert_financial_record_valid
+
+    fin = assert_financial_record_valid(
+        db,
+        company_id=company_id,
+        amount=amt,
+        domain="cashflow",
+        action="record_movement",
+        actor_id=user_id,
+    )
+    if fin.get("blocked"):
+        raise ValueError(
+            fin.get("guard", {}).get("human_message") or "Registro cashflow bloqueado por guard"
+        )
     direc = (direction or "in").strip().lower()
     if direc not in ("in", "out"):
         direc = "in"
@@ -55,12 +69,18 @@ def record_movement(
         reference=(str(reference)[:255] if reference else None),
         metadata_json=json.dumps(metadata or {}, ensure_ascii=False),
     )
-    db.add(entry)
-    if auto_commit:
-        db.commit()
-        db.refresh(entry)
-    else:
-        db.flush()
+    from services.zeus_runtime_guard_v1 import clear_authorized_session, mark_authorized_session
+
+    mark_authorized_session(db)
+    try:
+        db.add(entry)
+        if auto_commit:
+            db.commit()
+            db.refresh(entry)
+        else:
+            db.flush()
+    finally:
+        clear_authorized_session(db)
     logger.info(
         "cashflow_ledger entry id=%s company=%s %s %.2f source=%s",
         entry.id,
@@ -137,3 +157,19 @@ def get_summary(
             for r in rows[:20]
         ],
     }
+
+
+def detect_anomaly(
+    db: Session,
+    *,
+    company_id: int,
+    threshold_multiplier: float = 3.0,
+) -> Dict[str, Any]:
+    """Wrapper THALOS v1 — delega en thalos_security_engine sin alterar get_summary."""
+    from services.thalos_security_engine import detect_cashflow_anomaly
+
+    return detect_cashflow_anomaly(
+        db,
+        company_id=company_id,
+        threshold_multiplier=threshold_multiplier,
+    )

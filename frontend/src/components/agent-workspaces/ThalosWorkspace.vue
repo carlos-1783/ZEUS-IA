@@ -6,6 +6,14 @@
         <p class="subtitle">
           Auditorías automáticas de seguridad, alertas y respaldos del sistema.
         </p>
+        <ThalosExecutionBadge
+          v-if="globalStatus"
+          class="workspace-badges"
+          :global-mode="globalStatus.system_default_mode"
+          :control="globalStatus.thalos_control"
+          :data-origin="globalStatus.data_origin"
+          :real-execution="globalStatus.real_execution"
+        />
       </div>
       <button class="refresh-btn" :disabled="isLoading" @click="reload">
         <i class="fas fa-sync-alt"></i>
@@ -182,7 +190,11 @@
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue';
 import { useAutomationDeliverables } from '@/composables/useAutomationDeliverables';
+import { fetchThalosStatus, type ThalosStatusResponse } from '@/api/thalos_workspace_api';
 import ThalosToolsPanel from './ThalosToolsPanel.vue';
+import ThalosExecutionBadge from './ThalosExecutionBadge.vue';
+
+const globalStatus = ref<ThalosStatusResponse | null>(null);
 
 const {
   items: deliverables,
@@ -270,6 +282,11 @@ const formatValue = (value: unknown) => (typeof value === 'boolean' ? (value ? '
 watch(selectedId, loadDetails);
 
 onMounted(async () => {
+  try {
+    globalStatus.value = await fetchThalosStatus();
+  } catch {
+    /* optional */
+  }
   await reload();
 });
 </script>
@@ -304,6 +321,10 @@ onMounted(async () => {
   font-size: 15px;
   color: #475569;
   margin-top: 4px;
+}
+
+.workspace-badges {
+  margin-top: 10px;
 }
 
 .refresh-btn {

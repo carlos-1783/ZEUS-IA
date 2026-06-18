@@ -104,6 +104,16 @@ class Settings(BaseSettings):
         "1",
         "yes",
     )
+    THALOS_REAL_LOGS_ENABLED: bool = os.getenv("THALOS_REAL_LOGS_ENABLED", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    THALOS_BACKUP_ENABLED: bool = os.getenv("THALOS_BACKUP_ENABLED", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
 
     # zeus_total_system_closure_v1
     ZEUS_TOTAL_SYSTEM_CLOSURE_ENABLED: bool = os.getenv(

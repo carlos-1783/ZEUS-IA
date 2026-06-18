@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models.user import User
 from services.activity_logger import ActivityLogger
+from services.thalos_control_layer_v1 import log_execution_attempt, wrap_response
 from services.workspace_deliverables import persist_workspace_deliverable, primary_company_id_for_user
 from services.workspaces import (
     analyze_perseo_image,
@@ -669,9 +670,16 @@ async def workspace_thalos_logs(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
+    log_execution_attempt(
+        module="log_monitor",
+        action="analyze_text",
+        allowed=True,
+        actor_id=current_user.id,
+    )
     result = monitor_security_logs(request.model_dump())
     text = _text_generic("Monitor de logs de seguridad", result)
     cid = primary_company_id_for_user(db, current_user)
+    real_written = False
     try:
         from services.thalos_security_engine import scan_logs
         from services.thalos_workspace_writer_v1 import write_workspace_item
@@ -689,9 +697,10 @@ async def workspace_thalos_logs(
             persist_document=False,
         )
         db.flush()
+        real_written = True
     except Exception:
         pass
-    return _persist_agent_tool_response(
+    response = _persist_agent_tool_response(
         db,
         current_user=current_user,
         agent_name="THALOS",
@@ -703,6 +712,12 @@ async def workspace_thalos_logs(
         event_name="thalos_logs_monitored",
         chain_steps=["trigger_security_followup"],
     )
+    return wrap_response(
+        response,
+        "log_monitor",
+        data_origin="mixed" if real_written else "user_input",
+        real_execution=real_written,
+    )
 
 
 @router.post("/thalos/threat-detector")
@@ -711,9 +726,15 @@ async def workspace_thalos_threat(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
+    log_execution_attempt(
+        module="text_analysis",
+        action="threat_detector",
+        allowed=True,
+        actor_id=current_user.id,
+    )
     result = detect_threat_events(request.model_dump())
     text = _text_generic("Detección de amenazas", result)
-    return _persist_agent_tool_response(
+    response = _persist_agent_tool_response(
         db,
         current_user=current_user,
         agent_name="THALOS",
@@ -725,6 +746,7 @@ async def workspace_thalos_threat(
         event_name="thalos_threat_detected",
         chain_steps=["trigger_security_followup"],
     )
+    return wrap_response(response, "text_analysis", data_origin="mock", real_execution=False)
 
 
 @router.post("/thalos/credential-revoker")
@@ -733,9 +755,15 @@ async def workspace_thalos_credentials(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
+    log_execution_attempt(
+        module="text_analysis",
+        action="credential_revoker",
+        allowed=False,
+        actor_id=current_user.id,
+    )
     result = revoke_credentials(request.model_dump())
     text = _text_generic("Revocación de credenciales", result)
-    return _persist_agent_tool_response(
+    response = _persist_agent_tool_response(
         db,
         current_user=current_user,
         agent_name="THALOS",
@@ -747,6 +775,7 @@ async def workspace_thalos_credentials(
         event_name="thalos_credentials_revoked",
         chain_steps=["trigger_security_followup"],
     )
+    return wrap_response(response, "text_analysis", data_origin="mock", real_execution=False)
 
 
 # ---------------------------------------------------------------------------

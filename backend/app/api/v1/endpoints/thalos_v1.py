@@ -1,4 +1,4 @@
-"""THALOS v1 API — monitorización, ejecución y workspace."""
+"""THALOS v1 API — monitorización, ejecución y workspace + control layer."""
 
 from __future__ import annotations
 
@@ -15,6 +15,12 @@ from app.db.session import get_db
 from app.models.thalos_security_event import ThalosSecurityEvent
 from app.models.thalos_workspace_item import ThalosWorkspaceItem
 from app.models.user import User
+from services.thalos_control_layer_v1 import (
+    can_run_active_execution,
+    global_status_payload,
+    log_execution_attempt,
+    wrap_response,
+)
 from services.thalos_executor import execute_action
 from services.thalos_monitoring_service import run_monitoring_cycle
 from services.workspace_deliverables import primary_company_id_for_user
@@ -42,13 +48,7 @@ class ThalosMonitorRequest(BaseModel):
 def thalos_v1_status(
     current_user: User = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
-    return {
-        "THALOS_EXECUTION_ENABLED": settings.THALOS_EXECUTION_ENABLED,
-        "THALOS_AUTO_BLOCK": settings.THALOS_AUTO_BLOCK,
-        "THALOS_REAL_MONITORING": settings.THALOS_REAL_MONITORING,
-        "THALOS_WORKSPACE_WRITE_ENABLED": settings.THALOS_WORKSPACE_WRITE_ENABLED,
-        "legacy_preserved": True,
-    }
+    return global_status_payload()
 
 
 @router.post("/monitor")
@@ -57,16 +57,27 @@ def thalos_v1_monitor(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
+    log_execution_attempt(
+        module="auditoria_real",
+        action="security_monitor",
+        allowed=True,
+        actor_id=current_user.id,
+    )
     cid = body.company_id or primary_company_id_for_user(db, current_user)
     result = run_monitoring_cycle(
         db,
         company_id=cid,
         user_id=current_user.id,
-        auto_execute=body.auto_execute,
+        auto_execute=body.auto_execute and can_run_active_execution("auditoria_real", "block_user"),
         force_scan=True,
     )
     db.commit()
-    return result
+    return wrap_response(
+        result,
+        "auditoria_real",
+        data_origin="backend",
+        real_execution=True,
+    )
 
 
 @router.post("/execute")
@@ -75,11 +86,44 @@ def thalos_v1_execute(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    if not settings.THALOS_EXECUTION_ENABLED:
-        raise HTTPException(
-            status_code=403,
-            detail="THALOS_EXECUTION_ENABLED=false. Enable flag for real execution.",
+    module = "backup_system" if body.action == "trigger_backup" else "auditoria_real"
+    if body.action in ("block_user", "alert_admin"):
+        module = "auditoria_real"
+
+    allowed = can_run_active_execution(module, body.action)
+    log_execution_attempt(
+        module=module,
+        action=body.action,
+        allowed=allowed,
+        actor_id=current_user.id,
+    )
+
+    if not allowed or not settings.THALOS_EXECUTION_ENABLED:
+        return wrap_response(
+            {
+                "status": "blocked",
+                "action": body.action,
+                "executed": False,
+                "reason": "REAL_ACTIVE required (THALOS_EXECUTION_ENABLED + module flags)",
+            },
+            module,
+            data_origin="backend",
+            real_execution=False,
         )
+
+    if body.action == "trigger_backup" and not settings.THALOS_BACKUP_ENABLED:
+        return wrap_response(
+            {
+                "status": "blocked",
+                "action": body.action,
+                "executed": False,
+                "reason": "THALOS_BACKUP_ENABLED=false",
+            },
+            "backup_system",
+            data_origin="backend",
+            real_execution=False,
+        )
+
     cid = body.company_id or primary_company_id_for_user(db, current_user)
     result = execute_action(
         db,
@@ -91,7 +135,9 @@ def thalos_v1_execute(
         payload=body.payload,
     )
     db.commit()
-    return result
+    origin = "backend"
+    real = bool(result.get("executed"))
+    return wrap_response(result, module, data_origin=origin, real_execution=real)
 
 
 @router.get("/events")
@@ -99,14 +145,14 @@ def thalos_v1_events(
     limit: int = 50,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
-) -> Dict[str, List[Dict[str, Any]]]:
+) -> Dict[str, Any]:
     rows = (
         db.query(ThalosSecurityEvent)
         .order_by(ThalosSecurityEvent.id.desc())
         .limit(min(limit, 200))
         .all()
     )
-    return {
+    body = {
         "events": [
             {
                 "id": r.id,
@@ -123,6 +169,7 @@ def thalos_v1_events(
             for r in rows
         ]
     }
+    return wrap_response(body, "events", data_origin="backend", real_execution=True)
 
 
 @router.get("/workspace/items")
@@ -131,7 +178,6 @@ def thalos_v1_workspace_items(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """Items persistidos para el workspace THALOS (datos reales)."""
     rows = (
         db.query(ThalosWorkspaceItem)
         .filter(ThalosWorkspaceItem.user_id == current_user.id)
@@ -162,4 +208,9 @@ def thalos_v1_workspace_items(
                 "payload": payload,
             }
         )
-    return {"success": True, "items": items, "count": len(items)}
+    return wrap_response(
+        {"success": True, "items": items, "count": len(items)},
+        "workspace",
+        data_origin="backend",
+        real_execution=True,
+    )

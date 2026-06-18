@@ -44,27 +44,61 @@ export interface ThalosStatusResponse extends ThalosControlResponse {
   legacy_preserved: boolean
 }
 
+function isControlMetadata(value: unknown): value is ThalosControlMetadata {
+  if (!value || typeof value !== 'object') return false
+  const v = value as ThalosControlMetadata
+  return (
+    typeof v.execution_mode === 'string' &&
+    typeof v.data_origin === 'string' &&
+    typeof v.real_execution === 'boolean' &&
+    typeof v.module === 'string' &&
+    typeof v.ui_badge === 'string' &&
+    typeof v.flags === 'object' &&
+    v.flags !== null
+  )
+}
+
+function isControlResponse(value: unknown): value is ThalosControlResponse {
+  if (!value || typeof value !== 'object') return false
+  const v = value as ThalosControlResponse
+  return (
+    typeof v.execution_mode === 'string' &&
+    typeof v.data_origin === 'string' &&
+    typeof v.real_execution === 'boolean'
+  )
+}
+
+function partialNestedFields(nested: unknown): Pick<ThalosControlMetadata, 'module' | 'ui_badge' | 'flags'> {
+  if (!nested || typeof nested !== 'object') {
+    return { module: '', ui_badge: '', flags: {} }
+  }
+  const n = nested as Record<string, unknown>
+  return {
+    module: typeof n.module === 'string' ? n.module : '',
+    ui_badge: typeof n.ui_badge === 'string' ? n.ui_badge : '',
+    flags:
+      typeof n.flags === 'object' && n.flags !== null
+        ? (n.flags as Record<string, boolean>)
+        : {},
+  }
+}
+
 /** Normaliza respuesta API (plana o anidada) a metadata de control. */
-export function extractControlMetadata(
-  source?: ThalosControlResponse | ThalosControlMetadata | null
-): ThalosControlMetadata | null {
+export function extractControlMetadata(source?: unknown): ThalosControlMetadata | null {
   if (!source) return null
-  if ('module' in source && 'ui_badge' in source && 'flags' in source) {
-    return source
-  }
+  if (isControlMetadata(source)) return source
+  if (!isControlResponse(source)) return null
+
   const nested = source.thalos_control
-  if (nested) return nested
-  if (source.execution_mode && source.data_origin !== undefined) {
-    return {
-      execution_mode: source.execution_mode,
-      data_origin: source.data_origin,
-      real_execution: source.real_execution,
-      module: '',
-      ui_badge: '',
-      flags: {},
-    }
+  if (nested && isControlMetadata(nested)) return nested
+
+  const extras = partialNestedFields(nested)
+  return {
+    execution_mode: source.execution_mode,
+    data_origin: source.data_origin,
+    real_execution: source.real_execution,
+    ...extras,
   }
-  return null
 }
 
 export async function fetchThalosWorkspaceItems(limit = 50) {

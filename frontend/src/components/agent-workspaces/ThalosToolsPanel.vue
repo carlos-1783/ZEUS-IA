@@ -185,8 +185,7 @@ const backupSummary = ref<string | null>(null)
 
 
 
-const pickControl = (out: Record<string, unknown>): ThalosControlMetadata | null =>
-  extractControlMetadata(out as Parameters<typeof extractControlMetadata>[0])
+const pickControl = (out: unknown): ThalosControlMetadata | null => extractControlMetadata(out)
 
 
 

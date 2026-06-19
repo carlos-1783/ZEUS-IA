@@ -159,6 +159,23 @@ def create_product(
     
     return {"success": True, "data": product}
 
+@router.get("/movements", response_model=List[InventoryMovementInDB])
+def list_all_inventory_movements(
+    db: Session = Depends(get_db),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, le=500),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Lista global de movimientos ERP (alias para panel OPS)."""
+    rows = (
+        db.query(InventoryMovement)
+        .order_by(InventoryMovement.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return rows
+
 @router.get("/{product_id}", response_model=ProductResponse)
 def get_product(
     product_id: int = Path(..., description="ID of the product to retrieve"),
@@ -403,8 +420,8 @@ def list_inventory_movements(
     
     # Apply pagination and ordering
     movements = query.order_by(InventoryMovement.created_at.desc())\
-                    .offset(skip)\
-                    .limit(limit)\
-                    .all()
+                   .offset(skip)\
+                   .limit(limit)\
+                   .all()
     
     return movements

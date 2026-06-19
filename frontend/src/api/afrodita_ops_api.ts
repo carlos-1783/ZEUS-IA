@@ -46,6 +46,7 @@ export interface InventoryMovementItem {
 
 export interface AfroditaOpsStatusResponse extends AfroditaOpsControlResponse {
   system_default_mode: AfroditaOpsExecutionMode
+  afrodita_ops_control?: AfroditaOpsControlMetadata
   AFRODITA_OPS_ENABLED: boolean
   AFRODITA_OPS_READ_ONLY: boolean
   AFRODITA_USE_TPV: boolean

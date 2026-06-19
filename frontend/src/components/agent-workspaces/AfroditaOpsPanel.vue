@@ -1,127 +1,153 @@
 <template>
-  <section class="ops-panel">
-    <header>
-      <div class="header-row">
-        <div>
-          <h4>📦 Operaciones (OPS)</h4>
-          <p>Inventario unificado TPV + ERP, movimientos y rutas.</p>
-        </div>
-        <ThalosExecutionBadge
-          v-if="globalStatus"
-          :global-mode="globalStatus.system_default_mode"
-          :control="globalStatus.afrodita_ops_control"
-          :data-origin="globalStatus.data_origin"
-          :real-execution="globalStatus.real_execution"
-        />
-      </div>
+  <div class="afrodita-ops">
+    <header v-if="globalStatus" class="ops-header">
+      <ThalosExecutionBadge
+        :global-mode="globalStatus.system_default_mode"
+        :control="globalStatus.afrodita_ops_control"
+        :data-origin="globalStatus.data_origin"
+        :real-execution="globalStatus.real_execution"
+      />
       <p v-if="statusNote" class="status-note">{{ statusNote }}</p>
     </header>
 
-    <div class="ops-grid">
-      <div class="ops-card highlight">
-        <div class="card-title-row">
-          <h5>Inventario</h5>
-          <ThalosExecutionBadge module-badge="REAL" :inline="true" :show-global="false" />
-        </div>
-        <p class="hint">Vista merged — prioridad ERP (`quantity_on_hand`) sobre TPV (`stock`).</p>
-        <button :disabled="loading.inventory" @click="loadInventory">
-          {{ loading.inventory ? 'Cargando…' : 'Cargar inventario' }}
-        </button>
-        <ul v-if="products.length" class="data-list">
-          <li v-for="p in products.slice(0, 12)" :key="p.id">
-            <strong>{{ p.name }}</strong>
-            <span>{{ p.id }} · stock {{ p.stock ?? '—' }} · {{ p.source }}</span>
-            <span v-if="p.low_stock" class="warn">Low stock</span>
-          </li>
-        </ul>
-        <p v-else-if="inventoryLoaded" class="hint">Sin productos en TPV ni ERP.</p>
-        <ThalosExecutionBadge v-if="lastInvControl" :control="lastInvControl" :show-global="false" />
-      </div>
+    <!-- INVENTARIO -->
+    <section class="card">
+      <h3>📦 Inventario <span class="badge real">REAL</span></h3>
 
-      <div class="ops-card">
-        <div class="card-title-row">
-          <h5>Movimientos</h5>
-          <ThalosExecutionBadge module-badge="PARCIAL" :inline="true" :show-global="false" />
-        </div>
-        <p class="hint">Lectura de `inventory_movements` (ERP).</p>
-        <button :disabled="loading.movements" @click="loadMovements">
-          {{ loading.movements ? 'Cargando…' : 'Ver movimientos' }}
-        </button>
-        <ul v-if="movements.length" class="data-list">
-          <li v-for="m in movements.slice(0, 8)" :key="m.id">
-            {{ m.movement_type }} · {{ m.product_name }} · {{ m.quantity }}
-          </li>
-        </ul>
-        <ThalosExecutionBadge v-if="lastMovControl" :control="lastMovControl" :show-global="false" />
-      </div>
+      <button @click="() => loadInventory()" :disabled="loading.inventory">
+        {{ loading.inventory ? 'Cargando...' : 'Refrescar' }}
+      </button>
 
-      <div class="ops-card stub">
-        <div class="card-title-row">
-          <h5>Almacén</h5>
-          <ThalosExecutionBadge module-badge="NONE" :inline="true" :show-global="false" />
-        </div>
-        <p class="hint">Bins/ubicaciones — fase 3 (no implementado).</p>
-        <button :disabled="loading.warehouse" @click="loadWarehouseStub">
-          {{ loading.warehouse ? '…' : 'Estado módulo' }}
-        </button>
-        <p v-if="warehouseNote" class="tool-text">{{ warehouseNote }}</p>
-      </div>
+      <table v-if="inventory.length">
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>Stock (ERP)</th>
+            <th>Stock (TPV)</th>
+            <th>Fuente</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in inventory" :key="item.id">
+            <td>
+              {{ item.name }}
+              <span v-if="item.low_stock" class="low-stock">Low</span>
+            </td>
+            <td>{{ formatStock(item.erp_stock) }}</td>
+            <td>{{ formatStock(item.tpv_stock) }}</td>
+            <td>{{ item.source }}</td>
+          </tr>
+        </tbody>
+      </table>
 
-      <div class="ops-card legacy">
-        <div class="card-title-row">
-          <h5>Rutas</h5>
-          <ThalosExecutionBadge module-badge="SIMULADO" :inline="true" :show-global="false" />
-        </div>
-        <p class="hint">`optimize_route` — stub marcado SIMULADO.</p>
-        <button :disabled="loading.routes" @click="runRouteSim">
-          {{ loading.routes ? 'Simulando…' : 'Simular ruta' }}
-        </button>
-        <p v-if="routeResult" class="tool-text">{{ routeResult }}</p>
-        <ThalosExecutionBadge v-if="lastRouteControl" :control="lastRouteControl" :show-global="false" />
-      </div>
-    </div>
-    <p v-if="error" class="tool-error">{{ error }}</p>
-  </section>
+      <p v-else-if="inventoryLoaded">No hay datos</p>
+    </section>
+
+    <!-- MOVIMIENTOS -->
+    <section class="card">
+      <h3>🔄 Movimientos <span class="badge partial">PARCIAL</span></h3>
+
+      <button @click="loadMovements" :disabled="loading.movements">
+        {{ loading.movements ? 'Cargando...' : 'Refrescar' }}
+      </button>
+
+      <ul v-if="movements.length">
+        <li v-for="m in movements" :key="m.id">
+          {{ m.product_name }} — {{ m.type }} — {{ m.quantity }}
+        </li>
+      </ul>
+
+      <p v-else-if="movementsLoaded">No hay movimientos</p>
+    </section>
+
+    <!-- ALMACÉN -->
+    <section class="card">
+      <h3>🏭 Almacén <span class="badge none">NONE</span></h3>
+      <p>No implementado aún</p>
+    </section>
+
+    <!-- RUTAS -->
+    <section class="card">
+      <h3>🚚 Rutas <span class="badge simulated">SIMULADO</span></h3>
+
+      <button @click="simulateRoute" :disabled="loading.routes">
+        {{ loading.routes ? 'Calculando...' : 'Simular ruta' }}
+      </button>
+
+      <pre v-if="routeResult">{{ routeResult }}</pre>
+    </section>
+
+    <p v-if="error" class="error">{{ error }}</p>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import {
-  extractAfroditaOpsControl,
   fetchAfroditaOpsInventory,
   fetchAfroditaOpsMovements,
   fetchAfroditaOpsStatus,
-  fetchAfroditaOpsWarehouseStub,
   simulateAfroditaRoute,
-  type AfroditaOpsControlMetadata,
   type AfroditaOpsStatusResponse,
   type InventoryMovementItem,
   type MergedProductItem,
 } from '@/api/afrodita_ops_api'
 import ThalosExecutionBadge from './ThalosExecutionBadge.vue'
 
-const loading = reactive({ inventory: false, movements: false, warehouse: false, routes: false })
+interface InventoryRow {
+  id: string
+  name: string
+  erp_stock: number | null
+  tpv_stock: number | null
+  source: string
+  low_stock: boolean
+}
+
+interface MovementRow {
+  id: number
+  product_name: string
+  type: string
+  quantity: number
+}
+
+const loading = reactive({ inventory: false, movements: false, routes: false })
 const error = ref('')
 const statusNote = ref('')
 const globalStatus = ref<AfroditaOpsStatusResponse | null>(null)
-const products = ref<MergedProductItem[]>([])
-const movements = ref<InventoryMovementItem[]>([])
+const rawProducts = ref<MergedProductItem[]>([])
+const rawMovements = ref<InventoryMovementItem[]>([])
 const inventoryLoaded = ref(false)
-const warehouseNote = ref<string | null>(null)
+const movementsLoaded = ref(false)
 const routeResult = ref<string | null>(null)
 
-const lastInvControl = ref<AfroditaOpsControlMetadata | null>(null)
-const lastMovControl = ref<AfroditaOpsControlMetadata | null>(null)
-const lastRouteControl = ref<AfroditaOpsControlMetadata | null>(null)
+const inventory = computed<InventoryRow[]>(() =>
+  rawProducts.value.map((p) => ({
+    id: p.id,
+    name: p.name,
+    erp_stock: p.erp_quantity_on_hand,
+    tpv_stock: p.tpv_stock,
+    source: p.source,
+    low_stock: p.low_stock,
+  }))
+)
 
-const pickControl = (out: unknown) => extractAfroditaOpsControl(out)
+const movements = computed<MovementRow[]>(() =>
+  rawMovements.value.map((m) => ({
+    id: m.id,
+    product_name: m.product_name,
+    type: m.movement_type,
+    quantity: m.quantity,
+  }))
+)
+
+const formatStock = (v: number | null | undefined) => (v == null ? '-' : String(v))
 
 onMounted(async () => {
   try {
     globalStatus.value = await fetchAfroditaOpsStatus()
     statusNote.value = globalStatus.value.AFRODITA_OPS_READ_ONLY
-      ? 'Modo lectura OPS: inventario consolidado visible; escritura de stock en fase 3.'
-      : 'OPS activo — revisar flags en Railway.'
+      ? 'Modo lectura: `/api/v1/afrodita/ops/v1/inventory` consolida TPV + ERP (prioridad ERP).'
+      : 'OPS activo.'
     await loadInventory(true)
   } catch {
     /* optional */
@@ -131,14 +157,12 @@ onMounted(async () => {
 const loadInventory = async (silent = false) => {
   if (!silent) error.value = ''
   loading.inventory = true
-  lastInvControl.value = null
   try {
     const out = await fetchAfroditaOpsInventory()
-    lastInvControl.value = pickControl(out)
-    products.value = out.items || []
+    rawProducts.value = out.items || []
     inventoryLoaded.value = true
-  } catch (err) {
-    if (!silent) error.value = err instanceof Error ? err.message : String(err)
+  } catch (e) {
+    if (!silent) error.value = e instanceof Error ? e.message : String(e)
   } finally {
     loading.inventory = false
   }
@@ -147,46 +171,26 @@ const loadInventory = async (silent = false) => {
 const loadMovements = async () => {
   error.value = ''
   loading.movements = true
-  lastMovControl.value = null
   try {
     const out = await fetchAfroditaOpsMovements()
-    lastMovControl.value = pickControl(out)
-    movements.value = out.movements || []
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
+    rawMovements.value = out.movements || []
+    movementsLoaded.value = true
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e)
   } finally {
     loading.movements = false
   }
 }
 
-const loadWarehouseStub = async () => {
-  loading.warehouse = true
-  warehouseNote.value = null
-  try {
-    const out = await fetchAfroditaOpsWarehouseStub()
-    warehouseNote.value = String(out.label || out.note || 'No implementado')
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    loading.warehouse = false
-  }
-}
-
-const runRouteSim = async () => {
+const simulateRoute = async () => {
   error.value = ''
   loading.routes = true
   routeResult.value = null
-  lastRouteControl.value = null
   try {
-    const out = await simulateAfroditaRoute(
-      [{ id: 'D1', address: 'Calle Mayor 1' }, { id: 'D2', address: 'Av. Logística 5' }],
-      'depot'
-    )
-    lastRouteControl.value = pickControl(out)
-    const r = out.result || {}
-    routeResult.value = String(r.note || r.status || 'Ruta simulada (stub)')
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
+    const out = await simulateAfroditaRoute([], 'HQ')
+    routeResult.value = JSON.stringify(out.result ?? out, null, 2)
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e)
   } finally {
     loading.routes = false
   }
@@ -194,91 +198,124 @@ const runRouteSim = async () => {
 </script>
 
 <style scoped>
-.ops-panel {
-  margin-top: 24px;
-  padding: 22px;
-  border-radius: 16px;
-  border: 1px solid rgba(16, 185, 129, 0.35);
-  background: #ecfdf5;
-}
-.header-row {
+.afrodita-ops {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 24px;
 }
-.ops-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
-}
-.ops-card {
-  background: white;
-  border: 1px solid rgba(16, 185, 129, 0.35);
-  border-radius: 12px;
-  padding: 14px;
+
+.ops-header {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.ops-card.highlight {
-  border-color: #059669;
-}
-.ops-card.stub,
-.ops-card.legacy {
-  opacity: 0.95;
-}
-.card-title-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.hint {
+
+.status-note {
   margin: 0;
   font-size: 12px;
   color: #64748b;
 }
-.status-note {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #475569;
+
+.card {
+  padding: 16px;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: 10px;
+  background: #fff;
 }
-.ops-card button {
+
+.card h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.badge.real {
+  background: #dcfce7;
+  color: #15803d;
+}
+.badge.partial {
+  background: #fef3c7;
+  color: #b45309;
+}
+.badge.simulated {
+  background: #f1f5f9;
+  color: #64748b;
+}
+.badge.none {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.card button {
   border: none;
   border-radius: 8px;
   background: #059669;
   color: #fff;
-  padding: 8px 10px;
+  padding: 8px 12px;
   cursor: pointer;
+  margin-bottom: 10px;
 }
-.data-list {
-  margin: 0;
-  padding-left: 16px;
-  font-size: 12px;
+
+.card button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
-.data-list li {
-  margin-bottom: 4px;
+
+table {
+  width: 100%;
+  margin-top: 10px;
+  border-collapse: collapse;
+  font-size: 13px;
 }
-.data-list span {
-  display: block;
+
+th,
+td {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 8px 6px;
+  text-align: left;
+}
+
+th {
   color: #64748b;
-}
-.warn {
-  color: #b45309;
   font-weight: 600;
 }
-.tool-text {
-  margin: 0;
-  padding: 8px;
-  border-radius: 8px;
-  background: #f0fdf4;
-  font-size: 12px;
+
+.low-stock {
+  margin-left: 6px;
+  font-size: 10px;
+  color: #b45309;
+  font-weight: 700;
 }
-.tool-error {
+
+ul {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 12px;
+  border-radius: 8px;
+  overflow: auto;
+  font-size: 12px;
   margin-top: 10px;
+}
+
+.error {
   color: #b91c1c;
+  font-size: 13px;
 }
 </style>

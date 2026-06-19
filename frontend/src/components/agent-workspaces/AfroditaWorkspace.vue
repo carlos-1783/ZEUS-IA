@@ -6,6 +6,14 @@
         <p class="subtitle">
           Playbooks de soporte, onboarding y coordinación automatizados.
         </p>
+        <ThalosExecutionBadge
+          v-if="globalStatus"
+          class="workspace-badges"
+          :global-mode="globalStatus.system_default_mode"
+          :control="globalStatus.afrodita_control"
+          :data-origin="globalStatus.data_origin"
+          :real-execution="globalStatus.real_execution"
+        />
       </div>
       <button class="refresh-btn" :disabled="isLoading" @click="reload">
         <i class="fas fa-sync-alt"></i>
@@ -180,12 +188,18 @@
   </div>
 
   <AfroditaToolsPanel />
+  <AfroditaOpsPanel />
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue';
 import { useAutomationDeliverables } from '@/composables/useAutomationDeliverables';
+import { fetchAfroditaStatus, type AfroditaStatusResponse } from '@/api/afrodita_workspace_api';
 import AfroditaToolsPanel from './AfroditaToolsPanel.vue';
+import AfroditaOpsPanel from './AfroditaOpsPanel.vue';
+import ThalosExecutionBadge from './ThalosExecutionBadge.vue';
+
+const globalStatus = ref<AfroditaStatusResponse | null>(null);
 
 const {
   items: deliverables,
@@ -273,6 +287,11 @@ const formatWeek = (label: string | number) =>
 watch(selectedId, loadDetails);
 
 onMounted(async () => {
+  try {
+    globalStatus.value = await fetchAfroditaStatus();
+  } catch {
+    /* optional */
+  }
   await reload();
 });
 </script>
@@ -307,6 +326,10 @@ onMounted(async () => {
   font-size: 15px;
   color: #475569;
   margin-top: 4px;
+}
+
+.workspace-badges {
+  margin-top: 10px;
 }
 
 .refresh-btn {

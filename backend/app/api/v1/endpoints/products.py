@@ -41,8 +41,7 @@ def get_product_or_404(
     # Optimizar la consulta cargando relaciones comunes
     product = db.query(Product).options(
         joinedload(Product.variants),
-        joinedload(Product.category),
-        joinedload(Product.inventory_movements)
+        joinedload(Product.inventory_movements),
     ).filter(
         Product.id == product_id
     ).first()

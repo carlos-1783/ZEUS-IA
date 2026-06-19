@@ -115,6 +115,57 @@ class Settings(BaseSettings):
         "yes",
     )
 
+    # afrodita_control_layer_v1
+    AFRODITA_EXECUTION_ENABLED: bool = os.getenv("AFRODITA_EXECUTION_ENABLED", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    AFRODITA_READ_ONLY_MODE: bool = os.getenv("AFRODITA_READ_ONLY_MODE", "true").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    AFRODITA_USE_REAL_EMPLOYEES: bool = os.getenv("AFRODITA_USE_REAL_EMPLOYEES", "true").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    AFRODITA_USE_REAL_CHECKINS: bool = os.getenv("AFRODITA_USE_REAL_CHECKINS", "true").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    AFRODITA_USE_REAL_SCHEDULES: bool = os.getenv("AFRODITA_USE_REAL_SCHEDULES", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+
+    # afrodita_ops_control_layer_v1
+    AFRODITA_OPS_ENABLED: bool = os.getenv("AFRODITA_OPS_ENABLED", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    AFRODITA_OPS_READ_ONLY: bool = os.getenv("AFRODITA_OPS_READ_ONLY", "true").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    AFRODITA_USE_TPV: bool = os.getenv("AFRODITA_USE_TPV", "true").lower() in ("true", "1", "yes")
+    AFRODITA_USE_ERP: bool = os.getenv("AFRODITA_USE_ERP", "true").lower() in ("true", "1", "yes")
+    AFRODITA_ENABLE_STOCK_SYNC: bool = os.getenv("AFRODITA_ENABLE_STOCK_SYNC", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    AFRODITA_ENABLE_ROUTE_ENGINE: bool = os.getenv("AFRODITA_ENABLE_ROUTE_ENGINE", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+
     # zeus_total_system_closure_v1
     ZEUS_TOTAL_SYSTEM_CLOSURE_ENABLED: bool = os.getenv(
         "ZEUS_TOTAL_SYSTEM_CLOSURE_ENABLED", "false"

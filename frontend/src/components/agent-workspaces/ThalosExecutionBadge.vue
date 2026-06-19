@@ -19,15 +19,12 @@
 import { computed } from 'vue'
 import {
   extractControlMetadata,
-  type ThalosControlMetadata,
-  type ThalosControlResponse,
-  type ThalosExecutionMode,
 } from '@/api/thalos_workspace_api'
 
 const props = withDefaults(
   defineProps<{
-    globalMode?: ThalosExecutionMode | string | null
-    control?: ThalosControlMetadata | ThalosControlResponse | null
+    globalMode?: string | null
+    control?: unknown
     moduleBadge?: string | null
     dataOrigin?: string | null
     realExecution?: boolean
@@ -36,7 +33,6 @@ const props = withDefaults(
   }>(),
   {
     globalMode: null,
-    control: null,
     moduleBadge: null,
     dataOrigin: null,
     realExecution: undefined,
@@ -45,7 +41,24 @@ const props = withDefaults(
   }
 )
 
-const resolvedControl = computed(() => extractControlMetadata(props.control))
+const resolvedControl = computed(() => {
+  const c = extractControlMetadata(props.control)
+  if (c) return c
+  if (props.control && typeof props.control === 'object') {
+    const raw = props.control as unknown as Record<string, unknown>
+    if (typeof raw.ui_badge === 'string') {
+      return {
+        execution_mode: String(raw.execution_mode || ''),
+        data_origin: String(raw.data_origin || ''),
+        real_execution: Boolean(raw.real_execution),
+        module: String(raw.module || ''),
+        ui_badge: String(raw.ui_badge),
+        flags: (raw.flags as Record<string, boolean>) || {},
+      }
+    }
+  }
+  return null
+})
 
 const moduleBadge = computed(() => props.moduleBadge ?? resolvedControl.value?.ui_badge ?? null)
 const dataOrigin = computed(() => props.dataOrigin ?? resolvedControl.value?.data_origin ?? null)
@@ -67,13 +80,14 @@ const originLabel = computed(() => {
 
 const modeClass = (mode: string) => {
   if (mode === 'REAL_ACTIVE') return 'active'
-  if (mode === 'REAL_SAFE') return 'safe'
+  if (mode === 'REAL_SAFE' || mode === 'READ_ONLY') return 'safe'
   return 'simulation'
 }
 
 const uiClass = (badge: string) => {
   if (badge === 'REAL') return 'real'
   if (badge === 'PARCIAL') return 'partial'
+  if (badge === 'NONE') return 'none'
   return 'simulated'
 }
 </script>
@@ -119,6 +133,10 @@ const uiClass = (badge: string) => {
 .badge.module.simulated {
   background: #f1f5f9;
   color: #64748b;
+}
+.badge.module.none {
+  background: #e5e7eb;
+  color: #6b7280;
 }
 .badge.origin {
   background: #f8fafc;

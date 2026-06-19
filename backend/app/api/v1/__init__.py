@@ -38,6 +38,9 @@ from app.api.v1.endpoints import (
     invoices,
     scan,
     thalos_v1,
+    afrodita_v1,
+    afrodita_ops_v1,
+    products,
     zeus_closure_v1,
     zeus_core_v2,
     webhooks,
@@ -122,10 +125,13 @@ api_router.include_router(cashflow.router, prefix="/cashflow", tags=["cashflow"]
 
 # ERP Invoices & payments
 api_router.include_router(invoices.router, prefix="/invoices", tags=["invoices"])
+api_router.include_router(products.router, prefix="/products", tags=["products"])
 
 # Physical scan flows (QR / NFC / DNI)
 api_router.include_router(scan.router, prefix="/scan", tags=["scan"])
 api_router.include_router(thalos_v1.router, tags=["thalos-v1"])
+api_router.include_router(afrodita_v1.router, tags=["afrodita-v1"])
+api_router.include_router(afrodita_ops_v1.router, tags=["afrodita-ops-v1"])
 api_router.include_router(zeus_closure_v1.router, tags=["zeus-closure"])
 
 # ZEUS final closure v2

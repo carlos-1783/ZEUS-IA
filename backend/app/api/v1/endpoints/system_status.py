@@ -8,11 +8,24 @@ from typing import Dict, Any, List
 import os
 from datetime import datetime
 
-from app.core.auth import get_current_active_superuser
+from app.core.auth import get_current_active_superuser, get_current_active_user
 from app.models.user import User
 from app.core.config import settings
 
 router = APIRouter()
+
+
+@router.get("/execution-status")
+async def get_execution_status(
+    current_user: User = Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    """
+    Estado de ejecución por agente + flags Railway (Phase A visibility).
+    Accesible a cualquier usuario autenticado.
+    """
+    from services.system_visibility_v1 import execution_status_payload
+
+    return execution_status_payload()
 
 
 @router.get("/status")

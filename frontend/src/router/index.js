@@ -46,6 +46,7 @@ const LandingPage = () => import('../views/LandingPage.vue')
 const PublicStore = () => import('../views/public/PublicStore.vue')
 const OnboardingSetup = () => import('../views/OnboardingSetup.vue')
 const ScanHub = () => import('../views/ScanHub.vue')
+const SystemStatusPanel = () => import('../views/SystemStatusPanel.vue')
 
 // Routes that don't require authentication
 const publicRoutes = [
@@ -251,6 +252,15 @@ const router = createRouter({
         title: 'Control Horario Universal - ZEUS-IA',
         requiresAuth: true
       }
+    },
+    {
+      path: '/system/status',
+      name: 'SystemStatus',
+      component: SystemStatusPanel,
+      meta: {
+        title: 'Estado del sistema - ZEUS-IA',
+        requiresAuth: true,
+      },
     },
     {
       path: '/scan',

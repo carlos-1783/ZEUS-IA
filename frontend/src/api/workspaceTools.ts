@@ -29,6 +29,7 @@ const post = async (path: string, body: Payload) => {
 }
 
 export const workspaceTools = {
+  // PERSEO — /api/v1/tools/* (heurístico, sin persistencia BD)
   runPerseoImageAnalyzer: (payload: Payload) =>
     post('/tools/analyze-image', payload),
   runPerseoVideoEnhancer: (payload: Payload) =>
@@ -37,6 +38,8 @@ export const workspaceTools = {
     post('/tools/seo-audit', payload),
   runPerseoAdsBuilder: (payload: Payload) =>
     post('/tools/generate-ads-plan', payload),
+
+  // RAFAEL — scan real vía scanFlowApi; forms vía workspace
   runRafaelQrReader: (payload: Payload) =>
     post('/workspaces/rafael/qr-reader', payload),
   runRafaelNfcScanner: (payload: Payload) =>
@@ -45,30 +48,28 @@ export const workspaceTools = {
     post('/workspaces/rafael/dni-ocr', payload),
   runRafaelForms: (payload: Payload) =>
     post('/workspaces/rafael/forms', payload),
+
+  // JUSTICIA — stubs documentales (usar /api/v1/justicia/v1 para auditoría real)
   runJusticiaSigner: (payload: Payload) =>
     post('/workspaces/justicia/pdf-signer', payload),
   runJusticiaContract: (payload: Payload) =>
     post('/workspaces/justicia/contract', payload),
   runJusticiaGdpr: (payload: Payload) =>
     post('/workspaces/justicia/gdpr-audit', payload),
+
+  // THALOS legacy — preferir thalos_workspace_api (/api/v1/thalos/v1/*)
   runThalosLogMonitor: (payload: Payload) =>
     post('/workspaces/thalos/log-monitor', payload),
   runThalosThreatDetector: (payload: Payload) =>
     post('/workspaces/thalos/threat-detector', payload),
   runThalosCredentialRevoker: (payload: Payload) =>
     post('/workspaces/thalos/credential-revoker', payload),
-  runAfroditaFaceCheckIn: (payload: Payload) =>
-    post('/workspaces/afrodita/face-check-in', payload),
-  runAfroditaQrCheckIn: (payload: Payload) =>
-    post('/workspaces/afrodita/qr-check-in', payload),
-  runAfroditaEmployeeManager: (payload: Payload) =>
-    post('/workspaces/afrodita/employee-manager', payload),
-  runAfroditaContract: (payload: Payload) =>
-    post('/workspaces/afrodita/contract', payload),
+
+  // LEGACY REMOVED — AFRODITA usa afrodita_workspace_api.ts:
+  //   /api/v1/afrodita/rrhh/v1/*  /api/v1/afrodita/ops/v1/*
+  //   /workspaces/afrodita/* devuelve 403 (workspace aislado)
 }
 
 export type WorkspaceToolResponse = Awaited<
   ReturnType<(typeof workspaceTools)[keyof typeof workspaceTools]>
 >
-
-

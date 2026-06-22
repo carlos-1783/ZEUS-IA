@@ -94,14 +94,12 @@
       </div>
 
       <div class="tool-card legacy">
-
+        <!-- LEGACY MODE (NO REAL EXECUTION) — usar thalos_workspace_api /api/v1/thalos/v1/monitor -->
         <div class="card-title-row">
-
           <h5>Monitor de logs (heurístico)</h5>
-
           <ThalosExecutionBadge module-badge="SIMULADO" :inline="true" :show-global="false" />
-
         </div>
+        <p class="legacy-hint">Legacy workspaceTools — sin persistencia en BD.</p>
 
         <textarea v-model="logInput" placeholder="Líneas de log separadas por salto de línea"></textarea>
 
@@ -438,6 +436,16 @@ const runLogs = async () => {
   font-size: 12px;
 
   color: #64748b;
+
+}
+
+.legacy-hint {
+
+  margin: 0;
+
+  font-size: 11px;
+
+  color: #b45309;
 
 }
 

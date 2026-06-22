@@ -1,23 +1,34 @@
 <template>
   <section class="tools-panel">
     <header>
-      <h4>🛠️ Herramientas en vivo</h4>
-      <p>Ejecuta análisis instantáneos sin salir del workspace.</p>
+      <div class="header-row">
+        <div>
+          <h4>🛠️ Herramientas en vivo</h4>
+          <p class="sim-note">No ejecuta acciones reales — análisis heurístico / LLM sin persistencia en BD.</p>
+        </div>
+        <ThalosExecutionBadge module-badge="SIMULADO" :inline="true" :show-global="false" />
+      </div>
     </header>
     <div class="tools-grid">
-      <div class="tool-card">
-        <h5>Analizador de imagen</h5>
+      <div class="tool-card legacy">
+        <div class="card-title-row">
+          <h5>Analizador de imagen</h5>
+          <ThalosExecutionBadge module-badge="SIMULADO" :inline="true" :show-global="false" />
+        </div>
         <input v-model="imageForm.image_url" placeholder="URL de la imagen" />
         <input v-model="imageForm.goals" placeholder="Objetivos (coma)" />
         <input v-model="imageForm.tags" placeholder="Tags visuales" />
         <button :disabled="loading.image" @click="runImageAnalyzer">
-          {{ loading.image ? 'Analizando…' : 'Analizar' }}
+          {{ loading.image ? 'Analizando…' : 'Analizar (stub)' }}
         </button>
         <p v-if="imageResult" class="tool-text">{{ imageResult }}</p>
       </div>
 
-      <div class="tool-card">
-        <h5>Mejora de vídeo</h5>
+      <div class="tool-card legacy">
+        <div class="card-title-row">
+          <h5>Mejora de vídeo</h5>
+          <ThalosExecutionBadge module-badge="SIMULADO" :inline="true" :show-global="false" />
+        </div>
         <label>Duración (s)</label>
         <input type="number" v-model.number="videoForm.duration_seconds" />
         <label>Tono</label>
@@ -25,24 +36,30 @@
         <label>Plataforma</label>
         <input v-model="videoForm.platform" />
         <button :disabled="loading.video" @click="runVideoEnhancer">
-          {{ loading.video ? 'Calculando…' : 'Recomendar' }}
+          {{ loading.video ? 'Calculando…' : 'Recomendar (stub)' }}
         </button>
         <p v-if="videoResult" class="tool-text">{{ videoResult }}</p>
       </div>
 
-      <div class="tool-card">
-        <h5>Auditoría SEO</h5>
+      <div class="tool-card legacy">
+        <div class="card-title-row">
+          <h5>Auditoría SEO</h5>
+          <ThalosExecutionBadge module-badge="SIMULADO" :inline="true" :show-global="false" />
+        </div>
         <input v-model="seoForm.url" placeholder="https://sitio.com" />
         <input v-model="seoForm.keywords" placeholder="keywords separadas por coma" />
         <textarea v-model="seoForm.html_snapshot" placeholder="HTML opcional"></textarea>
         <button :disabled="loading.seo" @click="runSeoAudit">
-          {{ loading.seo ? 'Auditando…' : 'Auditar' }}
+          {{ loading.seo ? 'Auditando…' : 'Auditar (stub)' }}
         </button>
         <p v-if="seoResult" class="tool-text">{{ seoResult }}</p>
       </div>
 
-      <div class="tool-card">
-        <h5>Blueprint Ads</h5>
+      <div class="tool-card legacy">
+        <div class="card-title-row">
+          <h5>Blueprint Ads</h5>
+          <ThalosExecutionBadge module-badge="SIMULADO" :inline="true" :show-global="false" />
+        </div>
         <input v-model="adsForm.product" placeholder="Producto" />
         <input type="number" v-model.number="adsForm.budget" placeholder="Presupuesto" />
         <input v-model="adsForm.audience" placeholder="Audiencia" />
@@ -52,7 +69,7 @@
           <option value="branding">Branding</option>
         </select>
         <button :disabled="loading.ads" @click="runAdsBuilder">
-          {{ loading.ads ? 'Generando…' : 'Generar plan' }}
+          {{ loading.ads ? 'Generando…' : 'Generar plan (stub)' }}
         </button>
         <p v-if="adsResult" class="tool-text">{{ adsResult }}</p>
       </div>
@@ -64,6 +81,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { workspaceTools } from '@/api/workspaceTools'
+import ThalosExecutionBadge from './ThalosExecutionBadge.vue'
 
 const loading = reactive({ image: false, video: false, seo: false, ads: false })
 const error = ref('')
@@ -71,7 +89,7 @@ const error = ref('')
 const imageForm = reactive({ image_url: '', goals: '', tags: '' })
 const videoForm = reactive({ duration_seconds: 45, tone: 'energético', platform: 'meta' })
 const seoForm = reactive({ url: '', keywords: '', html_snapshot: '' })
-const adsForm = reactive({ product: 'ZEUS IA', budget: 1000, audience: 'general', objective: 'leads' })
+const adsForm = reactive({ product: '', budget: 1000, audience: 'general', objective: 'leads' })
 
 const imageResult = ref<string | null>(null)
 const videoResult = ref<string | null>(null)
@@ -93,7 +111,7 @@ const runImageAnalyzer = async () => {
       goals: parseCsv(imageForm.goals),
       tags: parseCsv(imageForm.tags),
     })
-    imageResult.value = String((out as any)?.text || 'Análisis completado.')
+    imageResult.value = String((out as { text?: string }).text || 'Análisis heurístico (sin BD).')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -106,7 +124,7 @@ const runVideoEnhancer = async () => {
   loading.video = true
   try {
     const out = await workspaceTools.runPerseoVideoEnhancer({ ...videoForm })
-    videoResult.value = String((out as any)?.text || 'Recomendación de vídeo generada.')
+    videoResult.value = String((out as { text?: string }).text || 'Recomendación simulada.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -123,7 +141,7 @@ const runSeoAudit = async () => {
       keywords: parseCsv(seoForm.keywords),
       html_snapshot: seoForm.html_snapshot || undefined,
     })
-    seoResult.value = String((out as any)?.text || 'Auditoría SEO completada.')
+    seoResult.value = String((out as { text?: string }).text || 'Auditoría heurística (sin BD).')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -136,7 +154,7 @@ const runAdsBuilder = async () => {
   loading.ads = true
   try {
     const out = await workspaceTools.runPerseoAdsBuilder({ ...adsForm })
-    adsResult.value = String((out as any)?.text || 'Plan de anuncios generado.')
+    adsResult.value = String((out as { text?: string }).text || 'Plan simulado.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -155,12 +173,25 @@ const runAdsBuilder = async () => {
   box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
 }
 
-.tools-panel header {
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
   margin-bottom: 18px;
 }
 
-.tools-panel h4 {
-  margin: 0 0 4px;
+.card-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.sim-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #b45309;
 }
 
 .tools-grid {
@@ -176,6 +207,11 @@ const runAdsBuilder = async () => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.tool-card.legacy {
+  opacity: 0.95;
+  background: #fafafa;
 }
 
 .tool-card input,
@@ -195,7 +231,7 @@ const runAdsBuilder = async () => {
   margin-top: 6px;
   border: none;
   border-radius: 8px;
-  background: #2563eb;
+  background: #64748b;
   color: #fff;
   padding: 8px 12px;
   cursor: pointer;
@@ -205,7 +241,7 @@ const runAdsBuilder = async () => {
   margin: 8px 0 0;
   padding: 10px;
   border-radius: 10px;
-  background: #eff6ff;
+  background: #f1f5f9;
   color: #0f172a;
   font-size: 13px;
   line-height: 1.4;
@@ -216,4 +252,3 @@ const runAdsBuilder = async () => {
   color: #dc2626;
 }
 </style>
-

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Literal, Optional
 
 from app.core.config import settings
+from services.execution_mode_v1 import normalize_execution_mode
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,7 @@ def wrap_response(
     return {
         **body,
         "execution_mode": meta.execution_mode,
+        "standard_execution_mode": normalize_execution_mode(meta.execution_mode),
         "data_origin": meta.data_origin,
         "real_execution": meta.real_execution,
         "afrodita_ops_control": meta.to_dict(),

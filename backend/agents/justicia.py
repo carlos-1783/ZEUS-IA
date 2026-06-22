@@ -82,12 +82,72 @@ class Justicia(BaseAgent):
         result["request_type"] = request_type
         result["legal_ok"] = False  # Siempre requiere validación final
         result["requires_legal_review"] = True
+        result["execution_mode"] = self._resolve_execution_mode(request_type)
+        result["data_origin"] = "llm" if request_type in ("general", "contract", "gdpr", "policy") else "backend"
+
+        if request_type in ("audit", "system_audit", "compliance_audit"):
+            result = self._attach_system_audit(result, context)
         
         # Aplicar Legal-Fiscal Firewall para documentos legales
         user_id = context.get("user_id")
         if user_id and self._requires_firewall(result, request_type):
             result = self._apply_firewall(result, user_id, request_type, context)
         
+        return result
+    
+    def _resolve_execution_mode(self, request_type: str) -> str:
+        from app.core.config import settings
+
+        if request_type in ("audit", "system_audit", "compliance_audit"):
+            if getattr(settings, "JUSTICE_REAL_AUDIT_ENABLED", False):
+                return "REAL"
+            return "SIMULATED"
+        return "SIMULATED"
+
+    def _attach_system_audit(self, result: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+        """Adjunta auditoría read-only de BD cuando el flag está activo."""
+        from app.core.config import settings
+        from app.db.session import SessionLocal
+        from services.justice_system_audit_v1 import run_system_audit
+
+        user_id = context.get("user_id")
+        audit_mode = "SIMULATED"
+        audit_body: Dict[str, Any] = {}
+
+        if getattr(settings, "JUSTICE_REAL_AUDIT_ENABLED", False) and user_id:
+            db = SessionLocal()
+            try:
+                from app.models.user import User
+
+                user = db.query(User).filter(User.id == int(user_id)).first()
+                if user:
+                    audit_body = run_system_audit(db, user)
+                    audit_mode = audit_body.get("execution_mode", "REAL")
+            except Exception as exc:
+                logger.warning("[JUSTICIA] system audit failed: %s", exc)
+                audit_body = {"error": str(exc), "execution_mode": "SIMULATED"}
+            finally:
+                db.close()
+        else:
+            audit_body = {
+                "execution_mode": "SIMULATED",
+                "summary": "Activa JUSTICE_REAL_AUDIT_ENABLED para queries read-only a BD.",
+                "audit_trace": [],
+                "conclusions": [],
+            }
+
+        result["execution_mode"] = audit_mode
+        result["audit_trace"] = audit_body.get("audit_trace", [])
+        result["system_audit"] = audit_body
+        result["evidence_required"] = True
+        if audit_body.get("conclusions"):
+            result["conclusions_with_evidence"] = [
+                {
+                    **c,
+                    "evidence_source": c.get("evidence_source", "NONE"),
+                }
+                for c in audit_body["conclusions"]
+            ]
         return result
     
     def _requires_firewall(self, result: Dict[str, Any], request_type: str) -> bool:

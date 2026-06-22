@@ -166,6 +166,18 @@ class Settings(BaseSettings):
         "yes",
     )
 
+    # JUSTICIA v1 — auditoría real read-only (justice_deep_audit_v1)
+    JUSTICE_REAL_AUDIT_ENABLED: bool = os.getenv("JUSTICE_REAL_AUDIT_ENABLED", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    JUSTICE_READ_ONLY_MODE: bool = os.getenv("JUSTICE_READ_ONLY_MODE", "true").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+
     # zeus_total_system_closure_v1
     ZEUS_TOTAL_SYSTEM_CLOSURE_ENABLED: bool = os.getenv(
         "ZEUS_TOTAL_SYSTEM_CLOSURE_ENABLED", "false"

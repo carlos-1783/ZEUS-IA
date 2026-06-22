@@ -20,8 +20,6 @@ from services.afrodita_control_layer_v1 import (
     current_flags,
     validate_qr_freshness,
 )
-from services.time_cost_engine_v1 import register_checkin
-from services.workspaces.afrodita_tools import record_face_check_in
 from services.workspace_deliverables import primary_company_id_for_user
 
 
@@ -146,51 +144,47 @@ def list_employee_schedules(db: Session, user: User) -> Dict[str, Any]:
 
 
 def execute_face_checkin(db: Session, user: User, payload: Dict[str, Any]) -> Dict[str, Any]:
-    """PARTIAL: register_checkin vía device si flags lo permiten; si no, stub simulado."""
-    employee_id = str(payload.get("employee_id") or "").strip()
-    simulated = record_face_check_in(payload)
-    simulated["simulated_biometric"] = True
-    simulated["ui_method"] = "face"
+    """Deshabilitado en afrodita_finalization_v1 — sin motor biométrico."""
+    _ = db, user, payload
+    return {
+        "executed": False,
+        "disabled": True,
+        "reason": "no_biometric_engine",
+        "ui_method": "face",
+        "message": "Fichaje facial deshabilitado. Use fichaje QR en dominio RRHH.",
+        "redirect": "/api/v1/afrodita/rrhh/v1/checkin/qr",
+    }
 
-    if not can_execute_checkin() or not employee_id:
-        simulated["executed"] = False
-        simulated["reason"] = "AFRODITA_EXECUTION_ENABLED/READ_ONLY — fichaje simulado (sin biometría)"
-        return simulated
 
-    cid = primary_company_id_for_user(db, user)
-    if not cid or not employee_exists(db, company_id=cid, employee_code=employee_id):
-        simulated["executed"] = False
-        simulated["reason"] = "Empleado no encontrado en company_employees — fallback simulado"
-        return simulated
+def execute_qr_checkin(db: Session, user: User, code: str) -> Dict[str, Any]:
+    """Fichaje QR real vía scan_flow → register_checkin cuando flags lo permiten."""
+    from services.scan_flow_service_v1 import process_nfc_scan, process_qr_scan
 
-    try:
-        out = register_checkin(
-            db,
-            user=user,
-            company_id=cid,
-            employee_id=employee_id,
-            checkin_type="entrada",
-            method="device",
-            metadata={
-                "source": "afrodita_workspace",
-                "ui_method": "face",
-                "simulated_biometric": True,
-                "device_id": "afrodita_workspace_face_v1",
-                "embedding_provided": bool(payload.get("embedding")),
-            },
-        )
+    validation = validate_qr_before_checkin(db, user, code)
+
+    if not can_execute_checkin():
         return {
-            **out,
-            "simulated_biometric": True,
-            "ui_method": "face",
-            "executed": True,
-            "fallback_used": False,
+            "status": "dry_run",
+            "executed": False,
+            "message": (
+                "Modo lectura: validación OK pero fichaje requiere "
+                "AFRODITA_EXECUTION_ENABLED + READ_ONLY=false"
+            ),
+            **validation,
         }
-    except HTTPException as exc:
-        simulated["executed"] = False
-        simulated["reason"] = str(exc.detail)
-        simulated["fallback_used"] = True
-        return simulated
+
+    if code.upper().startswith(("ZEUS|", "ZEUSQR|")):
+        flow = process_qr_scan(db, user, data=code)
+    else:
+        flow = process_nfc_scan(db, user, text=code, checkin_type="entrada")
+
+    executed = bool(flow.get("executed", flow.get("success")))
+    return {
+        **flow,
+        "executed": executed,
+        "validation": validation,
+        "entry_point": "register_checkin",
+    }
 
 
 def validate_qr_before_checkin(db: Session, user: User, code: str) -> Dict[str, Any]:

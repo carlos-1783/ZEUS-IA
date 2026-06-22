@@ -99,21 +99,44 @@ export async function fetchAfroditaStatus() {
   return api.get('/api/v1/afrodita/v1/status') as Promise<AfroditaStatusResponse>
 }
 
+export async function fetchAfroditaRrhhStatus() {
+  return api.get('/api/v1/afrodita/rrhh/v1/status') as Promise<
+    AfroditaStatusResponse & { afrodita_finalization?: Record<string, unknown> }
+  >
+}
+
 export async function fetchAfroditaEmployees() {
-  return api.get('/api/v1/afrodita/v1/employees') as Promise<
+  return api.get('/api/v1/afrodita/rrhh/v1/employees') as Promise<
     AfroditaControlResponse & { success: boolean; employees: AfroditaEmployee[]; count: number }
   >
 }
 
 export async function fetchAfroditaSchedules() {
-  return api.get('/api/v1/afrodita/v1/schedules') as Promise<
+  return api.get('/api/v1/afrodita/rrhh/v1/schedules') as Promise<
     AfroditaControlResponse & { success: boolean; schedules: AfroditaScheduleRow[]; count: number }
   >
 }
 
+export async function submitAfroditaQrCheckin(qrCode: string) {
+  return api.post('/api/v1/afrodita/rrhh/v1/checkin/qr', { qr_code: qrCode }) as Promise<
+    AfroditaControlResponse & { success: boolean; result: Record<string, unknown>; text?: string }
+  >
+}
+
+export async function submitAfroditaContractDraft(payload: {
+  employee_name: string
+  role: string
+  salary: number
+  contract_type: string
+}) {
+  return api.post('/api/v1/afrodita/rrhh/v1/contract-draft', payload) as Promise<
+    AfroditaControlResponse & { success: boolean; text?: string }
+  >
+}
+
 export const MODULE_UI_BADGES: Record<string, string> = {
-  facial_checkin: 'SIMULADO',
+  facial_checkin: 'NONE',
   qr_checkin: 'PARCIAL',
   employee_manager: 'REAL',
-  shift_generator: 'SIMULADO',
+  shift_generator: 'PARTIAL',
 }

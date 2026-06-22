@@ -18,17 +18,7 @@ from app.db.session import get_db
 from app.models.user import User
 from services.activity_logger import ActivityLogger
 from services.thalos_control_layer_v1 import log_execution_attempt, wrap_response as thalos_wrap
-from services.afrodita_control_layer_v1 import (
-    can_execute_checkin,
-    log_execution_attempt as afrodita_log,
-    wrap_response as afrodita_wrap,
-)
-from services.afrodita_workspace_service_v1 import (
-    execute_face_checkin,
-    list_company_employees,
-    list_employee_schedules,
-    validate_qr_before_checkin,
-)
+from services.afrodita_finalization_v1 import assert_workspace_isolated
 from services.workspace_deliverables import persist_workspace_deliverable, primary_company_id_for_user
 from services.workspaces import (
     analyze_perseo_image,
@@ -45,7 +35,6 @@ from services.workspaces import (
     monitor_security_logs,
     detect_threat_events,
     revoke_credentials,
-    create_rrhh_contract,
 )
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
@@ -797,35 +786,7 @@ async def workspace_afrodita_face(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    afrodita_log(
-        module="facial_checkin",
-        action="face_check_in",
-        allowed=can_execute_checkin(),
-        actor_id=current_user.id,
-    )
-    result = execute_face_checkin(db, current_user, request.model_dump())
-    if result.get("executed"):
-        db.commit()
-    text = _text_generic("Fichaje facial", result)
-    response = _persist_agent_tool_response(
-        db,
-        current_user=current_user,
-        agent_name="AFRODITA",
-        workspace_category="hr_document",
-        content_type="hr_document",
-        title="Fichaje facial AFRODITA",
-        text=text,
-        result=result,
-        event_name="afrodita_face_checkin",
-        chain_steps=["trigger_shift_validation"],
-    )
-    return afrodita_wrap(
-        response,
-        "facial_checkin",
-        data_origin="mixed" if result.get("executed") else "user_input",
-        real_execution=bool(result.get("executed")),
-        ui_badge="SIMULADO",
-    )
+    assert_workspace_isolated("facial_checkin")
 
 
 @router.post("/afrodita/qr-check-in")
@@ -834,69 +795,7 @@ async def workspace_afrodita_qr(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    from services.scan_flow_service_v1 import process_nfc_scan, process_qr_scan
-
-    code = (request.qr_code or "").strip()
-    validation = validate_qr_before_checkin(db, current_user, code)
-    afrodita_log(
-        module="qr_checkin",
-        action="qr_check_in",
-        allowed=bool(validation.get("execution_allowed")),
-        actor_id=current_user.id,
-    )
-
-    if not can_execute_checkin():
-        preview = {
-            "status": "dry_run",
-            "executed": False,
-            "message": "Modo lectura: validación OK pero fichaje requiere AFRODITA_EXECUTION_ENABLED + READ_ONLY=false",
-            **validation,
-        }
-        text = _text_generic("Fichaje QR (simulado)", preview)
-        response = _persist_agent_tool_response(
-            db,
-            current_user=current_user,
-            agent_name="AFRODITA",
-            workspace_category="hr_document",
-            content_type="hr_document",
-            title="Fichaje QR AFRODITA",
-            text=text,
-            result=preview,
-            event_name="afrodita_qr_dry_run",
-            chain_steps=["checkin_employee"],
-        )
-        return afrodita_wrap(
-            response,
-            "qr_checkin",
-            data_origin="backend",
-            real_execution=False,
-            ui_badge="PARCIAL",
-        )
-
-    if code.upper().startswith(("ZEUS|", "ZEUSQR|")):
-        flow = process_qr_scan(db, current_user, data=code)
-    else:
-        flow = process_nfc_scan(db, current_user, text=code, checkin_type="entrada")
-    text = _text_scan_flow(flow, label="Fichaje QR/NFC")
-    response = _persist_agent_tool_response(
-        db,
-        current_user=current_user,
-        agent_name="AFRODITA",
-        workspace_category="hr_document",
-        content_type="hr_document",
-        title="Fichaje QR AFRODITA",
-        text=text,
-        result={**flow, "validation": validation},
-        event_name="nfc_detected",
-        chain_steps=["checkin_employee", "calculate_cost"],
-    )
-    return afrodita_wrap(
-        response,
-        "qr_checkin",
-        data_origin="backend",
-        real_execution=bool(flow.get("executed", flow.get("success"))),
-        ui_badge="PARCIAL",
-    )
+    assert_workspace_isolated("qr_checkin")
 
 
 @router.post("/afrodita/employee-manager")
@@ -905,61 +804,7 @@ async def workspace_afrodita_schedule(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    afrodita_log(
-        module="employee_manager",
-        action="list_employees",
-        allowed=True,
-        actor_id=current_user.id,
-    )
-    result = list_company_employees(db, current_user)
-    if not result.get("employees") and request.employees:
-        from services.workspaces.afrodita_tools import build_employee_schedule
-
-        legacy = build_employee_schedule(request.model_dump())
-        legacy["legacy_fake_schedule"] = True
-        legacy["note"] = "Sin empleados en BD; fallback simulado del textarea"
-        result = legacy
-        text = _text_generic("Empleados (fallback simulado)", result)
-        response = _persist_agent_tool_response(
-            db,
-            current_user=current_user,
-            agent_name="AFRODITA",
-            workspace_category="hr_document",
-            content_type="hr_document",
-            title="Turnos AFRODITA",
-            text=text,
-            result=result,
-            event_name="afrodita_schedule_generated",
-            chain_steps=["trigger_hr_sync"],
-        )
-        return afrodita_wrap(
-            response,
-            "employee_manager",
-            data_origin="user_input",
-            real_execution=False,
-            ui_badge="SIMULADO",
-        )
-
-    text = _text_generic("Empleados (BD real)", result)
-    response = _persist_agent_tool_response(
-        db,
-        current_user=current_user,
-        agent_name="AFRODITA",
-        workspace_category="hr_document",
-        content_type="hr_document",
-        title="Empleados AFRODITA",
-        text=text,
-        result=result,
-        event_name="afrodita_employees_loaded",
-        chain_steps=["trigger_hr_sync"],
-    )
-    return afrodita_wrap(
-        response,
-        "employee_manager",
-        data_origin="backend",
-        real_execution=True,
-        ui_badge="REAL",
-    )
+    assert_workspace_isolated("employee_manager")
 
 
 @router.get("/afrodita/schedules")
@@ -967,22 +812,7 @@ async def workspace_afrodita_schedules_read(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Lectura de turnos reales (employee_schedules)."""
-    afrodita_log(
-        module="shift_generator",
-        action="list_schedules",
-        allowed=True,
-        actor_id=current_user.id,
-    )
-    result = list_employee_schedules(db, current_user)
-    body = {"success": True, "text": f"{result.get('count', 0)} turnos en BD", "result": result}
-    return afrodita_wrap(
-        body,
-        "shift_generator",
-        data_origin="backend",
-        real_execution=bool(result.get("schedules")),
-        ui_badge="REAL" if result.get("schedules") else "SIMULADO",
-    )
+    assert_workspace_isolated("shift_generator")
 
 
 @router.post("/afrodita/contract")
@@ -991,27 +821,7 @@ async def workspace_afrodita_contract(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    result = create_rrhh_contract(request.model_dump())
-    text = _text_generic("Contrato RRHH", result)
-    response = _persist_agent_tool_response(
-        db,
-        current_user=current_user,
-        agent_name="AFRODITA",
-        workspace_category="hr_document",
-        content_type="hr_document",
-        title="Contrato RRHH AFRODITA",
-        text=text,
-        result=result,
-        event_name="afrodita_contract_generated",
-        chain_steps=["trigger_hr_sync"],
-    )
-    return afrodita_wrap(
-        response,
-        "contract",
-        data_origin="user_input",
-        real_execution=False,
-        ui_badge="SIMULADO",
-    )
+    assert_workspace_isolated("contract")
 
 
 # ---------------------------------------------------------------------------

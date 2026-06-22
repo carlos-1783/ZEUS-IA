@@ -19,10 +19,10 @@ ExecutionMode = Literal["SIMULATION", "READ_ONLY", "REAL_ACTIVE"]
 DataOrigin = Literal["backend", "user_input", "mock", "mixed"]
 
 MODULE_UI_BADGE: Dict[str, str] = {
-    "facial_checkin": "SIMULADO",
+    "facial_checkin": "NONE",
     "qr_checkin": "PARCIAL",
     "employee_manager": "REAL",
-    "shift_generator": "SIMULADO",
+    "shift_generator": "PARTIAL",
     "contract": "SIMULADO",
     "status": "REAL",
 }
@@ -63,9 +63,7 @@ def current_flags() -> Dict[str, bool]:
 def resolve_execution_mode(module: str) -> ExecutionMode:
     flags = current_flags()
     if flags["AFRODITA_EXECUTION_ENABLED"] and not flags["AFRODITA_READ_ONLY_MODE"]:
-        if module in ("qr_checkin",) and flags["AFRODITA_USE_REAL_CHECKINS"]:
-            return "REAL_ACTIVE"
-        if module == "facial_checkin" and flags["AFRODITA_USE_REAL_CHECKINS"]:
+        if module == "qr_checkin" and flags["AFRODITA_USE_REAL_CHECKINS"]:
             return "REAL_ACTIVE"
     if flags["AFRODITA_READ_ONLY_MODE"] or module in ("employee_manager", "shift_generator", "status"):
         return "READ_ONLY"
@@ -160,6 +158,8 @@ def global_status_payload() -> Dict[str, Any]:
             "checkin_entry_point": "register_checkin",
             "employees_source": "company_employees",
             "schedules_source": "employee_schedules",
+            "facial_checkin": "DISABLED",
+            "rrhh_api_prefix": "/api/v1/afrodita/rrhh/v1",
             "legacy_preserved": True,
         },
         "status",

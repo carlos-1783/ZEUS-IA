@@ -1,0 +1,222 @@
+/**
+ * css_system_enforcer_v1 — global UI stability patch
+ * Light cards + dark text inside agent workspaces; no * { color: white } globals.
+ */
+
+/* ------------------------------------------------------------------ */
+/* REMOVE_DANGEROUS_GLOBALS — neutralize white-text inside light UI   */
+/* ------------------------------------------------------------------ */
+.dashboard-profesional .tools-panel .text-white,
+.dashboard-profesional .workspace-content .text-white,
+.activity-panel .workspace-content .text-white,
+.system-status-panel .text-white,
+.tools-panel .text-white,
+.tool-card .text-white {
+  color: var(--text-primary) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* FORCE_WORKSPACE_CONTAINERS                                         */
+/* ------------------------------------------------------------------ */
+.workspace-card,
+.workspace-panel,
+.agent-panel,
+.tools-panel,
+.tool-card,
+.workspace-playbooks,
+.system-status-panel,
+.activity-panel .workspace-content,
+[class$='-workspace'],
+.agent-panel-container .workspace-content,
+.domain-panel {
+  background: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+}
+
+.system-status-panel,
+[class$='-workspace'] {
+  border: none;
+  background: transparent !important;
+}
+
+.system-status-panel .flags-section,
+.system-status-panel .agents-section {
+  background: var(--bg-card) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* FIX_TEXT_ELEMENTS                                                  */
+/* ------------------------------------------------------------------ */
+.workspace-card h1,
+.workspace-card h2,
+.workspace-card p,
+.workspace-card span,
+.workspace-panel h1,
+.workspace-panel h2,
+.workspace-panel h3,
+.workspace-panel h4,
+.workspace-panel p,
+.workspace-panel span,
+.workspace-panel label,
+.workspace-panel li,
+.workspace-panel td,
+.workspace-panel th,
+.tools-panel h1,
+.tools-panel h2,
+.tools-panel h3,
+.tools-panel h4,
+.tools-panel h5,
+.tools-panel p,
+.tools-panel span,
+.tools-panel label,
+.tools-panel li,
+.tool-card h1,
+.tool-card h2,
+.tool-card h3,
+.tool-card h4,
+.tool-card h5,
+.tool-card p,
+.tool-card span,
+.tool-card label,
+.workspace-playbooks h1,
+.workspace-playbooks h2,
+.workspace-playbooks h3,
+.workspace-playbooks p,
+.workspace-playbooks span,
+.system-status-panel h2,
+.system-status-panel h3,
+.system-status-panel p,
+.system-status-panel li,
+.system-status-panel td,
+.system-status-panel th,
+[class$='-workspace'] h1,
+[class$='-workspace'] h2,
+[class$='-workspace'] h3,
+[class$='-workspace'] p,
+[class$='-workspace'] .subtitle {
+  color: var(--text-primary) !important;
+}
+
+.workspace-panel .muted,
+.tools-panel .hint,
+.tools-panel .hint.muted,
+.tool-card .hint {
+  color: var(--text-secondary) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* SAFE_BUTTONS (workspace scope only — preserve dashboard chrome)    */
+/* ------------------------------------------------------------------ */
+.workspace-card button,
+.workspace-panel button,
+.agent-panel button,
+.tools-panel button,
+.tool-card button,
+.workspace-playbooks button,
+[class$='-workspace'] button,
+.system-status-panel .refresh-btn,
+.action-button {
+  color: #ffffff !important;
+  background: #111827 !important;
+  border-radius: 8px;
+}
+
+.system-status-panel .refresh-btn {
+  color: var(--text-primary) !important;
+  background: #ffffff !important;
+  border: 1px solid var(--border-soft);
+}
+
+.tools-panel .tool-card button:not(:disabled),
+[class$='-workspace'] .domain-tabs button.active {
+  color: #ffffff !important;
+}
+
+[class$='-workspace'] .domain-tabs button:not(.active) {
+  color: var(--text-secondary) !important;
+  background: transparent !important;
+}
+
+[class$='-workspace'] .domain-tabs button.active {
+  color: var(--text-primary) !important;
+  background: var(--bg-card) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* BADGE_VISIBILITY_FIX                                               */
+/* ------------------------------------------------------------------ */
+.badge,
+.status-badge,
+.tab-status,
+.status-pill,
+.mode-pill,
+.system-badge {
+  color: #111827 !important;
+  background: #e5e7eb !important;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.tab-status.real,
+.flags-grid li.on {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+}
+
+.tab-status.partial,
+.system-badge {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+}
+
+.tab-status.sim,
+.flags-grid li.off {
+  background: #f1f5f9 !important;
+  color: #64748b !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* INPUT_FIX                                                          */
+/* ------------------------------------------------------------------ */
+.workspace-card input,
+.workspace-card textarea,
+.workspace-card select,
+.workspace-panel input,
+.workspace-panel textarea,
+.workspace-panel select,
+.tools-panel input,
+.tools-panel textarea,
+.tools-panel select,
+.tool-card input,
+.tool-card textarea,
+.tool-card select,
+.workspace-playbooks input,
+.workspace-playbooks textarea,
+.workspace-playbooks select,
+[class$='-workspace'] input,
+[class$='-workspace'] textarea,
+[class$='-workspace'] select {
+  background: #ffffff !important;
+  color: #111827 !important;
+  border: 1px solid #d1d5db !important;
+  caret-color: #111827;
+}
+
+.workspace-card input::placeholder,
+.workspace-panel input::placeholder,
+.tools-panel input::placeholder,
+.tool-card input::placeholder,
+.tools-panel textarea::placeholder,
+.tool-card textarea::placeholder {
+  color: #6b7280 !important;
+  opacity: 1 !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* FORCE_OVERRIDE_PROTECTION                                          */
+/* ------------------------------------------------------------------ */
+* {
+  -webkit-font-smoothing: antialiased;
+}

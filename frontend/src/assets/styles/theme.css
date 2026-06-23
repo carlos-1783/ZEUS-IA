@@ -1,0 +1,10 @@
+/**
+ * css_system_enforcer_v1 — safe design tokens (light cards on dark shell)
+ */
+:root {
+  --bg-main: #0b0f19;
+  --bg-card: #ffffff;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --border-soft: #e5e7eb;
+}

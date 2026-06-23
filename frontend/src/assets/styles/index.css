@@ -1,0 +1,9 @@
+/**
+ * css_system_enforcer_v1 — base shell (no global white text inheritance)
+ */
+html,
+body {
+  background: var(--bg-main, #0b0f19);
+  color: var(--text-primary, #111827);
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}

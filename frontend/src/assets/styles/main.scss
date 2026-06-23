@@ -406,3 +406,8 @@ body {
   color: #334155 !important;
   background-color: #ffffff !important;
 }
+
+// css_system_enforcer_v1 — global UI stability (must load last)
+@import './theme.css';
+@import './index.css';
+@import './css_system_enforcer_v1.css';

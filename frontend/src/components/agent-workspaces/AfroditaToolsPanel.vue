@@ -43,9 +43,16 @@
           <h5>Gestor empleados</h5>
           <ThalosExecutionBadge module-badge="REAL" :inline="true" :show-global="false" />
         </div>
-        <p class="hint">Lectura desde company_employees (solo lectura).</p>
+        <p class="hint">Alta real en company_employees (requiere flags de ejecución).</p>
+        <input v-model="employeeForm.full_name" placeholder="Nombre completo" />
+        <input v-model="employeeForm.employee_code" placeholder="Código empleado (único)" />
+        <input v-model="employeeForm.role_title" placeholder="Rol / puesto" />
+        <input v-model="employeeForm.phone" placeholder="Teléfono (opcional)" />
+        <button :disabled="loading.createEmployee" @click="runCreateEmployee">
+          {{ loading.createEmployee ? 'Creando…' : 'Crear empleado' }}
+        </button>
         <button :disabled="loading.employees" @click="() => loadEmployees()">
-          {{ loading.employees ? 'Cargando…' : 'Cargar empleados' }}
+          {{ loading.employees ? 'Cargando…' : 'Refrescar lista' }}
         </button>
         <ul v-if="employees.length" class="emp-list">
           <li v-for="emp in employees" :key="emp.employee_code">
@@ -102,6 +109,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import {
+  createAfroditaEmployee,
   extractAfroditaControl,
   fetchAfroditaEmployees,
   fetchAfroditaRrhhStatus,
@@ -120,6 +128,7 @@ const loading = reactive({
   employees: false,
   schedules: false,
   contract: false,
+  createEmployee: false,
 })
 const error = ref('')
 const statusNote = ref('')
@@ -139,6 +148,12 @@ const contractForm = reactive({
   role: '',
   salary: 0,
   contract_type: 'indefinido',
+})
+const employeeForm = reactive({
+  full_name: '',
+  employee_code: '',
+  role_title: '',
+  phone: '',
 })
 
 const qrResult = ref<string | null>(null)
@@ -187,6 +202,30 @@ const loadEmployees = async (silent = false) => {
   }
 }
 
+const runCreateEmployee = async () => {
+  error.value = ''
+  loading.createEmployee = true
+  lastEmpControl.value = null
+  try {
+    const out = await createAfroditaEmployee({
+      full_name: employeeForm.full_name.trim(),
+      employee_code: employeeForm.employee_code.trim(),
+      role_title: employeeForm.role_title.trim() || undefined,
+      phone: employeeForm.phone.trim() || undefined,
+    })
+    lastEmpControl.value = pickControl(out)
+    await loadEmployees(true)
+    employeeForm.full_name = ''
+    employeeForm.employee_code = ''
+    employeeForm.role_title = ''
+    employeeForm.phone = ''
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    loading.createEmployee = false
+  }
+}
+
 const loadSchedules = async () => {
   error.value = ''
   loading.schedules = true
@@ -216,8 +255,13 @@ const runQr = async () => {
     const out = await submitAfroditaQrCheckin(qrCode.value)
     lastQrControl.value = pickControl(out)
     const res = (out.result || {}) as Record<string, unknown>
+    const checkinId = res.checkin_id
     qrResult.value = String(
-      out.text || res.message || (res.executed ? 'Fichaje registrado' : 'Validación OK (dry_run)')
+      out.text ||
+        res.message ||
+        (res.executed
+          ? `Fichaje registrado${checkinId != null ? ` (#${checkinId})` : ''}`
+          : 'Validación OK (modo lectura)')
     )
     refreshQrDefault()
   } catch (err) {

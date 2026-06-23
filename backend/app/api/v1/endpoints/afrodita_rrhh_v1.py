@@ -14,6 +14,7 @@ from app.models.user import User
 from services.afrodita_control_layer_v1 import log_execution_attempt, wrap_response
 from services.afrodita_finalization_v1 import rrhh_status_payload
 from services.afrodita_workspace_service_v1 import (
+    create_company_employee,
     execute_qr_checkin,
     list_company_employees,
     list_employee_schedules,
@@ -32,6 +33,14 @@ class ContractDraftRequest(BaseModel):
     role: str = ""
     salary: float = 0
     contract_type: str = "indefinido"
+
+
+class CreateEmployeeRequest(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=255)
+    employee_code: str = Field(..., min_length=2, max_length=80)
+    role_title: str = Field(default="", max_length=100)
+    phone: str = Field(default="", max_length=32)
+    hourly_rate: float = Field(default=0.0, ge=0)
 
 
 @router.get("/status")
@@ -54,14 +63,44 @@ def afrodita_rrhh_qr_checkin(
         actor_id=current_user.id,
     )
     result = execute_qr_checkin(db, current_user, request.qr_code.strip())
-    if result.get("executed"):
-        db.commit()
+    real_exec = bool(result.get("executed"))
     return wrap_response(
         {"success": True, "result": result, "text": result.get("message", "Fichaje QR procesado")},
         "qr_checkin",
         data_origin="backend",
-        real_execution=bool(result.get("executed")),
-        ui_badge="PARCIAL",
+        real_execution=real_exec,
+        ui_badge="REAL" if real_exec else "PARCIAL",
+    )
+
+
+@router.post("/employees")
+def afrodita_rrhh_create_employee(
+    request: CreateEmployeeRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    log_execution_attempt(
+        module="employee_manager",
+        action="create_employee",
+        allowed=True,
+        actor_id=current_user.id,
+    )
+    body = create_company_employee(
+        db,
+        current_user,
+        full_name=request.full_name,
+        employee_code=request.employee_code,
+        role_title=request.role_title or None,
+        phone=request.phone or None,
+        hourly_rate=request.hourly_rate,
+    )
+    db.commit()
+    return wrap_response(
+        {"success": True, **body},
+        "employee_manager",
+        data_origin="user_input",
+        real_execution=True,
+        ui_badge="REAL",
     )
 
 

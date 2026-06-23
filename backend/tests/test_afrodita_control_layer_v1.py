@@ -8,6 +8,7 @@ from unittest.mock import patch
 from app.core.config import settings
 from services.afrodita_control_layer_v1 import (
     MODULE_UI_BADGE,
+    can_create_employee,
     can_execute_checkin,
     global_status_payload,
     parse_zeuscheck_code,
@@ -26,12 +27,16 @@ def test_default_flags_read_only():
 def test_can_execute_checkin_requires_flags():
     with patch.object(settings, "AFRODITA_EXECUTION_ENABLED", False):
         assert can_execute_checkin() is False
+        assert can_create_employee() is False
     with patch.object(settings, "AFRODITA_EXECUTION_ENABLED", True):
         with patch.object(settings, "AFRODITA_READ_ONLY_MODE", True):
             assert can_execute_checkin() is False
+            assert can_create_employee() is False
         with patch.object(settings, "AFRODITA_READ_ONLY_MODE", False):
             with patch.object(settings, "AFRODITA_USE_REAL_CHECKINS", True):
                 assert can_execute_checkin() is True
+            with patch.object(settings, "AFRODITA_USE_REAL_EMPLOYEES", True):
+                assert can_create_employee() is True
 
 
 def test_validate_qr_freshness_stale():

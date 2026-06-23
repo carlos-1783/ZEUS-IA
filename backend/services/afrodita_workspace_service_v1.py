@@ -9,15 +9,16 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.models.company import UserCompany
 from app.models.company_employee import CompanyEmployee
 from app.models.time_tracking import EmployeeSchedule
 from app.models.user import User
 from services.afrodita_control_layer_v1 import (
     DAY_NAMES,
+    can_create_employee,
     can_execute_checkin,
     current_flags,
+    log_execution_attempt,
     validate_qr_freshness,
 )
 from services.workspace_deliverables import primary_company_id_for_user
@@ -80,7 +81,93 @@ def list_company_employees(db: Session, user: User) -> Dict[str, Any]:
         "employees": employees,
         "count": len(employees),
         "source": "company_employees",
-        "read_only": True,
+        "read_only": not can_create_employee(),
+    }
+
+
+def _employee_to_dict(row: CompanyEmployee) -> Dict[str, Any]:
+    return {
+        "id": row.id,
+        "employee_code": str(row.employee_code),
+        "full_name": row.full_name,
+        "role_title": row.role_title or "",
+        "company_id": row.company_id,
+        "phone": row.phone,
+        "source": row.source or "database",
+    }
+
+
+def create_company_employee(
+    db: Session,
+    user: User,
+    *,
+    full_name: str,
+    employee_code: str,
+    role_title: Optional[str] = None,
+    phone: Optional[str] = None,
+    hourly_rate: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Inserta fila real en company_employees — sin mock ni plantillas."""
+    if not can_create_employee():
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Creación de empleados requiere AFRODITA_EXECUTION_ENABLED=true "
+                "y AFRODITA_READ_ONLY_MODE=false"
+            ),
+        )
+
+    flags = current_flags()
+    if not flags["AFRODITA_USE_REAL_EMPLOYEES"]:
+        raise HTTPException(status_code=503, detail="AFRODITA_USE_REAL_EMPLOYEES=false")
+
+    company_id = primary_company_id_for_user(db, user)
+    if not company_id:
+        raise HTTPException(status_code=404, detail="Usuario sin empresa asociada")
+
+    name = (full_name or "").strip()
+    code = (employee_code or "").strip()
+    if len(name) < 2:
+        raise HTTPException(status_code=422, detail="full_name requerido (mín. 2 caracteres)")
+    if len(code) < 2:
+        raise HTTPException(status_code=422, detail="employee_code requerido (mín. 2 caracteres)")
+
+    dup = (
+        db.query(CompanyEmployee.id)
+        .filter(
+            CompanyEmployee.company_id == company_id,
+            CompanyEmployee.employee_code == code,
+        )
+        .first()
+    )
+    if dup:
+        raise HTTPException(status_code=409, detail=f"employee_code {code} ya existe en la empresa")
+
+    emp = CompanyEmployee(
+        company_id=company_id,
+        full_name=name[:255],
+        role_title=(role_title or "").strip()[:100] or None,
+        employee_code=code[:80],
+        phone=(phone or "").strip()[:32] or None,
+        hourly_rate=float(hourly_rate or 0.0),
+        is_active=True,
+        source="afrodita_rrhh_v1",
+    )
+    db.add(emp)
+    db.flush()
+    db.refresh(emp)
+
+    log_execution_attempt(
+        module="employee_manager",
+        action="create_employee",
+        allowed=True,
+        actor_id=user.id,
+    )
+
+    return {
+        "employee": _employee_to_dict(emp),
+        "executed": True,
+        "message": f"Empleado {emp.full_name} creado ({emp.employee_code}).",
     }
 
 
@@ -164,26 +251,45 @@ def execute_qr_checkin(db: Session, user: User, code: str) -> Dict[str, Any]:
 
     if not can_execute_checkin():
         return {
-            "status": "dry_run",
+            "status": "read_only",
             "executed": False,
             "message": (
                 "Modo lectura: validación OK pero fichaje requiere "
-                "AFRODITA_EXECUTION_ENABLED + READ_ONLY=false"
+                "AFRODITA_EXECUTION_ENABLED=true y AFRODITA_READ_ONLY_MODE=false"
             ),
             **validation,
         }
+
+    log_execution_attempt(
+        module="qr_checkin",
+        action="register_checkin",
+        allowed=True,
+        actor_id=user.id,
+    )
 
     if code.upper().startswith(("ZEUS|", "ZEUSQR|")):
         flow = process_qr_scan(db, user, data=code)
     else:
         flow = process_nfc_scan(db, user, text=code, checkin_type="entrada")
 
-    executed = bool(flow.get("executed", flow.get("success")))
+    session = flow.get("session") if isinstance(flow.get("session"), dict) else {}
+    checkin_id = flow.get("checkin_id") or session.get("checkin_id")
+    executed = bool(flow.get("executed", flow.get("success"))) and bool(checkin_id)
+
+    if not executed:
+        raise HTTPException(
+            status_code=500,
+            detail="Fichaje no persistido en time_cost_checkins pese a ejecución habilitada",
+        )
+
     return {
         **flow,
-        "executed": executed,
+        "executed": True,
+        "checkin_id": int(checkin_id),
+        "status": "executed",
         "validation": validation,
         "entry_point": "register_checkin",
+        "message": flow.get("message") or f"Fichaje registrado (checkin_id={checkin_id}).",
     }
 
 

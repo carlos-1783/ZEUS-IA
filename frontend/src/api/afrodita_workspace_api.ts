@@ -105,6 +105,23 @@ export async function fetchAfroditaRrhhStatus() {
   >
 }
 
+export async function createAfroditaEmployee(payload: {
+  full_name: string
+  employee_code: string
+  role_title?: string
+  phone?: string
+  hourly_rate?: number
+}) {
+  return api.post('/api/v1/afrodita/rrhh/v1/employees', payload) as Promise<
+    AfroditaControlResponse & {
+      success: boolean
+      employee: AfroditaEmployee
+      executed: boolean
+      message?: string
+    }
+  >
+}
+
 export async function fetchAfroditaEmployees() {
   return api.get('/api/v1/afrodita/rrhh/v1/employees') as Promise<
     AfroditaControlResponse & { success: boolean; employees: AfroditaEmployee[]; count: number }

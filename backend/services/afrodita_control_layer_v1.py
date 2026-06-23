@@ -66,9 +66,22 @@ def resolve_execution_mode(module: str) -> ExecutionMode:
     if flags["AFRODITA_EXECUTION_ENABLED"] and not flags["AFRODITA_READ_ONLY_MODE"]:
         if module == "qr_checkin" and flags["AFRODITA_USE_REAL_CHECKINS"]:
             return "REAL_ACTIVE"
-    if flags["AFRODITA_READ_ONLY_MODE"] or module in ("employee_manager", "shift_generator", "status"):
+        if module == "employee_manager" and flags["AFRODITA_USE_REAL_EMPLOYEES"]:
+            return "REAL_ACTIVE"
+    if flags["AFRODITA_READ_ONLY_MODE"] or module in ("shift_generator", "status"):
+        return "READ_ONLY"
+    if module == "employee_manager" and flags["AFRODITA_USE_REAL_EMPLOYEES"]:
         return "READ_ONLY"
     return "SIMULATION"
+
+
+def can_create_employee() -> bool:
+    f = current_flags()
+    return (
+        f["AFRODITA_EXECUTION_ENABLED"]
+        and f["AFRODITA_USE_REAL_EMPLOYEES"]
+        and not f["AFRODITA_READ_ONLY_MODE"]
+    )
 
 
 def can_execute_checkin() -> bool:

@@ -1,18 +1,16 @@
 <template>
   <div class="afrodita-ops">
-    <header v-if="globalStatus" class="ops-header">
+    <header v-if="truthStatus" class="ops-header">
       <ThalosExecutionBadge
-        :global-mode="globalStatus.system_default_mode"
-        :control="globalStatus.afrodita_ops_control"
-        :data-origin="globalStatus.data_origin"
-        :real-execution="globalStatus.real_execution"
+        :global-mode="truthStatus.execution_mode"
+        :real-execution="truthStatus.writes_enabled && truthStatus.db_connected"
       />
       <p v-if="statusNote" class="status-note">{{ statusNote }}</p>
     </header>
 
     <!-- INVENTARIO -->
     <section class="card">
-      <h3>📦 Inventario <span class="badge real">REAL</span></h3>
+      <h3>📦 Inventario</h3>
 
       <button @click="() => loadInventory()" :disabled="loading.inventory">
         {{ loading.inventory ? 'Cargando...' : 'Refrescar' }}
@@ -45,7 +43,7 @@
 
     <!-- MOVIMIENTOS -->
     <section class="card">
-      <h3>🔄 Movimientos <span class="badge partial">PARCIAL</span></h3>
+      <h3>🔄 Movimientos</h3>
 
       <button @click="loadMovements" :disabled="loading.movements">
         {{ loading.movements ? 'Cargando...' : 'Refrescar' }}
@@ -62,13 +60,13 @@
 
     <!-- ALMACÉN -->
     <section class="card">
-      <h3>🏭 Almacén <span class="badge none">NONE</span></h3>
+      <h3>🏭 Almacén</h3>
       <p>No implementado aún</p>
     </section>
 
     <!-- RUTAS -->
     <section class="card">
-      <h3>🚚 Rutas <span class="badge simulated">SIMULADO</span></h3>
+      <h3>🚚 Rutas</h3>
 
       <button @click="simulateRoute" :disabled="loading.routes">
         {{ loading.routes ? 'Calculando...' : 'Simular ruta' }}
@@ -83,6 +81,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { fetchAfroditaStatus, type AfroditaTruthStatus } from '@/api/afrodita_workspace_api'
 import {
   fetchAfroditaOpsInventory,
   fetchAfroditaOpsMovements,
@@ -113,6 +112,7 @@ interface MovementRow {
 const loading = reactive({ inventory: false, movements: false, routes: false })
 const error = ref('')
 const statusNote = ref('')
+const truthStatus = ref<AfroditaTruthStatus | null>(null)
 const globalStatus = ref<AfroditaOpsStatusResponse | null>(null)
 const rawProducts = ref<MergedProductItem[]>([])
 const rawMovements = ref<InventoryMovementItem[]>([])
@@ -144,6 +144,7 @@ const formatStock = (v: number | null | undefined) => (v == null ? '-' : String(
 
 onMounted(async () => {
   try {
+    truthStatus.value = await fetchAfroditaStatus()
     globalStatus.value = await fetchAfroditaOpsStatus()
     statusNote.value = globalStatus.value.AFRODITA_OPS_READ_ONLY
       ? 'Modo lectura: `/api/v1/afrodita/ops/v1/inventory` consolida TPV + ERP (prioridad ERP).'

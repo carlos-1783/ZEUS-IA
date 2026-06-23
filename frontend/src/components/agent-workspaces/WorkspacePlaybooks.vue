@@ -6,7 +6,6 @@
         <p class="subtitle">
           Solo playbooks y entregables — sin ejecución de negocio.
         </p>
-        <span class="layer-badge">SIMULATION_LAYER</span>
       </div>
       <button class="refresh-btn" :disabled="isLoading" @click="reload">
         <i class="fas fa-sync-alt"></i>

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+import os
 from unittest.mock import patch
 
 import pytest  # pyright: ignore[reportMissingImports]
@@ -54,12 +55,13 @@ def _seed_user_company(db: Session):
 
 
 def _exec_flags():
-    return patch.multiple(
-        settings,
-        AFRODITA_EXECUTION_ENABLED=True,
-        AFRODITA_READ_ONLY_MODE=False,
-        AFRODITA_USE_REAL_EMPLOYEES=True,
-        AFRODITA_USE_REAL_CHECKINS=True,
+    return patch.dict(
+        os.environ,
+        {
+            "AFRODITA_EXECUTION_ENABLED": "true",
+            "AFRODITA_READ_ONLY_MODE": "false",
+        },
+        clear=False,
     )
 
 
@@ -95,7 +97,6 @@ def test_create_employee_e2e(db: Session):
         )
         db.commit()
 
-    assert out["executed"] is True
     assert out["employee"]["employee_code"] == code
     assert out["employee"]["company_id"] == company.id
 
@@ -134,8 +135,8 @@ def test_qr_checkin_persists_with_flags(db: Session):
     with _exec_flags():
         result = execute_qr_checkin(db, user, qr)
 
-    assert result["executed"] is True
     assert result.get("checkin_id")
+    assert result["status"] == "executed"
 
     checkin = db.query(TimeCostCheckin).filter(TimeCostCheckin.id == result["checkin_id"]).first()
     assert checkin is not None
@@ -143,7 +144,7 @@ def test_qr_checkin_persists_with_flags(db: Session):
     assert str(checkin.employee_id) == code
 
 
-def test_qr_checkin_read_only_without_flags(db: Session):
+def test_qr_checkin_dry_run_without_flags(db: Session):
     user, company = _seed_user_company(db)
     code = f"RO-{uuid.uuid4().hex[:6]}"
     db.add(
@@ -160,5 +161,6 @@ def test_qr_checkin_read_only_without_flags(db: Session):
     qr = f"ZEUSCHECK|{code}|{ts}"
 
     result = execute_qr_checkin(db, user, qr)
-    assert result["executed"] is False
-    assert result["status"] == "read_only"
+    assert result.get("dry_run") is True
+    assert result["status"] == "dry_run"
+    assert "checkin_id" not in result

@@ -79,14 +79,12 @@ const originLabel = computed(() => {
 })
 
 const modeClass = (mode: string) => {
-  if (mode === 'REAL_ACTIVE') return 'active'
-  if (mode === 'REAL_SAFE' || mode === 'READ_ONLY') return 'safe'
+  if (mode === 'REAL' || mode === 'REAL_ACTIVE') return 'active'
   return 'simulation'
 }
 
 const uiClass = (badge: string) => {
   if (badge === 'REAL') return 'real'
-  if (badge === 'PARCIAL') return 'partial'
   if (badge === 'NONE') return 'none'
   return 'simulated'
 }

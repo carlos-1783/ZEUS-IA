@@ -115,13 +115,13 @@ class Settings(BaseSettings):
         "yes",
     )
 
-    # afrodita_control_layer_v1
+    # afrodita_control_layer_v1 — missing env → false (see config/afrodita_flags_v1.py)
     AFRODITA_EXECUTION_ENABLED: bool = os.getenv("AFRODITA_EXECUTION_ENABLED", "false").lower() in (
         "true",
         "1",
         "yes",
     )
-    AFRODITA_READ_ONLY_MODE: bool = os.getenv("AFRODITA_READ_ONLY_MODE", "true").lower() in (
+    AFRODITA_READ_ONLY_MODE: bool = os.getenv("AFRODITA_READ_ONLY_MODE", "false").lower() in (
         "true",
         "1",
         "yes",

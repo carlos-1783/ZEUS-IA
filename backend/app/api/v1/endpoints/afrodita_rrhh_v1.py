@@ -46,8 +46,10 @@ class CreateEmployeeRequest(BaseModel):
 @router.get("/status")
 def afrodita_rrhh_status(
     current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    return rrhh_status_payload()
+    _ = current_user
+    return rrhh_status_payload(db)
 
 
 @router.post("/checkin/qr")
@@ -63,13 +65,14 @@ def afrodita_rrhh_qr_checkin(
         actor_id=current_user.id,
     )
     result = execute_qr_checkin(db, current_user, request.qr_code.strip())
-    real_exec = bool(result.get("executed"))
+    dry_run = bool(result.get("dry_run"))
+    real_exec = bool(result.get("checkin_id")) and not dry_run
     return wrap_response(
         {"success": True, "result": result, "text": result.get("message", "Fichaje QR procesado")},
         "qr_checkin",
         data_origin="backend",
         real_execution=real_exec,
-        ui_badge="REAL" if real_exec else "PARCIAL",
+        dry_run=dry_run,
     )
 
 
@@ -100,7 +103,6 @@ def afrodita_rrhh_create_employee(
         "employee_manager",
         data_origin="user_input",
         real_execution=True,
-        ui_badge="REAL",
     )
 
 
@@ -115,7 +117,6 @@ def afrodita_rrhh_employees(
         "employee_manager",
         data_origin="backend",
         real_execution=True,
-        ui_badge="REAL",
     )
 
 
@@ -126,13 +127,11 @@ def afrodita_rrhh_schedules(
 ) -> Dict[str, Any]:
     body = list_employee_schedules(db, current_user)
     real = bool(body.get("schedules"))
-    badge = "REAL" if real else "PARTIAL"
     return wrap_response(
         {"success": True, **body},
         "shift_generator",
         data_origin="backend",
         real_execution=real,
-        ui_badge=badge,
     )
 
 
@@ -142,16 +141,14 @@ def afrodita_rrhh_contract_draft(
     current_user: User = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     result = create_rrhh_contract(request.model_dump())
-    result["simulated"] = True
-    result["label"] = "SIMULADO"
     return wrap_response(
         {
             "success": True,
             "result": result,
-            "text": "Borrador de contrato (simulado, sin validez legal).",
+            "text": "Borrador de contrato generado (sin validez legal).",
         },
         "contract",
         data_origin="user_input",
         real_execution=False,
-        ui_badge="SIMULADO",
+        dry_run=True,
     )

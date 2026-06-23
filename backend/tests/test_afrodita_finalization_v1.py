@@ -26,7 +26,7 @@ def test_facial_checkin_disabled():
     assert MODULE_UI_BADGE["facial_checkin"] == "NONE"
     out = execute_face_checkin(None, None, {"employee_id": "X"})
     assert out["disabled"] is True
-    assert out["executed"] is False
+    assert out.get("dry_run") is True
 
 
 def test_workspace_isolated_raises():

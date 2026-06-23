@@ -4,14 +4,12 @@
       <div class="header-row">
         <div>
           <h4>💼 Herramientas RRHH</h4>
-          <p>Fichajes, empleados y turnos con estado REAL / SIMULADO visible.</p>
+          <p>Fichajes, empleados y turnos — estado desde backend.</p>
         </div>
         <ThalosExecutionBadge
           v-if="globalStatus"
-          :global-mode="globalStatus.system_default_mode"
-          :control="globalStatus.afrodita_control"
-          :data-origin="globalStatus.data_origin"
-          :real-execution="globalStatus.real_execution"
+          :global-mode="globalStatus.execution_mode"
+          :real-execution="globalStatus.writes_enabled && globalStatus.db_connected"
         />
       </div>
       <p v-if="statusNote" class="status-note">{{ statusNote }}</p>
@@ -22,18 +20,22 @@
           <h5>Fichaje facial</h5>
           <ThalosExecutionBadge module-badge="NONE" :inline="true" :show-global="false" />
         </div>
-        <p class="hint">Deshabilitado (afrodita_finalization_v1) — sin motor biométrico.</p>
+        <p class="hint">Deshabilitado — sin motor biométrico.</p>
         <p class="hint muted">Use fichaje QR en este panel.</p>
       </div>
       <div class="tool-card highlight">
         <div class="card-title-row">
           <h5>Fichaje QR</h5>
-          <ThalosExecutionBadge module-badge="PARCIAL" :inline="true" :show-global="false" />
+          <ThalosExecutionBadge
+            :module-badge="moduleBadge('qr_checkin')"
+            :inline="true"
+            :show-global="false"
+          />
         </div>
-        <p class="hint">ZEUSCHECK|código|timestamp (máx 5 min). Ejecución real requiere flags.</p>
+        <p class="hint">ZEUSCHECK|código|timestamp (máx 5 min).</p>
         <input v-model="qrCode" placeholder="ZEUSCHECK|EMP1|timestamp" />
         <button :disabled="loading.qr" @click="runQr">
-          {{ loading.qr ? 'Validando…' : 'Validar' }}
+          {{ loading.qr ? 'Procesando…' : 'Fichar' }}
         </button>
         <ThalosExecutionBadge v-if="lastQrControl" :control="lastQrControl" :show-global="false" />
         <p v-if="qrResult" class="tool-text">{{ qrResult }}</p>
@@ -41,9 +43,13 @@
       <div class="tool-card">
         <div class="card-title-row">
           <h5>Gestor empleados</h5>
-          <ThalosExecutionBadge module-badge="REAL" :inline="true" :show-global="false" />
+          <ThalosExecutionBadge
+            :module-badge="moduleBadge('employee_manager')"
+            :inline="true"
+            :show-global="false"
+          />
         </div>
-        <p class="hint">Alta real en company_employees (requiere flags de ejecución).</p>
+        <p class="hint">Alta en company_employees (requiere escritura habilitada).</p>
         <input v-model="employeeForm.full_name" placeholder="Nombre completo" />
         <input v-model="employeeForm.employee_code" placeholder="Código empleado (único)" />
         <input v-model="employeeForm.role_title" placeholder="Rol / puesto" />
@@ -67,14 +73,14 @@
         <div class="card-title-row">
           <h5>Turnos (lectura)</h5>
           <ThalosExecutionBadge
-            :module-badge="globalStatus?.AFRODITA_USE_REAL_SCHEDULES ? 'REAL' : 'PARTIAL'"
+            :module-badge="moduleBadge('shift_generator')"
             :inline="true"
             :show-global="false"
           />
         </div>
         <p class="hint">employee_schedules · activar AFRODITA_USE_REAL_SCHEDULES en Railway.</p>
         <button :disabled="loading.schedules" @click="loadSchedules">
-          {{ loading.schedules ? 'Cargando…' : 'Ver turnos reales' }}
+          {{ loading.schedules ? 'Cargando…' : 'Ver turnos' }}
         </button>
         <ul v-if="schedules.length" class="emp-list">
           <li v-for="(s, i) in schedules.slice(0, 8)" :key="i">
@@ -87,7 +93,11 @@
       <div class="tool-card legacy">
         <div class="card-title-row">
           <h5>Contrato RRHH</h5>
-          <ThalosExecutionBadge module-badge="SIMULADO" :inline="true" :show-global="false" />
+          <ThalosExecutionBadge
+            :module-badge="moduleBadge('contract')"
+            :inline="true"
+            :show-global="false"
+          />
         </div>
         <input v-model="contractForm.employee_name" placeholder="Empleado" />
         <input v-model="contractForm.role" placeholder="Rol" />
@@ -112,14 +122,15 @@ import {
   createAfroditaEmployee,
   extractAfroditaControl,
   fetchAfroditaEmployees,
-  fetchAfroditaRrhhStatus,
+  fetchAfroditaStatus,
   fetchAfroditaSchedules,
+  moduleBadgeFromStatus,
   submitAfroditaContractDraft,
   submitAfroditaQrCheckin,
   type AfroditaControlMetadata,
   type AfroditaEmployee,
   type AfroditaScheduleRow,
-  type AfroditaStatusResponse,
+  type AfroditaTruthStatus,
 } from '@/api/afrodita_workspace_api'
 import ThalosExecutionBadge from './ThalosExecutionBadge.vue'
 
@@ -132,7 +143,7 @@ const loading = reactive({
 })
 const error = ref('')
 const statusNote = ref('')
-const globalStatus = ref<AfroditaStatusResponse | null>(null)
+const globalStatus = ref<AfroditaTruthStatus | null>(null)
 const employees = ref<AfroditaEmployee[]>([])
 const employeesLoaded = ref(false)
 const schedules = ref<AfroditaScheduleRow[]>([])
@@ -161,6 +172,8 @@ const contractResult = ref<string | null>(null)
 
 const pickControl = (out: unknown): AfroditaControlMetadata | null => extractAfroditaControl(out)
 
+const moduleBadge = (mod: string) => moduleBadgeFromStatus(globalStatus.value, mod)
+
 const refreshQrDefault = () => {
   const code = employees.value[0]?.employee_code || 'EMP-001'
   qrCode.value = `ZEUSCHECK|${code}|${new Date().toISOString()}`
@@ -168,15 +181,15 @@ const refreshQrDefault = () => {
 
 onMounted(async () => {
   try {
-    globalStatus.value = await fetchAfroditaRrhhStatus()
-    const mode = globalStatus.value.system_default_mode
-    if (mode === 'READ_ONLY') {
-      statusNote.value =
-        'Dominio RRHH: empleados reales; QR valida y fichaje vía register_checkin cuando flags activos.'
-    } else if (mode === 'REAL_ACTIVE') {
-      statusNote.value = 'Ejecución activa: fichajes pasan por register_checkin → time_cost_checkins.'
+    globalStatus.value = await fetchAfroditaStatus()
+    const s = globalStatus.value
+    if (s.execution_mode === 'REAL' && s.db_connected && s.writes_enabled) {
+      statusNote.value = 'Ejecución activa: fichajes y altas persisten en BD.'
+    } else if (!s.db_connected) {
+      statusNote.value = 'BD no disponible — operaciones de escritura bloqueadas.'
     } else {
-      statusNote.value = 'Modo simulación: operaciones REAL leen BD; fichaje QR en dry_run.'
+      statusNote.value =
+        'Escritura deshabilitada — active AFRODITA_EXECUTION_ENABLED y desactive READ_ONLY.'
     }
     await loadEmployees(true)
     refreshQrDefault()
@@ -256,13 +269,11 @@ const runQr = async () => {
     lastQrControl.value = pickControl(out)
     const res = (out.result || {}) as Record<string, unknown>
     const checkinId = res.checkin_id
-    qrResult.value = String(
-      out.text ||
-        res.message ||
-        (res.executed
-          ? `Fichaje registrado${checkinId != null ? ` (#${checkinId})` : ''}`
-          : 'Validación OK (modo lectura)')
-    )
+    if (checkinId != null) {
+      qrResult.value = String(out.text || res.message || `Fichaje registrado (#${checkinId})`)
+    } else {
+      qrResult.value = String(out.text || res.message || 'Validación completada (sin persistencia)')
+    }
     refreshQrDefault()
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
@@ -276,7 +287,7 @@ const runContract = async () => {
   loading.contract = true
   try {
     const out = await submitAfroditaContractDraft({ ...contractForm })
-    contractResult.value = String(out.text || 'Borrador generado (SIMULADO).')
+    contractResult.value = String(out.text || 'Borrador generado.')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {

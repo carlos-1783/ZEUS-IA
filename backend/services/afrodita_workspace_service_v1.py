@@ -166,7 +166,6 @@ def create_company_employee(
 
     return {
         "employee": _employee_to_dict(emp),
-        "executed": True,
         "message": f"Empleado {emp.full_name} creado ({emp.employee_code}).",
     }
 
@@ -234,8 +233,8 @@ def execute_face_checkin(db: Session, user: User, payload: Dict[str, Any]) -> Di
     """Deshabilitado en afrodita_finalization_v1 — sin motor biométrico."""
     _ = db, user, payload
     return {
-        "executed": False,
         "disabled": True,
+        "dry_run": True,
         "reason": "no_biometric_engine",
         "ui_method": "face",
         "message": "Fichaje facial deshabilitado. Use fichaje QR en dominio RRHH.",
@@ -251,11 +250,11 @@ def execute_qr_checkin(db: Session, user: User, code: str) -> Dict[str, Any]:
 
     if not can_execute_checkin():
         return {
-            "status": "read_only",
-            "executed": False,
+            "status": "dry_run",
+            "dry_run": True,
             "message": (
-                "Modo lectura: validación OK pero fichaje requiere "
-                "AFRODITA_EXECUTION_ENABLED=true y AFRODITA_READ_ONLY_MODE=false"
+                "Validación OK — escritura deshabilitada. "
+                "Active AFRODITA_EXECUTION_ENABLED=true y AFRODITA_READ_ONLY_MODE=false."
             ),
             **validation,
         }
@@ -274,9 +273,9 @@ def execute_qr_checkin(db: Session, user: User, code: str) -> Dict[str, Any]:
 
     session = flow.get("session") if isinstance(flow.get("session"), dict) else {}
     checkin_id = flow.get("checkin_id") or session.get("checkin_id")
-    executed = bool(flow.get("executed", flow.get("success"))) and bool(checkin_id)
+    persisted = bool(flow.get("executed", flow.get("success"))) and bool(checkin_id)
 
-    if not executed:
+    if not persisted:
         raise HTTPException(
             status_code=500,
             detail="Fichaje no persistido en time_cost_checkins pese a ejecución habilitada",
@@ -284,7 +283,6 @@ def execute_qr_checkin(db: Session, user: User, code: str) -> Dict[str, Any]:
 
     return {
         **flow,
-        "executed": True,
         "checkin_id": int(checkin_id),
         "status": "executed",
         "validation": validation,

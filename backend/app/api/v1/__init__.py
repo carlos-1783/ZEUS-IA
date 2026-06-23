@@ -39,6 +39,7 @@ from app.api.v1.endpoints import (
     scan,
     thalos_v1,
     afrodita_v1,
+    afrodita_status,
     afrodita_rrhh_v1,
     afrodita_ops_v1,
     justicia_v1,
@@ -132,6 +133,7 @@ api_router.include_router(products.router, prefix="/products", tags=["products"]
 # Physical scan flows (QR / NFC / DNI)
 api_router.include_router(scan.router, prefix="/scan", tags=["scan"])
 api_router.include_router(thalos_v1.router, tags=["thalos-v1"])
+api_router.include_router(afrodita_status.router, tags=["afrodita"])
 api_router.include_router(afrodita_v1.router, tags=["afrodita-v1"])
 api_router.include_router(afrodita_rrhh_v1.router, tags=["afrodita-rrhh-v1"])
 api_router.include_router(afrodita_ops_v1.router, tags=["afrodita-ops-v1"])

@@ -19,8 +19,10 @@ router = APIRouter(prefix="/afrodita/v1", tags=["afrodita-v1"])
 @router.get("/status")
 def afrodita_v1_status(
     current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    return global_status_payload()
+    _ = current_user
+    return global_status_payload(db)
 
 
 @router.get("/employees")
@@ -34,7 +36,6 @@ def afrodita_v1_employees(
         "employee_manager",
         data_origin="backend",
         real_execution=True,
-        ui_badge="REAL",
     )
 
 
@@ -50,5 +51,4 @@ def afrodita_v1_schedules(
         "shift_generator",
         data_origin="backend",
         real_execution=real,
-        ui_badge="REAL" if real else "SIMULADO",
     )

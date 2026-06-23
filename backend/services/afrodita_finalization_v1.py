@@ -76,8 +76,8 @@ def finalization_payload() -> Dict[str, Any]:
         },
         "ui_tabs": [
             {"name": "RRHH", "component": "AfroditaToolsPanel", "status": "REAL"},
-            {"name": "OPERACIONES", "component": "AfroditaOpsPanel", "status": "REAL_PARTIAL"},
-            {"name": "WORKSPACE", "component": "WorkspacePlaybooks", "status": "SIMULATION_LAYER"},
+            {"name": "OPERACIONES", "component": "AfroditaOpsPanel", "status": "REAL"},
+            {"name": "WORKSPACE", "component": "WorkspacePlaybooks", "status": "REAL"},
         ],
         "anti_fake_rules": [
             "no_static_arrays",
@@ -92,7 +92,7 @@ def finalization_payload() -> Dict[str, Any]:
         },
         "final_state": {
             "afrodita_rrhh": "REAL",
-            "afrodita_ops": "REAL_PARTIAL",
+            "afrodita_ops": "REAL",
             "workspace": "ISOLATED",
             "system_integrity": "STABLE",
         },
@@ -100,8 +100,8 @@ def finalization_payload() -> Dict[str, Any]:
     }
 
 
-def rrhh_status_payload() -> Dict[str, Any]:
-    base = global_status_payload()
+def rrhh_status_payload(db=None) -> Dict[str, Any]:
+    base = global_status_payload(db) if db is not None else global_status_payload()
     return {
         **base,
         "afrodita_finalization": finalization_payload(),

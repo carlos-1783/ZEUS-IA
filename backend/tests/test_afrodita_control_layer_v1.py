@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
@@ -17,26 +18,33 @@ from services.afrodita_control_layer_v1 import (
 )
 
 
-def test_default_flags_read_only():
+def test_default_flags_simulated():
     payload = global_status_payload()
-    assert payload["system_default_mode"] == "READ_ONLY"
-    assert payload["AFRODITA_READ_ONLY_MODE"] is True
+    assert payload["system_default_mode"] == "SIMULATED"
     assert payload["AFRODITA_EXECUTION_ENABLED"] is False
+    assert payload["writes_enabled"] is False
 
 
 def test_can_execute_checkin_requires_flags():
-    with patch.object(settings, "AFRODITA_EXECUTION_ENABLED", False):
+    with patch.dict(os.environ, {"AFRODITA_EXECUTION_ENABLED": "false"}, clear=False):
         assert can_execute_checkin() is False
         assert can_create_employee() is False
-    with patch.object(settings, "AFRODITA_EXECUTION_ENABLED", True):
-        with patch.object(settings, "AFRODITA_READ_ONLY_MODE", True):
-            assert can_execute_checkin() is False
-            assert can_create_employee() is False
-        with patch.object(settings, "AFRODITA_READ_ONLY_MODE", False):
-            with patch.object(settings, "AFRODITA_USE_REAL_CHECKINS", True):
-                assert can_execute_checkin() is True
-            with patch.object(settings, "AFRODITA_USE_REAL_EMPLOYEES", True):
-                assert can_create_employee() is True
+    with patch.dict(
+        os.environ,
+        {"AFRODITA_EXECUTION_ENABLED": "true", "AFRODITA_READ_ONLY_MODE": "true"},
+        clear=False,
+    ):
+        assert can_execute_checkin() is False
+        assert can_create_employee() is False
+    with patch.dict(
+        os.environ,
+        {"AFRODITA_EXECUTION_ENABLED": "true", "AFRODITA_READ_ONLY_MODE": "false"},
+        clear=False,
+    ):
+        with patch.object(settings, "AFRODITA_USE_REAL_CHECKINS", True):
+            assert can_execute_checkin() is True
+        with patch.object(settings, "AFRODITA_USE_REAL_EMPLOYEES", True):
+            assert can_create_employee() is True
 
 
 def test_validate_qr_freshness_stale():

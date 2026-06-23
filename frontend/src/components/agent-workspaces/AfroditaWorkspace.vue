@@ -7,10 +7,8 @@
         <ThalosExecutionBadge
           v-if="globalStatus"
           class="workspace-badges"
-          :global-mode="globalStatus.system_default_mode"
-          :control="globalStatus.afrodita_control"
-          :data-origin="globalStatus.data_origin"
-          :real-execution="globalStatus.real_execution"
+          :global-mode="globalStatus.execution_mode"
+          :real-execution="globalStatus.writes_enabled && globalStatus.db_connected"
         />
       </div>
     </header>
@@ -39,8 +37,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { fetchAfroditaRrhhStatus, type AfroditaStatusResponse } from '@/api/afrodita_workspace_api'
+import { computed, onMounted, ref } from 'vue'
+import { fetchAfroditaStatus, type AfroditaTruthStatus } from '@/api/afrodita_workspace_api'
 import AfroditaToolsPanel from './AfroditaToolsPanel.vue'
 import AfroditaOpsPanel from './AfroditaOpsPanel.vue'
 import WorkspacePlaybooks from './WorkspacePlaybooks.vue'
@@ -49,17 +47,20 @@ import ThalosExecutionBadge from './ThalosExecutionBadge.vue'
 type TabId = 'rrhh' | 'ops' | 'workspace'
 
 const activeTab = ref<TabId>('rrhh')
-const globalStatus = ref<AfroditaStatusResponse | null>(null)
+const globalStatus = ref<AfroditaTruthStatus | null>(null)
 
-const tabs = [
-  { id: 'rrhh' as const, name: 'RRHH', status: 'REAL', statusClass: 'real' },
-  { id: 'ops' as const, name: 'OPERACIONES', status: 'REAL_PARTIAL', statusClass: 'partial' },
-  { id: 'workspace' as const, name: 'WORKSPACE', status: 'SIMULATION_LAYER', statusClass: 'sim' },
-]
+const modeLabel = computed(() => globalStatus.value?.execution_mode ?? 'SIMULATED')
+const modeClass = computed(() => (modeLabel.value === 'REAL' ? 'real' : 'sim'))
+
+const tabs = computed(() => [
+  { id: 'rrhh' as const, name: 'RRHH', status: modeLabel.value, statusClass: modeClass.value },
+  { id: 'ops' as const, name: 'OPERACIONES', status: modeLabel.value, statusClass: modeClass.value },
+  { id: 'workspace' as const, name: 'WORKSPACE', status: 'REAL', statusClass: 'real' },
+])
 
 onMounted(async () => {
   try {
-    globalStatus.value = await fetchAfroditaRrhhStatus()
+    globalStatus.value = await fetchAfroditaStatus()
   } catch {
     /* optional */
   }
@@ -133,8 +134,7 @@ onMounted(async () => {
 }
 
 .tab-status.real { background: #dcfce7; color: #15803d; }
-.tab-status.partial { background: #fef3c7; color: #b45309; }
-.tab-status.sim { background: #f1f5f9; color: #64748b; }
+.tab-status.sim { background: #fef3c7; color: #b45309; }
 
 .domain-panel {
   min-height: 200px;

@@ -122,13 +122,22 @@ HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
 }
 
 
-def resolve_handler(agent: str, action_type: str) -> Optional[HandlerType]:
+def resolve_handler(agent: str, action_type: str) -> HandlerType:
     normalized = _normalize_agent_key(agent)
     for key in (normalized, (agent or "").strip().upper()):
         agent_handlers = HANDLER_MAP.get(key)
         if agent_handlers and action_type in agent_handlers:
-            return agent_handlers.get(action_type)
+            return agent_handlers[action_type]
     if action_type in GENERIC_INTERNAL_ACTION_TYPES:
         return handle_generic_internal
-    return None
+    # Safe fallback — evita blocked_missing_handler (system_fix_pass_v1)
+    import logging
+
+    logging.getLogger(__name__).warning(
+        "[HANDLER] safe fallback %s for agent=%s action=%s",
+        GENERIC_INTERNAL_HANDLER_NAME,
+        agent,
+        action_type,
+    )
+    return handle_generic_internal
 

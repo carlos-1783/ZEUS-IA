@@ -74,14 +74,15 @@ export function useAutomationDeliverables(agent: string) {
     error.value = null;
     try {
       const outputs = await fetchAutomationOutputs(agent);
-      let merged = groupOutputs(outputs);
+      let merged = groupOutputs(outputs ?? []);
       const workspaceAgents = new Set(['PERSEO', 'RAFAEL', 'JUSTICIA', 'THALOS', 'AFRODITA']);
       const agentKey = String(agent || '').toUpperCase();
       if (workspaceAgents.has(agentKey)) {
         try {
           const ws = await api.get(`/api/v1/workspace/list?agent_name=${encodeURIComponent(agentKey)}&limit=100`);
-          if (ws?.success && Array.isArray(ws.items)) {
-            const wsItems: DeliverableItem[] = ws.items.map((doc: Record<string, unknown>) => {
+          const wsItemsRaw = Array.isArray(ws?.items) ? ws.items : [];
+          if (ws?.success !== false) {
+            const wsItems: DeliverableItem[] = wsItemsRaw.map((doc: Record<string, unknown>) => {
               const payload = (doc.document_payload || {}) as Record<string, unknown>;
               const content = (payload.content || {}) as Record<string, unknown>;
               const fileSize = Number(
@@ -143,8 +144,9 @@ export function useAutomationDeliverables(agent: string) {
       if (agentKey === 'THALOS') {
         try {
           const th = await fetchThalosWorkspaceItems(100);
-          if (th?.success && Array.isArray(th.items)) {
-            const thItems: DeliverableItem[] = th.items.map((item) => {
+          const thItemsRaw = Array.isArray(th?.items) ? th.items : [];
+          if (th?.success !== false) {
+            const thItems: DeliverableItem[] = thItemsRaw.map((item) => {
               const created = item.created_at ? new Date(item.created_at).getTime() / 1000 : 0;
               const sizeBytes = Math.max((item.data_size_kb || 1) * 1024, 1024);
               return {

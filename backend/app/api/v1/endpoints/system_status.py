@@ -15,6 +15,16 @@ from app.core.config import settings
 router = APIRouter()
 
 
+@router.get("/fix-pass")
+async def get_system_fix_pass(
+    current_user: User = Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    """Auditoría system_fix_pass_v1 — UI, workspace, handlers, approval, flags."""
+    from services.system_fix_pass_v1 import fix_pass_payload
+
+    return fix_pass_payload()
+
+
 @router.get("/execution-status")
 async def get_execution_status(
     current_user: User = Depends(get_current_active_user),

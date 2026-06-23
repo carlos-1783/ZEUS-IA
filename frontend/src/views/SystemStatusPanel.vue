@@ -24,6 +24,7 @@
       <p v-if="status.ready_for_flags_activation" class="hint">
         Sistema listo para activación segura de flags (Fase B).
       </p>
+      <p v-if="fixPassBlockers" class="blockers">{{ fixPassBlockers }}</p>
     </section>
 
     <section v-if="status" class="agents-section">
@@ -58,21 +59,34 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   fetchSystemExecutionStatus,
+  fetchSystemFixPass,
   type SystemExecutionStatusResponse,
 } from '@/api/system_visibility_api'
 
 const loading = ref(false)
 const error = ref('')
 const status = ref<SystemExecutionStatusResponse | null>(null)
+const fixPass = ref<Record<string, unknown> | null>(null)
+
+const fixPassBlockers = computed(() => {
+  const blockers = fixPass.value?.critical_blockers
+  if (!Array.isArray(blockers) || !blockers.length) return ''
+  return `Blockers: ${blockers.join(' · ')}`
+})
 
 const load = async () => {
   error.value = ''
   loading.value = true
   try {
-    status.value = await fetchSystemExecutionStatus()
+    const [execStatus, fix] = await Promise.all([
+      fetchSystemExecutionStatus(),
+      fetchSystemFixPass(),
+    ])
+    status.value = execStatus
+    fixPass.value = fix
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -188,6 +202,12 @@ onMounted(load)
   margin: 12px 0 0;
   font-size: 13px;
   color: #475569;
+}
+
+.blockers {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #b91c1c;
 }
 
 table {

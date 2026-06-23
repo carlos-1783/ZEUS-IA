@@ -32,3 +32,7 @@ export interface SystemExecutionStatusResponse {
 export async function fetchSystemExecutionStatus() {
   return api.get('/api/v1/system/execution-status') as Promise<SystemExecutionStatusResponse>
 }
+
+export async function fetchSystemFixPass() {
+  return api.get('/api/v1/system/fix-pass') as Promise<Record<string, unknown>>
+}

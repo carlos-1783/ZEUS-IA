@@ -27,5 +27,6 @@ def test_truth_status_payload_shape(db):
     assert "read_only_mode" in payload
     assert "AFRODITA_EXECUTION_ENABLED" in payload
     assert "AFRODITA_READ_ONLY_MODE" in payload
-    if not payload["flags_loaded"]:
-        assert payload["writes_enabled"] is False
+    assert payload["writes_enabled"] == (payload["execution_enabled"] and not payload["read_only_mode"])
+    if payload["writes_enabled"] and payload["db_connected"]:
+        assert payload["execution_mode"] == "REAL"

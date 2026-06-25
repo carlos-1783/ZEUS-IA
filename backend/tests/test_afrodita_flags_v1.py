@@ -67,7 +67,7 @@ def test_writes_enabled_false_when_read_only_true():
         assert flags["writes_enabled"] is False
 
 
-def test_writes_enabled_false_when_only_execution_set():
+def test_writes_enabled_true_when_only_execution_set():
     env = {
         k: v
         for k, v in os.environ.items()
@@ -76,4 +76,5 @@ def test_writes_enabled_false_when_only_execution_set():
     with patch.dict(os.environ, {**env, "AFRODITA_EXECUTION_ENABLED": "true"}, clear=True):
         flags = get_afrodita_safety_flags()
         assert flags["flags_loaded"] is False
-        assert flags["writes_enabled"] is False
+        assert flags["writes_enabled"] is True
+        assert writes_enabled() is True

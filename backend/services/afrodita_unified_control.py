@@ -35,7 +35,8 @@ def probe_db_connected(db: Optional[Session]) -> bool:
 
 
 def writes_enabled() -> bool:
-    return bool(get_afrodita_safety_flags()["writes_enabled"])
+    safety = get_afrodita_safety_flags()
+    return bool(safety["execution_enabled"] and not safety["read_only_mode"])
 
 
 def current_flags() -> Dict[str, bool]:
@@ -65,18 +66,27 @@ def get_global_status(db: Optional[Session] = None) -> Dict[str, Any]:
     safety = get_afrodita_safety_flags()
     flags = current_flags()
     db_ok = probe_db_connected(db)
-    enabled = bool(safety["writes_enabled"])
-    mode = resolve_execution_mode(db_connected=db_ok, writes_on=enabled)
+    execution_enabled = bool(safety["execution_enabled"])
+    read_only_mode = bool(safety["read_only_mode"])
+    enabled = execution_enabled and not read_only_mode
+
+    if not db_ok:
+        mode: ExecutionMode = "ERROR"
+    elif enabled and db_ok:
+        mode = "REAL"
+    else:
+        mode = "SIMULATED"
+
     return {
         "execution_mode": mode,
         "system_default_mode": mode,
         "writes_enabled": enabled,
         "db_connected": db_ok,
         "flags_loaded": bool(safety["flags_loaded"]),
-        "execution_enabled": bool(safety["execution_enabled"]),
-        "read_only_mode": bool(safety["read_only_mode"]),
-        "AFRODITA_EXECUTION_ENABLED": bool(safety["AFRODITA_EXECUTION_ENABLED"]),
-        "AFRODITA_READ_ONLY_MODE": bool(safety["AFRODITA_READ_ONLY_MODE"]),
+        "execution_enabled": execution_enabled,
+        "read_only_mode": read_only_mode,
+        "AFRODITA_EXECUTION_ENABLED": execution_enabled,
+        "AFRODITA_READ_ONLY_MODE": read_only_mode,
         "flags": flags,
         "flags_env_present": safety["flags_env_present"],
         "checkin_entry_point": "register_checkin",

@@ -16,6 +16,6 @@ def normalize_execution_mode(mode: Optional[str]) -> StandardExecutionMode:
         return "REAL"
     if m in ("READ_ONLY", "REAL_SAFE"):
         return "READ_ONLY"
-    if m == "SIMULATED":
+    if m == "ERROR":
         return "SIMULATED"
     return "SIMULATED"

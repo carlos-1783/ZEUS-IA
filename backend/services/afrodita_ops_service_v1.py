@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.models.company import UserCompany
 from app.models.erp import InventoryMovement, Product, TPVProduct
 from app.models.user import User
-from services.afrodita_ops_control_layer_v1 import current_flags
+from services.afrodita_unified_control import current_flags
 
 
 def _company_ids(db: Session, user: User) -> List[int]:
@@ -163,7 +163,7 @@ def merge_products_view(db: Session, user: User) -> Dict[str, Any]:
         "erp_count": len(erp_items),
         "tpv_count": len(tpv_items),
         "precedence": "erp",
-        "read_only": flags["AFRODITA_OPS_READ_ONLY"],
+        "read_only": not flags.get("execution_enabled", False) or bool(flags.get("read_only_mode")),
     }
 
 

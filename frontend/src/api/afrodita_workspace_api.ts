@@ -1,22 +1,15 @@
 import api from '@/services/api'
 
-export type AfroditaExecutionMode = 'REAL' | 'SIMULATED'
+export type AfroditaExecutionMode = 'REAL' | 'SIMULATED' | 'ERROR'
 export type AfroditaDataOrigin = 'backend' | 'user_input' | 'mock' | 'mixed'
-
-export interface AfroditaControlMetadata {
-  execution_mode: AfroditaExecutionMode
-  data_origin: AfroditaDataOrigin
-  real_execution: boolean
-  module: string
-  ui_badge: string
-  flags: Record<string, boolean>
-}
 
 export interface AfroditaControlResponse {
   execution_mode: AfroditaExecutionMode
   data_origin?: AfroditaDataOrigin
   real_execution: boolean
-  afrodita_control?: AfroditaControlMetadata
+  writes_enabled?: boolean
+  db_connected?: boolean
+  success?: boolean
 }
 
 export interface AfroditaEmployee {
@@ -41,6 +34,7 @@ export interface AfroditaScheduleRow {
 
 export interface AfroditaTruthStatus {
   execution_mode: AfroditaExecutionMode
+  system_default_mode?: AfroditaExecutionMode
   db_connected: boolean
   writes_enabled: boolean
   flags_loaded: boolean
@@ -50,73 +44,17 @@ export interface AfroditaTruthStatus {
   AFRODITA_READ_ONLY_MODE: boolean
   flags: Record<string, boolean>
   flags_env_present?: Record<string, boolean>
-  module_badges: Record<string, string>
   checkin_entry_point: string
   employees_source: string
   schedules_source: string
   rrhh_api_prefix: string
+  ops_api_prefix?: string
 }
 
-export interface AfroditaStatusResponse extends AfroditaControlResponse, AfroditaTruthStatus {
-  system_default_mode: AfroditaExecutionMode
-  AFRODITA_EXECUTION_ENABLED: boolean
-  AFRODITA_READ_ONLY_MODE: boolean
-  AFRODITA_USE_REAL_EMPLOYEES: boolean
-  AFRODITA_USE_REAL_CHECKINS: boolean
-  AFRODITA_USE_REAL_SCHEDULES: boolean
-  legacy_preserved?: boolean
-}
-
-function isControlMetadata(value: unknown): value is AfroditaControlMetadata {
-  if (!value || typeof value !== 'object') return false
-  const v = value as AfroditaControlMetadata
-  return typeof v.execution_mode === 'string' && typeof v.ui_badge === 'string'
-}
-
-function isControlResponse(value: unknown): value is AfroditaControlResponse {
-  if (!value || typeof value !== 'object') return false
-  const v = value as AfroditaControlResponse
-  return typeof v.execution_mode === 'string' && typeof v.real_execution === 'boolean'
-}
-
-function partialNestedFields(nested: unknown): Pick<AfroditaControlMetadata, 'module' | 'ui_badge' | 'flags'> {
-  if (!nested || typeof nested !== 'object') {
-    return { module: '', ui_badge: '', flags: {} }
-  }
-  const n = nested as Record<string, unknown>
-  return {
-    module: typeof n.module === 'string' ? n.module : '',
-    ui_badge: typeof n.ui_badge === 'string' ? n.ui_badge : '',
-    flags:
-      typeof n.flags === 'object' && n.flags !== null
-        ? (n.flags as Record<string, boolean>)
-        : {},
-  }
-}
-
-export function extractAfroditaControl(source?: unknown): AfroditaControlMetadata | null {
-  if (!source) return null
-  if (isControlMetadata(source)) return source
-  if (!isControlResponse(source)) return null
-  const nested = source.afrodita_control
-  if (nested && isControlMetadata(nested)) return nested
-  const extras = partialNestedFields(nested)
-  return {
-    execution_mode: source.execution_mode,
-    data_origin: source.data_origin ?? 'backend',
-    real_execution: source.real_execution,
-    ...extras,
-  }
-}
-
-export function moduleBadgeFromStatus(
-  status: AfroditaTruthStatus | null | undefined,
-  module: string
-): AfroditaExecutionMode | 'NONE' {
-  if (module === 'facial_checkin') return 'NONE'
-  const badge = status?.module_badges?.[module]
-  if (badge === 'REAL' || badge === 'SIMULATED') return badge
-  return status?.execution_mode ?? 'SIMULATED'
+export function executionModeLabel(mode: AfroditaExecutionMode | null | undefined): string {
+  if (mode === 'REAL') return 'REAL'
+  if (mode === 'ERROR') return 'SYSTEM ERROR'
+  return 'NO EXECUTION'
 }
 
 export async function fetchAfroditaStatus() {
@@ -125,7 +63,7 @@ export async function fetchAfroditaStatus() {
 
 export async function fetchAfroditaRrhhStatus() {
   return api.get('/api/v1/afrodita/rrhh/v1/status') as Promise<
-    AfroditaStatusResponse & { afrodita_finalization?: Record<string, unknown> }
+    AfroditaTruthStatus & { afrodita_finalization?: Record<string, unknown> }
   >
 }
 
@@ -140,6 +78,7 @@ export async function createAfroditaEmployee(payload: {
     AfroditaControlResponse & {
       success: boolean
       employee: AfroditaEmployee
+      employee_id: number
       message?: string
     }
   >
@@ -159,7 +98,12 @@ export async function fetchAfroditaSchedules() {
 
 export async function submitAfroditaQrCheckin(qrCode: string) {
   return api.post('/api/v1/afrodita/rrhh/v1/checkin/qr', { qr_code: qrCode }) as Promise<
-    AfroditaControlResponse & { success: boolean; result: Record<string, unknown>; text?: string }
+    AfroditaControlResponse & {
+      success: boolean
+      checkin_id?: number
+      result: Record<string, unknown>
+      text?: string
+    }
   >
 }
 

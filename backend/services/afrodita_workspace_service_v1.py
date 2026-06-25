@@ -13,7 +13,7 @@ from app.models.company import UserCompany
 from app.models.company_employee import CompanyEmployee
 from app.models.time_tracking import EmployeeSchedule
 from app.models.user import User
-from services.afrodita_control_layer_v1 import (
+from services.afrodita_unified_control import (
     DAY_NAMES,
     can_create_employee,
     can_execute_checkin,
@@ -249,15 +249,9 @@ def execute_qr_checkin(db: Session, user: User, code: str) -> Dict[str, Any]:
     validation = validate_qr_before_checkin(db, user, code)
 
     if not can_execute_checkin():
-        return {
-            "status": "dry_run",
-            "dry_run": True,
-            "message": (
-                "Validación OK — escritura deshabilitada. "
-                "Active AFRODITA_EXECUTION_ENABLED=true y AFRODITA_READ_ONLY_MODE=false."
-            ),
-            **validation,
-        }
+        from services.afrodita_unified_control import assert_can_write
+
+        assert_can_write(db)
 
     log_execution_attempt(
         module="qr_checkin",
@@ -293,7 +287,7 @@ def execute_qr_checkin(db: Session, user: User, code: str) -> Dict[str, Any]:
 
 def validate_qr_before_checkin(db: Session, user: User, code: str) -> Dict[str, Any]:
     """Pre-validación QR: frescura + empleado en BD."""
-    from services.afrodita_control_layer_v1 import parse_zeuscheck_code
+    from services.afrodita_unified_control import parse_zeuscheck_code
 
     flags = current_flags()
     fresh_ok, fresh_reason = validate_qr_freshness(code)

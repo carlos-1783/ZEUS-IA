@@ -8,7 +8,7 @@
           v-if="globalStatus"
           class="workspace-badges"
           :global-mode="globalStatus.execution_mode"
-          :real-execution="globalStatus.writes_enabled && globalStatus.db_connected"
+          :real-execution="globalStatus.execution_mode === 'REAL'"
         />
       </div>
     </header>
@@ -38,7 +38,12 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { fetchAfroditaStatus, type AfroditaTruthStatus } from '@/api/afrodita_workspace_api'
+import {
+  executionModeLabel,
+  fetchAfroditaStatus,
+  type AfroditaExecutionMode,
+  type AfroditaTruthStatus,
+} from '@/api/afrodita_workspace_api'
 import AfroditaToolsPanel from './AfroditaToolsPanel.vue'
 import AfroditaOpsPanel from './AfroditaOpsPanel.vue'
 import WorkspacePlaybooks from './WorkspacePlaybooks.vue'
@@ -49,14 +54,24 @@ type TabId = 'rrhh' | 'ops' | 'workspace'
 const activeTab = ref<TabId>('rrhh')
 const globalStatus = ref<AfroditaTruthStatus | null>(null)
 
-const modeLabel = computed(() => globalStatus.value?.execution_mode ?? 'SIMULATED')
-const modeClass = computed(() => (modeLabel.value === 'REAL' ? 'real' : 'sim'))
+const modeLabel = computed(() => executionModeLabel(globalStatus.value?.execution_mode))
 
-const tabs = computed(() => [
-  { id: 'rrhh' as const, name: 'RRHH', status: modeLabel.value, statusClass: modeClass.value },
-  { id: 'ops' as const, name: 'OPERACIONES', status: modeLabel.value, statusClass: modeClass.value },
-  { id: 'workspace' as const, name: 'WORKSPACE', status: 'REAL', statusClass: 'real' },
-])
+const statusClassFor = (mode: AfroditaExecutionMode | undefined) => {
+  if (mode === 'REAL') return 'real'
+  if (mode === 'ERROR') return 'error'
+  return 'sim'
+}
+
+const tabs = computed(() => {
+  const mode = globalStatus.value?.execution_mode
+  const label = modeLabel.value
+  const cls = statusClassFor(mode)
+  return [
+    { id: 'rrhh' as const, name: 'RRHH', status: label, statusClass: cls },
+    { id: 'ops' as const, name: 'OPERACIONES', status: label, statusClass: cls },
+    { id: 'workspace' as const, name: 'WORKSPACE', status: label, statusClass: cls },
+  ]
+})
 
 onMounted(async () => {
   try {
@@ -135,6 +150,7 @@ onMounted(async () => {
 
 .tab-status.real { background: #dcfce7; color: #15803d; }
 .tab-status.sim { background: #fef3c7; color: #b45309; }
+.tab-status.error { background: #fee2e2; color: #b91c1c; }
 
 .domain-panel {
   min-height: 200px;

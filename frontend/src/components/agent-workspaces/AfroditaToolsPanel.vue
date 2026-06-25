@@ -9,7 +9,7 @@
         <ThalosExecutionBadge
           v-if="globalStatus"
           :global-mode="globalStatus.execution_mode"
-          :real-execution="globalStatus.writes_enabled && globalStatus.db_connected"
+          :real-execution="globalStatus.execution_mode === 'REAL'"
         />
       </div>
       <p v-if="statusNote" class="status-note">{{ statusNote }}</p>
@@ -27,9 +27,10 @@
         <div class="card-title-row">
           <h5>Fichaje QR</h5>
           <ThalosExecutionBadge
-            :module-badge="moduleBadge('qr_checkin')"
+            v-if="globalStatus"
+            :global-mode="globalStatus.execution_mode"
             :inline="true"
-            :show-global="false"
+            :show-global="true"
           />
         </div>
         <p class="hint">ZEUSCHECK|código|timestamp (máx 5 min).</p>
@@ -37,16 +38,16 @@
         <button :disabled="loading.qr" @click="runQr">
           {{ loading.qr ? 'Procesando…' : 'Fichar' }}
         </button>
-        <ThalosExecutionBadge v-if="lastQrControl" :control="lastQrControl" :show-global="false" />
         <p v-if="qrResult" class="tool-text">{{ qrResult }}</p>
       </div>
       <div class="tool-card">
         <div class="card-title-row">
           <h5>Gestor empleados</h5>
           <ThalosExecutionBadge
-            :module-badge="moduleBadge('employee_manager')"
+            v-if="globalStatus"
+            :global-mode="globalStatus.execution_mode"
             :inline="true"
-            :show-global="false"
+            :show-global="true"
           />
         </div>
         <p class="hint">Alta en company_employees (requiere escritura habilitada).</p>
@@ -67,15 +68,15 @@
           </li>
         </ul>
         <p v-else-if="employeesLoaded" class="hint">Sin empleados en BD para tu empresa.</p>
-        <ThalosExecutionBadge v-if="lastEmpControl" :control="lastEmpControl" :show-global="false" />
       </div>
       <div class="tool-card">
         <div class="card-title-row">
           <h5>Turnos (lectura)</h5>
           <ThalosExecutionBadge
-            :module-badge="moduleBadge('shift_generator')"
+            v-if="globalStatus"
+            :global-mode="globalStatus.execution_mode"
             :inline="true"
-            :show-global="false"
+            :show-global="true"
           />
         </div>
         <p class="hint">employee_schedules · activar AFRODITA_USE_REAL_SCHEDULES en Railway.</p>
@@ -88,15 +89,15 @@
           </li>
         </ul>
         <p v-if="scheduleNote" class="tool-text">{{ scheduleNote }}</p>
-        <ThalosExecutionBadge v-if="lastSchedControl" :control="lastSchedControl" :show-global="false" />
       </div>
       <div class="tool-card legacy">
         <div class="card-title-row">
           <h5>Contrato RRHH</h5>
           <ThalosExecutionBadge
-            :module-badge="moduleBadge('contract')"
+            v-if="globalStatus"
+            :global-mode="globalStatus.execution_mode"
             :inline="true"
-            :show-global="false"
+            :show-global="true"
           />
         </div>
         <input v-model="contractForm.employee_name" placeholder="Empleado" />
@@ -120,14 +121,12 @@
 import { onMounted, reactive, ref } from 'vue'
 import {
   createAfroditaEmployee,
-  extractAfroditaControl,
+  executionModeLabel,
   fetchAfroditaEmployees,
   fetchAfroditaStatus,
   fetchAfroditaSchedules,
-  moduleBadgeFromStatus,
   submitAfroditaContractDraft,
   submitAfroditaQrCheckin,
-  type AfroditaControlMetadata,
   type AfroditaEmployee,
   type AfroditaScheduleRow,
   type AfroditaTruthStatus,
@@ -149,10 +148,6 @@ const employeesLoaded = ref(false)
 const schedules = ref<AfroditaScheduleRow[]>([])
 const scheduleNote = ref<string | null>(null)
 
-const lastQrControl = ref<AfroditaControlMetadata | null>(null)
-const lastEmpControl = ref<AfroditaControlMetadata | null>(null)
-const lastSchedControl = ref<AfroditaControlMetadata | null>(null)
-
 const qrCode = ref('')
 const contractForm = reactive({
   employee_name: '',
@@ -170,10 +165,6 @@ const employeeForm = reactive({
 const qrResult = ref<string | null>(null)
 const contractResult = ref<string | null>(null)
 
-const pickControl = (out: unknown): AfroditaControlMetadata | null => extractAfroditaControl(out)
-
-const moduleBadge = (mod: string) => moduleBadgeFromStatus(globalStatus.value, mod)
-
 const refreshQrDefault = () => {
   const code = employees.value[0]?.employee_code || 'EMP-001'
   qrCode.value = `ZEUSCHECK|${code}|${new Date().toISOString()}`
@@ -183,13 +174,12 @@ onMounted(async () => {
   try {
     globalStatus.value = await fetchAfroditaStatus()
     const s = globalStatus.value
-    if (s.execution_mode === 'REAL' && s.db_connected && s.writes_enabled) {
+    if (s.execution_mode === 'ERROR') {
+      statusNote.value = 'SYSTEM ERROR — base de datos no disponible.'
+    } else if (s.execution_mode === 'REAL') {
       statusNote.value = 'Ejecución activa: fichajes y altas persisten en BD.'
-    } else if (!s.db_connected) {
-      statusNote.value = 'BD no disponible — operaciones de escritura bloqueadas.'
     } else {
-      statusNote.value =
-        'Escritura deshabilitada — active AFRODITA_EXECUTION_ENABLED y desactive READ_ONLY.'
+      statusNote.value = `NO EXECUTION — ${executionModeLabel(s.execution_mode)} (configure flags en Railway).`
     }
     await loadEmployees(true)
     refreshQrDefault()
@@ -201,10 +191,8 @@ onMounted(async () => {
 const loadEmployees = async (silent = false) => {
   if (!silent) error.value = ''
   loading.employees = true
-  lastEmpControl.value = null
   try {
     const out = await fetchAfroditaEmployees()
-    lastEmpControl.value = pickControl(out)
     employees.value = out.employees || []
     employeesLoaded.value = true
     refreshQrDefault()
@@ -218,7 +206,6 @@ const loadEmployees = async (silent = false) => {
 const runCreateEmployee = async () => {
   error.value = ''
   loading.createEmployee = true
-  lastEmpControl.value = null
   try {
     const out = await createAfroditaEmployee({
       full_name: employeeForm.full_name.trim(),
@@ -226,7 +213,6 @@ const runCreateEmployee = async () => {
       role_title: employeeForm.role_title.trim() || undefined,
       phone: employeeForm.phone.trim() || undefined,
     })
-    lastEmpControl.value = pickControl(out)
     await loadEmployees(true)
     employeeForm.full_name = ''
     employeeForm.employee_code = ''
@@ -243,10 +229,8 @@ const loadSchedules = async () => {
   error.value = ''
   loading.schedules = true
   scheduleNote.value = null
-  lastSchedControl.value = null
   try {
     const out = await fetchAfroditaSchedules()
-    lastSchedControl.value = pickControl(out)
     schedules.value = out.schedules || []
     scheduleNote.value =
       schedules.value.length > 0
@@ -263,16 +247,13 @@ const runQr = async () => {
   error.value = ''
   loading.qr = true
   qrResult.value = null
-  lastQrControl.value = null
   try {
     const out = await submitAfroditaQrCheckin(qrCode.value)
-    lastQrControl.value = pickControl(out)
-    const res = (out.result || {}) as Record<string, unknown>
-    const checkinId = res.checkin_id
-    if (checkinId != null) {
-      qrResult.value = String(out.text || res.message || `Fichaje registrado (#${checkinId})`)
+    const checkinId = out.checkin_id ?? (out.result as { checkin_id?: number })?.checkin_id
+    if (checkinId != null && out.success) {
+      qrResult.value = String(out.text || `Fichaje registrado (#${checkinId})`)
     } else {
-      qrResult.value = String(out.text || res.message || 'Validación completada (sin persistencia)')
+      qrResult.value = 'Fichaje no registrado — verifique flags de ejecución.'
     }
     refreshQrDefault()
   } catch (err) {
@@ -286,8 +267,8 @@ const runContract = async () => {
   error.value = ''
   loading.contract = true
   try {
-    const out = await submitAfroditaContractDraft({ ...contractForm })
-    contractResult.value = String(out.text || 'Borrador generado.')
+    await submitAfroditaContractDraft({ ...contractForm })
+    contractResult.value = 'No implementado (501) — generación contractual no persistente.'
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {

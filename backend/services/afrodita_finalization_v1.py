@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Literal
 
 from fastapi import HTTPException, status
 
-from services.afrodita_control_layer_v1 import current_flags, global_status_payload
+from services.afrodita_unified_control import current_flags, get_global_status
 
 DomainId = Literal["rrhh", "ops", "workspace"]
 
@@ -101,7 +101,7 @@ def finalization_payload() -> Dict[str, Any]:
 
 
 def rrhh_status_payload(db=None) -> Dict[str, Any]:
-    base = global_status_payload(db) if db is not None else global_status_payload()
+    base = get_global_status(db)
     return {
         **base,
         "afrodita_finalization": finalization_payload(),

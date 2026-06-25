@@ -3,7 +3,7 @@
     <header v-if="truthStatus" class="ops-header">
       <ThalosExecutionBadge
         :global-mode="truthStatus.execution_mode"
-        :real-execution="truthStatus.writes_enabled && truthStatus.db_connected"
+        :real-execution="truthStatus.execution_mode === 'REAL'"
       />
       <p v-if="statusNote" class="status-note">{{ statusNote }}</p>
     </header>
@@ -68,8 +68,8 @@
     <section class="card">
       <h3>🚚 Rutas</h3>
 
-      <button @click="simulateRoute" :disabled="loading.routes">
-        {{ loading.routes ? 'Calculando...' : 'Simular ruta' }}
+      <button @click="simulateRoute" :disabled="loading.routes || truthStatus?.execution_mode !== 'REAL'">
+        {{ loading.routes ? 'Calculando...' : 'Calcular ruta' }}
       </button>
 
       <pre v-if="routeResult">{{ routeResult }}</pre>
@@ -81,13 +81,11 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { fetchAfroditaStatus, type AfroditaTruthStatus } from '@/api/afrodita_workspace_api'
+import { executionModeLabel, fetchAfroditaStatus, type AfroditaTruthStatus } from '@/api/afrodita_workspace_api'
 import {
   fetchAfroditaOpsInventory,
   fetchAfroditaOpsMovements,
-  fetchAfroditaOpsStatus,
   simulateAfroditaRoute,
-  type AfroditaOpsStatusResponse,
   type InventoryMovementItem,
   type MergedProductItem,
 } from '@/api/afrodita_ops_api'
@@ -113,7 +111,6 @@ const loading = reactive({ inventory: false, movements: false, routes: false })
 const error = ref('')
 const statusNote = ref('')
 const truthStatus = ref<AfroditaTruthStatus | null>(null)
-const globalStatus = ref<AfroditaOpsStatusResponse | null>(null)
 const rawProducts = ref<MergedProductItem[]>([])
 const rawMovements = ref<InventoryMovementItem[]>([])
 const inventoryLoaded = ref(false)
@@ -145,10 +142,14 @@ const formatStock = (v: number | null | undefined) => (v == null ? '-' : String(
 onMounted(async () => {
   try {
     truthStatus.value = await fetchAfroditaStatus()
-    globalStatus.value = await fetchAfroditaOpsStatus()
-    statusNote.value = globalStatus.value.AFRODITA_OPS_READ_ONLY
-      ? 'Modo lectura: `/api/v1/afrodita/ops/v1/inventory` consolida TPV + ERP (prioridad ERP).'
-      : 'OPS activo.'
+    const mode = truthStatus.value.execution_mode
+    if (mode === 'ERROR') {
+      statusNote.value = 'SYSTEM ERROR — base de datos no disponible.'
+    } else if (mode === 'REAL') {
+      statusNote.value = 'OPS activo — lectura desde BD (inventario TPV + ERP).'
+    } else {
+      statusNote.value = `${executionModeLabel(mode)} — escritura global deshabilitada.`
+    }
     await loadInventory(true)
   } catch {
     /* optional */
@@ -188,10 +189,11 @@ const simulateRoute = async () => {
   loading.routes = true
   routeResult.value = null
   try {
-    const out = await simulateAfroditaRoute([], 'HQ')
-    routeResult.value = JSON.stringify(out.result ?? out, null, 2)
+    await simulateAfroditaRoute([], 'HQ')
+    routeResult.value = 'Motor de rutas no implementado (501).'
   } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e)
+    routeResult.value = e instanceof Error ? e.message : String(e)
+    error.value = routeResult.value
   } finally {
     loading.routes = false
   }

@@ -1,42 +1,39 @@
-"""Tests afrodita_ops_control_layer_v1."""
+"""Tests afrodita_ops_control_layer_v1 shim."""
 
 from __future__ import annotations
 
-from unittest.mock import patch
+import os
+from unittest.mock import MagicMock, patch
 
-from app.core.config import settings
-from services.afrodita_ops_control_layer_v1 import (
-    MODULE_UI_BADGE,
-    can_write_stock,
-    global_status_payload,
-    wrap_response,
-)
+from services.afrodita_ops_control_layer_v1 import can_write_stock, global_status_payload, wrap_response
 
 
-def test_default_ops_read_only():
+def test_ops_status_matches_global_simulated_by_default():
     payload = global_status_payload()
-    assert payload["system_default_mode"] == "READ_ONLY"
-    assert payload["AFRODITA_OPS_READ_ONLY"] is True
-    assert payload["erp_api_path"] == "/api/v1/products"
+    assert payload["execution_mode"] == "SIMULATED"
 
 
-def test_can_write_stock_requires_flags():
-    with patch.object(settings, "AFRODITA_OPS_ENABLED", False):
+def test_can_write_stock_requires_global_writes():
+    with patch.dict(os.environ, {"AFRODITA_EXECUTION_ENABLED": "false"}, clear=False):
         assert can_write_stock() is False
-    with patch.object(settings, "AFRODITA_OPS_ENABLED", True):
-        with patch.object(settings, "AFRODITA_OPS_READ_ONLY", True):
-            assert can_write_stock() is False
-        with patch.object(settings, "AFRODITA_OPS_READ_ONLY", False):
-            with patch.object(settings, "AFRODITA_ENABLE_STOCK_SYNC", True):
-                assert can_write_stock() is True
+    with patch.dict(
+        os.environ,
+        {
+            "AFRODITA_EXECUTION_ENABLED": "true",
+            "AFRODITA_READ_ONLY_MODE": "false",
+        },
+        clear=False,
+    ):
+        with patch("services.afrodita_unified_control.current_flags") as mock_flags:
+            mock_flags.return_value = {
+                "AFRODITA_ENABLE_STOCK_SYNC": True,
+            }
+            assert can_write_stock() is True
 
 
-def test_wrap_response_inventory():
-    out = wrap_response({"ok": True}, "inventory_core", data_origin="backend", real_execution=True)
-    assert out["afrodita_ops_control"]["ui_badge"] == MODULE_UI_BADGE["inventory_core"]
-    assert out["real_execution"] is True
-
-
-def test_warehouse_stub_badge():
-    out = wrap_response({"stub": True}, "warehouse_management", data_origin="mock", real_execution=False)
-    assert out["afrodita_ops_control"]["ui_badge"] == "NONE"
+def test_ops_wrap_response_global_mode():
+    db = MagicMock()
+    db.execute.return_value = None
+    out = wrap_response({"ok": True}, db=db, data_origin="backend", read_only=True)
+    assert out["execution_mode"] in ("REAL", "SIMULATED", "ERROR")
+    assert "afrodita_ops_control" not in out

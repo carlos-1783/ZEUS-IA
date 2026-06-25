@@ -80,6 +80,7 @@ const originLabel = computed(() => {
 
 const modeClass = (mode: string) => {
   if (mode === 'REAL' || mode === 'REAL_ACTIVE') return 'active'
+  if (mode === 'ERROR') return 'error'
   return 'simulation'
 }
 
@@ -119,6 +120,10 @@ const uiClass = (badge: string) => {
 .badge.global.active {
   background: #dcfce7;
   color: #15803d;
+}
+.badge.global.error {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 .badge.module.real {
   background: #0f766e;

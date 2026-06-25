@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from config.afrodita_flags_v1 import get_afrodita_safety_flags, reset_afrodita_flag_warnings
-from services.afrodita_control_layer_v1 import writes_enabled
+from services.afrodita_unified_control import writes_enabled
 
 
 @pytest.fixture(autouse=True)

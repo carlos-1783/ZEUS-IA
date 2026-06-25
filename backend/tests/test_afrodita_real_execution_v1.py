@@ -18,7 +18,7 @@ from app.models.company import Company, UserCompany
 from app.models.company_employee import CompanyEmployee
 from app.models.time_cost_checkin import TimeCostCheckin
 from app.models.user import User
-from services.afrodita_control_layer_v1 import can_create_employee, can_execute_checkin
+from services.afrodita_unified_control import can_create_employee, can_execute_checkin
 from services.afrodita_workspace_service_v1 import (
     create_company_employee,
     execute_qr_checkin,
@@ -144,7 +144,7 @@ def test_qr_checkin_persists_with_flags(db: Session):
     assert str(checkin.employee_id) == code
 
 
-def test_qr_checkin_dry_run_without_flags(db: Session):
+def test_qr_checkin_blocked_without_flags(db: Session):
     user, company = _seed_user_company(db)
     code = f"RO-{uuid.uuid4().hex[:6]}"
     db.add(
@@ -160,7 +160,6 @@ def test_qr_checkin_dry_run_without_flags(db: Session):
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     qr = f"ZEUSCHECK|{code}|{ts}"
 
-    result = execute_qr_checkin(db, user, qr)
-    assert result.get("dry_run") is True
-    assert result["status"] == "dry_run"
-    assert "checkin_id" not in result
+    with pytest.raises(HTTPException) as exc:
+        execute_qr_checkin(db, user, qr)
+    assert exc.value.status_code == 403

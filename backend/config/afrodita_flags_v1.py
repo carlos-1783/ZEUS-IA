@@ -1,14 +1,14 @@
 """
 AFRODITA flag safety v1 — lectura explícita de env con defaults seguros (false).
+Soporta alias legacy y recuperación si el valor se pegó en otra variable (Railway).
 """
 
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any, Dict
 
-from core.afrodita_env_debug import get_env_debug, parse_bool
+from core.afrodita_env_debug import resolve_afrodita_env
 
 logger = logging.getLogger(__name__)
 
@@ -35,19 +35,27 @@ def reset_afrodita_flag_warnings() -> None:
 
 
 def get_afrodita_safety_flags() -> Dict[str, Any]:
-    raw_execution = os.environ.get("AFRODITA_EXECUTION_ENABLED")
-    raw_readonly = os.environ.get("AFRODITA_READ_ONLY_MODE")
+    resolved = resolve_afrodita_env()
+    raw_execution = resolved["raw"]["AFRODITA_EXECUTION_ENABLED"]
+    raw_readonly = resolved["raw"]["AFRODITA_READ_ONLY_MODE"]
+    execution_source = resolved["resolution"]["AFRODITA_EXECUTION_ENABLED"]
+    readonly_source = resolved["resolution"]["AFRODITA_READ_ONLY_MODE"]
 
-    if raw_execution is None:
+    if execution_source == "missing":
         _warn_missing("AFRODITA_EXECUTION_ENABLED")
-    if raw_readonly is None:
+    if readonly_source == "missing":
         _warn_missing("AFRODITA_READ_ONLY_MODE")
 
-    execution_enabled = parse_bool(raw_execution)
-    read_only_mode = parse_bool(raw_readonly)
-    writes_enabled = execution_enabled and not read_only_mode
+    execution_enabled = bool(resolved["parsed"]["execution_enabled"])
+    read_only_mode = bool(resolved["parsed"]["read_only"])
+    writes_enabled = bool(resolved["parsed"]["writes_enabled"])
+    flags_loaded = bool(resolved["flags_loaded"])
 
-    flags_loaded = raw_execution is not None and raw_readonly is not None
+    if resolved.get("salvaged_from_misconfigured_env"):
+        logger.error(
+            "[AFRODITA_FLAGS] Flags recovered from a misconfigured env var — "
+            "set AFRODITA_EXECUTION_ENABLED and AFRODITA_READ_ONLY_MODE as separate Railway variables"
+        )
 
     return {
         "execution_enabled": execution_enabled,
@@ -57,8 +65,10 @@ def get_afrodita_safety_flags() -> Dict[str, Any]:
         "flags_loaded": flags_loaded,
         "writes_enabled": writes_enabled,
         "flags_env_present": {
-            "AFRODITA_EXECUTION_ENABLED": raw_execution is not None,
-            "AFRODITA_READ_ONLY_MODE": raw_readonly is not None,
+            "AFRODITA_EXECUTION_ENABLED": execution_source != "missing",
+            "AFRODITA_READ_ONLY_MODE": readonly_source != "missing",
         },
-        "env_debug": get_env_debug(),
+        "env_debug": resolved,
+        "resolution": resolved["resolution"],
+        "salvaged_from_misconfigured_env": resolved.get("salvaged_from_misconfigured_env", False),
     }

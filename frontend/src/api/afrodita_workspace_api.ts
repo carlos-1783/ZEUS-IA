@@ -49,6 +49,12 @@ export interface AfroditaTruthStatus {
   schedules_source: string
   rrhh_api_prefix: string
   ops_api_prefix?: string
+  salvaged_from_misconfigured_env?: boolean
+  resolution?: Record<string, string>
+  railway_env_audit?: {
+    count: number
+    misconfigured_env_vars: Array<{ host_var: string; embedded: string; hint: string }>
+  }
 }
 
 export function executionModeLabel(mode: AfroditaExecutionMode | null | undefined): string {

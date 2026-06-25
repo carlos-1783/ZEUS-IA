@@ -1,7 +1,9 @@
 import logging
-from pydantic_settings import BaseSettings
-from typing import Dict, List, Optional, Union
 import os
+import re
+from typing import Dict, List, Optional, Union
+
+from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
 # Cargar variables de entorno
@@ -17,7 +19,35 @@ else:
         os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "static")
     )
 # Volumen persistente (p. ej. Railway /data/static): subidas, sin index.html del SPA.
-_ENV_VOLATILE_STATIC = (os.getenv("ZEUS_STATIC_DIR") or os.getenv("STATIC_DIR") or "").strip()
+def _sanitize_volatile_static_path(raw: str) -> str:
+    """Strip flags accidentally pasted into STATIC_DIR on Railway."""
+    s = (raw or "").strip()
+    if not s:
+        return s
+    match = re.search(r"(/(?:app/)?data/static)", s)
+    if match:
+        cleaned = match.group(1)
+        if cleaned != s:
+            logger.warning(
+                "STATIC_DIR sanitized from %r to %r — remove embedded env text in Railway",
+                s[:120],
+                cleaned,
+            )
+        return cleaned
+    for marker in ('"', "'", "AFRODITA_", "THALOS_", "JUSTICE_"):
+        if marker in s:
+            s = s.split(marker, 1)[0].rstrip("/\"'")
+            logger.warning(
+                "STATIC_DIR truncated at %r — fix Railway variable (was %r)",
+                marker,
+                raw[:120],
+            )
+            break
+    return s
+
+_ENV_VOLATILE_STATIC = _sanitize_volatile_static_path(
+    (os.getenv("ZEUS_STATIC_DIR") or os.getenv("STATIC_DIR") or "").strip()
+)
 _RESOLVED_STATIC_DIR = os.path.abspath(_ENV_VOLATILE_STATIC) if _ENV_VOLATILE_STATIC else _PKG_STATIC_DIR
 _SPA_OVERRIDE = (os.getenv("ZEUS_SPA_STATIC_DIR") or "").strip()
 if _SPA_OVERRIDE:

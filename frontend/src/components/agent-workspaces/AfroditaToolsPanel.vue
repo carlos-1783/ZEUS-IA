@@ -178,6 +178,9 @@ onMounted(async () => {
       statusNote.value = 'SYSTEM ERROR — base de datos no disponible.'
     } else if (s.execution_mode === 'REAL') {
       statusNote.value = 'Ejecución activa: fichajes y altas persisten en BD.'
+    } else if (s.salvaged_from_misconfigured_env) {
+      statusNote.value =
+        'Flags recuperados de otra variable Railway — corrija STATIC_DIR y cree AFRODITA_EXECUTION_ENABLED por separado.'
     } else {
       statusNote.value = `NO EXECUTION — ${executionModeLabel(s.execution_mode)} (configure flags en Railway).`
     }

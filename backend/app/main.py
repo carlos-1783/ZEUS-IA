@@ -260,6 +260,23 @@ async def startup_event():
             "Omitido zeus_launch_started (producción por defecto). "
             "Pon ZEUS_STARTUP_LAUNCH_ACTIVITY=true para activarlo."
         )
+    try:
+        from config.afrodita_flags_v1 import get_afrodita_safety_flags
+        from core.afrodita_env_debug import scan_misconfigured_railway_env
+
+        af = get_afrodita_safety_flags()
+        audit = scan_misconfigured_railway_env()
+        logger.info(
+            "[AFRODITA_STARTUP] mode_writes=%s flags_loaded=%s resolution=%s misconfigured=%s",
+            af.get("writes_enabled"),
+            af.get("flags_loaded"),
+            af.get("resolution"),
+            audit.get("count", 0),
+        )
+        if audit.get("count"):
+            logger.error("[AFRODITA_STARTUP] Railway env misconfiguration: %s", audit)
+    except Exception as exc:
+        logger.warning("[AFRODITA_STARTUP] flag diagnostic failed: %s", exc)
     logger.info("ZEUS-IA backend ready")
 
 
@@ -308,6 +325,24 @@ async def health_check():
 
 @app.get("/debug")
 async def debug_info():
+    afrodita_diag: dict = {}
+    try:
+        from config.afrodita_flags_v1 import get_afrodita_safety_flags
+        from core.afrodita_env_debug import scan_misconfigured_railway_env
+        from services.afrodita_unified_control import get_global_status
+
+        flags = get_afrodita_safety_flags()
+        afrodita_diag = {
+            "execution_mode": get_global_status()["execution_mode"],
+            "writes_enabled": flags.get("writes_enabled"),
+            "flags_loaded": flags.get("flags_loaded"),
+            "resolution": flags.get("resolution"),
+            "env_debug": flags.get("env_debug"),
+            "railway_env_audit": scan_misconfigured_railway_env(),
+        }
+    except Exception as exc:
+        afrodita_diag = {"error": str(exc)}
+
     return {
         "status": "debug",
         "database_url": "SET" if os.getenv("DATABASE_URL") else "NOT_SET",
@@ -319,6 +354,7 @@ async def debug_info():
         "cors_origins": settings.BACKEND_CORS_ORIGINS,
         "static_dir": static_root,
         "spa_static_dir": spa_root,
+        "afrodita": afrodita_diag,
     }
 
 

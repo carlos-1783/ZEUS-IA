@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal
 
 from app.core.config import settings
+from config.afrodita_flags_v1 import get_afrodita_safety_flags
 from services.execution_mode_v1 import normalize_execution_mode
 
 AgentStatusLabel = Literal["REAL", "PARTIAL", "FAKE", "DISCONNECTED"]
@@ -16,9 +17,10 @@ SYSTEM_STATE = "CONTROLLED_UNTRUSTED"
 
 
 def _railway_flags() -> Dict[str, bool]:
+    afrodita = get_afrodita_safety_flags()
     return {
-        "AFRODITA_EXECUTION_ENABLED": bool(getattr(settings, "AFRODITA_EXECUTION_ENABLED", False)),
-        "AFRODITA_READ_ONLY_MODE": bool(getattr(settings, "AFRODITA_READ_ONLY_MODE", True)),
+        "AFRODITA_EXECUTION_ENABLED": bool(afrodita["AFRODITA_EXECUTION_ENABLED"]),
+        "AFRODITA_READ_ONLY_MODE": bool(afrodita["AFRODITA_READ_ONLY_MODE"]),
         "AFRODITA_OPS_ENABLED": bool(getattr(settings, "AFRODITA_OPS_ENABLED", False)),
         "AFRODITA_OPS_READ_ONLY": bool(getattr(settings, "AFRODITA_OPS_READ_ONLY", True)),
         "AFRODITA_ENABLE_STOCK_SYNC": bool(getattr(settings, "AFRODITA_ENABLE_STOCK_SYNC", False)),
@@ -53,12 +55,16 @@ def _justicia_execution_mode(flags: Dict[str, bool]) -> str:
 
 
 def _agent_catalog(flags: Dict[str, bool]) -> List[Dict[str, Any]]:
+    afrodita_mode = _afrodita_execution_mode(flags)
+    afrodita_status: AgentStatusLabel = (
+        "REAL" if afrodita_mode == "REAL" else "PARTIAL"
+    )
     return [
         {
             "name": "AFRODITA",
-            "status": "PARTIAL",
-            "execution_mode": _afrodita_execution_mode(flags),
-            "execution_ready": False,
+            "status": afrodita_status,
+            "execution_mode": afrodita_mode,
+            "execution_ready": afrodita_mode == "REAL",
             "api_prefix": "/api/v1/afrodita/rrhh/v1",
             "notes": "RRHH/OPS con BD; escritura gated por flags",
         },

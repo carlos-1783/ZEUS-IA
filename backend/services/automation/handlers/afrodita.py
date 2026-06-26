@@ -1,15 +1,21 @@
 """
 🤝 AFRODITA Automation Handler
-Genera playbooks de soporte y onboarding.
+Genera playbooks de soporte y onboarding — persiste en workspace_playbooks.
 """
 
 from __future__ import annotations
 
+import json
+import logging
 from datetime import datetime, timedelta
-from typing import Dict, Any
+from typing import Any, Dict
 
+from app.db.session import SessionLocal
 from app.models.agent_activity import AgentActivity
+from app.models.user import User
 from .. import utils
+
+logger = logging.getLogger(__name__)
 
 
 def _support_schedule() -> Dict[str, Any]:
@@ -60,6 +66,52 @@ def _coordination_notes() -> Dict[str, Any]:
     }
 
 
+def _persist_to_workspace_db(
+    activity: AgentActivity,
+    *,
+    title: str,
+    deliverable: Dict[str, Any],
+    markdown: str,
+    json_path: str,
+    markdown_path: str,
+) -> Dict[str, Any]:
+    db = SessionLocal()
+    try:
+        user = None
+        email = (activity.user_email or "").strip()
+        if email:
+            user = db.query(User).filter(User.email == email).first()
+        if not user:
+            logger.warning("[AFRODITA] playbook sin user_email — no se persiste en BD")
+            return {"persisted": False, "reason": "no_user"}
+
+        from services.afrodita_workspace_db_service_v1 import (
+            persist_workspace_file,
+            persist_workspace_playbook,
+            workspace_enabled,
+        )
+
+        if not workspace_enabled():
+            return {"persisted": False, "reason": "workspace_disabled"}
+
+        playbook = persist_workspace_playbook(db, user, title=title, content=deliverable)
+        persist_workspace_file(db, user, name=f"{activity.id}_{activity.action_type}.json", content=json.dumps(deliverable, ensure_ascii=False))
+        persist_workspace_file(db, user, name=f"{activity.id}_{activity.action_type}.md", content=markdown)
+        db.commit()
+        return {
+            "persisted": True,
+            "playbook_id": playbook.id,
+            "json_path": json_path,
+            "markdown_path": markdown_path,
+        }
+    except Exception:
+        db.rollback()
+        logger.exception("[AFRODITA] error persistiendo playbook en BD")
+        return {"persisted": False, "reason": "db_error"}
+    finally:
+        db.close()
+
+
 def handle_afrodita_task(activity: AgentActivity) -> Dict[str, Any]:
     agent = activity.agent_name.upper()
     prefix = f"{activity.id}_{activity.action_type}"
@@ -88,6 +140,14 @@ def handle_afrodita_task(activity: AgentActivity) -> Dict[str, Any]:
         },
     )
     markdown_path = utils.write_markdown(agent, prefix, markdown)
+    db_result = _persist_to_workspace_db(
+        activity,
+        title="Playbook de Soporte ZEUS IA",
+        deliverable=deliverable,
+        markdown=markdown,
+        json_path=json_path,
+        markdown_path=markdown_path,
+    )
 
     return {
         "status": "completed",
@@ -95,9 +155,9 @@ def handle_afrodita_task(activity: AgentActivity) -> Dict[str, Any]:
             "automation": {
                 "deliverables": {"json": json_path, "markdown": markdown_path},
                 "summary": deliverable["summary"],
+                "workspace_db": db_result,
             }
         },
         "metrics_update": {"playbooks_generated": 1},
         "notes": f"Playbook de soporte disponible en {json_path}",
     }
-

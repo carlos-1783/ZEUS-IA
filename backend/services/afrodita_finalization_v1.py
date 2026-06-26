@@ -40,6 +40,10 @@ WORKSPACE_BLOCKED_MODULES = frozenset(
 
 def finalization_payload() -> Dict[str, Any]:
     flags = current_flags()
+    ws = {"enabled": flags.get("AFRODITA_WORKSPACE_ENABLED", True), "status": "CONNECTED"}
+    rrhh_mode = "REAL" if flags.get("AFRODITA_USE_REAL_EMPLOYEES") else "PARTIAL"
+    ops_mode = "REAL" if flags.get("AFRODITA_ENABLE_STOCK_SYNC") or flags.get("AFRODITA_OPS_ENABLED") else "PARTIAL"
+    workspace_mode = "REAL" if ws["enabled"] else "ISOLATED"
     return {
         "system_id": "afrodita_finalization_v1",
         "mode": "safe_execution",
@@ -67,17 +71,18 @@ def finalization_payload() -> Dict[str, Any]:
             "routes": "SIMULATED",
         },
         "workspace_module": {
-            "status": "ISOLATED",
+            "status": workspace_mode,
             "rules": [
-                "no_direct_db_writes",
-                "no_business_execution",
-                "only_playbooks_and_outputs",
+                "no_direct_business_execution",
+                "playbooks_and_files_from_db",
             ],
+            "files_api": "/api/v1/afrodita/workspace/files",
+            "playbooks_api": "/api/v1/afrodita/workspace/playbooks",
         },
         "ui_tabs": [
-            {"name": "RRHH", "component": "AfroditaToolsPanel", "status": "REAL"},
-            {"name": "OPERACIONES", "component": "AfroditaOpsPanel", "status": "REAL"},
-            {"name": "WORKSPACE", "component": "WorkspacePlaybooks", "status": "REAL"},
+            {"name": "RRHH", "component": "AfroditaToolsPanel", "status": rrhh_mode},
+            {"name": "OPERACIONES", "component": "AfroditaOpsPanel", "status": ops_mode},
+            {"name": "WORKSPACE", "component": "AfroditaWorkspacePanel", "status": workspace_mode},
         ],
         "anti_fake_rules": [
             "no_static_arrays",

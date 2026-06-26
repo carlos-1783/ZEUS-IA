@@ -55,6 +55,30 @@ export interface AfroditaTruthStatus {
     count: number
     misconfigured_env_vars: Array<{ host_var: string; embedded: string; hint: string }>
   }
+  workspace?: {
+    enabled: boolean
+    connected: boolean
+    db_connected: boolean
+    files_api: string
+    playbooks_api: string
+    status: AfroditaExecutionMode
+  }
+}
+
+export interface AfroditaWorkspaceFile {
+  id: number
+  name: string
+  content: string | null
+  company_id?: number | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface AfroditaWorkspacePlaybook {
+  id: number
+  title: string
+  content: Record<string, unknown>
+  created_at: string | null
 }
 
 export function executionModeLabel(mode: AfroditaExecutionMode | null | undefined): string {
@@ -65,6 +89,28 @@ export function executionModeLabel(mode: AfroditaExecutionMode | null | undefine
 
 export async function fetchAfroditaStatus() {
   return api.get('/api/v1/afrodita/status') as Promise<AfroditaTruthStatus>
+}
+
+export async function fetchAfroditaWorkspaceFiles(limit = 100) {
+  return api.get(`/api/v1/afrodita/workspace/files?limit=${limit}`) as Promise<
+    AfroditaControlResponse & {
+      success: boolean
+      files: AfroditaWorkspaceFile[]
+      count: number
+      connected?: boolean
+    }
+  >
+}
+
+export async function fetchAfroditaWorkspacePlaybooks(limit = 100) {
+  return api.get(`/api/v1/afrodita/workspace/playbooks?limit=${limit}`) as Promise<
+    AfroditaControlResponse & {
+      success: boolean
+      playbooks: AfroditaWorkspacePlaybook[]
+      count: number
+      connected?: boolean
+    }
+  >
 }
 
 export async function fetchAfroditaRrhhStatus() {

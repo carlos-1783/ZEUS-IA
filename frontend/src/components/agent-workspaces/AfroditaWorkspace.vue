@@ -31,7 +31,7 @@
     <section class="domain-panel">
       <AfroditaToolsPanel v-if="activeTab === 'rrhh'" />
       <AfroditaOpsPanel v-else-if="activeTab === 'ops'" />
-      <WorkspacePlaybooks v-else />
+      <AfroditaWorkspacePanel v-else :connected="workspaceConnected" />
     </section>
   </div>
 </template>
@@ -46,7 +46,7 @@ import {
 } from '@/api/afrodita_workspace_api'
 import AfroditaToolsPanel from './AfroditaToolsPanel.vue'
 import AfroditaOpsPanel from './AfroditaOpsPanel.vue'
-import WorkspacePlaybooks from './WorkspacePlaybooks.vue'
+import AfroditaWorkspacePanel from './AfroditaWorkspacePanel.vue'
 import ThalosExecutionBadge from './ThalosExecutionBadge.vue'
 
 type TabId = 'rrhh' | 'ops' | 'workspace'
@@ -55,6 +55,18 @@ const activeTab = ref<TabId>('rrhh')
 const globalStatus = ref<AfroditaTruthStatus | null>(null)
 
 const modeLabel = computed(() => executionModeLabel(globalStatus.value?.execution_mode))
+
+const workspaceConnected = computed(
+  () => globalStatus.value?.workspace?.connected === true
+)
+
+const workspaceTabLabel = computed(() => {
+  const ws = globalStatus.value?.workspace
+  if (!ws?.enabled) return 'NO EXECUTION'
+  if (ws.connected) return 'REAL'
+  if (ws.status === 'ERROR') return 'SYSTEM ERROR'
+  return 'NO EXECUTION'
+})
 
 const statusClassFor = (mode: AfroditaExecutionMode | undefined) => {
   if (mode === 'REAL') return 'real'
@@ -66,10 +78,14 @@ const tabs = computed(() => {
   const mode = globalStatus.value?.execution_mode
   const label = modeLabel.value
   const cls = statusClassFor(mode)
+  const wsLabel = workspaceTabLabel.value
+  const wsCls = statusClassFor(
+    workspaceConnected.value ? 'REAL' : globalStatus.value?.workspace?.status
+  )
   return [
     { id: 'rrhh' as const, name: 'RRHH', status: label, statusClass: cls },
     { id: 'ops' as const, name: 'OPERACIONES', status: label, statusClass: cls },
-    { id: 'workspace' as const, name: 'WORKSPACE', status: label, statusClass: cls },
+    { id: 'workspace' as const, name: 'WORKSPACE', status: wsLabel, statusClass: wsCls },
   ]
 })
 

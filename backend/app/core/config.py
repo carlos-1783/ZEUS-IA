@@ -166,7 +166,12 @@ class Settings(BaseSettings):
         "1",
         "yes",
     )
-    AFRODITA_USE_REAL_SCHEDULES: bool = os.getenv("AFRODITA_USE_REAL_SCHEDULES", "false").lower() in (
+    AFRODITA_USE_REAL_SCHEDULES: bool = os.getenv("AFRODITA_USE_REAL_SCHEDULES", "true").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    AFRODITA_WORKSPACE_ENABLED: bool = os.getenv("AFRODITA_WORKSPACE_ENABLED", "true").lower() in (
         "true",
         "1",
         "yes",

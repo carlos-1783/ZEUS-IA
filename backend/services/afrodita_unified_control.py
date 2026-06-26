@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from config.afrodita_flags_v1 import get_afrodita_safety_flags
+from services.afrodita_workspace_db_service_v1 import workspace_connection_status
 from services.execution_mode_v1 import normalize_execution_mode
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,8 @@ def current_flags() -> Dict[str, bool]:
         "read_only_mode": bool(safety["read_only_mode"]),
         "AFRODITA_USE_REAL_EMPLOYEES": bool(getattr(settings, "AFRODITA_USE_REAL_EMPLOYEES", True)),
         "AFRODITA_USE_REAL_CHECKINS": bool(getattr(settings, "AFRODITA_USE_REAL_CHECKINS", True)),
-        "AFRODITA_USE_REAL_SCHEDULES": bool(getattr(settings, "AFRODITA_USE_REAL_SCHEDULES", False)),
+        "AFRODITA_USE_REAL_SCHEDULES": bool(getattr(settings, "AFRODITA_USE_REAL_SCHEDULES", True)),
+        "AFRODITA_WORKSPACE_ENABLED": bool(getattr(settings, "AFRODITA_WORKSPACE_ENABLED", True)),
         "AFRODITA_ENABLE_ROUTE_ENGINE": bool(getattr(settings, "AFRODITA_ENABLE_ROUTE_ENGINE", False)),
         "AFRODITA_ENABLE_STOCK_SYNC": bool(getattr(settings, "AFRODITA_ENABLE_STOCK_SYNC", False)),
     }
@@ -100,6 +102,7 @@ def get_global_status(db: Optional[Session] = None) -> Dict[str, Any]:
         "erp_api_path": "/api/v1/products",
         "tpv_api_path": "/api/v1/tpv/products",
         "inventory_precedence": "erp",
+        "workspace": workspace_connection_status(db),
     }
 
 

@@ -42,6 +42,7 @@ from app.api.v1.endpoints import (
     afrodita_status,
     afrodita_rrhh_v1,
     afrodita_ops_v1,
+    afrodita_workspace_v1,
     justicia_v1,
     products,
     zeus_closure_v1,
@@ -137,6 +138,7 @@ api_router.include_router(afrodita_status.router, tags=["afrodita"])
 api_router.include_router(afrodita_v1.router, tags=["afrodita-v1"])
 api_router.include_router(afrodita_rrhh_v1.router, tags=["afrodita-rrhh-v1"])
 api_router.include_router(afrodita_ops_v1.router, tags=["afrodita-ops-v1"])
+api_router.include_router(afrodita_workspace_v1.router, tags=["afrodita-workspace"])
 api_router.include_router(justicia_v1.router, tags=["justicia-v1"])
 api_router.include_router(zeus_closure_v1.router, tags=["zeus-closure"])
 

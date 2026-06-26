@@ -158,7 +158,7 @@ def create_company_employee(
     db.refresh(emp)
 
     log_execution_attempt(
-        module="employee_manager",
+        domain="rrhh",
         action="create_employee",
         allowed=True,
         actor_id=user.id,
@@ -254,7 +254,7 @@ def execute_qr_checkin(db: Session, user: User, code: str) -> Dict[str, Any]:
         assert_can_write(db)
 
     log_execution_attempt(
-        module="qr_checkin",
+        domain="rrhh",
         action="register_checkin",
         allowed=True,
         actor_id=user.id,

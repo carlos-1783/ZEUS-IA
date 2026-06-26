@@ -51,6 +51,8 @@ def current_flags() -> Dict[str, bool]:
         "AFRODITA_USE_REAL_CHECKINS": bool(getattr(settings, "AFRODITA_USE_REAL_CHECKINS", True)),
         "AFRODITA_USE_REAL_SCHEDULES": bool(getattr(settings, "AFRODITA_USE_REAL_SCHEDULES", True)),
         "AFRODITA_WORKSPACE_ENABLED": bool(getattr(settings, "AFRODITA_WORKSPACE_ENABLED", True)),
+        "AFRODITA_USE_ERP": bool(getattr(settings, "AFRODITA_USE_ERP", True)),
+        "AFRODITA_USE_TPV": bool(getattr(settings, "AFRODITA_USE_TPV", True)),
         "AFRODITA_ENABLE_ROUTE_ENGINE": bool(getattr(settings, "AFRODITA_ENABLE_ROUTE_ENGINE", False)),
         "AFRODITA_ENABLE_STOCK_SYNC": bool(getattr(settings, "AFRODITA_ENABLE_STOCK_SYNC", False)),
     }
@@ -143,11 +145,11 @@ def can_execute_checkin() -> bool:
 
 
 def can_write_stock() -> bool:
-    return writes_enabled() and bool(current_flags()["AFRODITA_ENABLE_STOCK_SYNC"])
+    return writes_enabled()
 
 
 def route_engine_available() -> bool:
-    return writes_enabled() and bool(current_flags()["AFRODITA_ENABLE_ROUTE_ENGINE"])
+    return writes_enabled()
 
 
 def log_execution_attempt(

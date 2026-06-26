@@ -24,11 +24,7 @@ def test_can_write_stock_requires_global_writes():
         },
         clear=False,
     ):
-        with patch("services.afrodita_unified_control.current_flags") as mock_flags:
-            mock_flags.return_value = {
-                "AFRODITA_ENABLE_STOCK_SYNC": True,
-            }
-            assert can_write_stock() is True
+        assert can_write_stock() is True
 
 
 def test_ops_wrap_response_global_mode():

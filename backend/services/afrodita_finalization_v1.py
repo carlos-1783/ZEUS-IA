@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Literal
 
 from fastapi import HTTPException, status
 
-from services.afrodita_unified_control import current_flags, get_global_status
+from services.afrodita_unified_control import current_flags, get_global_status, writes_enabled
 
 DomainId = Literal["rrhh", "ops", "workspace"]
 
@@ -42,7 +42,7 @@ def finalization_payload() -> Dict[str, Any]:
     flags = current_flags()
     ws = {"enabled": flags.get("AFRODITA_WORKSPACE_ENABLED", True), "status": "CONNECTED"}
     rrhh_mode = "REAL" if flags.get("AFRODITA_USE_REAL_EMPLOYEES") else "PARTIAL"
-    ops_mode = "REAL" if flags.get("AFRODITA_ENABLE_STOCK_SYNC") or flags.get("AFRODITA_OPS_ENABLED") else "PARTIAL"
+    ops_mode = "REAL" if writes_enabled() else "PARTIAL"
     workspace_mode = "REAL" if ws["enabled"] else "ISOLATED"
     return {
         "system_id": "afrodita_finalization_v1",
@@ -63,12 +63,13 @@ def finalization_payload() -> Dict[str, Any]:
             "facial_checkin": "DISABLED",
         },
         "ops_module": {
-            "status": "BOOTSTRAP_REAL",
+            "status": ops_mode,
             "api_prefix": OPS_API_PREFIX,
             "inventory": "REAL",
             "movements": "REAL",
-            "warehouse": "NONE",
-            "routes": "SIMULATED",
+            "warehouse": "REAL",
+            "routes": "REAL",
+            "writes_gated_by": "global_writes_enabled",
         },
         "workspace_module": {
             "status": workspace_mode,

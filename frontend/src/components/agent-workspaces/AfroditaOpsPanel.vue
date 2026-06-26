@@ -8,14 +8,11 @@
       <p v-if="statusNote" class="status-note">{{ statusNote }}</p>
     </header>
 
-    <!-- INVENTARIO -->
     <section class="card">
       <h3>📦 Inventario</h3>
-
       <button @click="() => loadInventory()" :disabled="loading.inventory">
         {{ loading.inventory ? 'Cargando...' : 'Refrescar' }}
       </button>
-
       <table v-if="inventory.length">
         <thead>
           <tr>
@@ -37,41 +34,69 @@
           </tr>
         </tbody>
       </table>
-
       <p v-else-if="inventoryLoaded">No hay datos</p>
     </section>
 
-    <!-- MOVIMIENTOS -->
     <section class="card">
       <h3>🔄 Movimientos</h3>
-
+      <div v-if="canWrite" class="movement-form">
+        <select v-model.number="movementForm.product_id">
+          <option :value="0" disabled>Producto ERP</option>
+          <option v-for="p in writableProducts" :key="p.product_id" :value="p.product_id">
+            {{ p.name }} ({{ p.id }})
+          </option>
+        </select>
+        <select v-model="movementForm.movement_type">
+          <option value="adjustment">Ajuste</option>
+          <option value="purchase">Entrada</option>
+          <option value="sale">Salida</option>
+          <option value="return">Devolución</option>
+        </select>
+        <input v-model.number="movementForm.quantity" type="number" step="1" placeholder="Cantidad (+/-)" />
+        <button :disabled="loading.createMovement" @click="runCreateMovement">
+          {{ loading.createMovement ? 'Guardando…' : 'Registrar movimiento' }}
+        </button>
+      </div>
+      <p v-else class="hint">Escritura OPS requiere modo REAL global.</p>
       <button @click="loadMovements" :disabled="loading.movements">
-        {{ loading.movements ? 'Cargando...' : 'Refrescar' }}
+        {{ loading.movements ? 'Cargando...' : 'Refrescar lista' }}
       </button>
-
       <ul v-if="movements.length">
         <li v-for="m in movements" :key="m.id">
           {{ m.product_name }} — {{ m.type }} — {{ m.quantity }}
         </li>
       </ul>
-
       <p v-else-if="movementsLoaded">No hay movimientos</p>
     </section>
 
-    <!-- ALMACÉN -->
     <section class="card">
       <h3>🏭 Almacén</h3>
-      <p>No implementado aún</p>
+      <button @click="loadWarehouse" :disabled="loading.warehouse">
+        {{ loading.warehouse ? 'Cargando...' : 'Refrescar almacén' }}
+      </button>
+      <div v-if="warehouse">
+        <p><strong>{{ warehouse.total_skus }}</strong> SKUs · <strong>{{ warehouse.total_units }}</strong> unidades</p>
+        <p v-if="warehouse.low_stock_count">⚠️ {{ warehouse.low_stock_count }} en stock bajo</p>
+        <ul v-if="warehouse.low_stock_items?.length">
+          <li v-for="item in warehouse.low_stock_items" :key="item.id">{{ item.name }} ({{ item.stock }})</li>
+        </ul>
+      </div>
     </section>
 
-    <!-- RUTAS -->
     <section class="card">
       <h3>🚚 Rutas</h3>
-
-      <button @click="simulateRoute" :disabled="loading.routes || truthStatus?.execution_mode !== 'REAL'">
-        {{ loading.routes ? 'Calculando...' : 'Calcular ruta' }}
-      </button>
-
+      <div v-if="canWrite" class="route-form">
+        <input v-model="routeForm.origin" placeholder="Origen" />
+        <input v-model="routeForm.destination" placeholder="Destino" />
+        <button :disabled="loading.routes" @click="runCreateRoute">
+          {{ loading.routes ? 'Guardando…' : 'Crear y persistir ruta' }}
+        </button>
+      </div>
+      <ul v-if="routes.length" class="route-list">
+        <li v-for="r in routes" :key="r.id">
+          {{ r.origin }} → {{ r.destination }} · {{ r.distance }} km
+        </li>
+      </ul>
       <pre v-if="routeResult">{{ routeResult }}</pre>
     </section>
 
@@ -83,16 +108,22 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { executionModeLabel, fetchAfroditaStatus, type AfroditaTruthStatus } from '@/api/afrodita_workspace_api'
 import {
+  createAfroditaMovement,
+  createAfroditaRoute,
   fetchAfroditaOpsInventory,
   fetchAfroditaOpsMovements,
-  simulateAfroditaRoute,
+  fetchAfroditaOpsRoutes,
+  fetchAfroditaWarehouse,
   type InventoryMovementItem,
   type MergedProductItem,
+  type OpsRouteItem,
+  type WarehouseSummary,
 } from '@/api/afrodita_ops_api'
 import ThalosExecutionBadge from './ThalosExecutionBadge.vue'
 
 interface InventoryRow {
   id: string
+  product_id?: number
   name: string
   erp_stock: number | null
   tpv_stock: number | null
@@ -107,25 +138,50 @@ interface MovementRow {
   quantity: number
 }
 
-const loading = reactive({ inventory: false, movements: false, routes: false })
+const loading = reactive({
+  inventory: false,
+  movements: false,
+  createMovement: false,
+  routes: false,
+  warehouse: false,
+})
 const error = ref('')
 const statusNote = ref('')
 const truthStatus = ref<AfroditaTruthStatus | null>(null)
 const rawProducts = ref<MergedProductItem[]>([])
 const rawMovements = ref<InventoryMovementItem[]>([])
+const routes = ref<OpsRouteItem[]>([])
+const warehouse = ref<WarehouseSummary | null>(null)
 const inventoryLoaded = ref(false)
 const movementsLoaded = ref(false)
 const routeResult = ref<string | null>(null)
 
+const movementForm = reactive({
+  product_id: 0,
+  movement_type: 'adjustment',
+  quantity: 1,
+})
+const routeForm = reactive({
+  origin: 'HQ',
+  destination: 'Cliente',
+})
+
+const canWrite = computed(() => truthStatus.value?.execution_mode === 'REAL')
+
 const inventory = computed<InventoryRow[]>(() =>
   rawProducts.value.map((p) => ({
     id: p.id,
+    product_id: p.product_id,
     name: p.name,
     erp_stock: p.erp_quantity_on_hand,
     tpv_stock: p.tpv_stock,
     source: p.source,
     low_stock: p.low_stock,
   }))
+)
+
+const writableProducts = computed(() =>
+  inventory.value.filter((p) => typeof p.product_id === 'number' && p.product_id > 0)
 )
 
 const movements = computed<MovementRow[]>(() =>
@@ -146,11 +202,11 @@ onMounted(async () => {
     if (mode === 'ERROR') {
       statusNote.value = 'SYSTEM ERROR — base de datos no disponible.'
     } else if (mode === 'REAL') {
-      statusNote.value = 'OPS activo — lectura desde BD (inventario TPV + ERP).'
+      statusNote.value = 'OPS REAL — inventario, movimientos y rutas persisten en BD.'
     } else {
       statusNote.value = `${executionModeLabel(mode)} — escritura global deshabilitada.`
     }
-    await loadInventory(true)
+    await Promise.all([loadInventory(true), loadMovements(true), loadRoutes(true), loadWarehouse(true)])
   } catch {
     /* optional */
   }
@@ -163,6 +219,8 @@ const loadInventory = async (silent = false) => {
     const out = await fetchAfroditaOpsInventory()
     rawProducts.value = out.items || []
     inventoryLoaded.value = true
+    const first = writableProducts.value[0]
+    if (first?.product_id) movementForm.product_id = first.product_id
   } catch (e) {
     if (!silent) error.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -170,30 +228,90 @@ const loadInventory = async (silent = false) => {
   }
 }
 
-const loadMovements = async () => {
-  error.value = ''
+const loadMovements = async (silent = false) => {
+  if (!silent) error.value = ''
   loading.movements = true
   try {
     const out = await fetchAfroditaOpsMovements()
     rawMovements.value = out.movements || []
     movementsLoaded.value = true
   } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e)
+    if (!silent) error.value = e instanceof Error ? e.message : String(e)
   } finally {
     loading.movements = false
   }
 }
 
-const simulateRoute = async () => {
-  error.value = ''
+const loadRoutes = async (silent = false) => {
+  if (!silent) error.value = ''
   loading.routes = true
-  routeResult.value = null
   try {
-    await simulateAfroditaRoute([], 'HQ')
-    routeResult.value = 'Motor de rutas no implementado (501).'
+    const out = await fetchAfroditaOpsRoutes()
+    routes.value = out.routes || []
   } catch (e) {
-    routeResult.value = e instanceof Error ? e.message : String(e)
-    error.value = routeResult.value
+    if (!silent) error.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    loading.routes = false
+  }
+}
+
+const loadWarehouse = async (silent = false) => {
+  if (!silent) error.value = ''
+  loading.warehouse = true
+  try {
+    warehouse.value = await fetchAfroditaWarehouse()
+  } catch (e) {
+    if (!silent) error.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    loading.warehouse = false
+  }
+}
+
+const runCreateMovement = async () => {
+  if (!movementForm.product_id) {
+    error.value = 'Seleccione un producto ERP'
+    return
+  }
+  error.value = ''
+  loading.createMovement = true
+  try {
+    const out = await createAfroditaMovement({
+      product_id: movementForm.product_id,
+      movement_type: movementForm.movement_type,
+      quantity: movementForm.quantity,
+      reference: 'afrodita_ops_ui',
+    })
+    if (!out.success) {
+      error.value = out.message || 'Movimiento no persistido'
+      return
+    }
+    await Promise.all([loadInventory(true), loadMovements(true), loadWarehouse(true)])
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    loading.createMovement = false
+  }
+}
+
+const runCreateRoute = async () => {
+  error.value = ''
+  routeResult.value = null
+  loading.routes = true
+  try {
+    const out = await createAfroditaRoute({
+      origin: routeForm.origin,
+      destination: routeForm.destination,
+      deliveries: [{ stop: 1 }],
+    })
+    if (!out.success) {
+      error.value = 'Ruta no persistida'
+      return
+    }
+    routeResult.value = out.message || `Ruta #${out.route.id} — ${out.route.distance} km`
+    await loadRoutes(true)
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e)
+    routeResult.value = error.value
   } finally {
     loading.routes = false
   }
@@ -230,34 +348,29 @@ const simulateRoute = async () => {
 .card h3 {
   margin: 0 0 12px;
   font-size: 16px;
+}
+
+.movement-form,
+.route-form {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
+  margin-bottom: 10px;
 }
 
-.badge {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 6px;
-  font-weight: 600;
-  text-transform: uppercase;
+.movement-form input,
+.movement-form select,
+.route-form input {
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
 }
 
-.badge.real {
-  background: #dcfce7;
-  color: #15803d;
-}
-.badge.partial {
-  background: #fef3c7;
-  color: #b45309;
-}
-.badge.simulated {
-  background: #f1f5f9;
+.hint {
+  font-size: 12px;
   color: #64748b;
-}
-.badge.none {
-  background: #fee2e2;
-  color: #b91c1c;
+  margin: 0 0 8px;
 }
 
 .card button {
@@ -268,6 +381,7 @@ const simulateRoute = async () => {
   padding: 8px 12px;
   cursor: pointer;
   margin-bottom: 10px;
+  margin-right: 8px;
 }
 
 .card button:disabled {
@@ -301,7 +415,8 @@ th {
   font-weight: 700;
 }
 
-ul {
+ul,
+.route-list {
   margin: 10px 0 0;
   padding-left: 18px;
   font-size: 13px;

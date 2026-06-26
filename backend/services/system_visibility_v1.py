@@ -21,8 +21,7 @@ def _railway_flags() -> Dict[str, bool]:
     return {
         "AFRODITA_EXECUTION_ENABLED": bool(afrodita["AFRODITA_EXECUTION_ENABLED"]),
         "AFRODITA_READ_ONLY_MODE": bool(afrodita["AFRODITA_READ_ONLY_MODE"]),
-        "AFRODITA_OPS_ENABLED": bool(getattr(settings, "AFRODITA_OPS_ENABLED", False)),
-        "AFRODITA_OPS_READ_ONLY": bool(getattr(settings, "AFRODITA_OPS_READ_ONLY", True)),
+        "AFRODITA_OPS_WRITES": bool(afrodita["writes_enabled"]),
         "AFRODITA_ENABLE_STOCK_SYNC": bool(getattr(settings, "AFRODITA_ENABLE_STOCK_SYNC", False)),
         "THALOS_EXECUTION_ENABLED": bool(getattr(settings, "THALOS_EXECUTION_ENABLED", False)),
         "THALOS_REAL_LOGS_ENABLED": bool(getattr(settings, "THALOS_REAL_LOGS_ENABLED", False)),

@@ -13,6 +13,7 @@ export interface MergedProductItem {
   low_stock: boolean
   category: string
   price: number
+  erp_id?: number
 }
 
 export interface InventoryMovementItem {
@@ -25,6 +26,30 @@ export interface InventoryMovementItem {
   reference?: string
   notes?: string
   created_at?: string
+}
+
+export interface OpsRouteItem {
+  id: number
+  origin: string
+  destination: string
+  distance: number
+  created_at?: string
+  plan?: Record<string, unknown>
+}
+
+export interface WarehouseSummary {
+  implemented: boolean
+  total_skus: number
+  low_stock_count: number
+  total_units: number
+  locations: Array<{
+    code: string
+    label: string
+    sku_count: number
+    units_on_hand: number
+    low_stock_skus: number
+  }>
+  low_stock_items: Array<{ id?: string; name?: string; stock?: number | null }>
 }
 
 export async function fetchAfroditaOpsInventory() {
@@ -51,9 +76,50 @@ export async function fetchAfroditaOpsMovements(limit = 50) {
   >
 }
 
-export async function simulateAfroditaRoute(deliveries: Record<string, unknown>[], startLocation = 'depot') {
-  return api.post('/api/v1/afrodita/ops/v1/routes/simulate', {
-    deliveries,
-    start_location: startLocation,
-  }) as Promise<AfroditaControlResponse & { success: boolean; result?: Record<string, unknown> }>
+export async function createAfroditaMovement(payload: {
+  product_id: number
+  movement_type: string
+  quantity: number
+  reference?: string
+  notes?: string
+}) {
+  return api.post('/api/v1/afrodita/ops/v1/movements/create', payload) as Promise<
+    AfroditaControlResponse & {
+      success: boolean
+      movement: InventoryMovementItem
+      stock_after: number
+      tpv_synced?: string | null
+      message?: string
+    }
+  >
+}
+
+export async function createAfroditaRoute(payload: {
+  origin: string
+  destination: string
+  deliveries?: Record<string, unknown>[]
+}) {
+  return api.post('/api/v1/afrodita/ops/v1/routes/create', payload) as Promise<
+    AfroditaControlResponse & {
+      success: boolean
+      route: OpsRouteItem
+      message?: string
+    }
+  >
+}
+
+export async function fetchAfroditaOpsRoutes(limit = 50) {
+  return api.get(`/api/v1/afrodita/ops/v1/routes?limit=${limit}`) as Promise<
+    AfroditaControlResponse & {
+      success: boolean
+      routes: OpsRouteItem[]
+      count: number
+    }
+  >
+}
+
+export async function fetchAfroditaWarehouse() {
+  return api.get('/api/v1/afrodita/ops/v1/warehouse') as Promise<
+    AfroditaControlResponse & { success: boolean } & WarehouseSummary
+  >
 }

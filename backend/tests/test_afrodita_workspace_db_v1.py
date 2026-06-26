@@ -22,6 +22,9 @@ from services.afrodita_workspace_db_service_v1 import (
 
 @pytest.fixture()
 def db():
+    from app.models.workspace_playbook import WorkspacePlaybook
+
+    WorkspacePlaybook.__table__.drop(bind=engine, checkfirst=True)
     Base.metadata.create_all(bind=engine)
     session = SessionLocal()
     try:

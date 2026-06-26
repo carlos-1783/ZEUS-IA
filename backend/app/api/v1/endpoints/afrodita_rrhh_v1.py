@@ -80,6 +80,16 @@ def afrodita_rrhh_qr_checkin(
                 "message": "Fichaje no persistido — falta checkin_id",
             },
         )
+    from services.workspace_playbook_writer_v1 import write_rrhh_playbook
+
+    write_rrhh_playbook(
+        db,
+        current_user,
+        action="qr_check_in",
+        title=f"Fichaje QR #{checkin_id}",
+        payload={"checkin_id": checkin_id, "result": result},
+    )
+    db.commit()
     return wrap_response(
         {
             "success": True,
@@ -115,8 +125,17 @@ def afrodita_rrhh_create_employee(
         phone=request.phone or None,
         hourly_rate=request.hourly_rate,
     )
-    db.commit()
+    from services.workspace_playbook_writer_v1 import write_rrhh_playbook
+
     emp = body["employee"]
+    write_rrhh_playbook(
+        db,
+        current_user,
+        action="create_employee",
+        title=f"Alta empleado {emp['full_name']}",
+        payload=body,
+    )
+    db.commit()
     return wrap_response(
         {
             "success": True,

@@ -78,7 +78,7 @@ def finalization_payload() -> Dict[str, Any]:
                 "playbooks_and_files_from_db",
             ],
             "files_api": "/api/v1/afrodita/workspace/files",
-            "playbooks_api": "/api/v1/afrodita/workspace/playbooks",
+            "playbooks_api": "/api/v1/workspace/playbooks",
         },
         "ui_tabs": [
             {"name": "RRHH", "component": "AfroditaToolsPanel", "status": rrhh_mode},

@@ -94,7 +94,9 @@ def _persist_to_workspace_db(
         if not workspace_enabled():
             return {"persisted": False, "reason": "workspace_disabled"}
 
-        playbook = persist_workspace_playbook(db, user, title=title, content=deliverable)
+        playbook = persist_workspace_playbook(
+            db, user, title=title, content=deliverable, agent_source="automation"
+        )
         persist_workspace_file(db, user, name=f"{activity.id}_{activity.action_type}.json", content=json.dumps(deliverable, ensure_ascii=False))
         persist_workspace_file(db, user, name=f"{activity.id}_{activity.action_type}.md", content=markdown)
         db.commit()

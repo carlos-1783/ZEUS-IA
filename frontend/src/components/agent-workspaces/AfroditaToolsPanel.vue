@@ -79,7 +79,7 @@
             :show-global="true"
           />
         </div>
-        <p class="hint">employee_schedules · activar AFRODITA_USE_REAL_SCHEDULES en Railway.</p>
+        <p class="hint">employee_schedules — lectura desde BD.</p>
         <button :disabled="loading.schedules" @click="loadSchedules">
           {{ loading.schedules ? 'Cargando…' : 'Ver turnos' }}
         </button>

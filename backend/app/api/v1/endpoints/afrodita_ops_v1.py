@@ -116,6 +116,15 @@ def afrodita_ops_movement_create(
         reference=body.reference,
         notes=body.notes,
     )
+    from services.workspace_playbook_writer_v1 import write_ops_playbook
+
+    write_ops_playbook(
+        db,
+        current_user,
+        action="create_movement",
+        title=f"Movimiento #{result['movement']['id']}",
+        payload=result,
+    )
     db.commit()
     return wrap_response(
         {"success": True, **result},
@@ -159,6 +168,15 @@ def afrodita_ops_route_create(
         origin=body.origin,
         destination=body.destination,
         deliveries=body.deliveries,
+    )
+    from services.workspace_playbook_writer_v1 import write_logistics_playbook
+
+    write_logistics_playbook(
+        db,
+        current_user,
+        action="create_route",
+        title=f"Ruta {body.origin} → {body.destination}",
+        payload=result,
     )
     db.commit()
     return wrap_response(

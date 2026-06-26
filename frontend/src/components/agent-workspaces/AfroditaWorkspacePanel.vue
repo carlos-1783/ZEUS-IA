@@ -43,6 +43,7 @@
           >
             <div class="title">{{ item.title }}</div>
             <div class="meta">
+              <span class="source-badge">{{ item.agent_source || 'afrodita' }}</span>
               <span>{{ formatDate(item.created_at) }}</span>
             </div>
           </li>
@@ -132,17 +133,17 @@
 import { computed, onMounted, ref } from 'vue'
 import {
   fetchAfroditaWorkspaceFiles,
-  fetchAfroditaWorkspacePlaybooks,
   type AfroditaWorkspaceFile,
   type AfroditaWorkspacePlaybook,
 } from '@/api/afrodita_workspace_api'
+import { fetchWorkspacePlaybooks, type WorkspacePlaybookItem } from '@/api/workspace_playbooks_api'
 
 const props = defineProps<{
   connected?: boolean
 }>()
 
 const files = ref<AfroditaWorkspaceFile[]>([])
-const playbooks = ref<AfroditaWorkspacePlaybook[]>([])
+const playbooks = ref<WorkspacePlaybookItem[]>([])
 const selectedId = ref<number | null>(null)
 const isLoading = ref(false)
 const error = ref<string | null>(null)
@@ -160,7 +161,7 @@ const reload = async () => {
   try {
     const [filesRes, playbooksRes] = await Promise.all([
       fetchAfroditaWorkspaceFiles(),
-      fetchAfroditaWorkspacePlaybooks(),
+      fetchWorkspacePlaybooks(),
     ])
     files.value = filesRes.files || []
     playbooks.value = playbooksRes.playbooks || []
@@ -313,6 +314,26 @@ onMounted(reload)
 .deliverable-list li.active {
   border-color: rgba(16, 185, 129, 0.45);
   background: rgba(16, 185, 129, 0.08);
+}
+
+.deliverable-list .meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.source-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.12);
+  color: #4338ca;
 }
 
 .deliverable-details {

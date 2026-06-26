@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -14,6 +13,11 @@ from app.models.user import User
 from app.models.workspace_file import WorkspaceFile
 from app.models.workspace_playbook import WorkspacePlaybook
 from services.workspace_deliverables import primary_company_id_for_user
+from services.workspace_playbook_service_v1 import (
+    create_playbook,
+    list_playbooks,
+    workspace_enabled as _workspace_enabled,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +35,9 @@ def _probe_db_connected(db: Optional[Session]) -> bool:
     except Exception:
         return False
 
-logger = logging.getLogger(__name__)
-
-AGENT_NAME = "AFRODITA"
-
 
 def workspace_enabled() -> bool:
-    return bool(getattr(settings, "AFRODITA_WORKSPACE_ENABLED", True))
+    return _workspace_enabled()
 
 
 def workspace_connection_status(db: Optional[Session]) -> Dict[str, Any]:
@@ -49,7 +49,8 @@ def workspace_connection_status(db: Optional[Session]) -> Dict[str, Any]:
         "connected": connected,
         "db_connected": db_ok,
         "files_api": "/api/v1/afrodita/workspace/files",
-        "playbooks_api": "/api/v1/afrodita/workspace/playbooks",
+        "playbooks_api": "/api/v1/workspace/playbooks",
+        "playbooks_create_api": "/api/v1/workspace/playbooks/create",
         "status": "REAL" if connected else ("ERROR" if not db_ok else "SIMULATED"),
     }
 
@@ -96,41 +97,8 @@ def list_workspace_files(db: Session, user: User, *, limit: int = 100) -> Dict[s
 
 
 def list_workspace_playbooks(db: Session, user: User, *, limit: int = 100) -> Dict[str, Any]:
-    _assert_workspace_available(db)
-    rows = (
-        db.query(WorkspacePlaybook)
-        .filter(
-            WorkspacePlaybook.user_id == user.id,
-            WorkspacePlaybook.agent_name == AGENT_NAME,
-        )
-        .order_by(WorkspacePlaybook.id.desc())
-        .limit(min(limit, 200))
-        .all()
-    )
-    playbooks: List[Dict[str, Any]] = []
-    for r in rows:
-        payload: Dict[str, Any] = {}
-        if r.content:
-            try:
-                payload = json.loads(r.content)
-            except json.JSONDecodeError:
-                payload = {"summary": r.content}
-        playbooks.append(
-            {
-                "id": r.id,
-                "title": r.title,
-                "content": payload,
-                "raw_content": r.content,
-                "company_id": r.company_id,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-            }
-        )
-    return {
-        "playbooks": playbooks,
-        "count": len(playbooks),
-        "source": "workspace_playbooks",
-        **workspace_connection_status(db),
-    }
+    body = list_playbooks(db, user, limit=limit)
+    return {**body, **workspace_connection_status(db)}
 
 
 def persist_workspace_playbook(
@@ -140,21 +108,16 @@ def persist_workspace_playbook(
     title: str,
     content: Dict[str, Any],
     company_id: Optional[int] = None,
+    agent_source: str = "automation",
 ) -> WorkspacePlaybook:
-    _assert_workspace_available(db)
-    cid = company_id or primary_company_id_for_user(db, user)
-    row = WorkspacePlaybook(
-        user_id=user.id,
-        company_id=cid,
-        agent_name=AGENT_NAME,
-        title=(title or "Playbook AFRODITA")[:255],
-        content=json.dumps(content, ensure_ascii=False),
+    _ = company_id
+    return create_playbook(
+        db,
+        user,
+        title=title,
+        content=content,
+        agent_source=agent_source,
     )
-    db.add(row)
-    db.flush()
-    db.refresh(row)
-    logger.info("[AFRODITA_WORKSPACE] playbook persisted id=%s user=%s", row.id, user.id)
-    return row
 
 
 def persist_workspace_file(

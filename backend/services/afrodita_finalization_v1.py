@@ -8,7 +8,8 @@ from typing import Any, Dict, List, Literal
 
 from fastapi import HTTPException, status
 
-from services.afrodita_unified_control import current_flags, get_global_status, writes_enabled
+from services.afrodita_unified_control import current_flags, get_global_status
+from services.zeus_execution_controller_v1 import get_module_statuses
 
 DomainId = Literal["rrhh", "ops", "workspace"]
 
@@ -38,12 +39,15 @@ WORKSPACE_BLOCKED_MODULES = frozenset(
 )
 
 
-def finalization_payload() -> Dict[str, Any]:
+def finalization_payload(db=None) -> Dict[str, Any]:
     flags = current_flags()
-    ws = {"enabled": flags.get("AFRODITA_WORKSPACE_ENABLED", True), "status": "CONNECTED"}
-    rrhh_mode = "REAL" if flags.get("AFRODITA_USE_REAL_EMPLOYEES") else "PARTIAL"
-    ops_mode = "REAL" if writes_enabled() else "PARTIAL"
-    workspace_mode = "REAL" if ws["enabled"] else "ISOLATED"
+    global_status = get_global_status(db)
+    modules = get_module_statuses(db, global_status)
+    ws = global_status.get("workspace") or {"enabled": flags.get("AFRODITA_WORKSPACE_ENABLED", True)}
+    rrhh_mode = modules["rrhh"]["status"]
+    ops_mode = modules["ops"]["status"]
+    workspace_mode = modules["workspace"]["status"]
+    integrity = "STABLE" if global_status.get("execution_mode") == "REAL" else "DEGRADED"
     return {
         "system_id": "afrodita_finalization_v1",
         "mode": "safe_execution",
@@ -97,10 +101,10 @@ def finalization_payload() -> Dict[str, Any]:
             "phase_3": "READY",
         },
         "final_state": {
-            "afrodita_rrhh": "REAL",
-            "afrodita_ops": "REAL",
-            "workspace": "ISOLATED",
-            "system_integrity": "STABLE",
+            "afrodita_rrhh": rrhh_mode,
+            "afrodita_ops": ops_mode,
+            "workspace": workspace_mode,
+            "system_integrity": integrity,
         },
         "flags": flags,
     }
@@ -110,7 +114,7 @@ def rrhh_status_payload(db=None) -> Dict[str, Any]:
     base = get_global_status(db)
     return {
         **base,
-        "afrodita_finalization": finalization_payload(),
+        "afrodita_finalization": finalization_payload(db),
         "domain": "rrhh",
         "rrhh_api_prefix": RRHH_API_PREFIX,
     }

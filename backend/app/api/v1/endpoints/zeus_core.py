@@ -171,17 +171,34 @@ async def get_zeus_status(
     - Estado de cada agente
     - Actividad reciente
     - Logs del sistema
+    - execution_mode / writes_enabled / módulos conectados (ZEUS execution controller)
     """
     try:
+        from services.zeus_data_pipeline_v1 import get_pipeline_status
+        from services.zeus_execution_controller_v1 import get_execution_status
+
         logger.info(f"Obteniendo estado ZEUS para usuario: {current_user.email}")
-        
-        status = zeus_manager.get_system_status()
-        
+
+        legacy = zeus_manager.get_system_status()
+        execution = get_execution_status(db)
+        pipeline_user = get_pipeline_status(db, current_user.id)
+
         return {
             "status": "success",
             "message": "Estado del Núcleo ZEUS obtenido correctamente",
-            "timestamp": status["timestamp"],
-            "data": status
+            "timestamp": legacy["timestamp"],
+            "execution_mode": execution["execution_mode"],
+            "writes_enabled": execution["writes_enabled"],
+            "db_status": execution["db_status"],
+            "connected_modules": execution["connected_modules"],
+            "modules": execution["modules"],
+            "simulation_layers_present": execution["simulation_layers_present"],
+            "flag_consistency": execution["flag_consistency"],
+            "pipeline": {**execution["pipeline"], "user": pipeline_user},
+            "data": {
+                **legacy,
+                "execution": execution,
+            },
         }
         
     except Exception as e:

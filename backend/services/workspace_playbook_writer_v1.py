@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 from app.models.workspace_playbook import WorkspacePlaybook
 from services.workspace_playbook_service_v1 import persist_execution_playbook
+from services.zeus_data_pipeline_v1 import attach_pipeline_metadata
 
 
 def write_rrhh_playbook(
@@ -20,7 +21,12 @@ def write_rrhh_playbook(
     payload: Dict[str, Any],
 ) -> Optional[WorkspacePlaybook]:
     return persist_execution_playbook(
-        db, user, agent_source="rrhh", action=action, title=title, payload=payload
+        db,
+        user,
+        agent_source="rrhh",
+        action=action,
+        title=title,
+        payload=attach_pipeline_metadata("rrhh", payload),
     )
 
 
@@ -33,7 +39,12 @@ def write_ops_playbook(
     payload: Dict[str, Any],
 ) -> Optional[WorkspacePlaybook]:
     return persist_execution_playbook(
-        db, user, agent_source="ops", action=action, title=title, payload=payload
+        db,
+        user,
+        agent_source="ops",
+        action=action,
+        title=title,
+        payload=attach_pipeline_metadata("ops", payload),
     )
 
 
@@ -46,5 +57,10 @@ def write_logistics_playbook(
     payload: Dict[str, Any],
 ) -> Optional[WorkspacePlaybook]:
     return persist_execution_playbook(
-        db, user, agent_source="logistics", action=action, title=title, payload=payload
+        db,
+        user,
+        agent_source="logistics",
+        action=action,
+        title=title,
+        payload=attach_pipeline_metadata("logistics", payload),
     )

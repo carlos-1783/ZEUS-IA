@@ -5,10 +5,10 @@
         <h3>🤝 AFRODITA</h3>
         <p class="subtitle">RRHH · Operaciones · Workspace IA (dominios separados)</p>
         <ThalosExecutionBadge
-          v-if="globalStatus"
+          v-if="globalStatus || zeusStatus"
           class="workspace-badges"
-          :global-mode="globalStatus.execution_mode"
-          :real-execution="globalStatus.execution_mode === 'REAL'"
+          :global-mode="zeusStatus?.execution_mode ?? globalStatus?.execution_mode"
+          :real-execution="(zeusStatus?.execution_mode ?? globalStatus?.execution_mode) === 'REAL'"
         />
       </div>
     </header>
@@ -44,6 +44,12 @@ import {
   type AfroditaExecutionMode,
   type AfroditaTruthStatus,
 } from '@/api/afrodita_workspace_api'
+import {
+  fetchZeusExecutionStatus,
+  moduleStatusLabel,
+  type ZeusExecutionStatus,
+  type ZeusModuleStatus,
+} from '@/api/zeus_status_api'
 import AfroditaToolsPanel from './AfroditaToolsPanel.vue'
 import AfroditaOpsPanel from './AfroditaOpsPanel.vue'
 import AfroditaWorkspacePanel from './AfroditaWorkspacePanel.vue'
@@ -53,20 +59,54 @@ type TabId = 'rrhh' | 'ops' | 'workspace'
 
 const activeTab = ref<TabId>('rrhh')
 const globalStatus = ref<AfroditaTruthStatus | null>(null)
+const zeusStatus = ref<ZeusExecutionStatus | null>(null)
 
-const modeLabel = computed(() => executionModeLabel(globalStatus.value?.execution_mode))
+const modeLabel = computed(() => {
+  const zeusMode = zeusStatus.value?.execution_mode
+  if (zeusMode) return executionModeLabel(zeusMode)
+  return executionModeLabel(globalStatus.value?.execution_mode)
+})
 
 const workspaceConnected = computed(
   () => globalStatus.value?.workspace?.connected === true
 )
 
 const workspaceTabLabel = computed(() => {
+  const wsMod = zeusStatus.value?.modules?.workspace
+  if (wsMod?.status) return moduleStatusLabel(wsMod.status)
   const ws = globalStatus.value?.workspace
   if (!ws?.enabled) return 'NO EXECUTION'
   if (ws.connected) return 'REAL'
   if (ws.status === 'ERROR') return 'SYSTEM ERROR'
   return 'NO EXECUTION'
 })
+
+const tabModuleStatus = (tabId: TabId): ZeusModuleStatus | AfroditaExecutionMode | undefined => {
+  const mods = zeusStatus.value?.modules
+  if (mods) {
+    if (tabId === 'rrhh') return mods.rrhh?.status
+    if (tabId === 'ops') return mods.ops?.status
+    return mods.workspace?.status
+  }
+  if (tabId === 'workspace') {
+    return workspaceConnected.value ? 'REAL' : globalStatus.value?.workspace?.status
+  }
+  return globalStatus.value?.execution_mode
+}
+
+const tabLabel = (tabId: TabId) => {
+  const mod = tabModuleStatus(tabId)
+  if (tabId === 'workspace') return workspaceTabLabel.value
+  return moduleStatusLabel(mod) || modeLabel.value
+}
+
+const tabClass = (tabId: TabId) => {
+  const mod = tabModuleStatus(tabId)
+  if (mod === 'REAL' || mod === 'REAL_WITH_OUTPUT') return 'real'
+  if (mod === 'ERROR') return 'error'
+  if (mod === 'PARTIAL_REAL' || mod === 'EMPTY_REAL') return 'partial'
+  return statusClassFor(globalStatus.value?.execution_mode)
+}
 
 const statusClassFor = (mode: AfroditaExecutionMode | undefined) => {
   if (mode === 'REAL') return 'real'
@@ -75,23 +115,26 @@ const statusClassFor = (mode: AfroditaExecutionMode | undefined) => {
 }
 
 const tabs = computed(() => {
-  const mode = globalStatus.value?.execution_mode
-  const label = modeLabel.value
-  const cls = statusClassFor(mode)
-  const wsLabel = workspaceTabLabel.value
-  const wsCls = statusClassFor(
-    workspaceConnected.value ? 'REAL' : globalStatus.value?.workspace?.status
-  )
   return [
-    { id: 'rrhh' as const, name: 'RRHH', status: label, statusClass: cls },
-    { id: 'ops' as const, name: 'OPERACIONES', status: label, statusClass: cls },
-    { id: 'workspace' as const, name: 'WORKSPACE', status: wsLabel, statusClass: wsCls },
+    { id: 'rrhh' as const, name: 'RRHH', status: tabLabel('rrhh'), statusClass: tabClass('rrhh') },
+    { id: 'ops' as const, name: 'OPERACIONES', status: tabLabel('ops'), statusClass: tabClass('ops') },
+    {
+      id: 'workspace' as const,
+      name: 'WORKSPACE',
+      status: tabLabel('workspace'),
+      statusClass: tabClass('workspace'),
+    },
   ]
 })
 
 onMounted(async () => {
   try {
-    globalStatus.value = await fetchAfroditaStatus()
+    const [afrodita, zeus] = await Promise.all([
+      fetchAfroditaStatus(),
+      fetchZeusExecutionStatus().catch(() => null),
+    ])
+    globalStatus.value = afrodita
+    zeusStatus.value = zeus
   } catch {
     /* optional */
   }
@@ -165,6 +208,7 @@ onMounted(async () => {
 }
 
 .tab-status.real { background: #dcfce7; color: #15803d; }
+.tab-status.partial { background: #e0e7ff; color: #4338ca; }
 .tab-status.sim { background: #fef3c7; color: #b45309; }
 .tab-status.error { background: #fee2e2; color: #b91c1c; }
 

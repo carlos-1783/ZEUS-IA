@@ -44,6 +44,18 @@
               <span class="metric-label">Tiempo de Actividad:</span>
               <span class="metric-value">{{ uptime }}</span>
             </div>
+            <div class="metric">
+              <span class="metric-label">Modo ejecución:</span>
+              <span class="metric-value">{{ executionMode }}</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Escrituras:</span>
+              <span class="metric-value">{{ writesEnabledLabel }}</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Módulos:</span>
+              <span class="metric-value">{{ connectedModulesLabel }}</span>
+            </div>
           </div>
         </div>
         
@@ -112,6 +124,9 @@ const authStore = useAuthStore()
 // Refs
 const hologram3D = ref(null)
 const systemStatus = ref('inactive')
+const executionMode = ref('UNKNOWN')
+const writesEnabled = ref(false)
+const connectedModules = ref([])
 const activeAgents = ref(0)
 const commandsExecuted = ref(0)
 const systemLogs = ref([])
@@ -133,6 +148,10 @@ const uptime = computed(() => {
   const seconds = Math.floor((diff % 60000) / 1000)
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
 })
+const writesEnabledLabel = computed(() => (writesEnabled.value ? 'ON' : 'OFF'))
+const connectedModulesLabel = computed(() =>
+  connectedModules.value.length ? connectedModules.value.join(', ') : '—'
+)
 
 // Comandos disponibles con especializaciones reales
 const availableCommands = ref([
@@ -258,9 +277,13 @@ async function updateSystemStatus() {
     const api = (await import('@/services/api')).default
     const result = await api.get('/api/v1/zeus/status', authStore.token)
     const status = result.data || result
-    
-    systemStatus.value = status.system_status
-    activeAgents.value = status.active_agents || 0
+    const legacy = status.data || {}
+
+    systemStatus.value = legacy.system_status || status.execution_mode || 'inactive'
+    executionMode.value = status.execution_mode || 'UNKNOWN'
+    writesEnabled.value = Boolean(status.writes_enabled)
+    connectedModules.value = status.connected_modules || []
+    activeAgents.value = legacy.active_agents || status.active_agents || 0
   } catch (error) {
     if (error.name === 'AbortError') {
       console.warn('⏱️ Timeout actualizando estado del sistema')

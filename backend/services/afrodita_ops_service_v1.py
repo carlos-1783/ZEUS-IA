@@ -16,7 +16,7 @@ from app.models.company import UserCompany
 from app.models.erp import InventoryMovement, InventoryMovementType, Product, TPVProduct
 from app.models.ops_route import OpsRoute
 from app.models.user import User
-from services.afrodita_unified_control import current_flags, writes_enabled
+from services.afrodita_unified_control import current_flags, get_global_status, writes_enabled
 from services.workspace_deliverables import primary_company_id_for_user
 
 logger = logging.getLogger(__name__)
@@ -91,6 +91,8 @@ def list_tpv_products(db: Session, user: User, *, limit: int = 500) -> List[Dict
 
 def merge_products_view(db: Session, user: User) -> Dict[str, Any]:
     flags = current_flags()
+    global_mode = get_global_status(db)["execution_mode"]
+    ui_badge = global_mode if global_mode in ("REAL", "SIMULATED", "ERROR") else "SIMULATED"
     erp_items: List[Dict[str, Any]] = list_erp_products(db) if flags["AFRODITA_USE_ERP"] else []
     tpv_items: List[Dict[str, Any]] = list_tpv_products(db, user) if flags["AFRODITA_USE_TPV"] else []
 
@@ -142,7 +144,7 @@ def merge_products_view(db: Session, user: User) -> Dict[str, Any]:
                 ),
                 "category": erp_d["category"],
                 "price": erp_d["price"],
-                "ui_badge": "REAL",
+                "ui_badge": ui_badge,
             }
         )
 
@@ -162,7 +164,7 @@ def merge_products_view(db: Session, user: User) -> Dict[str, Any]:
                 "low_stock": False,
                 "category": tpv_d["category"],
                 "price": tpv_d["price"],
-                "ui_badge": "REAL",
+                "ui_badge": ui_badge,
             }
         )
 

@@ -44,6 +44,7 @@ from app.api.v1.endpoints import (
     afrodita_ops_v1,
     afrodita_workspace_v1,
     workspace_playbooks_v1,
+    zeus_transactions_v1,
     justicia_v1,
     products,
     zeus_closure_v1,
@@ -83,6 +84,7 @@ api_router.include_router(test.router, prefix="/test", tags=["test"])
 
 # Núcleo ZEUS endpoints
 api_router.include_router(zeus_core.router, prefix="/zeus", tags=["zeus-core"])
+api_router.include_router(zeus_transactions_v1.router, tags=["zeus-transactions"])
 
 # Agents & Metrics endpoints (para dashboard)
 api_router.include_router(agents.router, prefix="/agents", tags=["agents"])

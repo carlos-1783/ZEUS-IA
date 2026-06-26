@@ -145,6 +145,14 @@ def persist_execution_playbook(
     summary: Optional[str] = None,
 ) -> Optional[WorkspacePlaybook]:
     """Auto-persist tras ejecución real de dominio AFRODITA."""
+    from services.zeus_transaction_context_v1 import get_active_transaction_id, workspace_writes_allowed
+
+    if get_active_transaction_id() and not workspace_writes_allowed():
+        logger.info(
+            "[WORKSPACE_PLAYBOOK] deferred until transaction commit tx=%s",
+            get_active_transaction_id(),
+        )
+        return None
     if not workspace_enabled():
         return None
     try:

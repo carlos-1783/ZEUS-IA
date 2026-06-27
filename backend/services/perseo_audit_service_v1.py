@@ -24,6 +24,12 @@ AUDIT_TARGETS = (
     "ads_generation",
     "video_editing",
     "image_generation",
+    "video_generation",
+    "image_analyzer",
+    "video_recommender",
+    "seo_audit",
+    "ads_blueprint",
+    "pipeline",
     "publishing",
     "analytics",
     "automation",
@@ -50,13 +56,19 @@ def build_feature_status_map(db: Session | None = None) -> Dict[str, Dict[str, A
 
     try:
         from services.perseo_image_engine_v2 import _provider_configured
+        from services.perseo_video_gen_engine_v2 import video_gen_configured
+        from services.perseo_ai_service_v2 import openai_configured
         from services.perseo_ads_engine_v2 import _meta_configured, _google_configured
         from services.perseo_publishing_v1 import _instagram_configured
     except ImportError:
         _provider_configured = lambda: False  # type: ignore
+        video_gen_configured = lambda: False  # type: ignore
+        openai_configured = lambda: False  # type: ignore
         _meta_configured = lambda: False  # type: ignore
         _google_configured = lambda: False  # type: ignore
         _instagram_configured = lambda: False  # type: ignore
+
+    ai_on = openai_configured()
 
     video_status: FeatureStatus = "REAL" if ffmpeg_ok else "BROKEN"
     if v2 and not s3_configured():
@@ -78,6 +90,12 @@ def build_feature_status_map(db: Session | None = None) -> Dict[str, Dict[str, A
 
     analytics_status: FeatureStatus = "REAL" if _meta_configured() else "SIMULATED"
 
+    ai_tool_status: FeatureStatus = "REAL" if ai_on else "SIMULATED"
+    video_gen_status: FeatureStatus = "REAL" if video_gen_configured() and s3_configured() else (
+        "BROKEN" if video_gen_configured() and not s3_configured() else ("SIMULATED" if not video_gen_configured() else "REAL")
+    )
+    pipeline_status_val: FeatureStatus = "REAL" if (ffmpeg_ok and (not v2 or s3_configured())) else "BROKEN"
+
     return {
         "content_generation": {
             "status": "REAL",
@@ -97,6 +115,46 @@ def build_feature_status_map(db: Session | None = None) -> Dict[str, Dict[str, A
             "endpoint": "/api/v1/perseo/v2/image/generate" if v2 else "/api/v1/perseo/upload-image",
             "notes": "AI via Replicate/Stability when configured" if v2 else "Local upload only",
             "storage": getattr(settings, "PERSEO_STORAGE_BACKEND", "local"),
+        },
+        "video_generation": {
+            "status": video_gen_status,
+            "endpoint": "/api/v1/perseo/v2/ai/generate-video",
+            "notes": "Replicate zeroscope-v2-xl → S3",
+            "model": "zeroscope-v2-xl",
+        },
+        "image_analyzer": {
+            "status": ai_tool_status,
+            "endpoint": "/api/v1/perseo/v2/ai/analyze-image",
+            "notes": "GPT-4o vision when OPENAI_API_KEY configured",
+        },
+        "video_recommender": {
+            "status": ai_tool_status,
+            "endpoint": "/api/v1/perseo/v2/ai/recommend-video",
+            "notes": "GPT-4o script and scene breakdown",
+        },
+        "seo_audit": {
+            "status": ai_tool_status,
+            "endpoint": "/api/v1/perseo/v2/ai/seo-audit",
+            "notes": "GPT-4o SEO audit with meta tags",
+        },
+        "ads_blueprint": {
+            "status": "REAL" if (_meta_configured() or ai_on) else "SIMULATED",
+            "endpoint": "/api/v1/perseo/v2/ai/generate-ads",
+            "notes": "GPT-4o blueprint + Meta API for live campaigns",
+        },
+        "pipeline": {
+            "status": pipeline_status_val,
+            "endpoint": "/api/v1/perseo/v2/pipeline/run",
+            "notes": "Full flow orchestrated by ZEUS_CORE",
+            "stages": [
+                "input_media",
+                "ai_analysis",
+                "content_generation",
+                "video_processing",
+                "storage_upload",
+                "optimization",
+                "publishing",
+            ],
         },
         "ads_generation": {
             "status": ads_status,
@@ -160,8 +218,14 @@ def build_audit_report(db: Session | None = None) -> Dict[str, Any]:
             "supported_actions": [
                 "video_edit",
                 "generate_image",
+                "generate_video",
+                "analyze_image",
+                "recommend_video",
+                "seo_audit",
+                "generate_ads",
                 "create_campaign",
                 "publish_post",
+                "run_pipeline",
                 "store_object",
             ],
             "storage_module": "STORAGE",

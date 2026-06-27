@@ -60,6 +60,9 @@ def enqueue_job(
     db.add(row)
     db.commit()
     db.refresh(row)
+    from services.perseo_events_v1 import emit_generation_started
+
+    emit_generation_started(user_id, job_id, job_type)
     return {"job_id": job_id, "status": "queued", "job_type": job_type}
 
 
@@ -75,6 +78,10 @@ def update_job(db: Session, job_id: str, **fields: Any) -> None:
     row.updated_at = _now()
     db.add(row)
     db.commit()
+    if "progress" in fields and row.user_id:
+        from services.perseo_events_v1 import emit_generation_progress
+
+        emit_generation_progress(row.user_id, job_id, int(fields.get("progress") or 0), str(fields.get("status") or row.status))
 
 
 def get_job(db: Session, job_id: str, user_id: int) -> Dict[str, Any]:
@@ -126,6 +133,9 @@ def _worker(job_id: str, handler: JobHandler) -> None:
                     output_json=output,
                     error=None,
                 )
+                from services.perseo_events_v1 import emit_generation_completed
+
+                emit_generation_completed(row.user_id, job_id, output)
                 return
             except Exception as exc:
                 retry += 1

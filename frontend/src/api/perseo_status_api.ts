@@ -76,6 +76,47 @@ export async function pollPerseoV2Job(jobId: string) {
   return api.get(`/api/v1/perseo/v2/jobs/${jobId}`) as Promise<PerseoVideoEditResponse & { output?: Record<string, unknown> }>
 }
 
+export async function perseoAnalyzeImage(payload: {
+  image_url: string
+  goals?: string[]
+  tags?: string[]
+}) {
+  return api.post('/api/v1/perseo/v2/ai/analyze-image', payload) as Promise<Record<string, unknown>>
+}
+
+export async function perseoRecommendVideo(payload: {
+  duration_seconds?: number
+  tone?: string
+  platform?: string
+}) {
+  return api.post('/api/v1/perseo/v2/ai/recommend-video', payload) as Promise<Record<string, unknown>>
+}
+
+export async function perseoSeoAudit(payload: {
+  url?: string
+  keywords?: string[]
+  html_snapshot?: string
+}) {
+  return api.post('/api/v1/perseo/v2/ai/seo-audit', payload) as Promise<Record<string, unknown>>
+}
+
+export async function perseoGenerateAds(payload: {
+  product?: string
+  budget?: number
+  audience?: string
+  objective?: string
+}) {
+  return api.post('/api/v1/perseo/v2/ai/generate-ads', payload) as Promise<Record<string, unknown>>
+}
+
+export async function perseoGenerateVideo(payload: {
+  prompt: string
+  duration_sec?: number
+  transaction_id?: string
+}) {
+  return api.post('/api/v1/perseo/v2/ai/generate-video', payload) as Promise<PerseoVideoEditResponse>
+}
+
 export function perseoFeatureBadge(status?: PerseoFeatureStatus): string {
   if (status === 'REAL') return 'REAL'
   if (status === 'BROKEN') return 'ERROR'

@@ -229,6 +229,45 @@ def _exec_perseo(
             caption=inp.get("caption", ""),
             transaction_id=transaction_id,
         )
+    if act == "generate_video":
+        from services.perseo_video_gen_engine_v2 import create_video_generation_job, get_video_gen_job
+        import time
+
+        created = create_video_generation_job(
+            db, user,
+            prompt=inp["prompt"],
+            duration_sec=float(inp.get("duration_sec") or 5),
+            transaction_id=transaction_id,
+        )
+        job_id = created["job_id"]
+        for _ in range(90):
+            job = get_video_gen_job(db, job_id, user.id)
+            if job["status"] == "completed":
+                return {**job.get("output", {}), "job_id": job_id}
+            if job["status"] == "failed":
+                raise HTTPException(status_code=500, detail=job.get("error"))
+            time.sleep(3)
+        raise HTTPException(status_code=504, detail="video generation timeout")
+    if act == "analyze_image":
+        from services.perseo_ai_service_v2 import analyze_image_ai
+
+        return analyze_image_ai(inp)
+    if act == "recommend_video":
+        from services.perseo_ai_service_v2 import recommend_video_ai
+
+        return recommend_video_ai(inp)
+    if act == "seo_audit":
+        from services.perseo_ai_service_v2 import seo_audit_ai
+
+        return seo_audit_ai(inp)
+    if act == "generate_ads":
+        from services.perseo_ai_service_v2 import generate_ads_ai
+
+        return generate_ads_ai(inp)
+    if act == "run_pipeline":
+        from services.perseo_pipeline_v2 import run_pipeline
+
+        return run_pipeline(db, user, transaction_id=transaction_id, **inp)
     raise HTTPException(status_code=422, detail=f"Unknown PERSEO action: {action}")
 
 

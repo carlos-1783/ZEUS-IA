@@ -50,8 +50,14 @@ def validate_transaction(
         if module == "PERSEO" and action not in (
             "video_edit",
             "generate_image",
+            "generate_video",
+            "analyze_image",
+            "recommend_video",
+            "seo_audit",
+            "generate_ads",
             "create_campaign",
             "publish_post",
+            "run_pipeline",
         ):
             errors.append(f"Unknown PERSEO action: {action}")
         if module == "STORAGE" and action not in ("store_object",):

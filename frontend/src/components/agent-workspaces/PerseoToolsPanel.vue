@@ -38,24 +38,32 @@
         </a>
       </div>
 
-      <div class="tool-card legacy">
+      <div class="tool-card" :class="{ real: featureStatus('image_analyzer') === 'REAL' }">
         <div class="card-title-row">
           <h5>Analizador de imagen</h5>
-          <ThalosExecutionBadge module-badge="SIMULADO" :inline="true" :show-global="false" />
+          <ThalosExecutionBadge
+            :module-badge="perseoFeatureBadge(featureStatus('image_analyzer'))"
+            :inline="true"
+            :show-global="false"
+          />
         </div>
         <input v-model="imageForm.image_url" placeholder="URL de la imagen" />
         <input v-model="imageForm.goals" placeholder="Objetivos (coma)" />
         <input v-model="imageForm.tags" placeholder="Tags visuales" />
         <button :disabled="loading.image" @click="runImageAnalyzer">
-          {{ loading.image ? 'Analizando…' : 'Analizar (heurístico)' }}
+          {{ loading.image ? 'Analizando…' : aiLabel('image_analyzer', 'Analizar imagen') }}
         </button>
         <p v-if="imageResult" class="tool-text">{{ imageResult }}</p>
       </div>
 
-      <div class="tool-card legacy">
+      <div class="tool-card" :class="{ real: featureStatus('video_recommender') === 'REAL' }">
         <div class="card-title-row">
           <h5>Recomendaciones de vídeo</h5>
-          <ThalosExecutionBadge module-badge="SIMULADO" :inline="true" :show-global="false" />
+          <ThalosExecutionBadge
+            :module-badge="perseoFeatureBadge(featureStatus('video_recommender'))"
+            :inline="true"
+            :show-global="false"
+          />
         </div>
         <label>Duración (s)</label>
         <input type="number" v-model.number="videoForm.duration_seconds" />
@@ -64,29 +72,37 @@
         <label>Plataforma</label>
         <input v-model="videoForm.platform" />
         <button :disabled="loading.video" @click="runVideoEnhancer">
-          {{ loading.video ? 'Calculando…' : 'Recomendar (sin procesar vídeo)' }}
+          {{ loading.video ? 'Calculando…' : aiLabel('video_recommender', 'Generar guion') }}
         </button>
         <p v-if="videoResult" class="tool-text">{{ videoResult }}</p>
       </div>
 
-      <div class="tool-card legacy">
+      <div class="tool-card" :class="{ real: featureStatus('seo_audit') === 'REAL' }">
         <div class="card-title-row">
           <h5>Auditoría SEO</h5>
-          <ThalosExecutionBadge module-badge="SIMULADO" :inline="true" :show-global="false" />
+          <ThalosExecutionBadge
+            :module-badge="perseoFeatureBadge(featureStatus('seo_audit'))"
+            :inline="true"
+            :show-global="false"
+          />
         </div>
         <input v-model="seoForm.url" placeholder="https://sitio.com" />
         <input v-model="seoForm.keywords" placeholder="keywords separadas por coma" />
         <textarea v-model="seoForm.html_snapshot" placeholder="HTML opcional"></textarea>
         <button :disabled="loading.seo" @click="runSeoAudit">
-          {{ loading.seo ? 'Auditando…' : 'Auditar (heurístico)' }}
+          {{ loading.seo ? 'Auditando…' : aiLabel('seo_audit', 'Auditar SEO') }}
         </button>
         <p v-if="seoResult" class="tool-text">{{ seoResult }}</p>
       </div>
 
-      <div class="tool-card legacy">
+      <div class="tool-card" :class="{ real: featureStatus('ads_blueprint') === 'REAL' }">
         <div class="card-title-row">
           <h5>Blueprint Ads</h5>
-          <ThalosExecutionBadge module-badge="SIMULADO" :inline="true" :show-global="false" />
+          <ThalosExecutionBadge
+            :module-badge="perseoFeatureBadge(featureStatus('ads_blueprint'))"
+            :inline="true"
+            :show-global="false"
+          />
         </div>
         <input v-model="adsForm.product" placeholder="Producto" />
         <input type="number" v-model.number="adsForm.budget" placeholder="Presupuesto" />
@@ -97,7 +113,7 @@
           <option value="branding">Branding</option>
         </select>
         <button :disabled="loading.ads" @click="runAdsBuilder">
-          {{ loading.ads ? 'Generando…' : 'Generar plan (simulado)' }}
+          {{ loading.ads ? 'Generando…' : aiLabel('ads_blueprint', 'Generar plan') }}
         </button>
         <p v-if="adsResult" class="tool-text">{{ adsResult }}</p>
       </div>
@@ -108,17 +124,21 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { workspaceTools } from '@/api/workspaceTools'
 import {
   fetchPerseoStatus,
   fetchPerseoV2Status,
+  perseoAnalyzeImage,
   perseoFeatureBadge,
+  perseoGenerateAds,
+  perseoRecommendVideo,
+  perseoSeoAudit,
   pollPerseoVideoJob,
   pollPerseoV2Job,
   submitPerseoVideoEdit,
   submitPerseoV2VideoEdit,
   type PerseoFeatureStatus,
 } from '@/api/perseo_status_api'
+import { workspaceTools } from '@/api/workspaceTools'
 import ThalosExecutionBadge from './ThalosExecutionBadge.vue'
 
 const loading = reactive({ image: false, video: false, seo: false, ads: false, videoEdit: false })
@@ -145,10 +165,22 @@ const featureStatus = (key: string): PerseoFeatureStatus =>
   (featureMap.value[key]?.status as PerseoFeatureStatus) || 'SIMULATED'
 
 const statusNote = computed(() => {
-  const sim = ['ads_generation', 'analytics'].filter((k) => featureStatus(k) === 'SIMULATED')
-  const real = ['content_generation', 'video_editing'].filter((k) => featureStatus(k) === 'REAL')
-  return `REAL: ${real.join(', ') || '—'} · SIMULADO: ${sim.join(', ') || 'herramientas heurísticas'}`
+  const keys = Object.keys(featureMap.value)
+  const real = keys.filter((k) => featureStatus(k) === 'REAL')
+  const sim = keys.filter((k) => featureStatus(k) === 'SIMULATED')
+  return `REAL: ${real.join(', ') || '—'} · SIMULADO: ${sim.join(', ') || '—'}`
 })
+
+const aiLabel = (key: string, realLabel: string) =>
+  featureStatus(key) === 'REAL' ? realLabel : `${realLabel} (fallback)`
+
+const formatResult = (data: Record<string, unknown>) => {
+  const text = (data.script as string) || (data.summary as string)
+  if (text) return text
+  const score = data.seo_score ?? data.score
+  if (score != null) return `Score: ${score} — ${JSON.stringify(data.improvements || data.issues || data, null, 2)}`
+  return JSON.stringify(data, null, 2)
+}
 
 const parseCsv = (value: string) =>
   value.split(',').map((item) => item.trim()).filter(Boolean)
@@ -218,12 +250,15 @@ const runImageAnalyzer = async () => {
   error.value = ''
   loading.image = true
   try {
-    const out = await workspaceTools.runPerseoImageAnalyzer({
-      image_url: imageForm.image_url || undefined,
+    const payload = {
+      image_url: imageForm.image_url,
       goals: parseCsv(imageForm.goals),
       tags: parseCsv(imageForm.tags),
-    })
-    imageResult.value = String((out as { text?: string }).text || 'Análisis heurístico.')
+    }
+    const out = useV2.value || featureStatus('image_analyzer') === 'REAL'
+      ? await perseoAnalyzeImage(payload)
+      : await workspaceTools.runPerseoImageAnalyzer(payload)
+    imageResult.value = (out as { text?: string }).text || formatResult(out as Record<string, unknown>)
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -235,8 +270,11 @@ const runVideoEnhancer = async () => {
   error.value = ''
   loading.video = true
   try {
-    const out = await workspaceTools.runPerseoVideoEnhancer({ ...videoForm })
-    videoResult.value = String((out as { text?: string }).text || 'Recomendación simulada.')
+    const payload = { ...videoForm }
+    const out = useV2.value || featureStatus('video_recommender') === 'REAL'
+      ? await perseoRecommendVideo(payload)
+      : await workspaceTools.runPerseoVideoEnhancer(payload)
+    videoResult.value = (out as { text?: string }).text || formatResult(out as Record<string, unknown>)
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -248,12 +286,15 @@ const runSeoAudit = async () => {
   error.value = ''
   loading.seo = true
   try {
-    const out = await workspaceTools.runPerseoSeoAudit({
+    const payload = {
       url: seoForm.url || undefined,
       keywords: parseCsv(seoForm.keywords),
       html_snapshot: seoForm.html_snapshot || undefined,
-    })
-    seoResult.value = String((out as { text?: string }).text || 'Auditoría heurística.')
+    }
+    const out = useV2.value || featureStatus('seo_audit') === 'REAL'
+      ? await perseoSeoAudit(payload)
+      : await workspaceTools.runPerseoSeoAudit(payload)
+    seoResult.value = (out as { text?: string }).text || formatResult(out as Record<string, unknown>)
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -265,8 +306,11 @@ const runAdsBuilder = async () => {
   error.value = ''
   loading.ads = true
   try {
-    const out = await workspaceTools.runPerseoAdsBuilder({ ...adsForm })
-    adsResult.value = String((out as { text?: string }).text || 'Plan simulado.')
+    const payload = { ...adsForm }
+    const out = useV2.value || featureStatus('ads_blueprint') === 'REAL'
+      ? await perseoGenerateAds(payload)
+      : await workspaceTools.runPerseoAdsBuilder(payload)
+    adsResult.value = (out as { text?: string }).text || formatResult(out as Record<string, unknown>)
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {

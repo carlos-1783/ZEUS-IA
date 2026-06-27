@@ -50,6 +50,12 @@ class ConnectionManager:
         if client_id in self.active_connections:
             await self.active_connections[client_id].send_text(message)
 
+    async def send_user_json(self, user_id: int, payload: dict):
+        message = json.dumps(payload, default=str)
+        for client_id in self.user_connections.get(user_id, []):
+            if client_id in self.active_connections:
+                await self.active_connections[client_id].send_text(message)
+
     async def broadcast(self, message: str):
         for connection in self.active_connections.values():
             await connection.send_text(message)

@@ -129,6 +129,8 @@ class Settings(BaseSettings):
     REPLICATE_API_TOKEN: str = os.getenv("REPLICATE_API_TOKEN", "").strip()
     STABILITY_API_KEY: str = os.getenv("STABILITY_API_KEY", "").strip()
     PERSEO_IMAGE_PROVIDER: str = os.getenv("PERSEO_IMAGE_PROVIDER", "replicate").strip().lower()
+    PERSEO_AI_MODEL: str = os.getenv("PERSEO_AI_MODEL", os.getenv("OPENAI_MODEL", "gpt-4o")).strip()
+    PERSEO_VIDEO_GEN_MAX_SEC: int = int(os.getenv("PERSEO_VIDEO_GEN_MAX_SEC", "10") or "10")
     INSTAGRAM_ACCESS_TOKEN: str = os.getenv("INSTAGRAM_ACCESS_TOKEN", "").strip()
     INSTAGRAM_BUSINESS_ACCOUNT_ID: str = os.getenv("INSTAGRAM_BUSINESS_ACCOUNT_ID", "").strip()
     YOUTUBE_ACCESS_TOKEN: str = os.getenv("YOUTUBE_ACCESS_TOKEN", "").strip()

@@ -231,6 +231,11 @@ def _execute_zeus_launch_started():
 
 @app.on_event("startup")
 async def startup_event():
+    import asyncio
+
+    from services.perseo_events_v1 import register_event_loop
+
+    register_event_loop(asyncio.get_running_loop())
     logger.info("Starting ZEUS-IA backend")
     # Por defecto SÍ: sin tablas/superuser el API cae en cascada. Solo omitir si se pide explícitamente.
     skip_db = os.getenv("ZEUS_SKIP_STARTUP_DB_INIT", "").strip().lower() in (

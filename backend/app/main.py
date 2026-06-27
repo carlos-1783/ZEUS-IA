@@ -234,8 +234,11 @@ async def startup_event():
     import asyncio
 
     from services.perseo_events_v1 import register_event_loop
+    from services.thalos_events_v1 import register_event_loop as register_thalos_loop
 
-    register_event_loop(asyncio.get_running_loop())
+    loop = asyncio.get_running_loop()
+    register_event_loop(loop)
+    register_thalos_loop(loop)
     logger.info("Starting ZEUS-IA backend")
     # Por defecto SÍ: sin tablas/superuser el API cae en cascada. Solo omitir si se pide explícitamente.
     skip_db = os.getenv("ZEUS_SKIP_STARTUP_DB_INIT", "").strip().lower() in (
@@ -282,11 +285,23 @@ async def startup_event():
             logger.error("[AFRODITA_STARTUP] Railway env misconfiguration: %s", audit)
     except Exception as exc:
         logger.warning("[AFRODITA_STARTUP] flag diagnostic failed: %s", exc)
+    try:
+        from workers.thalos_worker import start_thalos_worker
+
+        start_thalos_worker()
+    except Exception as exc:
+        logger.warning("[THALOS_STARTUP] worker start failed: %s", exc)
     logger.info("ZEUS-IA backend ready")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    try:
+        from workers.thalos_worker import stop_thalos_worker
+
+        stop_thalos_worker()
+    except Exception:
+        pass
     await stop_agent_automation()
 
 # Subidas + URL /static → volumen opcional (ZEUS_STATIC_DIR, p. ej. /data/static).

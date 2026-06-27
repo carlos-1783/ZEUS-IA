@@ -30,8 +30,8 @@ ModuleId = Literal[
 MODULE_CLASSIFICATION: Dict[str, str] = {
     "auditoria_real": "REAL_SAFE",
     "backup_system": "REAL_CONDITIONAL",
-    "log_monitor": "SIMULATION",
-    "text_analysis": "SIMULATION",
+    "log_monitor": "REAL_SAFE",
+    "text_analysis": "REAL_SAFE",
     "workspace": "REAL_SAFE",
     "events": "REAL_SAFE",
     "status": "REAL_SAFE",
@@ -39,9 +39,9 @@ MODULE_CLASSIFICATION: Dict[str, str] = {
 
 MODULE_UI_BADGE: Dict[str, str] = {
     "auditoria_real": "REAL",
-    "backup_system": "PARCIAL",
-    "log_monitor": "SIMULADO",
-    "text_analysis": "SIMULADO",
+    "backup_system": "REAL",
+    "log_monitor": "REAL",
+    "text_analysis": "REAL",
     "workspace": "REAL",
     "events": "REAL",
     "status": "REAL",
@@ -80,8 +80,11 @@ def current_flags() -> Dict[str, bool]:
 
 def resolve_execution_mode(module: str) -> ExecutionMode:
     """Modo efectivo según módulo + flags globales."""
+    if not getattr(settings, "THALOS_ENABLED", True):
+        return "SIMULATION"
+
     mod = (module or "").strip().lower()
-    classification = MODULE_CLASSIFICATION.get(mod, "SIMULATION")
+    classification = MODULE_CLASSIFICATION.get(mod, "REAL_SAFE")
 
     if classification == "SIMULATION":
         return "SIMULATION"
@@ -89,15 +92,22 @@ def resolve_execution_mode(module: str) -> ExecutionMode:
     if mod == "backup_system":
         if settings.THALOS_EXECUTION_ENABLED and getattr(settings, "THALOS_BACKUP_ENABLED", False):
             return "REAL_ACTIVE"
-        return "SIMULATION"
+        if getattr(settings, "THALOS_BACKUP_ENABLED", False):
+            return "REAL_SAFE"
+        return "REAL_SAFE"
+
+    if mod in ("log_monitor", "text_analysis") and (
+        settings.THALOS_REAL_LOGS_ENABLED or settings.THALOS_REAL_MONITORING
+    ):
+        return "REAL_ACTIVE" if settings.THALOS_EXECUTION_ENABLED else "REAL_SAFE"
 
     if classification == "REAL_SAFE":
         return "REAL_SAFE"
 
     if classification == "REAL_CONDITIONAL":
-        return "REAL_ACTIVE" if settings.THALOS_EXECUTION_ENABLED else "SIMULATION"
+        return "REAL_ACTIVE" if settings.THALOS_EXECUTION_ENABLED else "REAL_SAFE"
 
-    return "SIMULATION"
+    return "REAL_SAFE"
 
 
 def can_run_active_execution(module: str, action: Optional[str] = None) -> bool:
@@ -171,21 +181,39 @@ def wrap_response(
 
 
 def global_status_payload() -> Dict[str, Any]:
-    """Estado global para badge UI."""
-    default_mode: ExecutionMode = "SIMULATION"
+    """Estado global para badge UI — derived from DB counts when possible."""
+    default_mode: ExecutionMode = "REAL_SAFE"
     if settings.THALOS_EXECUTION_ENABLED:
         default_mode = "REAL_ACTIVE"
-    elif settings.THALOS_REAL_MONITORING or settings.THALOS_WORKSPACE_WRITE_ENABLED:
-        default_mode = "REAL_SAFE"
+    elif settings.THALOS_REAL_MONITORING or settings.THALOS_REAL_LOGS_ENABLED:
+        default_mode = "REAL_ACTIVE" if settings.THALOS_EXECUTION_ENABLED else "REAL_SAFE"
+
+    db_stats: Dict[str, Any] = {}
+    try:
+        from app.db.session import SessionLocal
+        from services.thalos_monitor_service import audit_from_db
+
+        db = SessionLocal()
+        try:
+            db_stats = audit_from_db(db)
+        finally:
+            db.close()
+    except Exception:
+        db_stats = {}
+
+    from workers.thalos_worker import worker_status
 
     return wrap_response(
         {
             "system_default_mode": default_mode,
+            "thalos_enabled": bool(getattr(settings, "THALOS_ENABLED", True)),
+            "worker": worker_status(),
+            "database": db_stats,
             **current_flags(),
             "module_classification": MODULE_CLASSIFICATION,
-            "legacy_preserved": True,
+            "strict_real_mode": True,
         },
         "status",
         data_origin="backend",
-        real_execution=False,
+        real_execution=bool(getattr(settings, "THALOS_ENABLED", True)),
     )

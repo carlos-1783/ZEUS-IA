@@ -13,6 +13,7 @@ from app.core.auth import get_current_active_user
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.thalos_security_event import ThalosSecurityEvent
+from app.models.thalos_event import ThalosEvent
 from app.models.thalos_workspace_item import ThalosWorkspaceItem
 from app.models.user import User
 from services.thalos_control_layer_v1 import (
@@ -21,7 +22,9 @@ from services.thalos_control_layer_v1 import (
     log_execution_attempt,
     wrap_response,
 )
+from services.thalos_alert_service import list_alerts
 from services.thalos_executor import execute_action
+from services.thalos_monitor_service import audit_from_db
 from services.thalos_monitoring_service import run_monitoring_cycle
 from services.workspace_deliverables import primary_company_id_for_user
 
@@ -146,30 +149,84 @@ def thalos_v1_events(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    rows = (
+    sec_rows = (
         db.query(ThalosSecurityEvent)
         .order_by(ThalosSecurityEvent.id.desc())
         .limit(min(limit, 200))
         .all()
     )
-    body = {
-        "events": [
-            {
-                "id": r.id,
-                "event_type": r.event_type,
-                "severity": r.severity,
-                "source": r.source,
-                "user_email": r.user_email,
-                "ip_address": r.ip_address,
-                "company_id": r.company_id,
-                "action_taken": r.action_taken,
-                "decision_rule": r.decision_rule,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-            }
-            for r in rows
-        ]
-    }
+    parsed_rows = (
+        db.query(ThalosEvent)
+        .order_by(ThalosEvent.id.desc())
+        .limit(min(limit, 200))
+        .all()
+    )
+    events = [
+        {
+            "id": f"sec-{r.id}",
+            "event_type": r.event_type,
+            "severity": r.severity,
+            "source": r.source,
+            "user_email": r.user_email,
+            "message": (r.details_json or "")[:200],
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in sec_rows
+    ]
+    events.extend(
+        {
+            "id": f"evt-{r.id}",
+            "event_type": r.event_type,
+            "severity": r.severity,
+            "source": r.source,
+            "message": r.message,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in parsed_rows
+    )
+    if not events and getattr(settings, "THALOS_ENABLED", True):
+        raise HTTPException(status_code=404, detail="No events in database — run /monitor or enable worker")
+    body = {"events": events[:limit], "count": len(events[:limit])}
     return wrap_response(body, "events", data_origin="backend", real_execution=True)
+
+
+@router.get("/alerts")
+def thalos_v1_alerts(
+    limit: int = 50,
+    unresolved_only: bool = False,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    _ = current_user
+    rows = list_alerts(db, limit=limit, unresolved_only=unresolved_only)
+    alerts = [
+        {
+            "id": r.id,
+            "event_id": r.event_id,
+            "level": r.level,
+            "title": r.title,
+            "message": r.message,
+            "rule_id": r.rule_id,
+            "resolved": r.resolved,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]
+    return wrap_response({"alerts": alerts, "count": len(alerts)}, "events", data_origin="backend", real_execution=True)
+
+
+@router.get("/audit")
+def thalos_v1_audit(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    _ = current_user
+    from workers.thalos_worker import worker_status
+
+    report = audit_from_db(db)
+    report["worker"] = worker_status()
+    report["strict_real_mode"] = True
+    return wrap_response(report, "auditoria_real", data_origin="backend", real_execution=True)
 
 
 @router.get("/workspace/items")

@@ -129,8 +129,25 @@ export async function fetchThalosStatus() {
 
 export const MODULE_UI_BADGES: Record<string, string> = {
   auditoria_real: 'REAL',
-  backup_system: 'PARCIAL',
-  log_monitor: 'SIMULADO',
-  text_analysis: 'SIMULADO',
+  backup_system: 'REAL',
+  log_monitor: 'REAL',
+  text_analysis: 'REAL',
   workspace: 'REAL',
+  events: 'REAL',
+  status: 'REAL',
+}
+
+export async function fetchThalosAlerts(limit = 50, unresolvedOnly = false) {
+  const res = await api.get(
+    `/api/v1/thalos/v1/alerts?limit=${limit}&unresolved_only=${unresolvedOnly}`,
+  )
+  return res as ThalosControlResponse & { alerts: Record<string, unknown>[]; count: number }
+}
+
+export async function fetchThalosAudit() {
+  return api.get('/api/v1/thalos/v1/audit') as Promise<ThalosControlResponse & Record<string, unknown>>
+}
+
+export async function ingestThalosLogs(logs: string[]) {
+  return api.post('/api/v1/thalos/logs/ingest', { logs }) as Promise<ThalosControlResponse & Record<string, unknown>>
 }

@@ -97,6 +97,8 @@ def create_tables():
             from app.models.zeus_pending_approval import ZeusPendingApproval
             from app.models.scan_event import ScanEvent
             from app.models.thalos_security_event import ThalosSecurityEvent, ThalosLoginAttempt
+            from app.models.thalos_event import ThalosEvent
+            from app.models.thalos_alert import ThalosAlert
             from app.models.zeus_closure_audit import ZeusClosureAudit
             from app.models.thalos_workspace_item import ThalosWorkspaceItem
             from app.models.workspace_file import WorkspaceFile

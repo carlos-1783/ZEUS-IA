@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from services import thalos_executor, thalos_security_engine
+from services import thalos_executor
 
 logger = logging.getLogger(__name__)
 
@@ -21,83 +21,44 @@ def run_monitoring_cycle(
     auto_execute: bool = False,
     force_scan: bool = False,
 ) -> Dict[str, Any]:
-    """
-    Escaneo real de logs y evaluación de reglas.
-    Con force_scan=True (UI workspace) ejecuta scan aunque flags estén off.
-    """
-    scan: Dict[str, Any] = {}
-    if settings.THALOS_REAL_MONITORING or settings.THALOS_EXECUTION_ENABLED or force_scan:
-        scan = thalos_security_engine.scan_logs(db, hours=24, company_id=company_id)
-    else:
-        scan = {
-            "status": "monitoring_disabled",
-            "note": "Enable THALOS_REAL_MONITORING or THALOS_EXECUTION_ENABLED",
+    """Pipeline real: logs → parser → events → threat engine → alerts."""
+    from services.thalos_monitor_service import run_monitor_cycle
+
+    if getattr(settings, "THALOS_ENABLED", True) and (
+        settings.THALOS_REAL_MONITORING or settings.THALOS_EXECUTION_ENABLED
+        or settings.THALOS_REAL_LOGS_ENABLED or force_scan
+    ):
+        cycle = run_monitor_cycle(db, company_id=company_id, user_id=user_id)
+        rules = cycle.get("alerts") or []
+        actions_taken: List[Dict[str, Any]] = []
+
+        if auto_execute and settings.THALOS_EXECUTION_ENABLED:
+            for rule in rules:
+                action = "alert_admin"
+                actions_taken.append(
+                    thalos_executor.execute_action(
+                        db,
+                        action,
+                        company_id=company_id,
+                        user_id=user_id,
+                        payload={"message": rule.get("title") or "THALOS alert"},
+                    )
+                )
+
+        return {
+            "monitoring_enabled": settings.THALOS_REAL_MONITORING,
+            "execution_enabled": settings.THALOS_EXECUTION_ENABLED,
+            "auto_block_enabled": settings.THALOS_AUTO_BLOCK,
+            "scan": cycle.get("security_scan") or cycle,
+            "rules_triggered": rules,
+            "actions_taken": actions_taken,
+            "pipeline": cycle.get("pipeline"),
+            "file_events_inserted": cycle.get("file_events_inserted", 0),
+            "alerts_created": cycle.get("alerts_created", 0),
         }
 
-    rules = thalos_security_engine.evaluate_decision_rules(db, company_id=company_id)
-    actions_taken: List[Dict[str, Any]] = []
-
-    if auto_execute and settings.THALOS_EXECUTION_ENABLED:
-        for rule in rules:
-            action = rule.get("action")
-            if not action:
-                continue
-            ctx = rule.get("context") or {}
-            if action == "block_user" and ctx.get("email"):
-                actions_taken.append(
-                    thalos_executor.execute_action(
-                        db,
-                        "block_user",
-                        company_id=company_id,
-                        user_id=user_id,
-                        user_email=ctx["email"],
-                    )
-                )
-            elif action == "audit_cashflow_anomaly" and company_id:
-                actions_taken.append(
-                    thalos_executor.execute_action(
-                        db,
-                        "audit_cashflow_anomaly",
-                        company_id=company_id,
-                        user_id=user_id,
-                    )
-                )
-            elif action == "trigger_backup":
-                actions_taken.append(
-                    thalos_executor.execute_action(
-                        db, "trigger_backup", company_id=company_id, user_id=user_id
-                    )
-                )
-            elif action == "alert_admin":
-                actions_taken.append(
-                    thalos_executor.execute_action(
-                        db,
-                        "alert_admin",
-                        company_id=company_id,
-                        user_id=user_id,
-                        payload={"message": f"THALOS rule: {rule.get('condition')}"},
-                    )
-                )
-
-    result = {
-        "monitoring_enabled": settings.THALOS_REAL_MONITORING,
-        "execution_enabled": settings.THALOS_EXECUTION_ENABLED,
-        "auto_block_enabled": settings.THALOS_AUTO_BLOCK,
-        "scan": scan,
-        "rules_triggered": rules,
-        "actions_taken": actions_taken,
+    return {
+        "monitoring_enabled": False,
+        "status": "monitoring_disabled",
+        "note": "Enable THALOS_ENABLED + THALOS_REAL_MONITORING or THALOS_REAL_LOGS_ENABLED",
     }
-
-    if user_id and scan and scan.get("status") != "monitoring_disabled":
-        from services.thalos_workspace_writer_v1 import write_from_action_result
-
-        write_from_action_result(
-            db,
-            user_id=user_id,
-            company_id=company_id,
-            action="security_monitor",
-            result={"status": "completed", "executed": True, "result": scan, "rules": rules},
-            source="monitoring_cycle",
-        )
-
-    return result

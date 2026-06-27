@@ -137,6 +137,9 @@ class Settings(BaseSettings):
     TIKTOK_ACCESS_TOKEN: str = os.getenv("TIKTOK_ACCESS_TOKEN", "").strip()
 
     # THALOS v1 — ejecución real detrás de flags (thalos_safe_audit_v1)
+    THALOS_ENABLED: bool = os.getenv("THALOS_ENABLED", "true").lower() in ("true", "1", "yes")
+    THALOS_WORKER_INTERVAL_SEC: int = int(os.getenv("THALOS_WORKER_INTERVAL_SEC", "30") or "30")
+    THALOS_LOG_PATH: str = os.getenv("THALOS_LOG_PATH", "logs/zeus.log").strip()
     THALOS_EXECUTION_ENABLED: bool = os.getenv("THALOS_EXECUTION_ENABLED", "false").lower() in (
         "true",
         "1",

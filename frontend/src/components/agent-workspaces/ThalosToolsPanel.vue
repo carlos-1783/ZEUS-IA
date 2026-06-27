@@ -35,7 +35,7 @@
 
           <h5>Auditoría real (scan logs)</h5>
 
-          <ThalosExecutionBadge module-badge="REAL" :inline="true" :show-global="false" />
+          <ThalosExecutionBadge :module-badge="moduleBadge('auditoria_real')" :inline="true" :show-global="false" />
 
         </div>
 
@@ -67,7 +67,7 @@
 
           <h5>Backup del sistema</h5>
 
-          <ThalosExecutionBadge module-badge="PARCIAL" :inline="true" :show-global="false" />
+          <ThalosExecutionBadge :module-badge="moduleBadge('backup_system')" :inline="true" :show-global="false" />
 
         </div>
 
@@ -93,19 +93,18 @@
 
       </div>
 
-      <div class="tool-card legacy">
-        <!-- LEGACY MODE (NO REAL EXECUTION) — usar thalos_workspace_api /api/v1/thalos/v1/monitor -->
+      <div class="tool-card" :class="{ real: moduleBadge('log_monitor') === 'REAL' }">
         <div class="card-title-row">
-          <h5>Monitor de logs (heurístico)</h5>
-          <ThalosExecutionBadge module-badge="SIMULADO" :inline="true" :show-global="false" />
+          <h5>Monitor de logs (BD)</h5>
+          <ThalosExecutionBadge :module-badge="moduleBadge('log_monitor')" :inline="true" :show-global="false" />
         </div>
-        <p class="legacy-hint">Legacy workspaceTools — sin persistencia en BD.</p>
+        <p class="hint">Ingesta real → thalos_events → motor de amenazas → alertas.</p>
 
         <textarea v-model="logInput" placeholder="Líneas de log separadas por salto de línea"></textarea>
 
         <button :disabled="loading.logs" @click="runLogs">
 
-          {{ loading.logs ? 'Analizando…' : 'Analizar texto' }}
+          {{ loading.logs ? 'Analizando…' : 'Ingestar logs en BD' }}
 
         </button>
 
@@ -139,11 +138,11 @@
 
 import { onMounted, reactive, ref } from 'vue'
 
-import { workspaceTools } from '@/api/workspaceTools'
-
 import {
   extractControlMetadata,
+  fetchThalosAudit,
   fetchThalosStatus,
+  ingestThalosLogs,
   runThalosMonitor,
   type ThalosControlMetadata,
   type ThalosStatusResponse,
@@ -180,6 +179,13 @@ const logResult = ref<string | null>(null)
 const monitorSummary = ref<string | null>(null)
 
 const backupSummary = ref<string | null>(null)
+const auditStats = ref<{ event_count?: number; open_alerts?: number; worker?: { running?: boolean } } | null>(null)
+
+const moduleBadge = (module: string) =>
+  globalStatus.value?.module_classification?.[module] === 'REAL_SAFE' ||
+  globalStatus.value?.module_classification?.[module] === 'REAL_CONDITIONAL'
+    ? 'REAL'
+    : (globalStatus.value?.thalos_control?.ui_badge || 'REAL')
 
 
 
@@ -188,35 +194,18 @@ const pickControl = (out: unknown): ThalosControlMetadata | null => extractContr
 
 
 onMounted(async () => {
-
   try {
-
     globalStatus.value = await fetchThalosStatus()
-
+    const audit = await fetchThalosAudit().catch(() => null)
+    auditStats.value = audit as typeof auditStats.value
     const mode = globalStatus.value.system_default_mode
-
-    if (mode === 'SIMULATION') {
-
-      statusNote.value =
-
-        'Modo simulación por defecto: auditoría y workspace son REAL_SAFE; backup y acciones destructivas requieren REAL_ACTIVE.'
-
-    } else if (mode === 'REAL_SAFE') {
-
-      statusNote.value = 'Modo REAL_SAFE: monitoreo y persistencia activos; ejecución destructiva bloqueada.'
-
-    } else {
-
-      statusNote.value = 'Modo REAL_ACTIVE: ejecución completa habilitada (revisar flags en Railway).'
-
-    }
-
+    const ev = auditStats.value?.event_count ?? 0
+    const al = auditStats.value?.open_alerts ?? 0
+    const wrk = auditStats.value?.worker?.running ? 'activo' : 'inactivo'
+    statusNote.value = `Modo ${mode} · ${ev} eventos BD · ${al} alertas abiertas · worker ${wrk}`
   } catch {
-
     /* optional */
-
   }
-
 })
 
 
@@ -312,37 +301,22 @@ const runBackup = async () => {
 
 
 const runLogs = async () => {
-
   error.value = ''
-
   loading.logs = true
-
   lastLogControl.value = null
-
   try {
-
-    const out = (await workspaceTools.runThalosLogMonitor({
-
-      logs: logInput.value.split('\n').filter(Boolean),
-
-    })) as Record<string, unknown>
-
+    const lines = logInput.value.split('\n').filter(Boolean)
+    const out = (await ingestThalosLogs(lines)) as Record<string, unknown>
     lastLogControl.value = pickControl(out)
-
-    logResult.value = String(out?.text || 'Monitorización de logs completada.')
-
+    const inserted = (out as { events_inserted?: number }).events_inserted ?? 0
+    const alerts = (out as { alerts_created?: number }).alerts_created ?? 0
+    logResult.value = `${inserted} evento(s) en BD · ${alerts} alerta(s) generada(s)`
     emit('refreshed')
-
   } catch (err) {
-
     error.value = err instanceof Error ? err.message : String(err)
-
   } finally {
-
     loading.logs = false
-
   }
-
 }
 
 </script>

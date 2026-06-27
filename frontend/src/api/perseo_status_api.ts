@@ -47,6 +47,10 @@ export async function submitPerseoVideoEdit(payload: {
   return api.post('/api/v1/perseo/video/edit', payload) as Promise<PerseoVideoEditResponse>
 }
 
+export async function pollPerseoVideoJob(jobId: string) {
+  return api.get(`/api/v1/perseo/video/jobs/${jobId}`) as Promise<PerseoVideoEditResponse>
+}
+
 export async function fetchPerseoV2Status() {
   return api.get('/api/v1/perseo/v2/status') as Promise<{
     success: boolean

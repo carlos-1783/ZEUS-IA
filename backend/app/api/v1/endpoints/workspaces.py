@@ -596,7 +596,7 @@ async def workspace_justicia_signer(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    result = sign_pdf_document(request.model_dump())
+    result = sign_pdf_document(request.model_dump(), user_id=current_user.id, db=db)
     text = _text_generic("Firma digital", result)
     return _persist_agent_tool_response(
         db,
@@ -618,7 +618,7 @@ async def workspace_justicia_contract(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    result = generate_contract_kit(request.model_dump())
+    result = generate_contract_kit(request.model_dump(), user_id=current_user.id, db=db)
     text = _text_generic("Generación de contrato legal", result)
     return _persist_agent_tool_response(
         db,
@@ -640,7 +640,7 @@ async def workspace_justicia_gdpr(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    result = run_gdpr_audit(request.model_dump())
+    result = run_gdpr_audit(request.model_dump(), user_id=current_user.id, db=db)
     text = _text_generic("Auditoría GDPR", result)
     return _persist_agent_tool_response(
         db,

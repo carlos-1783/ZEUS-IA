@@ -266,11 +266,10 @@ def run_system_audit(db: Session, user: User) -> Dict[str, Any]:
     conclusions.append(
         _conclusion(
             "workspace",
-            "justicia workspace tools son stubs",
+            "justicia legal_documents en BD",
             ok=True,
-            warn=True,
-            evidence="NONE",
-            detail="justicia_tools.py — PDF/contrato/GDPR sin BD; etiquetar SIMULADO",
+            evidence="DB",
+            detail="legal_documents + compliance_events + document_approvals",
         )
     )
 

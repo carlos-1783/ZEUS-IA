@@ -40,23 +40,23 @@
     </div>
 
     <div class="tools-grid">
-      <div class="tool-card legacy">
+      <div class="tool-card" :class="{ real: moduleBadge('pdf_signer') === 'REAL' }">
         <div class="card-title-row">
           <h5>Firma digital</h5>
-          <ThalosExecutionBadge module-badge="SIMULADO" :inline="true" :show-global="false" />
+          <ThalosExecutionBadge :module-badge="moduleBadge('pdf_signer')" :inline="true" :show-global="false" />
         </div>
         <input v-model="signerForm.document_name" placeholder="Nombre documento.pdf" />
-        <input v-model="signerForm.file_hash" placeholder="Hash SHA-256" />
+        <input v-model="signerForm.file_hash" placeholder="Hash SHA-256 (opcional)" />
         <button :disabled="loading.signer" @click="runSigner">
-          {{ loading.signer ? 'Firmando…' : 'Firmar (stub)' }}
+          {{ loading.signer ? 'Firmando…' : 'Firmar y persistir' }}
         </button>
         <p v-if="signerResult" class="tool-text">{{ signerResult }}</p>
       </div>
 
-      <div class="tool-card legacy">
+      <div class="tool-card" :class="{ real: moduleBadge('contract_generator') === 'REAL' }">
         <div class="card-title-row">
           <h5>Generador de contrato</h5>
-          <ThalosExecutionBadge module-badge="SIMULADO" :inline="true" :show-global="false" />
+          <ThalosExecutionBadge :module-badge="moduleBadge('contract_generator')" :inline="true" :show-global="false" />
         </div>
         <input v-model="contractForm.scope" placeholder="Alcance" />
         <textarea v-model="contractForm.parties" placeholder="Parte A, Parte B"></textarea>
@@ -66,16 +66,21 @@
         <p v-if="contractResult" class="tool-text">{{ contractResult }}</p>
       </div>
 
-      <div class="tool-card legacy">
+      <div class="tool-card" :class="{ real: moduleBadge('gdpr_audit') === 'REAL' }">
         <div class="card-title-row">
-          <h5>Auditoría GDPR (descriptiva)</h5>
-          <ThalosExecutionBadge module-badge="SIMULADO" :inline="true" :show-global="false" />
+          <h5>Auditoría GDPR</h5>
+          <ThalosExecutionBadge :module-badge="moduleBadge('gdpr_audit')" :inline="true" :show-global="false" />
         </div>
         <textarea v-model="gdprForm.systems" placeholder="Sistemas (coma)"></textarea>
         <button :disabled="loading.gdpr" @click="runGdpr">
-          {{ loading.gdpr ? 'Auditando…' : 'Auditar (LLM/stub)' }}
+          {{ loading.gdpr ? 'Auditando…' : 'Auditar RGPD (BD)' }}
         </button>
         <p v-if="gdprResult" class="tool-text">{{ gdprResult }}</p>
+        <ul v-if="complianceAlerts.length" class="audit-list">
+          <li v-for="(a, i) in complianceAlerts.slice(0, 5)" :key="i">
+            <strong>{{ a.source }}</strong> · {{ a.event_type }} — {{ a.severity }}
+          </li>
+        </ul>
       </div>
     </div>
     <p v-if="error" class="tool-error">{{ error }}</p>
@@ -84,10 +89,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { workspaceTools } from '@/api/workspaceTools'
 import {
+  fetchJusticiaComplianceEvents,
+  fetchJusticiaDocuments,
   fetchJusticiaStatus,
   fetchJusticiaSystemAudit,
+  justiciaGenerateContract,
+  justiciaGdprCheck,
+  justiciaSign,
   type AuditConclusion,
   type JusticiaStatusResponse,
 } from '@/api/justicia_workspace_api'
@@ -101,8 +110,12 @@ const auditSummary = ref<string | null>(null)
 const auditConclusions = ref<AuditConclusion[]>([])
 
 const auditBadge = computed(() =>
-  globalStatus.value?.JUSTICE_REAL_AUDIT_ENABLED ? 'REAL' : 'SIMULADO'
+  globalStatus.value?.module_badges?.system_audit || (globalStatus.value?.JUSTICE_REAL_AUDIT_ENABLED ? 'REAL' : 'SIMULADO')
 )
+
+const moduleBadge = (key: string) => globalStatus.value?.module_badges?.[key] || 'REAL'
+
+const complianceAlerts = ref<Array<Record<string, unknown>>>([])
 
 const signerForm = reactive({
   document_name: '',
@@ -122,9 +135,12 @@ const csv = (value: string) =>
 onMounted(async () => {
   try {
     globalStatus.value = await fetchJusticiaStatus()
+    const docs = await fetchJusticiaDocuments().catch(() => null)
+    const events = await fetchJusticiaComplianceEvents().catch(() => null)
+    complianceAlerts.value = events?.events || []
     statusNote.value = globalStatus.value.JUSTICE_REAL_AUDIT_ENABLED
-      ? 'Auditoría real activa: conclusions con evidence_source DB/API.'
-      : 'Modo descriptivo: activa JUSTICE_REAL_AUDIT_ENABLED en Railway para queries BD.'
+      ? `Modo REAL · ${docs?.count ?? 0} documentos legales · ${complianceAlerts.value.length} alertas compliance`
+      : 'Activa JUSTICE_REAL_AUDIT_ENABLED en Railway.'
   } catch {
     /* optional */
   }
@@ -150,8 +166,8 @@ const runSigner = async () => {
   error.value = ''
   loading.signer = true
   try {
-    const out = await workspaceTools.runJusticiaSigner({ ...signerForm })
-    signerResult.value = String((out as { text?: string }).text || 'Stub — sin firma legal real.')
+    const out = await justiciaSign({ ...signerForm })
+    signerResult.value = `Firma: ${(out as { signature?: string }).signature?.slice(0, 16)}… · doc ${(out as { document_id?: string }).document_id}`
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -163,12 +179,12 @@ const runContract = async () => {
   error.value = ''
   loading.contract = true
   try {
-    const out = await workspaceTools.runJusticiaContract({
+    const out = await justiciaGenerateContract({
       scope: contractForm.scope,
       media_buying: contractForm.media_buying,
       parties: csv(contractForm.parties),
     })
-    contractResult.value = String((out as { text?: string }).text || 'Borrador simulado.')
+    contractResult.value = `Contrato v${(out as { version?: number }).version} · ${(out as { document_id?: string }).document_id} · ${(out as { status?: string }).status}`
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -180,11 +196,11 @@ const runGdpr = async () => {
   error.value = ''
   loading.gdpr = true
   try {
-    const out = await workspaceTools.runJusticiaGdpr({
-      systems: csv(gdprForm.systems),
-      data_flows: csv(gdprForm.data_flows),
-    })
-    gdprResult.value = String((out as { text?: string }).text || 'Auditoría descriptiva (sin BD).')
+    const out = await justiciaGdprCheck(csv(gdprForm.systems))
+    const issues = (out as { issues?: Array<{ message?: string }> }).issues || []
+    gdprResult.value = issues.map((i) => i.message).join(' · ') || 'Sin incidencias críticas.'
+    const ev = await fetchJusticiaComplianceEvents()
+    complianceAlerts.value = ev.events || []
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -237,7 +253,7 @@ const runGdpr = async () => {
   flex-direction: column;
   gap: 8px;
 }
-.tool-card.legacy { opacity: 0.92; }
+.tool-card.real { border-color: #0f172a; }
 .hint { margin: 0; font-size: 12px; color: #64748b; }
 .status-note { margin-top: 8px; font-size: 12px; color: #475569; }
 .tool-card input,

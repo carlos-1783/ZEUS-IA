@@ -1,78 +1,80 @@
 """
-Herramientas de workspace para JUSTICIA.
+Herramientas de workspace para JUSTICIA — persistencia real en BD.
 """
 
 from __future__ import annotations
 
-import hashlib
-from datetime import datetime
-from typing import Any, Dict, List
-
-from .base import log_tool_execution
+from typing import Any, Dict, List, Optional
 
 
-def sign_pdf_document(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Simular firma digital generando un hash seguro."""
+def sign_pdf_document(payload: Dict[str, Any], user_id: Optional[int] = None, db=None) -> Dict[str, Any]:
+    if db and user_id:
+        from app.models.user import User
+        from services.signature_service import apply_signature
+
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            return apply_signature(
+                db,
+                user,
+                document_id=payload.get("document_id"),
+                document_name=payload.get("document_name", "documento.pdf"),
+                file_hash=payload.get("file_hash", ""),
+                signer_label=payload.get("signer", "JUSTICIA"),
+            )
+
+    import hashlib
+    from datetime import datetime, timezone
+
+    from .base import log_tool_execution
+
     document_name = payload.get("document_name", "documento.pdf")
     digest = payload.get("file_hash", "")
     signer = payload.get("signer", "JUSTICIA")
-
-    composite = f"{document_name}:{digest}:{signer}:{datetime.utcnow().isoformat()}"
+    ts = datetime.now(timezone.utc).isoformat()
+    composite = f"{document_name}:{digest}:{signer}:{ts}"
     signature = hashlib.sha256(composite.encode("utf-8")).hexdigest()
     result = {
         "document": document_name,
         "signature": signature,
-        "signed_at": datetime.utcnow().isoformat(),
+        "signed_at": ts,
         "signer": signer,
+        "real_execution": False,
     }
-
-    log_tool_execution("JUSTICIA", "pdf_signer", "Documento firmado digitalmente", {"payload": payload, "result": result})
+    log_tool_execution("JUSTICIA", "pdf_signer", "Firma sin BD", {"payload": payload, "result": result})
     return result
 
 
-def generate_contract_kit(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Generar contrato base con cláusulas esenciales."""
-    parties = payload.get("parties", [])
-    scope = payload.get("scope", "servicios")
-    clauses = [
-        "Objeto y alcance del servicio",
-        "Condiciones económicas y calendario de pagos",
-        "Confidencialidad y protección de datos",
-        "Limitación de responsabilidad",
-    ]
-    if payload.get("media_buying"):
-        clauses.append("Propiedad intelectual de creatividades / media.")
+def generate_contract_kit(payload: Dict[str, Any], user_id: Optional[int] = None, db=None) -> Dict[str, Any]:
+    if db and user_id:
+        from app.models.user import User
+        from services.contract_generator import generate_contract
 
-    result = {
-        "parties": parties,
-        "scope": scope,
-        "clauses": clauses,
-        "delivery_format": "markdown",
-    }
-    log_tool_execution("JUSTICIA", "contract_generator", "Contrato generado", {"payload": payload, "result": result})
-    return result
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            return generate_contract(
+                db,
+                user,
+                parties=payload.get("parties", []),
+                scope=payload.get("scope", "servicios"),
+                media_buying=bool(payload.get("media_buying")),
+            )
+
+    from .justicia_tools_heuristic import generate_contract_heuristic
+
+    return generate_contract_heuristic(payload)
 
 
-def run_gdpr_audit(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Checklist rápido de cumplimiento GDPR."""
-    systems: List[str] = payload.get("systems", [])
-    flows: List[str] = payload.get("data_flows", [])
+def run_gdpr_audit(payload: Dict[str, Any], user_id: Optional[int] = None, db=None) -> Dict[str, Any]:
+    if db and user_id:
+        from app.models.user import User
+        from services.gdpr_engine import run_gdpr_check
 
-    issues = []
-    if not flows:
-        issues.append("Registrar flujos de datos entre agentes.")
-    if "whatsapp" in systems:
-        issues.append("Verificar consentimiento explícito para WhatsApp.")
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            systems: List[str] = payload.get("systems", [])
+            return run_gdpr_check(db, user, systems=systems)
 
-    statuses = [
-        {"system": system, "status": "ok" if system not in ("whatsapp", "crm") else "review"}
-        for system in systems
-    ]
+    from .justicia_tools_heuristic import run_gdpr_heuristic
 
-    result = {
-        "findings": issues or ["Cumplimiento validado sin observaciones críticas."],
-        "systems": statuses,
-    }
-    log_tool_execution("JUSTICIA", "gdpr_audit", "GDPR auditado", {"payload": payload, "result": result})
-    return result
-
+    return run_gdpr_heuristic(payload)

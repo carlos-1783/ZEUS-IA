@@ -223,8 +223,9 @@ class Settings(BaseSettings):
         "yes",
     )
 
-    # JUSTICIA v1 — auditoría real read-only (justice_deep_audit_v1)
-    JUSTICE_REAL_AUDIT_ENABLED: bool = os.getenv("JUSTICE_REAL_AUDIT_ENABLED", "false").lower() in (
+    # JUSTICIA v1 — auditoría real + documentos legales en BD
+    JUSTICE_ENABLED: bool = os.getenv("JUSTICE_ENABLED", "true").lower() in ("true", "1", "yes")
+    JUSTICE_REAL_AUDIT_ENABLED: bool = os.getenv("JUSTICE_REAL_AUDIT_ENABLED", "true").lower() in (
         "true",
         "1",
         "yes",

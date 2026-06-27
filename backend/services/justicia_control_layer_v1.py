@@ -18,10 +18,10 @@ DataOrigin = Literal["backend", "user_input", "mock", "mixed", "llm"]
 
 MODULE_UI_BADGE: Dict[str, str] = {
     "system_audit": "REAL",
-    "gdpr_audit": "SIMULADO",
-    "contract_generator": "SIMULADO",
-    "pdf_signer": "SIMULADO",
-    "workspace": "SIMULADO",
+    "gdpr_audit": "REAL",
+    "contract_generator": "REAL",
+    "pdf_signer": "REAL",
+    "workspace": "REAL",
     "status": "REAL",
 }
 
@@ -55,7 +55,9 @@ def current_flags() -> Dict[str, bool]:
 
 def resolve_execution_mode(module: str) -> ExecutionMode:
     flags = current_flags()
-    if module == "system_audit" and flags["JUSTICE_REAL_AUDIT_ENABLED"]:
+    if not getattr(settings, "JUSTICE_ENABLED", True):
+        return "SIMULATED"
+    if flags["JUSTICE_REAL_AUDIT_ENABLED"]:
         return "REAL"
     if flags["JUSTICE_READ_ONLY_MODE"]:
         return "READ_ONLY"

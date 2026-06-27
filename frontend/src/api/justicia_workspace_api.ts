@@ -58,3 +58,41 @@ export async function fetchJusticiaStatus() {
 export async function fetchJusticiaSystemAudit() {
   return api.get('/api/v1/justicia/v1/system-audit') as Promise<JusticiaSystemAuditResponse>
 }
+
+export async function fetchJusticiaDocuments(status?: string) {
+  const q = status ? `?status=${encodeURIComponent(status)}` : ''
+  return api.get(`/api/v1/justicia/v1/documents${q}`) as Promise<{
+    documents: Array<Record<string, unknown>>
+    pending: Record<string, unknown>
+    count: number
+    real_execution: boolean
+  }>
+}
+
+export async function justiciaSign(payload: {
+  document_id?: string
+  document_name?: string
+  file_hash?: string
+  signer?: string
+}) {
+  return api.post('/api/v1/justice/sign', payload) as Promise<Record<string, unknown>>
+}
+
+export async function justiciaGenerateContract(payload: {
+  parties: string[]
+  scope?: string
+  media_buying?: boolean
+}) {
+  return api.post('/api/v1/justice/contracts/generate', payload) as Promise<Record<string, unknown>>
+}
+
+export async function justiciaGdprCheck(systems: string[] = []) {
+  return api.post('/api/v1/justice/gdpr', { systems }) as Promise<Record<string, unknown>>
+}
+
+export async function fetchJusticiaComplianceEvents(limit = 30) {
+  return api.get(`/api/v1/justice/compliance-events?limit=${limit}`) as Promise<{
+    events: Array<Record<string, unknown>>
+    count: number
+  }>
+}

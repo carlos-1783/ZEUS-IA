@@ -93,11 +93,11 @@ def _agent_catalog(flags: Dict[str, bool]) -> List[Dict[str, Any]]:
         },
         {
             "name": "PERSEO",
-            "status": "FAKE",
-            "execution_mode": "SIMULATED",
-            "execution_ready": False,
-            "api_prefix": "/api/v1/tools",
-            "notes": "Heurísticas/LLM; sin persistencia de negocio",
+            "status": "PARTIAL",
+            "execution_mode": "REAL" if flags.get("AFRODITA_EXECUTION_ENABLED") else "SIMULATED",
+            "execution_ready": bool(flags.get("AFRODITA_EXECUTION_ENABLED")),
+            "api_prefix": "/api/v1/perseo",
+            "notes": "LLM chat REAL; tools heurísticos SIMULATED; video edit REAL con FFmpeg",
         },
         {
             "name": "ZEUS CORE",

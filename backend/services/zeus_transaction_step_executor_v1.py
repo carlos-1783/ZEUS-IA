@@ -40,6 +40,14 @@ def execute_step(
             )
         return _exec_workspace(db, user, act, step_input, transaction_id)
 
+    if mod == "PERSEO":
+        out = _exec_perseo(db, user, act, step_input, transaction_id)
+        return {**out, "transaction_id": transaction_id}
+
+    if mod == "STORAGE":
+        out = _exec_storage(db, user, act, step_input, transaction_id)
+        return {**out, "transaction_id": transaction_id}
+
     if mod == "RRHH":
         out = _exec_rrhh(db, user, act, step_input)
     elif mod == "OPS":
@@ -153,3 +161,98 @@ def _exec_workspace(
     if action == "persist_summary":
         return {"summary": inp, "transaction_id": transaction_id}
     raise HTTPException(status_code=422, detail=f"Unknown WORKSPACE action: {action}")
+
+
+def _exec_perseo(
+    db: Session,
+    user: User,
+    action: str,
+    inp: Dict[str, Any],
+    transaction_id: str,
+) -> Dict[str, Any]:
+    act = action.strip().lower()
+    if act == "video_edit":
+        from services.perseo_video_engine_v2 import create_video_edit_job_v2, get_video_job_v2
+        import time
+
+        created = create_video_edit_job_v2(
+            db,
+            user,
+            input_url=inp["input_url"],
+            operations=inp.get("operations"),
+            transaction_id=transaction_id,
+        )
+        job_id = created["job_id"]
+        for _ in range(240):
+            job = get_video_job_v2(db, job_id, user.id)
+            if job["status"] == "completed":
+                return {**job.get("output", {}), "job_id": job_id}
+            if job["status"] == "failed":
+                raise HTTPException(status_code=500, detail=job.get("error", "video failed"))
+            time.sleep(1)
+        raise HTTPException(status_code=504, detail="video job timeout")
+    if act == "generate_image":
+        from services.perseo_image_engine_v2 import create_image_generation_job, get_image_job
+        import time
+
+        created = create_image_generation_job(
+            db, user, prompt=inp["prompt"], transaction_id=transaction_id,
+        )
+        job_id = created["job_id"]
+        for _ in range(120):
+            job = get_image_job(db, job_id, user.id)
+            if job["status"] == "completed":
+                return {**job.get("output", {}), "job_id": job_id}
+            if job["status"] == "failed":
+                raise HTTPException(status_code=500, detail=job.get("error"))
+            time.sleep(2)
+        raise HTTPException(status_code=504, detail="image job timeout")
+    if act == "create_campaign":
+        from services.perseo_ads_engine_v2 import create_ad_campaign
+
+        return create_ad_campaign(
+            db,
+            user,
+            platform=inp["platform"],
+            name=inp["name"],
+            budget=float(inp["budget"]),
+            transaction_id=transaction_id,
+        )
+    if act == "publish_post":
+        from services.perseo_publishing_v1 import publish_post
+
+        return publish_post(
+            db,
+            user,
+            platform=inp["platform"],
+            video_url=inp["video_url"],
+            caption=inp.get("caption", ""),
+            transaction_id=transaction_id,
+        )
+    raise HTTPException(status_code=422, detail=f"Unknown PERSEO action: {action}")
+
+
+def _exec_storage(
+    db: Session,
+    user: User,
+    action: str,
+    inp: Dict[str, Any],
+    transaction_id: str,
+) -> Dict[str, Any]:
+    if action == "store_object":
+        from pathlib import Path
+
+        from services.perseo_storage_v2 import upload_file
+
+        local_path = Path(inp["local_path"])
+        return {
+            **upload_file(
+                local_path,
+                user_id=user.id,
+                category=inp.get("category", "media"),
+                filename=inp.get("filename"),
+                content_type=inp.get("content_type"),
+            ),
+            "transaction_id": transaction_id,
+        }
+    raise HTTPException(status_code=422, detail=f"Unknown STORAGE action: {action}")

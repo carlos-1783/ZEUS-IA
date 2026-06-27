@@ -48,6 +48,16 @@ def get_module_statuses(db: Optional[Session], global_status: Dict[str, Any]) ->
     ws_read = ws_enabled and ws_connected
     ws_write = ws_read and writes_on
 
+    ffmpeg_ok = False
+    try:
+        from services.perseo_audit_service_v1 import _ffmpeg_available
+
+        ffmpeg_ok = _ffmpeg_available()
+    except Exception:
+        ffmpeg_ok = False
+    perseo_read = True
+    perseo_write = writes_on and ffmpeg_ok
+
     playbook_count = 0
     if db is not None and ws_read:
         try:
@@ -89,6 +99,12 @@ def get_module_statuses(db: Optional[Session], global_status: Dict[str, Any]) ->
             "read": ws_read,
             "write": ws_write,
             "playbook_count": playbook_count,
+        },
+        "perseo": {
+            "status": _module_mode(global_mode=gmode, can_read=perseo_read, can_write=perseo_write),
+            "read": perseo_read,
+            "write": perseo_write,
+            "video_engine": "perseo_video_engine_v1" if ffmpeg_ok else None,
         },
     }
 

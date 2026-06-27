@@ -1,0 +1,186 @@
+"""
+PERSEO full-system audit v1 — feature classification and report generation.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Literal
+
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from services.zeus_execution_controller_v1 import get_execution_status
+
+logger = logging.getLogger(__name__)
+
+FeatureStatus = Literal["REAL", "SIMULATED", "BROKEN", "MISSING"]
+
+AUDIT_TARGETS = (
+    "content_generation",
+    "ads_generation",
+    "video_editing",
+    "image_generation",
+    "publishing",
+    "analytics",
+    "automation",
+)
+
+
+def _ffmpeg_available() -> bool:
+    try:
+        import imageio_ffmpeg  # type: ignore
+
+        imageio_ffmpeg.get_ffmpeg_exe()
+        return True
+    except Exception:
+        return False
+
+
+def build_feature_status_map(db: Session | None = None) -> Dict[str, Dict[str, Any]]:
+    execution = get_execution_status(db)
+    ffmpeg_ok = _ffmpeg_available()
+    images_on = bool(getattr(settings, "PERSEO_IMAGES_ENABLED", True))
+    v2 = bool(getattr(settings, "PERSEO_V2_ENABLED", False))
+
+    from services.perseo_storage_v2 import s3_configured
+
+    try:
+        from services.perseo_image_engine_v2 import _provider_configured
+        from services.perseo_ads_engine_v2 import _meta_configured, _google_configured
+        from services.perseo_publishing_v1 import _instagram_configured
+    except ImportError:
+        _provider_configured = lambda: False  # type: ignore
+        _meta_configured = lambda: False  # type: ignore
+        _google_configured = lambda: False  # type: ignore
+        _instagram_configured = lambda: False  # type: ignore
+
+    video_status: FeatureStatus = "REAL" if ffmpeg_ok else "BROKEN"
+    if v2 and not s3_configured():
+        video_status = "BROKEN"
+
+    image_status: FeatureStatus = "SIMULATED"
+    if v2 and _provider_configured():
+        image_status = "REAL"
+    elif images_on and not v2:
+        image_status = "REAL"
+
+    ads_status: FeatureStatus = "SIMULATED"
+    if _meta_configured() or _google_configured():
+        ads_status = "REAL" if _meta_configured() else "BROKEN"
+
+    pub_status: FeatureStatus = "MISSING"
+    if _instagram_configured():
+        pub_status = "REAL"
+
+    analytics_status: FeatureStatus = "REAL" if _meta_configured() else "SIMULATED"
+
+    return {
+        "content_generation": {
+            "status": "REAL",
+            "endpoint": "POST /api/v1/chat (agent=PERSEO)",
+            "notes": "LLM copy via OpenAI; workspace persist to document_approvals",
+            "execution_mode": execution["execution_mode"],
+        },
+        "video_editing": {
+            "status": video_status,
+            "endpoint": "/api/v1/perseo/v2/video/edit" if v2 else "/api/v1/perseo/video/edit",
+            "notes": "FFmpeg v2 + cloud storage when PERSEO_V2_ENABLED",
+            "ffmpeg_available": ffmpeg_ok,
+            "engine": "perseo_video_engine_v2" if v2 else "perseo_video_engine_v1",
+        },
+        "image_generation": {
+            "status": image_status,
+            "endpoint": "/api/v1/perseo/v2/image/generate" if v2 else "/api/v1/perseo/upload-image",
+            "notes": "AI via Replicate/Stability when configured" if v2 else "Local upload only",
+            "storage": getattr(settings, "PERSEO_STORAGE_BACKEND", "local"),
+        },
+        "ads_generation": {
+            "status": ads_status,
+            "endpoint": "/api/v1/perseo/v2/ads/create",
+            "notes": "Meta Graph API when token configured; Google requires client library",
+            "blocked_for_real_badges": ads_status == "SIMULATED",
+        },
+        "publishing": {
+            "status": pub_status,
+            "endpoint": "/api/v1/perseo/v2/publish",
+            "notes": "Instagram Reels via Graph API when configured",
+        },
+        "analytics": {
+            "status": analytics_status,
+            "endpoint": "/api/v1/perseo/v2/analytics",
+            "notes": "Meta insights — no placeholders when configured",
+            "blocked_for_real_badges": analytics_status == "SIMULATED",
+        },
+        "automation": {
+            "status": "REAL",
+            "endpoint": "automation/handlers/perseo.py",
+            "notes": "Files to storage/outputs/perseo; external AI prompts are text-only",
+        },
+    }
+
+
+def build_audit_report(db: Session | None = None) -> Dict[str, Any]:
+    features = build_feature_status_map(db)
+    fake = [k for k, v in features.items() if v["status"] == "SIMULATED"]
+    broken = [k for k, v in features.items() if v["status"] == "BROKEN"]
+    missing = [k for k, v in features.items() if v["status"] == "MISSING"]
+    real = [k for k, v in features.items() if v["status"] == "REAL"]
+
+    execution = get_execution_status(db)
+    return {
+        "project": "PERSEO_AGENT",
+        "version": "v1_full_system_audit",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "mode": "full_system_audit",
+        "execution_mode": execution["execution_mode"],
+        "writes_enabled": execution["writes_enabled"],
+        "audit_targets": list(AUDIT_TARGETS),
+        "feature_status_map": features,
+        "summary": {
+            "REAL": real,
+            "SIMULATED": fake,
+            "BROKEN": broken,
+            "MISSING": missing,
+        },
+        "fake_features_list": fake,
+        "broken_features_list": broken,
+        "video_editing_audit": {
+            "required_endpoint": "/api/v1/perseo/video/edit",
+            "endpoint_exists": True,
+            "ffmpeg_available": _ffmpeg_available(),
+            "storage": "local_static",
+            "checks_passed": _ffmpeg_available(),
+        },
+        "zeus_integration": {
+            "transaction_module": "PERSEO",
+            "supported_actions": [
+                "video_edit",
+                "generate_image",
+                "create_campaign",
+                "publish_post",
+                "store_object",
+            ],
+            "storage_module": "STORAGE",
+            "require_transaction_id": False,
+            "respect_execution_mode": True,
+        },
+        "rules": {
+            "no_success_without_real_output": True,
+            "require_storage_for_media": True,
+            "all_writes_must_use_zeus_transaction": False,
+        },
+    }
+
+
+def write_audit_report_file(db: Session | None = None) -> Path:
+    report = build_audit_report(db)
+    out_dir = Path(__file__).resolve().parents[1] / "config"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "perseo_audit_report.json"
+    path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    logger.info("[PERSEO_AUDIT] report written to %s", path)
+    return path

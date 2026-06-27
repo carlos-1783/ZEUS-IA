@@ -117,6 +117,23 @@ class Settings(BaseSettings):
     )
     PERSEO_IMAGE_MAX_BYTES: int = int(os.getenv("PERSEO_IMAGE_MAX_BYTES", str(5 * 1024 * 1024)))
 
+    # PERSEO V2 — cloud storage, transactional engines, queue workers
+    PERSEO_V2_ENABLED: bool = os.getenv("PERSEO_V2_ENABLED", "false").lower() in ("true", "1", "yes")
+    PERSEO_STORAGE_BACKEND: str = os.getenv("PERSEO_STORAGE_BACKEND", "local").strip().lower()
+    AWS_S3_BUCKET: str = os.getenv("AWS_S3_BUCKET", "").strip()
+    AWS_S3_REGION: str = os.getenv("AWS_S3_REGION", os.getenv("AWS_REGION", "eu-west-1")).strip()
+    AWS_ACCESS_KEY_ID: str = os.getenv("AWS_ACCESS_KEY_ID", "").strip()
+    AWS_SECRET_ACCESS_KEY: str = os.getenv("AWS_SECRET_ACCESS_KEY", "").strip()
+    AWS_S3_PUBLIC_URL_PREFIX: str = os.getenv("AWS_S3_PUBLIC_URL_PREFIX", "").strip().rstrip("/")
+    AWS_S3_SIGNED_URL_TTL_SEC: int = int(os.getenv("AWS_S3_SIGNED_URL_TTL_SEC", "3600") or "3600")
+    REPLICATE_API_TOKEN: str = os.getenv("REPLICATE_API_TOKEN", "").strip()
+    STABILITY_API_KEY: str = os.getenv("STABILITY_API_KEY", "").strip()
+    PERSEO_IMAGE_PROVIDER: str = os.getenv("PERSEO_IMAGE_PROVIDER", "replicate").strip().lower()
+    INSTAGRAM_ACCESS_TOKEN: str = os.getenv("INSTAGRAM_ACCESS_TOKEN", "").strip()
+    INSTAGRAM_BUSINESS_ACCOUNT_ID: str = os.getenv("INSTAGRAM_BUSINESS_ACCOUNT_ID", "").strip()
+    YOUTUBE_ACCESS_TOKEN: str = os.getenv("YOUTUBE_ACCESS_TOKEN", "").strip()
+    TIKTOK_ACCESS_TOKEN: str = os.getenv("TIKTOK_ACCESS_TOKEN", "").strip()
+
     # THALOS v1 — ejecución real detrás de flags (thalos_safe_audit_v1)
     THALOS_EXECUTION_ENABLED: bool = os.getenv("THALOS_EXECUTION_ENABLED", "false").lower() in (
         "true",

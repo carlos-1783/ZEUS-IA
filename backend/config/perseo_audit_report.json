@@ -1,0 +1,35 @@
+{
+  "project": "PERSEO_AGENT",
+  "version": "v1_full_system_audit",
+  "note": "Static snapshot — live audit at GET /api/v1/perseo/audit",
+  "classification_legend": {
+    "REAL": "feature fully working with real output and persistence",
+    "SIMULATED": "feature returns fake or mocked data",
+    "BROKEN": "feature exists but fails or incomplete",
+    "MISSING": "feature declared but not implemented"
+  },
+  "audit_targets": [
+    "content_generation",
+    "ads_generation",
+    "video_editing",
+    "image_generation",
+    "publishing",
+    "analytics",
+    "automation"
+  ],
+  "fake_features_list": ["ads_generation", "analytics"],
+  "broken_features_list_conditional": ["video_editing when FFmpeg unavailable"],
+  "missing_features_list": ["publishing"],
+  "real_features_list": ["content_generation", "automation", "image_upload"],
+  "video_editing_audit": {
+    "required_endpoint": "/api/v1/perseo/video/edit",
+    "endpoint_exists": true,
+    "engine": "perseo_video_engine_v1",
+    "storage": "local_static_under_STATIC_DIR"
+  },
+  "zeus_integration": {
+    "transaction_module": "PERSEO",
+    "action": "video_edit",
+    "status_endpoint": "/api/v1/perseo/status"
+  }
+}

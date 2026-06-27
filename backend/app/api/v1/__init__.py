@@ -25,6 +25,8 @@ from app.api.v1.endpoints import (
     automation_outputs,
     system_status,
     perseo_images,
+    perseo_v1,
+    perseo_v2,
     teamflow,
     workspaces,
     workspace as workspace_deliverables,
@@ -157,6 +159,8 @@ api_router.include_router(activities.router, prefix="/activities", tags=["activi
 api_router.include_router(automation_outputs.router, prefix="/automation", tags=["automation"])
 api_router.include_router(system_status.router, prefix="/system", tags=["system-status"])
 api_router.include_router(perseo_images.router, tags=["perseo-images"])
+api_router.include_router(perseo_v1.router, tags=["perseo"])
+api_router.include_router(perseo_v2.router, tags=["perseo-v2"])
 api_router.include_router(teamflow.router, tags=["teamflow"])
 api_router.include_router(actions.router, tags=["actions"])
 api_router.include_router(workspaces.router, tags=["workspaces"])

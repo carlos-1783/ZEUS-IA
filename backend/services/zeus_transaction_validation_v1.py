@@ -47,6 +47,15 @@ def validate_transaction(
         action = step.get("action") or ""
         if module == "WORKSPACE" and action not in ("persist_playbook", "persist_summary"):
             errors.append(f"Unknown WORKSPACE action: {action}")
+        if module == "PERSEO" and action not in (
+            "video_edit",
+            "generate_image",
+            "create_campaign",
+            "publish_post",
+        ):
+            errors.append(f"Unknown PERSEO action: {action}")
+        if module == "STORAGE" and action not in ("store_object",):
+            errors.append(f"Unknown STORAGE action: {action}")
 
     return {
         "passed": len(errors) == 0,

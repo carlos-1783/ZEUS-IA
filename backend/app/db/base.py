@@ -103,6 +103,7 @@ def create_tables():
             from app.models.workspace_playbook import WorkspacePlaybook
             from app.models.ops_route import OpsRoute
             from app.models.zeus_transaction import ZeusTransaction
+            from app.models.perseo_job import PerseoJob
             from app.models.tpv_operator_session import TPVOperatorSession
             from app.models.time_tracking import (
                 TimeTrackingRecord,

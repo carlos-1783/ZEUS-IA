@@ -23,6 +23,17 @@ CRITICAL_FLAG_NAMES = (
 def _warn_missing(name: str) -> None:
     if name not in _WARNED_MISSING:
         _WARNED_MISSING.add(name)
+        try:
+            from services.zeus_production_stabilization_v1 import production_execution_defaults
+
+            if production_execution_defaults():
+                logger.info(
+                    "[AFRODITA_FLAGS] env var %s missing — using production stabilization default",
+                    name,
+                )
+                return
+        except Exception:
+            pass
         logger.warning(
             "[AFRODITA_FLAGS] env var %s missing — defaulting to false",
             name,

@@ -367,6 +367,20 @@ def create_ops_route(
     db.flush()
     db.refresh(row)
 
+    try:
+        from services.zeus_cross_module_events_v1 import emit_cross_module_event
+
+        emit_cross_module_event(
+            db,
+            user,
+            "ops_route_created",
+            {"route_id": row.id, "origin": row.origin, "destination": row.destination},
+        )
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).warning("[CROSS_MODULE] ops_route_created failed: %s", exc)
+
     return {
         "route": {
             "id": row.id,

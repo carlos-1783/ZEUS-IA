@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
@@ -12,6 +13,8 @@ from app.models.teamflow_event import TeamFlowEvent
 from app.models.teamflow_item import TeamFlowItem, VALID_STATUSES
 from app.models.user import User
 from services.teamflow_state_v1 import can_transition
+
+logger = logging.getLogger(__name__)
 
 
 def _dump(obj: Any) -> str:
@@ -191,4 +194,24 @@ def persist_workflow_execution(
         )
         created.append(item)
         prev_agent = agent
+
+    try:
+        from services.workspace_playbook_service_v1 import persist_execution_playbook
+
+        persist_execution_playbook(
+            db,
+            user,
+            agent_source="teamflow",
+            action=f"workflow:{workflow_id}",
+            title=f"TeamFlow {workflow_id}",
+            payload={
+                "execution_id": execution_id,
+                "workflow_id": workflow_id,
+                "step_count": len(steps),
+                "item_ids": [c.get("id") for c in created if c.get("id")],
+            },
+        )
+    except Exception as exc:
+        logger.warning("[TEAMFLOW] workspace playbook bind failed: %s", exc)
+
     return created

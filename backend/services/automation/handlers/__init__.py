@@ -30,7 +30,17 @@ from .thalos_v1 import (
     handle_thalos_v1_detect,
     handle_thalos_v1_monitor,
 )
-from .generic_internal import handle_generic_internal, GENERIC_INTERNAL_HANDLER_NAME
+from .generic_internal import (
+    GENERIC_INTERNAL_HANDLER_NAME,
+    handle_generic_internal,
+    handle_soft_disabled_generic,
+)
+from .production_real_v1 import (
+    handle_ads_campaign_builder,
+    handle_contract_creator_rrhh,
+    handle_document_signed,
+    handle_invoice_sent,
+)
 from .zeus_orchestrator import (
     handle_campaign_created,
     handle_campaign_sent,
@@ -47,7 +57,7 @@ def _normalize_agent_key(agent: str) -> str:
 
 HandlerType = Callable[[AgentActivity], Dict[str, object]]
 
-# Action types that use GENERIC_INTERNAL_HANDLER
+# Action types that still lack a dedicated real handler (phase 5 soft-disable on stabilization)
 GENERIC_INTERNAL_ACTION_TYPES = frozenset({
     # ZEUS internal
     "autonomo_paperwork_prepare",
@@ -55,17 +65,18 @@ GENERIC_INTERNAL_ACTION_TYPES = frozenset({
     "stripe_readiness_check",
     "daily_internal_log",
     "system_friction_detected",
-    # RAFAEL critical (fiscal workflows)
-    "invoice_sent",  # Invoice generation - requires real handler in future
-    # JUSTICIA critical (legal workflows)
-    "contract_generator",  # Contract generation - requires real handler in future
-    "document_signed",  # Document signing - requires real handler in future
-    # AFRODITA critical (HR workflows)
-    "contract_creator_rrhh",  # HR contract creation - requires real handler in future
-    # PERSEO critical (marketing workflows)
-    "image_analyzer",  # Image analysis - requires real handler in future
-    "ads_campaign_builder",  # Campaign builder - requires real handler in future
+    # JUSTICIA — contract_generator pending dedicated handler
+    "contract_generator",
+    # PERSEO — image_analyzer pending dedicated handler
+    "image_analyzer",
 })
+
+PRODUCTION_REAL_ACTION_HANDLERS: Dict[str, HandlerType] = {
+    "invoice_sent": handle_invoice_sent,
+    "document_signed": handle_document_signed,
+    "contract_creator_rrhh": handle_contract_creator_rrhh,
+    "ads_campaign_builder": handle_ads_campaign_builder,
+}
 
 HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
     "ZEUS": {
@@ -94,17 +105,21 @@ HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
     "PERSEO": {
         "task_assigned": handle_perseo_task,
         "campaign_created": handle_campaign_created,
+        "ads_campaign_builder": handle_ads_campaign_builder,
     },
     "RAFAEL": {
         "task_assigned": handle_rafael_task,
+        "invoice_sent": handle_invoice_sent,
     },
     "JUSTICIA": {
         "task_assigned": handle_justicia_task,
         "document_reviewed": handle_justicia_task,
         "compliance_check": handle_justicia_task,
+        "document_signed": handle_document_signed,
     },
     "AFRODITA": {
         "task_assigned": handle_afrodita_task,
+        "contract_creator_rrhh": handle_contract_creator_rrhh,
     },
     "THALOS": {
         "security_scan": handle_thalos_security_scan,
@@ -122,15 +137,35 @@ HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
 }
 
 
+def _soft_disable_generic(action_type: str) -> bool:
+    if action_type not in GENERIC_INTERNAL_ACTION_TYPES:
+        return False
+    try:
+        from services.zeus_production_stabilization_v1 import stabilization_enabled
+
+        return stabilization_enabled()
+    except Exception:
+        return False
+
+
 def resolve_handler(agent: str, action_type: str) -> HandlerType:
+    if action_type in PRODUCTION_REAL_ACTION_HANDLERS:
+        return PRODUCTION_REAL_ACTION_HANDLERS[action_type]
+
     normalized = _normalize_agent_key(agent)
     for key in (normalized, (agent or "").strip().upper()):
         agent_handlers = HANDLER_MAP.get(key)
         if agent_handlers and action_type in agent_handlers:
-            return agent_handlers[action_type]
+            handler = agent_handlers[action_type]
+            if handler is handle_generic_internal and _soft_disable_generic(action_type):
+                return handle_soft_disabled_generic
+            return handler
+
     if action_type in GENERIC_INTERNAL_ACTION_TYPES:
+        if _soft_disable_generic(action_type):
+            return handle_soft_disabled_generic
         return handle_generic_internal
-    # Safe fallback — evita blocked_missing_handler (system_fix_pass_v1)
+
     import logging
 
     logging.getLogger(__name__).warning(

@@ -4,6 +4,8 @@ AFRODITA workspace RRHH v1 — conecta UI a company_employees, employee_schedule
 
 from __future__ import annotations
 
+import json
+import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
@@ -22,6 +24,8 @@ from services.afrodita_unified_control import (
     validate_qr_freshness,
 )
 from services.workspace_deliverables import primary_company_id_for_user
+
+logger = logging.getLogger(__name__)
 
 
 def _company_ids_for_user(db: Session, user: User) -> List[int]:
@@ -163,6 +167,18 @@ def create_company_employee(
         allowed=True,
         actor_id=user.id,
     )
+
+    try:
+        from services.zeus_cross_module_events_v1 import emit_cross_module_event
+
+        emit_cross_module_event(
+            db,
+            user,
+            "employee_created",
+            {"employee": _employee_to_dict(emp), "source": "afrodita_workspace"},
+        )
+    except Exception as exc:
+        logger.warning("[CROSS_MODULE] employee_created propagation failed: %s", exc)
 
     return {
         "employee": _employee_to_dict(emp),

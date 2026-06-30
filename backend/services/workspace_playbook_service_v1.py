@@ -18,7 +18,7 @@ from services.workspace_deliverables import primary_company_id_for_user
 logger = logging.getLogger(__name__)
 
 AGENT_ROOT = "AFRODITA"
-VALID_AGENT_SOURCES = frozenset({"rrhh", "ops", "logistics", "afrodita", "automation"})
+VALID_AGENT_SOURCES = frozenset({"rrhh", "ops", "logistics", "afrodita", "automation", "teamflow"})
 
 
 def _probe_db_connected(db: Optional[Session]) -> bool:

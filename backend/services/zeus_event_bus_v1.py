@@ -36,14 +36,25 @@ def emit_event(
 ) -> Dict[str, Any]:
     """Persist event and propagate to registered modules (best-effort, non-blocking)."""
     body = payload or {}
-    row = ZeusDomainEvent(
-        user_id=user.id if user else None,
-        event_name=event_name,
-        source_module=source_module.upper(),
-        payload_json=json.dumps(body, ensure_ascii=False, default=str),
-    )
-    db.add(row)
-    db.flush()
+    try:
+        row = ZeusDomainEvent(
+            user_id=user.id if user else None,
+            event_name=event_name,
+            source_module=source_module.upper(),
+            payload_json=json.dumps(body, ensure_ascii=False, default=str),
+        )
+        db.add(row)
+        db.flush()
+    except Exception as exc:
+        logger.warning("[EVENT_BUS] persist failed (migration 0042?): %s", exc)
+        return {
+            "event_id": None,
+            "event_name": event_name,
+            "propagated_to": [],
+            "active": False,
+            "degraded": True,
+            "error": str(exc),
+        }
 
     propagated: List[str] = []
     try:
@@ -52,13 +63,16 @@ def emit_event(
     except Exception as exc:
         logger.warning("[EVENT_BUS] handler dispatch failed: %s", exc)
 
-    for target in EVENT_TARGETS.get(event_name, EVENT_TARGETS.get("document_signed" if event_name == "contract_signed" else "", [])):
-        if target not in propagated and target not in [p.split(".")[0] for p in propagated]:
+    for target in EVENT_TARGETS.get(event_name, []):
+        if target not in propagated:
             propagated.append(target)
 
-    row.propagated_to = json.dumps(propagated, ensure_ascii=False)
-    db.add(row)
-    db.flush()
+    try:
+        row.propagated_to = json.dumps(propagated, ensure_ascii=False)
+        db.add(row)
+        db.flush()
+    except Exception:
+        pass
 
     logger.info("[EVENT_BUS] %s from %s → %s (async=%s)", event_name, source_module, propagated, async_mode)
     return {

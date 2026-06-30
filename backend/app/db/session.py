@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError, DisconnectionError
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from app.db.base import SessionLocal
 import logging
 import time
@@ -46,10 +46,27 @@ def get_db():
                 retry_delay *= 2
                 continue
             logger.error("Error crítico de conexión a BD después de %d intentos: %s", max_retries, e)
-            raise
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "error": "db_unavailable",
+                    "execution_mode": "ERROR",
+                    "message": "Base de datos temporalmente no disponible",
+                },
+            ) from e
         except HTTPException:
             # 401 Token expirado, 403, etc.: no son errores de BD, propagar sin logear como get_db
             raise
         except Exception as e:
+            error_msg = str(e).lower()
+            if any(k in error_msg for k in ("no such table", "does not exist", "undefinedtable")):
+                logger.error("Error de esquema en get_db: %s", e)
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail={
+                        "error": "schema_missing",
+                        "message": "Esquema de BD incompleto — ejecute alembic upgrade head",
+                    },
+                ) from e
             logger.error("Error inesperado en get_db: %s", e)
             raise

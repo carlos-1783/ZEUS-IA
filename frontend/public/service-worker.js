@@ -1,182 +1,181 @@
 // ZEUS-IA Enterprise - Service Worker
-// Versión: 1.1.0 — network-first para assets tras deploy (evita chunks 404)
+// Versión: 1.3.0 — nunca cachear POST; API network-only; SPA network-first
 
-const CACHE_NAME = 'zeus-enterprise-v2';
-const RUNTIME_CACHE = 'zeus-runtime-v2';
+const CACHE_NAME = 'zeus-enterprise-v4';
+const RUNTIME_CACHE = 'zeus-runtime-v4';
 
-// Recursos estáticos para cachear en la instalación
-const STATIC_ASSETS = [
-  '/',
+const STATIC_ASSETS = ['/favicon.ico'];
+
+const SPA_PATH_PREFIXES = [
   '/dashboard',
   '/admin',
   '/tpv',
-  '/index.html',
-  '/favicon.ico'
+  '/login',
+  '/register',
+  '/auth/',
+  '/pricing',
+  '/checkout',
 ];
 
-// Instalación del Service Worker
+function isSpaRoute(pathname) {
+  return SPA_PATH_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(p)
+  );
+}
+
+function isCacheableRequest(request) {
+  return request.method === 'GET' || request.method === 'HEAD';
+}
+
+function isApiRequest(pathname) {
+  return pathname.startsWith('/api/');
+}
+
+async function safeCachePut(cache, request, response) {
+  if (!isCacheableRequest(request)) {
+    return;
+  }
+  if (!response || !response.ok) {
+    return;
+  }
+  try {
+    await cache.put(request, response.clone());
+  } catch (err) {
+    console.log('[SW] Skip cache.put:', request.method, request.url, err);
+  }
+}
+
 self.addEventListener('install', (event) => {
-  console.log('[SW] Service Worker instalando...');
+  console.log('[SW] Service Worker instalando v4...');
   event.waitUntil(
-    caches.open(CACHE_NAME)
+    caches
+      .open(CACHE_NAME)
       .then((cache) => {
-        console.log('[SW] Cacheando recursos estáticos');
-        return cache.addAll(STATIC_ASSETS.map(url => new Request(url, { cache: 'reload' })))
+        return cache
+          .addAll(STATIC_ASSETS.map((url) => new Request(url, { cache: 'reload' })))
           .catch((err) => {
-            console.log('[SW] Error cacheando algunos recursos (continuando):', err);
-            return Promise.resolve(); // Continuar aunque falle algunos recursos
+            console.log('[SW] Error cacheando recursos (continuando):', err);
+            return Promise.resolve();
           });
       })
-      .then(() => {
-        console.log('[SW] Service Worker instalado correctamente');
-        return self.skipWaiting(); // Activar inmediatamente
-      })
+      .then(() => self.skipWaiting())
   );
 });
 
-// Activación del Service Worker
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Service Worker activando...');
+  console.log('[SW] Service Worker activando v4...');
   event.waitUntil(
-    caches.keys()
-      .then((cacheNames) => {
-        return Promise.all(
+    caches
+      .keys()
+      .then((cacheNames) =>
+        Promise.all(
           cacheNames
-            .filter((cacheName) => {
-              // Eliminar caches antiguos
-              return cacheName !== CACHE_NAME && cacheName !== RUNTIME_CACHE;
-            })
-            .map((cacheName) => {
-              console.log('[SW] Eliminando cache antiguo:', cacheName);
-              return caches.delete(cacheName);
-            })
-        );
-      })
-      .then(() => {
-        console.log('[SW] Service Worker activado');
-        return self.clients.claim(); // Tomar control inmediato
-      })
+            .filter((name) => name !== CACHE_NAME && name !== RUNTIME_CACHE)
+            .map((name) => caches.delete(name))
+        )
+      )
+      .then(() => self.clients.claim())
   );
 });
 
-// Estrategia: Cache-first con fallback a red
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Solo manejar requests HTTP/HTTPS (no chrome-extension, etc.)
   if (!url.protocol.startsWith('http')) {
     return;
   }
 
-  // Service worker: siempre red
+  // POST/PUT/PATCH/DELETE: no interceptar (Cache API no soporta POST)
+  if (!isCacheableRequest(request)) {
+    return;
+  }
+
   if (url.pathname.endsWith('service-worker.js')) {
     event.respondWith(networkOnlyStrategy(request));
     return;
   }
 
-  // Assets con hash: network-first (evita chunks obsoletos tras deploy)
+  if (isApiRequest(url.pathname)) {
+    event.respondWith(networkOnlyStrategy(request));
+    return;
+  }
+
   if (url.pathname.startsWith('/assets/')) {
-    event.respondWith(networkFirstStrategy(request));
+    event.respondWith(networkFirstStrategy(request, { allowCache: true }));
     return;
   }
 
-  // HTML / navegación: network-first
-  if (request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/') {
-    event.respondWith(networkFirstStrategy(request));
+  if (
+    request.mode === 'navigate' ||
+    url.pathname.endsWith('.html') ||
+    url.pathname === '/' ||
+    isSpaRoute(url.pathname)
+  ) {
+    event.respondWith(networkFirstStrategy(request, { allowCache: false, spaFallback: true }));
     return;
   }
 
-  // API: network-first
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(networkFirstStrategy(request));
-    return;
-  }
-
-  // Rutas de auth: network-first para no servir HTML/JS viejos tras un deploy
-  if (request.mode === 'navigate' && (url.pathname.startsWith('/auth/') || url.pathname === '/login' || url.pathname === '/register')) {
-    event.respondWith(networkFirstStrategy(request));
-    return;
-  }
-
-  // Resto: cache-first
   event.respondWith(cacheFirstStrategy(request));
 });
 
-// Estrategia Cache-First: Buscar en cache primero, luego en red
 async function cacheFirstStrategy(request) {
   try {
     const cachedResponse = await caches.match(request);
-    
     if (cachedResponse) {
-      console.log('[SW] Cache hit:', request.url);
       return cachedResponse;
     }
 
-    console.log('[SW] Cache miss, fetch desde red:', request.url);
     const networkResponse = await fetch(request);
-
-    // Cachear respuesta exitosa
     if (networkResponse && networkResponse.status === 200) {
       const cache = await caches.open(CACHE_NAME);
-      cache.put(request, networkResponse.clone());
+      await safeCachePut(cache, request, networkResponse);
     }
-
     return networkResponse;
   } catch (error) {
-    console.log('[SW] Error en cache-first:', error);
-    
-    // Fallback: Si es una página, devolver página offline
-    if (request.mode === 'navigate') {
-      return caches.match('/index.html');
+    if (request.mode === 'navigate' || isSpaRoute(new URL(request.url).pathname)) {
+      const fallback = await caches.match('/index.html');
+      if (fallback) {
+        return fallback;
+      }
     }
-    
     throw error;
   }
 }
 
-// Estrategia Network-Only: sin cache (service worker)
 async function networkOnlyStrategy(request) {
   return fetch(request);
 }
 
-// Estrategia Network-First: Intentar red primero, luego cache
-async function networkFirstStrategy(request) {
+async function networkFirstStrategy(request, options = {}) {
+  const { allowCache = true, spaFallback = false } = options;
+
   try {
     const networkResponse = await fetch(request);
-    
-    // Cachear respuesta exitosa
-    if (networkResponse && networkResponse.status === 200) {
+    if (allowCache && networkResponse && networkResponse.ok) {
       const cache = await caches.open(RUNTIME_CACHE);
-      cache.put(request, networkResponse.clone());
+      await safeCachePut(cache, request, networkResponse);
     }
-    
     return networkResponse;
   } catch (error) {
-    console.log('[SW] Network falló, buscando en cache:', request.url);
-    
     const cachedResponse = await caches.match(request);
     if (cachedResponse) {
       return cachedResponse;
     }
-    
+    if (spaFallback) {
+      const index = await caches.match('/index.html');
+      if (index) {
+        return index;
+      }
+    }
     throw error;
   }
 }
 
-// Manejar mensajes desde la app
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
-  
-  if (event.data && event.data.type === 'CACHE_URLS') {
-    event.waitUntil(
-      caches.open(CACHE_NAME).then((cache) => {
-        return cache.addAll(event.data.urls);
-      })
-    );
-  }
 });
 
-console.log('[SW] Service Worker cargado');
+console.log('[SW] Service Worker cargado v4');

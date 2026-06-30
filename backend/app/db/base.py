@@ -52,6 +52,7 @@ def ensure_schema_patches():
         _migrate_smart_time_control_tables()
         _migrate_time_cost_engine_v1()
         _migrate_cashflow_ledger()
+        _migrate_zeus_domain_events()
         print("[SCHEMA] Parches de esquema completados")
     except Exception as e:
         logger.warning("ensure_schema_patches: %s", e)
@@ -630,6 +631,21 @@ def _migrate_cashflow_ledger():
         print("[MIGRATION] [INFO] cashflow_ledger se creará vía create_all si el modelo está importado")
     except Exception as e:
         print(f"[MIGRATION] [WARN] cashflow_ledger migrate: {e}")
+
+
+def _migrate_zeus_domain_events():
+    """Tabla zeus_domain_events si falta (event bus v1 / migration 0042)."""
+    from sqlalchemy import inspect
+
+    try:
+        if "zeus_domain_events" in inspect(engine).get_table_names():
+            return
+        from app.models.zeus_domain_event import ZeusDomainEvent
+
+        ZeusDomainEvent.__table__.create(bind=engine, checkfirst=True)
+        print("[MIGRATION] [OK] zeus_domain_events creada")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] zeus_domain_events migrate: {e}")
 
 
 def _migrate_firewall_columns_legacy():

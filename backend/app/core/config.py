@@ -11,21 +11,6 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger("zeus.config")
 
-
-def _is_railway_deploy() -> bool:
-    return bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_SERVICE_NAME"))
-
-
-def _stabilization_active() -> bool:
-    return os.getenv("ZEUS_PRODUCTION_STABILIZATION", "true").lower() in ("true", "1", "yes")
-
-
-def _production_default_true() -> str:
-    """On Railway with stabilization, default critical flags to enabled."""
-    if _stabilization_active() and _is_railway_deploy():
-        return "true"
-    return "false"
-
 # Build Vite en imagen: /app/static con ZEUS_APP_ROOT=/app (Dockerfile); local sin env → …/backend/static.
 _app_root = (os.getenv("ZEUS_APP_ROOT") or "").strip()
 if _app_root:
@@ -249,9 +234,7 @@ class Settings(BaseSettings):
     )
 
     # afrodita_control_layer_v1 — missing env → false (see config/afrodita_flags_v1.py)
-    AFRODITA_EXECUTION_ENABLED: bool = os.getenv(
-        "AFRODITA_EXECUTION_ENABLED", _production_default_true()
-    ).lower() in (
+    AFRODITA_EXECUTION_ENABLED: bool = os.getenv("AFRODITA_EXECUTION_ENABLED", "false").lower() in (
         "true",
         "1",
         "yes",
@@ -283,14 +266,12 @@ class Settings(BaseSettings):
     )
 
     # afrodita_ops_control_layer_v1
-    AFRODITA_OPS_ENABLED: bool = os.getenv(
-        "AFRODITA_OPS_ENABLED", _production_default_true()
-    ).lower() in (
+    AFRODITA_OPS_ENABLED: bool = os.getenv("AFRODITA_OPS_ENABLED", "false").lower() in (
         "true",
         "1",
         "yes",
     )
-    AFRODITA_OPS_READ_ONLY: bool = os.getenv("AFRODITA_OPS_READ_ONLY", "false").lower() in (
+    AFRODITA_OPS_READ_ONLY: bool = os.getenv("AFRODITA_OPS_READ_ONLY", "true").lower() in (
         "true",
         "1",
         "yes",

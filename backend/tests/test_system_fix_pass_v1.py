@@ -15,7 +15,7 @@ def test_fix_pass_payload_structure():
     assert payload["ready_for_phase_B"] is True
 
 
-def test_resolve_handler_safe_fallback():
+def test_resolve_handler_fail_closed():
     handler = resolve_handler("UNKNOWN_AGENT", "unknown_action_xyz")
     assert handler is not None
-    assert handler.__name__ == "handle_generic_internal"
+    assert handler.__name__ == "handle_unmapped_no_fake"

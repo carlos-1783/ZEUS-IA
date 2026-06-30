@@ -61,7 +61,7 @@ def apply_signature(
         db.add(row)
         db.flush()
 
-    result = {
+    return {
         "document_id": row.public_id,
         "document": name,
         "signature": signature,
@@ -71,14 +71,3 @@ def apply_signature(
         "real_execution": True,
         "stored_in_db": True,
     }
-
-    try:
-        from services.zeus_cross_module_events_v1 import emit_cross_module_event
-
-        emit_cross_module_event(db, user, "document_signed", result)
-    except Exception as exc:
-        import logging
-
-        logging.getLogger(__name__).warning("[CROSS_MODULE] document_signed failed: %s", exc)
-
-    return result

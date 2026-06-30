@@ -368,18 +368,22 @@ def create_ops_route(
     db.refresh(row)
 
     try:
-        from services.zeus_cross_module_events_v1 import emit_cross_module_event
+        from services.zeus_event_bus_v1 import emit_event
 
-        emit_cross_module_event(
+        emit_event(
             db,
             user,
-            "ops_route_created",
-            {"route_id": row.id, "origin": row.origin, "destination": row.destination},
+            event_name="ops_route_created",
+            source_module="AFRODITA_OPS",
+            payload={
+                "route_id": row.id,
+                "origin": row.origin,
+                "destination": row.destination,
+                "owner_agent": "AFRODITA",
+            },
         )
-    except Exception as exc:
-        import logging
-
-        logging.getLogger(__name__).warning("[CROSS_MODULE] ops_route_created failed: %s", exc)
+    except Exception:
+        pass
 
     return {
         "route": {

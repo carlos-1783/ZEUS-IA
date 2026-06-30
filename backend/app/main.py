@@ -297,12 +297,6 @@ async def startup_event():
         log_startup_safe_lock()
     except Exception as exc:
         logger.warning("[ZEUS_SAFE_LOCK] startup check failed: %s", exc)
-    try:
-        from services.zeus_production_stabilization_v1 import log_startup_stabilization
-
-        log_startup_stabilization()
-    except Exception as exc:
-        logger.warning("[ZEUS_STABILIZATION] startup check failed: %s", exc)
     logger.info("ZEUS-IA backend ready")
 
 

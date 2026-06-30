@@ -110,6 +110,7 @@ def create_tables():
             from app.models.compliance_event import ComplianceEvent
             from app.models.teamflow_item import TeamFlowItem
             from app.models.teamflow_event import TeamFlowEvent
+            from app.models.zeus_domain_event import ZeusDomainEvent
             from app.models.tpv_operator_session import TPVOperatorSession
             from app.models.time_tracking import (
                 TimeTrackingRecord,

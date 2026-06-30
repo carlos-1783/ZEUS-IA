@@ -214,6 +214,21 @@ async def get_zeus_status(
             detail=f"Error obteniendo estado: {str(e)}"
         )
 
+
+@router.get(
+    "/repair/status",
+    operation_id="zeus_repair_status_api_v1",
+    summary="Estado controlled repair ZEUS",
+    description="Ejecuta auditoría secuencial de fases controlled_repair (sin mutaciones)",
+)
+async def get_zeus_repair_status(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    from services.zeus_controlled_repair_v1 import run_controlled_repair
+
+    return run_controlled_repair(db, current_user, stop_on_error=False)
+
 @router.get(
     "/agents",
     operation_id="zeus_agents_api_v1",

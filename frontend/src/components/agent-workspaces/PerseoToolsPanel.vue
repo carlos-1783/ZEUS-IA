@@ -8,7 +8,7 @@
         </div>
         <ThalosExecutionBadge
           :global-mode="globalMode"
-          :real-execution="globalMode === 'REAL'"
+          :real-execution="verifiedReal"
           :inline="true"
         />
       </div>
@@ -138,12 +138,16 @@ import {
   submitPerseoV2VideoEdit,
   type PerseoFeatureStatus,
 } from '@/api/perseo_status_api'
+import { fetchZeusExecutionStatus } from '@/api/zeus_status_api'
+import { isVerifiedReal } from '@/utils/zeus_safe_lock'
 import { workspaceTools } from '@/api/workspaceTools'
 import ThalosExecutionBadge from './ThalosExecutionBadge.vue'
 
 const loading = reactive({ image: false, video: false, seo: false, ads: false, videoEdit: false })
 const error = ref('')
-const globalMode = ref<'REAL' | 'SIMULATED' | 'ERROR'>('SIMULATED')
+const globalMode = ref<'REAL' | 'SIMULATED' | 'ERROR' | 'UNKNOWN'>('UNKNOWN')
+const zeusTruth = ref<{ execution_mode?: string; writes_enabled?: boolean } | null>(null)
+const verifiedReal = computed(() => isVerifiedReal(zeusTruth.value))
 const featureMap = ref<Record<string, { status: PerseoFeatureStatus }>>({})
 
 const imageForm = reactive({ image_url: '', goals: '', tags: '' })
@@ -187,14 +191,26 @@ const parseCsv = (value: string) =>
 
 onMounted(async () => {
   try {
-    const [st, v2] = await Promise.all([
+    const [st, v2, zeus] = await Promise.all([
       fetchPerseoStatus(),
       fetchPerseoV2Status().catch(() => null),
+      fetchZeusExecutionStatus().catch(() => null),
     ])
-    globalMode.value = (st.execution_mode as typeof globalMode.value) || 'SIMULATED'
+    zeusTruth.value = zeus
+      ? { execution_mode: zeus.execution_mode, writes_enabled: zeus.writes_enabled }
+      : null
+    if (isVerifiedReal(zeusTruth.value)) {
+      globalMode.value = 'REAL'
+    } else if (zeusTruth.value?.execution_mode) {
+      globalMode.value = (zeusTruth.value.execution_mode as typeof globalMode.value) || 'SIMULATED'
+    } else {
+      globalMode.value = 'UNKNOWN'
+    }
     featureMap.value = st.feature_status_map || {}
-    if (v2?.perseo_v2_enabled) {
-      globalMode.value = (v2.execution_mode as typeof globalMode.value) || globalMode.value
+    if (v2?.perseo_v2_enabled && isVerifiedReal({ execution_mode: v2.execution_mode, writes_enabled: true })) {
+      globalMode.value = 'REAL'
+      useV2.value = true
+    } else if (v2?.perseo_v2_enabled) {
       useV2.value = true
     }
   } catch {

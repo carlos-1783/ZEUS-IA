@@ -180,65 +180,15 @@ def afrodita_rrhh_schedules(
 def afrodita_rrhh_contract_draft(
     request: ContractDraftRequest,
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    assert_can_write(db)
-    log_execution_attempt(
-        domain="rrhh",
-        action="contract_draft",
-        allowed=True,
-        actor_id=current_user.id,
-    )
-    from services.workspaces.afrodita_tools import create_rrhh_contract
-    from services.contract_generator import generate_contract
-
-    name = (request.employee_name or "").strip() or "Empleado"
-    role = (request.role or "").strip() or "Puesto"
-    contract = create_rrhh_contract(
-        {
-            "employee_name": name,
-            "role": role,
-            "salary": float(request.salary or 0),
-            "contract_type": request.contract_type or "indefinido",
-        }
-    )
-    legal = generate_contract(
-        db,
-        current_user,
-        parties=[str(contract["clauses"][0]), str(contract["clauses"][1])],
-        scope=f"Contrato laboral {request.contract_type or 'indefinido'}",
-    )
-    try:
-        from services.zeus_cross_module_events_v1 import emit_cross_module_event
-
-        emit_cross_module_event(
-            db,
-            current_user,
-            "contract_rrhh_created",
-            {"source": "contract_draft", "contract": contract, "legal": legal},
-        )
-    except Exception:
-        pass
-
-    from services.workspace_playbook_writer_v1 import write_rrhh_playbook
-
-    write_rrhh_playbook(
-        db,
-        current_user,
-        action="contract_draft",
-        title=f"Contrato {name}",
-        payload={"contract": contract, "legal_document": legal},
-    )
-    db.commit()
-    return wrap_response(
-        {
-            "success": True,
-            "contract": contract,
-            "legal_document": legal,
-            "text": f"Contrato laboral generado para {name} (doc {legal.get('document_id')})",
-            "persisted": True,
+    _ = request, current_user
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail={
+            "error": "not_implemented",
+            "execution_mode": get_global_status().get("execution_mode", "SIMULATED"),
+            "non_persistent": True,
+            "message": "Generación contractual persistente no implementada",
+            "success": False,
         },
-        db=db,
-        data_origin="user_input",
-        persisted=True,
     )

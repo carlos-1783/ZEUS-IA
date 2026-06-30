@@ -13,24 +13,6 @@ from app.models.agent_activity import AgentActivity
 GENERIC_INTERNAL_HANDLER_NAME = "GENERIC_INTERNAL_HANDLER"
 
 
-def handle_soft_disabled_generic(activity: AgentActivity) -> Dict[str, Any]:
-    """Phase 5 — skip fake GENERIC_INTERNAL execution when stabilization is on."""
-    return {
-        "status": "skipped",
-        "details_update": {
-            "action_type": activity.action_type,
-            "agent": activity.agent_name,
-            "soft_disabled": True,
-            "executed_handler": "SOFT_DISABLED_GENERIC",
-        },
-        "metrics_update": {"soft_disabled": 1},
-        "notes": (
-            f"GENERIC_INTERNAL_HANDLER soft-disabled — no real mapping for {activity.action_type}"
-        ),
-        "executed_handler": "SOFT_DISABLED_GENERIC",
-    }
-
-
 def handle_generic_internal(activity: AgentActivity) -> Dict[str, Any]:
     """
     Write full payload to agent_activities (details), mark status executed_internal.

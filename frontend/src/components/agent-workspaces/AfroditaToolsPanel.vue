@@ -272,12 +272,8 @@ const runContract = async () => {
   error.value = ''
   loading.contract = true
   try {
-    const out = await submitAfroditaContractDraft({ ...contractForm })
-    contractResult.value =
-      out.text ||
-      (out.success
-        ? 'Contrato generado y persistido en legal_documents.'
-        : 'No se pudo generar el contrato.')
+    await submitAfroditaContractDraft({ ...contractForm })
+    contractResult.value = 'No implementado (501) — generación contractual no persistente.'
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {

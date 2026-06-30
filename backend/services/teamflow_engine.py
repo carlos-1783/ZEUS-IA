@@ -464,6 +464,25 @@ class TeamFlowEngine:
                 steps=created_tasks,
                 company_id=company_id,
             )
+            try:
+                from services.workspace_playbook_service_v1 import persist_execution_playbook
+
+                persist_execution_playbook(
+                    db,
+                    user,
+                    agent_source="teamflow",
+                    action=workflow_id,
+                    title=f"TeamFlow: {workflow.title}",
+                    payload={
+                        "execution_id": execution_id,
+                        "workflow_id": workflow_id,
+                        "steps": len(created_tasks),
+                        "agents": workflow.agents,
+                    },
+                    summary=workflow.summary,
+                )
+            except Exception:
+                pass
 
         self._shared_context[execution_id] = {
             "workflow": workflow.workflow_id,

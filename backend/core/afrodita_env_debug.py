@@ -75,19 +75,6 @@ def resolve_afrodita_env() -> Dict[str, Any]:
     raw_execution, execution_source = _resolve_raw(EXECUTION_ENV_KEYS, "AFRODITA_EXECUTION_ENABLED")
     raw_readonly, readonly_source = _resolve_raw(READ_ONLY_ENV_KEYS, "AFRODITA_READ_ONLY_MODE")
 
-    try:
-        from services.zeus_production_stabilization_v1 import production_execution_defaults
-
-        if production_execution_defaults():
-            if execution_source == "missing":
-                raw_execution = "true"
-                execution_source = "default:production_stabilization"
-            if readonly_source == "missing":
-                raw_readonly = "false"
-                readonly_source = "default:production_stabilization"
-    except Exception:
-        pass
-
     execution_enabled = parse_bool(raw_execution)
     read_only = parse_bool(raw_readonly)
     writes_enabled = execution_enabled and not read_only

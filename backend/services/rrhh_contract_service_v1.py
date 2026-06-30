@@ -67,6 +67,17 @@ def _find_employee(
         )
         if row:
             return row
+        row = (
+            db.query(CompanyEmployee)
+            .filter(
+                CompanyEmployee.company_id == company_id,
+                CompanyEmployee.full_name.ilike(f"%{name}%"),
+                CompanyEmployee.is_active.is_(True),
+            )
+            .first()
+        )
+        if row:
+            return row
 
     raise HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

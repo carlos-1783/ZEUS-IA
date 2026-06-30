@@ -100,7 +100,14 @@
             :show-global="true"
           />
         </div>
-        <input v-model="contractForm.employee_name" placeholder="Empleado" />
+        <p class="hint">Requiere empleado en BD — créelo arriba o selecciónelo.</p>
+        <select v-model="contractEmployeeCode" @change="onContractEmployeePick">
+          <option value="">— Seleccionar empleado —</option>
+          <option v-for="emp in employees" :key="emp.employee_code" :value="emp.employee_code">
+            {{ emp.full_name }} ({{ emp.employee_code }})
+          </option>
+        </select>
+        <input v-model="contractForm.employee_name" placeholder="Nombre (o seleccione arriba)" />
         <input v-model="contractForm.role" placeholder="Rol" />
         <input type="number" v-model.number="contractForm.salary" placeholder="Salario anual" />
         <select v-model="contractForm.contract_type">
@@ -153,10 +160,13 @@ const scheduleNote = ref<string | null>(null)
 const qrCode = ref('')
 const contractForm = reactive({
   employee_name: '',
+  employee_code: '',
+  employee_id: undefined as number | undefined,
   role: '',
   salary: 0,
   contract_type: 'indefinido',
 })
+const contractEmployeeCode = ref('')
 const employeeForm = reactive({
   full_name: '',
   employee_code: '',
@@ -170,6 +180,34 @@ const contractResult = ref<string | null>(null)
 const refreshQrDefault = () => {
   const code = employees.value[0]?.employee_code || 'EMP-001'
   qrCode.value = `ZEUSCHECK|${code}|${new Date().toISOString()}`
+  if (employees.value[0] && !contractEmployeeCode.value) {
+    contractEmployeeCode.value = employees.value[0].employee_code
+    onContractEmployeePick()
+  }
+}
+
+const onContractEmployeePick = () => {
+  const emp = employees.value.find((e) => e.employee_code === contractEmployeeCode.value)
+  if (!emp) return
+  contractForm.employee_name = emp.full_name
+  contractForm.employee_code = emp.employee_code
+  contractForm.employee_id = emp.id
+  if (!contractForm.role.trim() && emp.role_title) {
+    contractForm.role = emp.role_title
+  }
+}
+
+const formatApiError = (err: unknown): string => {
+  if (err && typeof err === 'object' && 'response' in err) {
+    const data = (err as { response?: { data?: { detail?: unknown } } }).response?.data
+    const detail = data?.detail
+    if (typeof detail === 'string') return detail
+    if (detail && typeof detail === 'object' && 'message' in detail) {
+      return String((detail as { message: string }).message)
+    }
+    if (detail) return JSON.stringify(detail)
+  }
+  return err instanceof Error ? err.message : String(err)
 }
 
 onMounted(async () => {
@@ -223,6 +261,12 @@ const runCreateEmployee = async () => {
     employeeForm.employee_code = ''
     employeeForm.role_title = ''
     employeeForm.phone = ''
+    if (out.employee) {
+      contractEmployeeCode.value = out.employee.employee_code
+      contractForm.employee_name = out.employee.full_name
+      contractForm.employee_code = out.employee.employee_code
+      contractForm.employee_id = out.employee.id
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -270,16 +314,28 @@ const runQr = async () => {
 
 const runContract = async () => {
   error.value = ''
+  contractResult.value = null
+  if (!contractForm.employee_name.trim() && !contractForm.employee_code) {
+    error.value = 'Seleccione o indique un empleado registrado en BD.'
+    return
+  }
   loading.contract = true
   try {
-    const out = await submitAfroditaContractDraft({ ...contractForm })
+    const out = await submitAfroditaContractDraft({
+      employee_name: contractForm.employee_name.trim(),
+      employee_code: contractForm.employee_code || undefined,
+      employee_id: contractForm.employee_id,
+      role: contractForm.role,
+      salary: contractForm.salary,
+      contract_type: contractForm.contract_type,
+    })
     contractResult.value =
       out.message ||
       (out.contract_id
         ? `Contrato generado (${out.contract_id}) — persistido en legal_documents.`
         : 'Contrato generado y persistido.')
   } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
+    error.value = formatApiError(err)
   } finally {
     loading.contract = false
   }

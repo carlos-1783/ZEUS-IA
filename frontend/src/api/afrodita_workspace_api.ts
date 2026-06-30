@@ -161,11 +161,18 @@ export async function submitAfroditaQrCheckin(qrCode: string) {
 
 export async function submitAfroditaContractDraft(payload: {
   employee_name: string
+  employee_code?: string
+  employee_id?: number
   role: string
   salary: number
   contract_type: string
 }) {
   return api.post('/api/v1/afrodita/rrhh/v1/contract-draft', payload) as Promise<
-    AfroditaControlResponse & { success: boolean; text?: string }
+    AfroditaControlResponse & {
+      success: boolean
+      message?: string
+      contract_id?: string
+      text?: string
+    }
   >
 }

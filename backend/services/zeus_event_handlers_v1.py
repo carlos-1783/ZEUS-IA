@@ -1,0 +1,159 @@
+"""ZEUS event bus — per-module handlers (async-safe, best-effort)."""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import Any, Dict, List, Optional
+
+from sqlalchemy.orm import Session
+
+from app.models.compliance_event import ComplianceEvent
+from app.models.user import User
+
+logger = logging.getLogger(__name__)
+
+
+def handle_ops_employee_shadow(db: Session, user: Optional[User], payload: Dict[str, Any]) -> bool:
+    """OPS shadow record when RRHH creates employee."""
+    try:
+        emp = payload.get("employee") or {}
+        db.add(
+            ComplianceEvent(
+                event_type="ops_employee_shadow",
+                severity="info",
+                source="OPS",
+                details_json=json.dumps(
+                    {
+                        "employee_id": emp.get("id"),
+                        "employee_code": emp.get("employee_code"),
+                        "full_name": emp.get("full_name"),
+                        "shadow": True,
+                    },
+                    ensure_ascii=False,
+                    default=str,
+                ),
+            )
+        )
+        db.flush()
+        return True
+    except Exception as exc:
+        logger.warning("[EVENT_HANDLER] ops shadow failed: %s", exc)
+        return False
+
+
+def handle_workspace_create_task(
+    db: Session,
+    user: Optional[User],
+    event_name: str,
+    payload: Dict[str, Any],
+) -> bool:
+    if not user:
+        return False
+    try:
+        from services.afrodita_workspace_db_service_v1 import persist_workspace_playbook, workspace_enabled
+
+        if not workspace_enabled():
+            return False
+        persist_workspace_playbook(
+            db,
+            user,
+            title=f"Task:{event_name}",
+            content={"event": event_name, "task_type": "cross_module", **payload},
+            agent_source=payload.get("owner_agent") or "ZEUS_CORE",
+        )
+        return True
+    except Exception as exc:
+        logger.warning("[EVENT_HANDLER] workspace task failed: %s", exc)
+        return False
+
+
+def handle_justicia_compliance(db: Session, event_name: str, payload: Dict[str, Any]) -> bool:
+    try:
+        db.add(
+            ComplianceEvent(
+                event_type=event_name,
+                severity="low",
+                source=payload.get("source_agent") or payload.get("owner_agent") or "JUSTICIA",
+                details_json=json.dumps(payload, ensure_ascii=False, default=str),
+            )
+        )
+        db.flush()
+        return True
+    except Exception as exc:
+        logger.warning("[EVENT_HANDLER] justicia compliance failed: %s", exc)
+        return False
+
+
+def handle_perseo_notification(db: Session, event_name: str, payload: Dict[str, Any]) -> bool:
+    try:
+        db.add(
+            ComplianceEvent(
+                event_type=f"perseo_notify_{event_name}",
+                severity="info",
+                source="PERSEO",
+                details_json=json.dumps(payload, ensure_ascii=False, default=str),
+            )
+        )
+        db.flush()
+        return True
+    except Exception as exc:
+        logger.warning("[EVENT_HANDLER] perseo notification failed: %s", exc)
+        return False
+
+
+def handle_workspace_financial_task(db: Session, user: Optional[User], payload: Dict[str, Any]) -> bool:
+    return handle_workspace_create_task(db, user, "invoice_generated", {**payload, "task_type": "financial"})
+
+
+def handle_workspace_mark_complete(db: Session, user: Optional[User], payload: Dict[str, Any]) -> bool:
+    return handle_workspace_create_task(
+        db,
+        user,
+        "contract_signed",
+        {**payload, "task_type": "complete", "status": "completed"},
+    )
+
+
+def dispatch_event_handlers(
+    db: Session,
+    user: Optional[User],
+    event_name: str,
+    payload: Dict[str, Any],
+) -> List[str]:
+    """Run registered handlers for an event. Returns list of handler ids executed."""
+    done: List[str] = []
+    normalized = "document_signed" if event_name == "contract_signed" else event_name
+
+    if normalized == "employee_created":
+        if handle_ops_employee_shadow(db, user, payload):
+            done.append("ops.create_employee_shadow")
+        if handle_workspace_create_task(db, user, normalized, payload):
+            done.append("workspace.create_task")
+        if handle_justicia_compliance(db, "employee_created", payload):
+            done.append("justicia.generate_contract")
+
+    elif normalized in ("contract_rrhh_created", "document_signed", "contract_signed"):
+        if handle_workspace_mark_complete(db, user, payload) or handle_workspace_create_task(
+            db, user, normalized, payload
+        ):
+            done.append("workspace.mark_complete" if normalized != "contract_rrhh_created" else "workspace.create_task")
+        if normalized in ("document_signed", "contract_signed"):
+            if handle_perseo_notification(db, normalized, payload):
+                done.append("perseo.send_notification")
+
+    elif normalized == "invoice_generated":
+        if handle_workspace_financial_task(db, user, payload):
+            done.append("workspace.create_financial_task")
+
+    elif normalized == "policy_expiring":
+        if handle_workspace_create_task(db, user, normalized, payload):
+            done.append("workspace.create_task")
+        if handle_perseo_notification(db, normalized, payload):
+            done.append("perseo.send_reminder")
+
+    elif normalized == "ops_route_created":
+        if handle_workspace_create_task(db, user, normalized, payload):
+            done.append("workspace.create_task")
+
+    return done

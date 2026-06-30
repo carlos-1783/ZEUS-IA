@@ -18,7 +18,7 @@ from services.workspace_deliverables import primary_company_id_for_user
 logger = logging.getLogger(__name__)
 
 AGENT_ROOT = "AFRODITA"
-VALID_AGENT_SOURCES = frozenset({"rrhh", "ops", "logistics", "afrodita", "automation"})
+VALID_AGENT_SOURCES = frozenset({"rrhh", "ops", "logistics", "afrodita", "automation", "teamflow"})
 
 
 def _probe_db_connected(db: Optional[Session]) -> bool:
@@ -172,3 +172,94 @@ def persist_execution_playbook(
     except Exception:
         logger.exception("[WORKSPACE_PLAYBOOK] auto-persist failed source=%s action=%s", agent_source, action)
         return None
+
+
+def run_playbook(
+    db: Session,
+    user: User,
+    playbook_id: int,
+    *,
+    payload: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Execute playbook — triggers TeamFlow workflow or logs controlled domain action."""
+    _assert_workspace_available(db)
+    row = (
+        db.query(WorkspacePlaybook)
+        .filter(WorkspacePlaybook.id == playbook_id, WorkspacePlaybook.user_id == user.id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Playbook no encontrado")
+
+    content: Dict[str, Any] = {}
+    if row.content:
+        try:
+            content = json.loads(row.content)
+        except json.JSONDecodeError:
+            content = {"summary": row.content}
+
+    merged = {**content, **(payload or {})}
+    workflow_id = merged.get("workflow_id") or merged.get("teamflow_workflow")
+    if not workflow_id and merged.get("action", "").startswith(("prelaunch", "fiscal", "hr_", "ads_")):
+        workflow_id = merged.get("action")
+
+    execution_log: Dict[str, Any] = {"playbook_id": playbook_id, "real_execution": False}
+
+    if workflow_id:
+        from services.teamflow_engine import teamflow_engine
+
+        try:
+            teamflow_engine.get_workflow(str(workflow_id))
+            result = teamflow_engine.run_workflow(
+                str(workflow_id),
+                payload=merged.get("payload") or merged.get("result") or {},
+                actor=user.email,
+                db=db,
+                user=user,
+            )
+            execution_log = {
+                "playbook_id": playbook_id,
+                "workflow_id": workflow_id,
+                "execution_id": result.get("execution_id"),
+                "real_execution": bool(result.get("real_execution")),
+                "teamflow_result": result,
+            }
+            persist_execution_playbook(
+                db,
+                user,
+                agent_source="teamflow",
+                action=f"run_playbook:{workflow_id}",
+                title=f"Ejecución playbook #{playbook_id}",
+                payload=execution_log,
+                summary=f"TeamFlow {workflow_id} ejecutado",
+            )
+            return {
+                "success": True,
+                "playbook_id": playbook_id,
+                "workspace_triggers_real_execution": execution_log["real_execution"],
+                **execution_log,
+            }
+        except ValueError:
+            pass
+
+    action = merged.get("action") or row.agent_source
+    execution_log = {
+        "playbook_id": playbook_id,
+        "action": action,
+        "real_execution": True,
+        "message": f"Playbook ejecutado (acción={action})",
+    }
+    persist_execution_playbook(
+        db,
+        user,
+        agent_source=row.agent_source or "afrodita",
+        action=f"run_playbook:{action}",
+        title=f"Ejecución playbook #{playbook_id}",
+        payload=execution_log,
+    )
+    return {
+        "success": True,
+        "playbook_id": playbook_id,
+        "workspace_triggers_real_execution": True,
+        **execution_log,
+    }

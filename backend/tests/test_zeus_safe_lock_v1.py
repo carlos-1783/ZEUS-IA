@@ -43,7 +43,7 @@ def test_verified_real_when_flags_ok():
         clear=False,
     ):
         report = run_safe_lock(
-            execution_status={"execution_mode": "REAL", "writes_enabled": True},
+            execution_status={"execution_mode": "REAL", "writes_enabled": True, "db_status": {"connected": True}},
             log_warnings=False,
         )
     assert report["verified_real"] is True

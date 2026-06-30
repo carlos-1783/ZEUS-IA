@@ -292,6 +292,12 @@ async def startup_event():
     except Exception as exc:
         logger.warning("[THALOS_STARTUP] worker start failed: %s", exc)
     try:
+        from workers.zeus_automation_worker import start_zeus_automation_worker
+
+        start_zeus_automation_worker()
+    except Exception as exc:
+        logger.warning("[ZEUS_AUTOMATION] worker start failed: %s", exc)
+    try:
         from services.zeus_safe_lock_v1 import log_startup_safe_lock
 
         log_startup_safe_lock()
@@ -306,6 +312,12 @@ async def shutdown_event():
         from workers.thalos_worker import stop_thalos_worker
 
         stop_thalos_worker()
+    except Exception:
+        pass
+    try:
+        from workers.zeus_automation_worker import stop_zeus_automation_worker
+
+        stop_zeus_automation_worker()
     except Exception:
         pass
     await stop_agent_automation()

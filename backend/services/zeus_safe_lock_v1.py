@@ -138,7 +138,9 @@ def run_safe_lock(
         _check_execution_soft(warnings, {"execution_mode": "UNKNOWN", "writes_enabled": False})
 
     verified_real = (
-        execution.get("execution_mode") == "REAL" and bool(execution.get("writes_enabled")) is True
+        execution.get("execution_mode") == "REAL"
+        and bool(execution.get("writes_enabled")) is True
+        and bool((execution.get("db_status") or {}).get("connected"))
     )
 
     report = {

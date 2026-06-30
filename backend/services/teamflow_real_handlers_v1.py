@@ -118,6 +118,19 @@ def handle_invoice_sent(activity: AgentActivity) -> Dict[str, Any]:
         )
         session.add(doc)
         session.flush()
+        from services.zeus_event_bus_v1 import emit_event
+
+        emit_event(
+            session,
+            user,
+            event_name="invoice_generated",
+            source_module="RAFAEL",
+            payload={
+                "document_approval_id": doc.id,
+                "title": doc.title,
+                "owner_agent": "RAFAEL",
+            },
+        )
         session.commit()
         return _ok(
             {
@@ -156,6 +169,13 @@ def handle_document_signed(activity: AgentActivity) -> Dict[str, Any]:
             session,
             user,
             event_name="document_signed",
+            source_module="JUSTICIA",
+            payload={**result, "owner_agent": "JUSTICIA"},
+        )
+        emit_event(
+            session,
+            user,
+            event_name="contract_signed",
             source_module="JUSTICIA",
             payload={**result, "owner_agent": "JUSTICIA"},
         )

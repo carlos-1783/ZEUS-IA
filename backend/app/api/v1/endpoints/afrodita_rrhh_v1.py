@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -33,7 +33,9 @@ class QrCheckinRequest(BaseModel):
 
 
 class ContractDraftRequest(BaseModel):
-    employee_name: str = ""
+    employee_name: str = Field(..., min_length=2)
+    employee_code: str = ""
+    employee_id: Optional[int] = None
     role: str = ""
     salary: float = 0
     contract_type: str = "indefinido"
@@ -180,15 +182,39 @@ def afrodita_rrhh_schedules(
 def afrodita_rrhh_contract_draft(
     request: ContractDraftRequest,
     current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    _ = request, current_user
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail={
-            "error": "not_implemented",
-            "execution_mode": get_global_status().get("execution_mode", "SIMULATED"),
-            "non_persistent": True,
-            "message": "Generación contractual persistente no implementada",
-            "success": False,
-        },
+    assert_can_write(db)
+    log_execution_attempt(
+        domain="rrhh",
+        action="contract_draft",
+        allowed=True,
+        actor_id=current_user.id,
+    )
+    from services.rrhh_contract_service_v1 import create_rrhh_contract_draft
+    from services.workspace_playbook_writer_v1 import write_rrhh_playbook
+
+    body = create_rrhh_contract_draft(
+        db,
+        current_user,
+        employee_name=request.employee_name,
+        employee_code=request.employee_code or None,
+        employee_id=request.employee_id,
+        role=request.role,
+        salary=request.salary,
+        contract_type=request.contract_type,
+    )
+    write_rrhh_playbook(
+        db,
+        current_user,
+        action="contract_draft",
+        title=f"Contrato {body['employee']['full_name']}",
+        payload=body,
+    )
+    db.commit()
+    return wrap_response(
+        body,
+        db=db,
+        data_origin="user_input",
+        persisted=True,
     )

@@ -12,7 +12,7 @@ from app.core.auth import get_current_active_user
 from app.db.session import get_db
 from app.models.user import User
 from services.afrodita_unified_control import assert_can_write, wrap_response
-from services.workspace_playbook_service_v1 import create_playbook, list_playbooks
+from services.workspace_playbook_service_v1 import create_playbook, list_playbooks, run_playbook
 
 router = APIRouter(prefix="/workspace", tags=["workspace-playbooks"])
 
@@ -21,6 +21,11 @@ class PlaybookCreateRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     content: Dict[str, Any] = Field(default_factory=dict)
     agent_source: str = Field(default="afrodita")
+
+
+class PlaybookRunRequest(BaseModel):
+    playbook_id: int = Field(..., ge=1)
+    payload: Dict[str, Any] = Field(default_factory=dict)
 
 
 @router.get("/playbooks")
@@ -63,6 +68,23 @@ def workspace_playbook_create(
             "agent_source": row.agent_source,
             "message": "Playbook persistido en workspace_playbooks",
         },
+        db=db,
+        data_origin="user_input",
+        persisted=True,
+    )
+
+
+@router.post("/playbooks/run")
+def workspace_playbook_run(
+    body: PlaybookRunRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    assert_can_write(db)
+    result = run_playbook(db, current_user, body.playbook_id, payload=body.payload)
+    db.commit()
+    return wrap_response(
+        result,
         db=db,
         data_origin="user_input",
         persisted=True,

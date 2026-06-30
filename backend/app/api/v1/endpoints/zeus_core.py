@@ -229,6 +229,21 @@ async def get_zeus_repair_status(
 
     return run_controlled_repair(db, current_user, stop_on_error=False)
 
+
+@router.get(
+    "/completion/status",
+    operation_id="zeus_completion_status_api_v1",
+    summary="ZEUS full completion audit",
+    description="Validates zeus_full_completion_v1 phases for 100% real execution",
+)
+async def get_zeus_completion_status(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    from services.zeus_full_completion_v1 import run_full_completion
+
+    return run_full_completion(db, current_user, stop_on_error=False)
+
 @router.get(
     "/agents",
     operation_id="zeus_agents_api_v1",

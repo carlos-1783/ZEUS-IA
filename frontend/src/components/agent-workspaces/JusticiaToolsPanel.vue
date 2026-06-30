@@ -100,6 +100,7 @@ import {
   type AuditConclusion,
   type JusticiaStatusResponse,
 } from '@/api/justicia_workspace_api'
+import { resolveJusticiaModuleBadge } from '@/utils/zeus_safe_lock'
 import ThalosExecutionBadge from './ThalosExecutionBadge.vue'
 
 const loading = reactive({ signer: false, contract: false, gdpr: false, audit: false })
@@ -109,11 +110,9 @@ const globalStatus = ref<JusticiaStatusResponse | null>(null)
 const auditSummary = ref<string | null>(null)
 const auditConclusions = ref<AuditConclusion[]>([])
 
-const auditBadge = computed(() =>
-  globalStatus.value?.module_badges?.system_audit || (globalStatus.value?.JUSTICE_REAL_AUDIT_ENABLED ? 'REAL' : 'SIMULADO')
-)
+const auditBadge = computed(() => resolveJusticiaModuleBadge('system_audit', globalStatus.value))
 
-const moduleBadge = (key: string) => globalStatus.value?.module_badges?.[key] || 'REAL'
+const moduleBadge = (key: string) => resolveJusticiaModuleBadge(key, globalStatus.value)
 
 const complianceAlerts = ref<Array<Record<string, unknown>>>([])
 

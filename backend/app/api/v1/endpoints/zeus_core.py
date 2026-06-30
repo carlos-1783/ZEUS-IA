@@ -183,6 +183,10 @@ async def get_zeus_status(
         execution = get_execution_status(db)
         pipeline_user = get_pipeline_status(db, current_user.id)
 
+        from services.zeus_safe_lock_v1 import run_safe_lock
+
+        safe_lock = run_safe_lock(db, execution_status=execution, log_warnings=True)
+
         return {
             "status": "success",
             "message": "Estado del Núcleo ZEUS obtenido correctamente",
@@ -194,6 +198,8 @@ async def get_zeus_status(
             "modules": execution["modules"],
             "simulation_layers_present": execution["simulation_layers_present"],
             "flag_consistency": execution["flag_consistency"],
+            "verified_real": safe_lock["verified_real"],
+            "safe_lock": safe_lock,
             "pipeline": {**execution["pipeline"], "user": pipeline_user},
             "data": {
                 **legacy,

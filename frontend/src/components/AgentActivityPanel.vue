@@ -239,6 +239,7 @@ import AfroditaWorkspace from './agent-workspaces/AfroditaWorkspace.vue'
 import ThalosWorkspace from './agent-workspaces/ThalosWorkspace.vue'
 import JusticiaWorkspace from './agent-workspaces/JusticiaWorkspace.vue'
 import ImageUploader from '@/components/ImageUploader.jsx'
+import { isForbiddenAiFallback, sanitizeAgentChatForMediaFlow } from '@/utils/mediaUploadPolicy'
 import { getAgentChatUrl, getChatMessagesUrl, AGENT_CHAT_TIMEOUT_MS } from '@/utils/chatApi'
 
 const props = defineProps({
@@ -281,6 +282,7 @@ const textInput = ref('')
 const messagesContainer = ref(null)
 const isPerseoAgent = computed(() => (props.agent?.name || '').toUpperCase().includes('PERSEO'))
 const imageReferenceUrl = ref(null)
+const mediaUploadedAwaitingPrompt = ref(false)
 
 const CHAT_MIN_INTERVAL_MS = 3000
 const lastTextChatSentAt = ref(0)
@@ -288,10 +290,20 @@ const lastVoiceChatSentAt = ref(0)
 
 const handleImageUploaded = (payload) => {
   imageReferenceUrl.value = payload?.url || null
+  mediaUploadedAwaitingPrompt.value = Boolean(payload?.url)
+}
+
+const formatAgentChatContent = (text, { hadPendingMedia = false } = {}) => {
+  const cleaned = sanitizeAgentChatForMediaFlow(text, { hadMediaOnly: hadPendingMedia })
+  if (isForbiddenAiFallback(text) && cleaned !== text) {
+    return cleaned
+  }
+  return cleaned || '⚠️ El agente no devolvió contenido útil. Escribe un mensaje concreto.'
 }
 
 const clearImageReference = () => {
   imageReferenceUrl.value = null
+  mediaUploadedAwaitingPrompt.value = false
 }
 
 // Voice chat
@@ -380,7 +392,9 @@ const sendVoiceToAgent = async (transcript) => {
     if (data.success === false) {
       throw new Error(data.error || data.message || 'El agente no pudo responder.')
     }
-    const responseText = data.message || 'Lo siento, no pude procesar tu solicitud.'
+    const responseText = formatAgentChatContent(data.message, {
+      hadPendingMedia: mediaUploadedAwaitingPrompt.value,
+    })
     
     agentVoiceResponse.value = responseText
     
@@ -604,7 +618,11 @@ const sendTextMessage = async () => {
   }
   lastTextChatSentAt.value = now
   
-  const userMessage = textInput.value
+  const userMessage = textInput.value.trim()
+  if (!userMessage) return
+
+  const hadPendingMedia = mediaUploadedAwaitingPrompt.value
+  mediaUploadedAwaitingPrompt.value = false
   textInput.value = ''
   
   // Añadir mensaje del usuario
@@ -643,12 +661,13 @@ const sendTextMessage = async () => {
       return { response, data }
     }
     let { response, data } = await doChatCall()
-    // Reintento único cuando viene vacío o "Sin respuesta"
     const msg = String(data?.message || '').trim()
-    if (
+    const shouldRetryEmpty =
       response.ok &&
-      (!msg || msg.toLowerCase() === 'sin respuesta')
-    ) {
+      (!msg || msg.toLowerCase() === 'sin respuesta') &&
+      !imageReferenceUrl.value &&
+      !isForbiddenAiFallback(msg)
+    if (shouldRetryEmpty) {
       await new Promise(resolve => setTimeout(resolve, 450))
       const second = await doChatCall()
       response = second.response
@@ -683,7 +702,7 @@ const sendTextMessage = async () => {
       messages.value.push({
         id: Date.now() + 2,
         sender: 'agent',
-        content: text || '⚠️ El agente no devolvió contenido útil. Reintenta en unos segundos.',
+        content: formatAgentChatContent(text, { hadPendingMedia }),
         timestamp: new Date()
       })
     }
@@ -1056,6 +1075,24 @@ const formatMetricValue = (value) => {
 .uploader-hint {
   font-size: 12px;
   color: #f87171;
+}
+
+.uploader-neutral {
+  font-size: 13px;
+  margin: 8px 0 0;
+  color: #64748b;
+}
+
+.uploader-success {
+  font-size: 13px;
+  margin: 8px 0 0;
+  color: #15803d;
+}
+
+.uploader-btn-secondary {
+  margin-top: 10px;
+  background: #e2e8f0;
+  color: #334155;
 }
 
 .image-reference-chip {

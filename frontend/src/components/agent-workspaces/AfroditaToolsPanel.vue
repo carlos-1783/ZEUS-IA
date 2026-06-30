@@ -9,7 +9,7 @@
         <ThalosExecutionBadge
           v-if="globalStatus"
           :global-mode="globalStatus.execution_mode"
-          :real-execution="globalStatus.execution_mode === 'REAL'"
+          :real-execution="verifiedReal"
         />
       </div>
       <p v-if="statusNote" class="status-note">{{ statusNote }}</p>
@@ -118,7 +118,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import {
   createAfroditaEmployee,
   executionModeLabel,
@@ -131,6 +131,7 @@ import {
   type AfroditaScheduleRow,
   type AfroditaTruthStatus,
 } from '@/api/afrodita_workspace_api'
+import { isVerifiedReal } from '@/utils/zeus_safe_lock'
 import ThalosExecutionBadge from './ThalosExecutionBadge.vue'
 
 const loading = reactive({
@@ -143,6 +144,7 @@ const loading = reactive({
 const error = ref('')
 const statusNote = ref('')
 const globalStatus = ref<AfroditaTruthStatus | null>(null)
+const verifiedReal = computed(() => isVerifiedReal(globalStatus.value))
 const employees = ref<AfroditaEmployee[]>([])
 const employeesLoaded = ref(false)
 const schedules = ref<AfroditaScheduleRow[]>([])

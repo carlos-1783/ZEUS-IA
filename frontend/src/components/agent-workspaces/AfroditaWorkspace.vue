@@ -8,7 +8,7 @@
           v-if="globalStatus || zeusStatus"
           class="workspace-badges"
           :global-mode="zeusStatus?.execution_mode ?? globalStatus?.execution_mode"
-          :real-execution="(zeusStatus?.execution_mode ?? globalStatus?.execution_mode) === 'REAL'"
+          :real-execution="verifiedReal"
         />
       </div>
     </header>
@@ -50,6 +50,7 @@ import {
   type ZeusExecutionStatus,
   type ZeusModuleStatus,
 } from '@/api/zeus_status_api'
+import { isVerifiedReal } from '@/utils/zeus_safe_lock'
 import AfroditaToolsPanel from './AfroditaToolsPanel.vue'
 import AfroditaOpsPanel from './AfroditaOpsPanel.vue'
 import AfroditaWorkspacePanel from './AfroditaWorkspacePanel.vue'
@@ -60,6 +61,8 @@ type TabId = 'rrhh' | 'ops' | 'workspace'
 const activeTab = ref<TabId>('rrhh')
 const globalStatus = ref<AfroditaTruthStatus | null>(null)
 const zeusStatus = ref<ZeusExecutionStatus | null>(null)
+
+const verifiedReal = computed(() => isVerifiedReal(zeusStatus.value ?? globalStatus.value))
 
 const modeLabel = computed(() => {
   const zeusMode = zeusStatus.value?.execution_mode
@@ -75,10 +78,10 @@ const workspaceTabLabel = computed(() => {
   const wsMod = zeusStatus.value?.modules?.workspace
   if (wsMod?.status) return moduleStatusLabel(wsMod.status)
   const ws = globalStatus.value?.workspace
-  if (!ws?.enabled) return 'NO EXECUTION'
-  if (ws.connected) return 'REAL'
-  if (ws.status === 'ERROR') return 'SYSTEM ERROR'
-  return 'NO EXECUTION'
+  if (!ws?.enabled) return 'UNKNOWN'
+  if (ws.connected) return wsMod?.status ? moduleStatusLabel(wsMod.status) : 'UNKNOWN'
+  if (ws.status === 'ERROR') return 'ERROR'
+  return 'UNKNOWN'
 })
 
 const tabModuleStatus = (tabId: TabId): ZeusModuleStatus | AfroditaExecutionMode | undefined => {
@@ -89,7 +92,7 @@ const tabModuleStatus = (tabId: TabId): ZeusModuleStatus | AfroditaExecutionMode
     return mods.workspace?.status
   }
   if (tabId === 'workspace') {
-    return workspaceConnected.value ? 'REAL' : globalStatus.value?.workspace?.status
+    return zeusStatus.value?.modules?.workspace?.status
   }
   return globalStatus.value?.execution_mode
 }

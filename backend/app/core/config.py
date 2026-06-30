@@ -3,6 +3,7 @@ import os
 import re
 from typing import Dict, List, Optional, Union
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
@@ -19,14 +20,23 @@ else:
         os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "static")
     )
 # Volumen persistente (p. ej. Railway /data/static): subidas, sin index.html del SPA.
+_MAX_STATIC_PATH_LEN = 240
+_EMBEDDED_FLAG_RE = re.compile(
+    r'[A-Z][A-Z0-9_]*=(?:true|false|1|0|yes|no)\b',
+    re.IGNORECASE,
+)
+_STD_STATIC_RE = re.compile(r"/(?:app/)?data/static\b")
+_PATH_PREFIX_RE = re.compile(r"^(/[\w./-]+)")
+
+
 def _sanitize_volatile_static_path(raw: str) -> str:
     """Strip flags accidentally pasted into STATIC_DIR on Railway."""
     s = (raw or "").strip()
     if not s:
         return s
-    match = re.search(r"(/(?:app/)?data/static)", s)
+    match = _STD_STATIC_RE.search(s)
     if match:
-        cleaned = match.group(1)
+        cleaned = match.group(0)
         if cleaned != s:
             logger.warning(
                 "STATIC_DIR sanitized from %r to %r — remove embedded env text in Railway",
@@ -34,7 +44,7 @@ def _sanitize_volatile_static_path(raw: str) -> str:
                 cleaned,
             )
         return cleaned
-    for marker in ('"', "'", "AFRODITA_", "THALOS_", "JUSTICE_"):
+    for marker in ('"', "'", "AFRODITA_", "THALOS_", "JUSTICE_", "ZEUS_", "TEAMFLOW_"):
         if marker in s:
             s = s.split(marker, 1)[0].rstrip("/\"'")
             logger.warning(
@@ -45,10 +55,66 @@ def _sanitize_volatile_static_path(raw: str) -> str:
             break
     return s
 
-_ENV_VOLATILE_STATIC = _sanitize_volatile_static_path(
-    (os.getenv("ZEUS_STATIC_DIR") or os.getenv("STATIC_DIR") or "").strip()
-)
-_RESOLVED_STATIC_DIR = os.path.abspath(_ENV_VOLATILE_STATIC) if _ENV_VOLATILE_STATIC else _PKG_STATIC_DIR
+
+def _finalize_static_dir_path(raw: str, *, fallback: Optional[str] = None) -> str:
+    """
+    Resolve a safe absolute static path. Corrupted Railway values must never crash startup.
+    """
+    fb = os.path.abspath(fallback or _PKG_STATIC_DIR)
+    if not (raw or "").strip():
+        return fb
+
+    s = _sanitize_volatile_static_path(raw)
+    s = _EMBEDDED_FLAG_RE.sub("", s)
+    s = re.sub(r'"+', "", s).strip().strip("\"'")
+    if not s:
+        logger.error("STATIC_DIR empty after sanitize (was %r) — using %s", raw[:120], fb)
+        return fb
+
+    std = _STD_STATIC_RE.search(s)
+    if std:
+        s = std.group(0)
+    elif not os.path.isabs(s):
+        prefix = _PATH_PREFIX_RE.match(s)
+        if prefix:
+            s = prefix.group(1)
+        else:
+            logger.error("STATIC_DIR not a path (was %r) — using %s", raw[:120], fb)
+            return fb
+
+    try:
+        resolved = os.path.abspath(s)
+    except (OSError, ValueError) as exc:
+        logger.error("STATIC_DIR invalid %r (%s) — using %s", raw[:120], exc, fb)
+        return fb
+
+    if len(resolved) > _MAX_STATIC_PATH_LEN:
+        logger.error(
+            "STATIC_DIR path too long (%d chars, was %r) — using %s",
+            len(resolved),
+            raw[:120],
+            fb,
+        )
+        return fb
+
+    if resolved != os.path.abspath((raw or "").strip()):
+        logger.warning(
+            "STATIC_DIR resolved %r → %r — set Railway STATIC_DIR/ZEUS_STATIC_DIR to path only (e.g. /data/static)",
+            raw[:120],
+            resolved,
+        )
+    return resolved
+
+
+def _resolve_static_dir_from_env() -> str:
+    raw = (os.getenv("ZEUS_STATIC_DIR") or os.getenv("STATIC_DIR") or "").strip()
+    if raw:
+        return _finalize_static_dir_path(raw)
+    return _PKG_STATIC_DIR
+
+
+_ENV_VOLATILE_STATIC = (os.getenv("ZEUS_STATIC_DIR") or os.getenv("STATIC_DIR") or "").strip()
+_RESOLVED_STATIC_DIR = _resolve_static_dir_from_env() if _ENV_VOLATILE_STATIC else _PKG_STATIC_DIR
 _SPA_OVERRIDE = (os.getenv("ZEUS_SPA_STATIC_DIR") or "").strip()
 if _SPA_OVERRIDE:
     _RESOLVED_SPA_STATIC_DIR = os.path.abspath(_SPA_OVERRIDE)
@@ -236,6 +302,11 @@ class Settings(BaseSettings):
         "yes",
     )
 
+    # TeamFlow — cross-agent orchestration with DB persistence
+    TEAMFLOW_ENABLED: bool = os.getenv("TEAMFLOW_ENABLED", "true").lower() in ("true", "1", "yes")
+    TEAMFLOW_STRICT_AUDIT: bool = os.getenv("TEAMFLOW_STRICT_AUDIT", "true").lower() in ("true", "1", "yes")
+    ZEUS_AGENT_ENABLED: bool = os.getenv("ZEUS_AGENT_ENABLED", "true").lower() in ("true", "1", "yes")
+
     # zeus_total_system_closure_v1
     ZEUS_TOTAL_SYSTEM_CLOSURE_ENABLED: bool = os.getenv(
         "ZEUS_TOTAL_SYSTEM_CLOSURE_ENABLED", "false"
@@ -388,7 +459,33 @@ class Settings(BaseSettings):
     # First Superuser
     FIRST_SUPERUSER_EMAIL: str = os.getenv("FIRST_SUPERUSER_EMAIL", "admin@zeus-ia.com")
     FIRST_SUPERUSER_PASSWORD: str = os.getenv("FIRST_SUPERUSER_PASSWORD", "changethis")
-    
+
+    @field_validator("STATIC_DIR", mode="before")
+    @classmethod
+    def _validate_static_dir(cls, value: object) -> str:
+        if value is None or str(value).strip() == "":
+            return _resolve_static_dir_from_env()
+        return _finalize_static_dir_path(str(value))
+
+    @field_validator("SPA_STATIC_DIR", mode="before")
+    @classmethod
+    def _validate_spa_static_dir(cls, value: object) -> str:
+        if value is None or str(value).strip() == "":
+            return _PKG_STATIC_DIR
+        raw = str(value)
+        if _EMBEDDED_FLAG_RE.search(raw) or any(
+            m in raw for m in ("AFRODITA_", "THALOS_", "JUSTICE_", "TEAMFLOW_")
+        ):
+            logger.warning("SPA_STATIC_DIR corrupted (%r) — using packaged static", raw[:120])
+            return _PKG_STATIC_DIR
+        try:
+            resolved = os.path.abspath(raw.strip().strip("'\""))
+            if len(resolved) > _MAX_STATIC_PATH_LEN:
+                return _PKG_STATIC_DIR
+            return resolved
+        except (OSError, ValueError):
+            return _PKG_STATIC_DIR
+
     class Config:
         case_sensitive = True
         # Prevenir que se sobrescriban los valores con variables de entorno
@@ -438,6 +535,38 @@ def ensure_secret_key_format(secret_key: str) -> str:
 
 # Crear instancia de configuración
 settings = Settings()
+settings.STATIC_DIR = _finalize_static_dir_path(settings.STATIC_DIR)
+settings.SPA_STATIC_DIR = _finalize_static_dir_path(
+    settings.SPA_STATIC_DIR,
+    fallback=_PKG_STATIC_DIR,
+)
+
+
+def ensure_static_root_ready() -> str:
+    """
+    Create upload directories without crashing gunicorn on corrupted STATIC_DIR.
+    Mutates settings.STATIC_DIR when falling back.
+    """
+    root = _finalize_static_dir_path(settings.STATIC_DIR)
+    if root != settings.STATIC_DIR:
+        settings.STATIC_DIR = root
+    try:
+        os.makedirs(root, exist_ok=True)
+        for sub in ("images", "videos", "documents", "media"):
+            os.makedirs(os.path.join(root, "uploads", sub), exist_ok=True)
+    except OSError as exc:
+        logger.error(
+            "Cannot create STATIC_DIR %r (%s) — falling back to %s",
+            root,
+            exc,
+            _PKG_STATIC_DIR,
+        )
+        root = _PKG_STATIC_DIR
+        settings.STATIC_DIR = root
+        os.makedirs(root, exist_ok=True)
+        for sub in ("images", "videos", "documents", "media"):
+            os.makedirs(os.path.join(root, "uploads", sub), exist_ok=True)
+    return root
 
 
 def _spa_index_exists(path: str) -> bool:

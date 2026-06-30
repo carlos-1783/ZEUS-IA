@@ -3,7 +3,7 @@
     <header v-if="truthStatus" class="ops-header">
       <ThalosExecutionBadge
         :global-mode="truthStatus.execution_mode"
-        :real-execution="truthStatus.execution_mode === 'REAL'"
+        :real-execution="verifiedReal"
       />
       <p v-if="statusNote" class="status-note">{{ statusNote }}</p>
     </header>
@@ -119,6 +119,8 @@ import {
   type OpsRouteItem,
   type WarehouseSummary,
 } from '@/api/afrodita_ops_api'
+import { fetchZeusExecutionStatus } from '@/api/zeus_status_api'
+import { isVerifiedReal } from '@/utils/zeus_safe_lock'
 import ThalosExecutionBadge from './ThalosExecutionBadge.vue'
 
 interface InventoryRow {
@@ -148,6 +150,8 @@ const loading = reactive({
 const error = ref('')
 const statusNote = ref('')
 const truthStatus = ref<AfroditaTruthStatus | null>(null)
+const zeusVerified = ref(false)
+const verifiedReal = computed(() => zeusVerified.value || isVerifiedReal(truthStatus.value))
 const rawProducts = ref<MergedProductItem[]>([])
 const rawMovements = ref<InventoryMovementItem[]>([])
 const routes = ref<OpsRouteItem[]>([])
@@ -166,7 +170,7 @@ const routeForm = reactive({
   destination: 'Cliente',
 })
 
-const canWrite = computed(() => truthStatus.value?.execution_mode === 'REAL')
+const canWrite = computed(() => verifiedReal.value)
 
 const inventory = computed<InventoryRow[]>(() =>
   rawProducts.value.map((p) => ({
@@ -197,7 +201,12 @@ const formatStock = (v: number | null | undefined) => (v == null ? '-' : String(
 
 onMounted(async () => {
   try {
-    truthStatus.value = await fetchAfroditaStatus()
+    const [afrodita, zeus] = await Promise.all([
+      fetchAfroditaStatus(),
+      fetchZeusExecutionStatus().catch(() => null),
+    ])
+    truthStatus.value = afrodita
+    zeusVerified.value = isVerifiedReal(zeus)
     const mode = truthStatus.value.execution_mode
     if (mode === 'ERROR') {
       statusNote.value = 'SYSTEM ERROR — base de datos no disponible.'

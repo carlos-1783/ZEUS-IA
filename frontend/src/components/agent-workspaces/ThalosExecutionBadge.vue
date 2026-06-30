@@ -81,11 +81,14 @@ const originLabel = computed(() => {
 const modeClass = (mode: string) => {
   if (mode === 'REAL' || mode === 'REAL_ACTIVE') return 'active'
   if (mode === 'ERROR') return 'error'
+  if (mode === 'UNKNOWN') return 'unknown'
   return 'simulation'
 }
 
 const uiClass = (badge: string) => {
   if (badge === 'REAL') return 'real'
+  if (badge === 'UNKNOWN') return 'unknown'
+  if (badge === 'ERROR') return 'error'
   if (badge === 'NONE') return 'none'
   return 'simulated'
 }
@@ -108,6 +111,11 @@ const uiClass = (badge: string) => {
   padding: 3px 8px;
   border-radius: 999px;
   text-transform: uppercase;
+}
+.badge.global.unknown,
+.badge.module.unknown {
+  background: #fef9c3;
+  color: #a16207;
 }
 .badge.global.simulation {
   background: #e2e8f0;

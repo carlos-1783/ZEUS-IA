@@ -409,8 +409,13 @@ class TeamFlowEngine:
         workflow_id: str,
         payload: Optional[Dict[str, Any]] = None,
         actor: Optional[str] = None,
+        db: Optional[Any] = None,
+        user: Optional[Any] = None,
+        company_id: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """Crea tareas en activity logger para cada paso del workflow."""
+        """Crea tareas en activity logger + persiste teamflow_items en BD."""
+        from app.core.config import settings
+
         workflow = self.get_workflow(workflow_id)
         execution_id = str(uuid4())
         base_payload = {**workflow.default_payload, **(payload or {})}
@@ -442,7 +447,22 @@ class TeamFlowEngine:
                     "agent": step.agent,
                     "activity_id": activity.id if activity else None,
                     "status": activity.status if activity else "pending",
+                    "handoff_to": step.handoff_to,
+                    "depends_on": step.depends_on,
                 }
+            )
+
+        persisted_items: List[Dict[str, Any]] = []
+        if getattr(settings, "TEAMFLOW_ENABLED", True) and db is not None and user is not None:
+            from services.teamflow_persistence_v1 import persist_workflow_execution
+
+            persisted_items = persist_workflow_execution(
+                db,
+                user,
+                workflow_id=workflow_id,
+                execution_id=execution_id,
+                steps=created_tasks,
+                company_id=company_id,
             )
 
         self._shared_context[execution_id] = {
@@ -450,15 +470,18 @@ class TeamFlowEngine:
             "payload": base_payload,
             "created_by": actor,
             "tasks": created_tasks,
+            "persisted_items": persisted_items,
         }
 
         return {
             "workflow": workflow.workflow_id,
             "execution_id": execution_id,
             "created_tasks": created_tasks,
+            "persisted_items": persisted_items,
             "agents": workflow.agents,
             "summary": workflow.summary,
             "success_criteria": workflow.success_criteria,
+            "real_execution": bool(persisted_items),
         }
 
     def get_shared_context(self, execution_id: str) -> Optional[Dict[str, Any]]:

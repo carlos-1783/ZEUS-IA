@@ -108,6 +108,8 @@ def create_tables():
             from app.models.perseo_job import PerseoJob
             from app.models.legal_document import LegalDocument
             from app.models.compliance_event import ComplianceEvent
+            from app.models.teamflow_item import TeamFlowItem
+            from app.models.teamflow_event import TeamFlowEvent
             from app.models.tpv_operator_session import TPVOperatorSession
             from app.models.time_tracking import (
                 TimeTrackingRecord,

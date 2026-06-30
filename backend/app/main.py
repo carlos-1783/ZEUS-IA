@@ -15,7 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.security_middleware import SecurityMiddleware
 
 # Import your existing app
-from app.core.config import settings
+from app.core.config import settings, ensure_static_root_ready
 from app.api.v1 import api_router
 from app.api.v1.endpoints import checkin as checkin_v1
 from app.db.base import create_tables, ensure_schema_patches
@@ -291,6 +291,12 @@ async def startup_event():
         start_thalos_worker()
     except Exception as exc:
         logger.warning("[THALOS_STARTUP] worker start failed: %s", exc)
+    try:
+        from services.zeus_safe_lock_v1 import log_startup_safe_lock
+
+        log_startup_safe_lock()
+    except Exception as exc:
+        logger.warning("[ZEUS_SAFE_LOCK] startup check failed: %s", exc)
     logger.info("ZEUS-IA backend ready")
 
 
@@ -306,11 +312,8 @@ async def shutdown_event():
 
 # Subidas + URL /static → volumen opcional (ZEUS_STATIC_DIR, p. ej. /data/static).
 # SPA (index.html, /assets de Vite) → SPA_STATIC_DIR (imagen Docker /app/static si hay volumen).
-static_root = os.path.abspath(settings.STATIC_DIR)
+static_root = ensure_static_root_ready()
 spa_root = os.path.abspath(getattr(settings, "SPA_STATIC_DIR", static_root))
-os.makedirs(static_root, exist_ok=True)
-for _sub in ("images", "videos", "documents", "media"):
-    os.makedirs(os.path.join(static_root, "uploads", _sub), exist_ok=True)
 
 if settings.ENVIRONMENT.lower() in ("production", "staging"):
     logger.warning(

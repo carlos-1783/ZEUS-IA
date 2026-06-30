@@ -148,6 +148,8 @@ import {
   type ThalosStatusResponse,
 } from '@/api/thalos_workspace_api'
 
+import { resolveThalosModuleBadge } from '@/utils/zeus_safe_lock'
+
 import api from '@/services/api'
 
 import ThalosExecutionBadge from './ThalosExecutionBadge.vue'
@@ -181,11 +183,7 @@ const monitorSummary = ref<string | null>(null)
 const backupSummary = ref<string | null>(null)
 const auditStats = ref<{ event_count?: number; open_alerts?: number; worker?: { running?: boolean } } | null>(null)
 
-const moduleBadge = (module: string) =>
-  globalStatus.value?.module_classification?.[module] === 'REAL_SAFE' ||
-  globalStatus.value?.module_classification?.[module] === 'REAL_CONDITIONAL'
-    ? 'REAL'
-    : (globalStatus.value?.thalos_control?.ui_badge || 'REAL')
+const moduleBadge = (module: string) => resolveThalosModuleBadge(module, globalStatus.value)
 
 
 

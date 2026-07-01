@@ -4,7 +4,7 @@
       <div>
         <h3>⚖️ Espacio de Trabajo – JUSTICIA</h3>
         <p class="subtitle">
-          Entregables legales automatizados: políticas, términos y checklist de cumplimiento.
+          Contratos laborales (BD), TeamFlow cross-agent y paquetes legal automation.
         </p>
       </div>
       <button class="refresh-btn" :disabled="isLoading" @click="reload">
@@ -18,7 +18,11 @@
       <span>Error al cargar entregables legales: {{ error }}</span>
     </div>
 
-    <section class="workspace-body" v-if="!isLoading && deliverables.length">
+    <JusticiaLegalDbPanel ref="legalDbRef" />
+
+    <section v-if="deliverables.length && !isLoading" class="automation-deliverables">
+      <h4 class="section-label">Paquetes automation (archivos locales)</h4>
+      <div class="workspace-body">
       <aside class="deliverable-list">
         <h4>Documentos generados</h4>
         <ul>
@@ -144,25 +148,22 @@
           <p>Elige un paquete generado para revisar políticas y condiciones.</p>
         </div>
       </main>
+      </div>
     </section>
 
-    <section v-else class="empty-container">
-      <div v-if="isLoading" class="empty-state">
-        <div class="spinner"></div>
-        <p>Generando documentación legal…</p>
-      </div>
-      <div v-else class="empty-state">
-        <div class="icon">⚖️</div>
-        <h4>Sin entregables disponibles</h4>
-        <p>
-          Solicita a JUSTICIA un nuevo paquete legal y aparecerá aquí listo para descargar.
-        </p>
-      </div>
+    <section v-else-if="!isLoading && !deliverables.length" class="automation-empty">
+      <p class="muted-note">Sin paquetes automation en disco — los contratos reales están arriba en BD.</p>
     </section>
+
+    <div v-if="isLoading" class="loading-inline">
+      <div class="spinner"></div>
+      <p>Cargando paquetes automation…</p>
+    </div>
 
     <footer class="workspace-footer">
       <p>
-        Descarga el Markdown para enviarlo a tu equipo legal o integrarlo en la web sin esfuerzo.
+        Los contratos RRHH de AFRODITA aparecen en <strong>Documentos legales en BD</strong>.
+        Los paquetes automation son plantillas en disco.
       </p>
     </footer>
 
@@ -179,7 +180,10 @@
 import { onMounted, ref, computed, watch } from 'vue';
 import { useAutomationDeliverables } from '@/composables/useAutomationDeliverables';
 import JusticiaToolsPanel from './JusticiaToolsPanel.vue';
+import JusticiaLegalDbPanel from './JusticiaLegalDbPanel.vue';
 import DocumentApprovalPanel from '@/components/DocumentApprovalPanel.vue';
+
+const legalDbRef = ref<InstanceType<typeof JusticiaLegalDbPanel> | null>(null)
 
 const {
   items: deliverables,
@@ -200,7 +204,7 @@ const currentDeliverable = computed(() =>
 const buildDownloadLink = buildDownloadLinkFor;
 
 const reload = async () => {
-  await load();
+  await Promise.all([load(), legalDbRef.value?.reload?.()])
   if (!deliverables.value.length) {
     selectedId.value = null;
     currentDetails.value = null;
@@ -675,6 +679,31 @@ onMounted(async () => {
   font-size: 13px;
   color: #64748b;
   text-align: center;
+}
+
+.section-label {
+  margin: 24px 0 12px;
+  font-size: 14px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.automation-deliverables {
+  margin-top: 8px;
+}
+
+.automation-empty,
+.muted-note {
+  font-size: 13px;
+  color: #94a3b8;
+  text-align: center;
+  padding: 12px;
+}
+
+.loading-inline {
+  text-align: center;
+  padding: 16px;
+  color: #64748b;
 }
 
 @keyframes spin {

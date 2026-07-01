@@ -84,22 +84,6 @@
       </div>
     </div>
 
-    <section v-if="legalDocuments.length" class="legal-docs-section">
-      <h5>Documentos legales en BD ({{ legalDocuments.length }})</h5>
-      <ul class="legal-doc-list">
-        <li
-          v-for="doc in legalDocuments"
-          :key="String(doc.id)"
-          :class="{ active: selectedLegalId === doc.id }"
-          @click="selectLegalDoc(doc)"
-        >
-          <strong>{{ doc.type }}</strong> · {{ doc.status }}
-          <span class="doc-id">{{ doc.id }}</span>
-        </li>
-      </ul>
-      <ZeusDocumentRenderer v-if="legalDocPayload" :doc="legalDocPayload" />
-    </section>
-
     <TeamFlowPanel agent="JUSTICIA" />
 
     <p v-if="error" class="tool-error">{{ error }}</p>
@@ -110,7 +94,6 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import {
   fetchJusticiaComplianceEvents,
-  fetchJusticiaDocumentDetail,
   fetchJusticiaDocuments,
   fetchJusticiaStatus,
   fetchJusticiaSystemAudit,
@@ -122,7 +105,6 @@ import {
 } from '@/api/justicia_workspace_api'
 import { resolveJusticiaModuleBadge } from '@/utils/zeus_safe_lock'
 import ThalosExecutionBadge from './ThalosExecutionBadge.vue'
-import ZeusDocumentRenderer from '@/components/documents/ZeusDocumentRenderer.vue'
 import TeamFlowPanel from './TeamFlowPanel.vue'
 
 const loading = reactive({ signer: false, contract: false, gdpr: false, audit: false })
@@ -150,40 +132,7 @@ const signerResult = ref<string | null>(null)
 const contractResult = ref<string | null>(null)
 const gdprResult = ref<string | null>(null)
 
-const legalDocuments = ref<Array<Record<string, unknown>>>([])
-const selectedLegalId = ref<string | null>(null)
-const legalDocPayload = ref<Record<string, unknown> | null>(null)
-
-const loadLegalDocuments = async () => {
-  const docs = await fetchJusticiaDocuments().catch(() => null)
-  legalDocuments.value = docs?.documents || []
-  if (legalDocuments.value.length && !selectedLegalId.value) {
-    await selectLegalDoc(legalDocuments.value[0])
-  }
-}
-
-const selectLegalDoc = async (doc: Record<string, unknown>) => {
-  const id = String(doc.id || '')
-  selectedLegalId.value = id
-  legalDocPayload.value = null
-  if (!id) return
-  try {
-    const detail = (await fetchJusticiaDocumentDetail(id)) as Record<string, unknown>
-    legalDocPayload.value = {
-      agent_source: 'JUSTICIA',
-      type: detail.type || doc.type,
-      title: `Documento ${detail.type || doc.type}`,
-      content: detail.content ?? detail.content_preview,
-      data: detail,
-    }
-  } catch {
-    legalDocPayload.value = {
-      agent_source: 'JUSTICIA',
-      type: doc.type,
-      content: doc,
-    }
-  }
-}
+const legalDocCount = ref(0)
 
 const csv = (value: string) =>
   value.split(',').map((item) => item.trim()).filter(Boolean)
@@ -191,16 +140,16 @@ const csv = (value: string) =>
 onMounted(async () => {
   try {
     globalStatus.value = await fetchJusticiaStatus()
-    await loadLegalDocuments()
+    const docs = await fetchJusticiaDocuments().catch(() => null)
+    legalDocCount.value = docs?.count ?? docs?.documents?.length ?? 0
     const events = await fetchJusticiaComplianceEvents().catch(() => null)
     complianceAlerts.value = events?.events || []
     statusNote.value = globalStatus.value.JUSTICE_REAL_AUDIT_ENABLED
-      ? `Modo REAL · ${legalDocuments.value.length} documentos legales · ${complianceAlerts.value.length} alertas compliance`
+      ? `Modo REAL · ${legalDocCount.value} documentos legales · ${complianceAlerts.value.length} alertas compliance`
       : 'Activa JUSTICE_REAL_AUDIT_ENABLED en Railway.'
   } catch {
     /* optional */
   }
-  window.addEventListener('zeus:teamflow-refresh', loadLegalDocuments)
 })
 
 const runSystemAudit = async () => {
@@ -347,22 +296,4 @@ const runGdpr = async () => {
   font-size: 13px;
 }
 .tool-error { margin-top: 10px; color: #b91c1c; }
-.legal-docs-section {
-  margin-top: 20px;
-  padding: 14px;
-  border-radius: 12px;
-  border: 1px solid rgba(15, 23, 42, 0.15);
-  background: #f8fafc;
-}
-.legal-doc-list { list-style: none; margin: 0 0 12px; padding: 0; }
-.legal-doc-list li {
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  margin-bottom: 6px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.legal-doc-list li.active { border-color: #0f172a; background: #fff; }
-.doc-id { display: block; font-size: 11px; color: #64748b; margin-top: 2px; }
 </style>

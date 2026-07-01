@@ -1,0 +1,58 @@
+.doc {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  margin: 10px 0;
+  font-family: var(--font-sans, 'Inter', sans-serif);
+  color: #1f2937;
+}
+
+.doc h2 {
+  margin: 0 0 12px;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.doc .section {
+  margin-top: 10px;
+  line-height: 1.55;
+}
+
+.doc .section p {
+  margin: 6px 0;
+}
+
+.doc.invoice ul {
+  padding-left: 20px;
+  margin: 12px 0;
+}
+
+.doc.invoice li {
+  margin: 4px 0;
+}
+
+.doc.invoice h3 {
+  margin-top: 16px;
+  font-size: 1.1rem;
+}
+
+.doc.legal pre,
+.doc .markdown-preview {
+  background: #f4f4f5;
+  padding: 12px;
+  border-radius: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.doc-error {
+  padding: 12px;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 0.9rem;
+}

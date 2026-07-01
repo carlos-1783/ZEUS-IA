@@ -44,6 +44,33 @@ def list_documents(
     ]
 
 
+def get_document(db: Session, user: User, document_id: str) -> Dict[str, Any]:
+    """Fetch full legal document content for UI preview."""
+    doc_id = (document_id or "").strip()
+    if not doc_id:
+        raise ValueError("document_id required")
+    row = (
+        db.query(LegalDocument)
+        .filter(LegalDocument.user_id == user.id, LegalDocument.public_id == doc_id)
+        .first()
+    )
+    if not row:
+        return {}
+    return {
+        "id": row.public_id,
+        "type": row.doc_type,
+        "status": row.status,
+        "owner_agent": row.owner_agent,
+        "version": row.version,
+        "content": row.content,
+        "content_preview": row.content[:500] if row.content else "",
+        "delivery_format": "markdown",
+        "signature_hash": row.signature_hash,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
 def list_pending_documents_grouped(db: Session, user: User) -> Dict[str, Any]:
     """Pending documents from DB — grouped by agent + type, deduplicated."""
     rows = (

@@ -46,8 +46,12 @@
 
         <div v-if="expandedDoc === doc.id" class="document-details">
           <div class="document-content">
-            <h4>Contenido del Documento:</h4>
-            <pre class="document-preview">{{ formatDocumentContent(doc.document_payload || (doc as any).document_payload_json || doc) }}</pre>
+            <h4>Vista previa:</h4>
+            <ZeusDocumentRenderer :doc="previewPayload(doc)" />
+            <details class="raw-json-toggle">
+              <summary>JSON crudo</summary>
+              <pre class="document-preview">{{ formatDocumentContent(doc.document_payload || (doc as any).document_payload_json || doc) }}</pre>
+            </details>
           </div>
 
           <template v-if="isAdvisorApprovalAgent(doc.agent_name)">
@@ -97,6 +101,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import api from '@/services/api'
+import ZeusDocumentRenderer from '@/components/documents/ZeusDocumentRenderer.vue'
 
 interface Document {
   id: number
@@ -117,6 +122,13 @@ const loading = ref(false)
 const approving = ref(false)
 const error = ref('')
 const expandedDoc = ref<number | null>(null)
+
+const previewPayload = (doc: Document) => ({
+  agent_name: doc.agent_name,
+  document_type: doc.document_type,
+  document_payload: doc.document_payload || (doc as any).document_payload_json,
+  created_at: doc.created_at,
+})
 
 const loadPendingDocuments = async () => {
   loading.value = true
@@ -534,9 +546,19 @@ onMounted(() => {
 }
 
 .document-content h4 {
-  margin: 0 0 12px 0;
+  margin: 0 0 8px;
   color: #374151;
   font-size: 14px;
+}
+
+.raw-json-toggle {
+  margin-top: 12px;
+  font-size: 0.85rem;
+}
+
+.raw-json-toggle summary {
+  cursor: pointer;
+  color: #6b7280;
 }
 
 .document-preview {

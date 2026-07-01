@@ -15,7 +15,7 @@ from app.models.compliance_event import ComplianceEvent
 from app.models.user import User
 from services.gdpr_engine import run_gdpr_check
 from services.contract_generator import generate_contract
-from services.justice_audit_service import audit_status, list_documents, run_real_audit
+from services.justice_audit_service import audit_status, get_document, list_documents, run_real_audit
 from services.justicia_control_layer_v1 import wrap_response
 from services.signature_service import apply_signature
 
@@ -73,6 +73,24 @@ def justice_documents(
         {"documents": docs, "count": len(docs), "data_origin": "database"},
         "workspace",
         data_origin="backend",
+        real_execution=True,
+        ui_badge="REAL",
+    )
+
+
+@router.get("/documents/{document_id}")
+def justice_document_detail(
+    document_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    body = get_document(db, current_user, document_id)
+    if not body:
+        raise HTTPException(status_code=404, detail="document_not_found")
+    return wrap_response(
+        body,
+        "workspace",
+        data_origin="database",
         real_execution=True,
         ui_badge="REAL",
     )

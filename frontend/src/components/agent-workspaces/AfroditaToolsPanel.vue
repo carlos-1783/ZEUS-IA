@@ -118,6 +118,7 @@
           {{ loading.contract ? 'Compilando…' : 'Crear borrador' }}
         </button>
         <p v-if="contractResult" class="tool-text">{{ contractResult }}</p>
+        <ZeusDocumentRenderer v-if="lastContractDoc" :doc="lastContractDoc" class="contract-preview" />
       </div>
     </div>
     <p v-if="error" class="tool-error">{{ error }}</p>
@@ -140,6 +141,7 @@ import {
 } from '@/api/afrodita_workspace_api'
 import { isVerifiedReal } from '@/utils/zeus_safe_lock'
 import ThalosExecutionBadge from './ThalosExecutionBadge.vue'
+import ZeusDocumentRenderer from '@/components/documents/ZeusDocumentRenderer.vue'
 
 const loading = reactive({
   qr: false,
@@ -176,6 +178,7 @@ const employeeForm = reactive({
 
 const qrResult = ref<string | null>(null)
 const contractResult = ref<string | null>(null)
+const lastContractDoc = ref<Record<string, unknown> | null>(null)
 
 const refreshQrDefault = () => {
   const code = employees.value[0]?.employee_code || 'EMP-001'
@@ -315,6 +318,7 @@ const runQr = async () => {
 const runContract = async () => {
   error.value = ''
   contractResult.value = null
+  lastContractDoc.value = null
   if (!contractForm.employee_name.trim() && !contractForm.employee_code) {
     error.value = 'Seleccione o indique un empleado registrado en BD.'
     return
@@ -334,6 +338,12 @@ const runContract = async () => {
       (out.contract_id
         ? `Contrato generado (${out.contract_id}) — persistido en legal_documents.`
         : 'Contrato generado y persistido.')
+    lastContractDoc.value = {
+      ...out,
+      role: contractForm.role,
+      salary: contractForm.salary,
+      employee_name: contractForm.employee_name,
+    }
   } catch (err) {
     error.value = formatApiError(err)
   } finally {
@@ -440,5 +450,8 @@ const runContract = async () => {
 .tool-error {
   margin-top: 10px;
   color: #b91c1c;
+}
+.contract-preview {
+  margin-top: 12px;
 }
 </style>

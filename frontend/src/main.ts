@@ -38,23 +38,35 @@ window.addEventListener('unauthorized', async () => {
   }
 })
 
-// Registrar Service Worker para PWA
-if ('serviceWorker' in navigator) {
+// Registrar Service Worker para PWA (solo producción)
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  let swReloading = false
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (swReloading) return
+    swReloading = true
+    console.log('✅ Service Worker actualizado — recargando')
+    window.location.reload()
+  })
+
   window.addEventListener('load', () => {
-    const isProd = import.meta.env.PROD
-    console.log('🔧 Service Worker: Intentando registrar... (PROD:', isProd, ')')
-    
-    navigator.serviceWorker.register('/service-worker.js')
+    navigator.serviceWorker
+      .register('/service-worker.js', { updateViaCache: 'none' })
       .then((registration) => {
         console.log('✅ Service Worker registrado:', registration.scope)
-        console.log('✅ Service Worker activo:', registration.active)
-        console.log('✅ Service Worker esperando:', registration.waiting)
+        if (registration.waiting) {
+          registration.waiting.postMessage({ type: 'SKIP_WAITING' })
+        }
+        registration.addEventListener('updatefound', () => {
+          const worker = registration.installing
+          worker?.addEventListener('statechange', () => {
+            if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+              worker.postMessage({ type: 'SKIP_WAITING' })
+            }
+          })
+        })
       })
       .catch((error) => {
-        console.warn('⚠️ Error registrando Service Worker:', error)
-        console.warn('⚠️ Detalles:', error.message)
+        console.warn('⚠️ Error registrando Service Worker:', error.message)
       })
   })
-} else {
-  console.warn('⚠️ Service Workers no están soportados en este navegador')
 }

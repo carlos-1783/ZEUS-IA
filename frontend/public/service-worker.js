@@ -1,8 +1,9 @@
 // ZEUS-IA Enterprise - Service Worker
-// Versión: 1.4.0 — SPA offline-safe; nunca cachear POST; API network-only
+// Versión: 1.6.0 — install instantáneo; precache en background; sin deadlock
 
-const CACHE_NAME = 'zeus-enterprise-v5';
-const RUNTIME_CACHE = 'zeus-runtime-v5';
+const CACHE_NAME = 'zeus-enterprise-v7';
+const RUNTIME_CACHE = 'zeus-runtime-v7';
+const FETCH_TIMEOUT_MS = 12000;
 
 const PRECACHE = ['/favicon.ico', '/index.html'];
 
@@ -16,6 +17,8 @@ const SPA_PATH_PREFIXES = [
   '/pricing',
   '/checkout',
 ];
+
+let backgroundPrecacheRunning = false;
 
 function isSpaRoute(pathname) {
   return SPA_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(p));
@@ -31,6 +34,12 @@ function isApiRequest(pathname) {
 
 function isNavigation(request) {
   return request.mode === 'navigate';
+}
+
+function fetchWithTimeout(request, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(request, { signal: controller.signal }).finally(() => clearTimeout(timer));
 }
 
 async function safeCachePut(cache, request, response) {
@@ -57,34 +66,55 @@ async function offlineHtmlResponse() {
   );
 }
 
+async function backgroundPrecache() {
+  if (backgroundPrecacheRunning) return;
+  backgroundPrecacheRunning = true;
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    for (const url of PRECACHE) {
+      try {
+        const res = await fetchWithTimeout(new Request(url), 5000);
+        if (res && res.ok) await safeCachePut(cache, new Request(url), res);
+      } catch (err) {
+        console.log('[SW] Precache background skip:', url, err);
+      }
+    }
+    console.log('[SW] Precache background completado v7');
+  } finally {
+    backgroundPrecacheRunning = false;
+  }
+}
+
 self.addEventListener('install', (event) => {
-  console.log('[SW] Service Worker instalando v5...');
+  console.log('[SW] Service Worker instalando v7...');
+  self.skipWaiting();
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then(async (cache) => {
-        for (const url of PRECACHE) {
-          try {
-            const res = await fetch(url, { cache: 'reload' });
-            if (res.ok) await safeCachePut(cache, new Request(url), res);
-          } catch (err) {
-            console.log('[SW] Precache skip:', url, err);
-          }
-        }
-      })
-      .then(() => self.skipWaiting())
+      .then(() => console.log('[SW] Service Worker instalado v7'))
+      .catch((err) => console.log('[SW] install cache open skip:', err))
   );
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Service Worker activando v5...');
+  console.log('[SW] Service Worker activando v7...');
   event.waitUntil(
-    caches
-      .keys()
-      .then((names) =>
-        Promise.all(names.filter((n) => n !== CACHE_NAME && n !== RUNTIME_CACHE).map((n) => caches.delete(n)))
-      )
-      .then(() => self.clients.claim())
+    (async () => {
+      const names = await caches.keys();
+      await Promise.all(
+        names.filter((n) => n !== CACHE_NAME && n !== RUNTIME_CACHE).map((n) => caches.delete(n))
+      );
+      try {
+        await Promise.race([
+          self.clients.claim(),
+          new Promise((resolve) => setTimeout(resolve, 3000)),
+        ]);
+      } catch (err) {
+        console.log('[SW] clients.claim skip:', err);
+      }
+      console.log('[SW] Service Worker listo v7');
+      void backgroundPrecache();
+    })()
   );
 });
 
@@ -123,10 +153,9 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(cacheFirstStrategy(request));
 });
 
-/** SPA: network → index.html cache → offline shell (nunca reject). */
 async function spaNavigationStrategy(request) {
   try {
-    const networkResponse = await fetch(request);
+    const networkResponse = await fetchWithTimeout(request);
     if (networkResponse && networkResponse.ok) {
       if (request.url.endsWith('/index.html') || new URL(request.url).pathname === '/') {
         const cache = await caches.open(CACHE_NAME);
@@ -145,8 +174,8 @@ async function spaNavigationStrategy(request) {
   if (index) return index;
 
   try {
-    const idx = await fetch('/index.html');
-    if (idx.ok) {
+    const idx = await fetchWithTimeout(new Request('/index.html'), 6000);
+    if (idx && idx.ok) {
       const cache = await caches.open(CACHE_NAME);
       await safeCachePut(cache, new Request('/index.html'), idx);
       return idx;
@@ -163,7 +192,7 @@ async function cacheFirstStrategy(request) {
     const cachedResponse = await caches.match(request);
     if (cachedResponse) return cachedResponse;
 
-    const networkResponse = await fetch(request);
+    const networkResponse = await fetchWithTimeout(request);
     if (networkResponse && networkResponse.ok) {
       const cache = await caches.open(CACHE_NAME);
       await safeCachePut(cache, request, networkResponse);
@@ -179,14 +208,14 @@ async function cacheFirstStrategy(request) {
 }
 
 async function networkOnlyStrategy(request) {
-  return fetch(request);
+  return fetchWithTimeout(request);
 }
 
 async function networkFirstStrategy(request, options = {}) {
   const { allowCache = true, spaFallback = false } = options;
 
   try {
-    const networkResponse = await fetch(request);
+    const networkResponse = await fetchWithTimeout(request);
     if (allowCache && networkResponse && networkResponse.ok) {
       const cache = await caches.open(RUNTIME_CACHE);
       await safeCachePut(cache, request, networkResponse);
@@ -207,4 +236,4 @@ self.addEventListener('message', (event) => {
   }
 });
 
-console.log('[SW] Service Worker cargado v5');
+console.log('[SW] Service Worker cargado v7');

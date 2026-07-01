@@ -440,6 +440,7 @@ onMounted(() => {
   tpvTablesPollTimer = window.setInterval(() => {
     void loadTpvTablesFromApi()
   }, 60000)
+  showNotification('success', '⚡ Bienvenido al Olimpo')
 })
 
 onUnmounted(() => {
@@ -718,10 +719,6 @@ const showNotification = (type, message) => {
   }, 4000)
 }
 
-// Lifecycle
-onMounted(() => {
-  showNotification('success', '⚡ Bienvenido al Olimpo')
-})
 </script>
 
 <style scoped>

@@ -603,7 +603,12 @@ function showModule(key) {
 const loadBackendHealth = async () => {
   try {
     const api = (await import('@/services/api')).default
-    const data = await api.get('/api/v1/health/detailed')
+    const data = await api.get('/api/v1/health/detailed').catch(() => null)
+    if (!data) {
+      backendHealthLabel.value = '!'
+      backendHealthDetail.value = 'Sin diagnóstico'
+      return
+    }
     const ok =
       data?.status === 'healthy' &&
       (data?.database === 'healthy' || String(data?.database || '').startsWith('healthy'))
@@ -625,7 +630,8 @@ const loadDashboardMetrics = async () => {
     await authStore.ensureAccessTokenFresh(300)
 
     const api = (await import('@/services/api')).default
-    const data = await api.get('/api/v1/metrics/summary?days=30')
+    const data = await api.get('/api/v1/metrics/summary?days=30').catch(() => null)
+    if (!data) return
     
     if (data.success && data.metrics) {
       // Actualizar métricas
@@ -709,8 +715,8 @@ const loadFinancialAnalytics = async () => {
     if (!authStore.getToken?.() && !authStore.token) return
     await authStore.ensureAccessTokenFresh(300)
     const api = (await import('@/services/api')).default
-    const data = await api.get('/api/v1/analytics/summary?days=30')
-    applyAnalyticsPayload(data)
+    const data = await api.get('/api/v1/analytics/summary?days=30').catch(() => null)
+    if (data) applyAnalyticsPayload(data)
   } catch (error) {
     console.error('❌ Error cargando analytics financieros:', error)
   }
@@ -785,7 +791,23 @@ watch(currentView, (view) => {
   }
 })
 
-// Cargar al montar y refrescar periódicamente
+const DASHBOARD_POLL_MS = 30000
+let dashboardPollTimer = null
+let pollTick = 0
+
+const refreshDashboardData = async () => {
+  pollTick += 1
+  await loadDashboardMetrics()
+  if (currentView.value === 'analytics') {
+    await loadFinancialAnalytics()
+  }
+  if (pollTick % 2 === 0) {
+    await loadBackendHealth()
+    await loadAgentsActivities()
+  }
+}
+
+// Cargar al montar y refrescar periódicamente (un solo interval, cleanup en unmount)
 onMounted(async () => {
   // Inicializar authStore si no está inicializado
   if (!authStore.isAuthenticated && authStore.initialize) {
@@ -810,18 +832,11 @@ onMounted(async () => {
   updateModulesForSuperuser()
   
   loadSavedSettings()
-  loadDashboardMetrics()
-  loadFinancialAnalytics()
-  loadBackendHealth()
-  loadAgentsActivities()
-  
-  // Refresh dashboard metrics cada 30 segundos; salud API/BD cada minuto
-  setInterval(loadDashboardMetrics, 30000)
-  setInterval(loadFinancialAnalytics, 30000)
-  setInterval(loadBackendHealth, 60000)
-  
-  // Refresh actividades de agentes cada minuto
-  setInterval(loadAgentsActivities, 60000)
+  await refreshDashboardData()
+
+  dashboardPollTimer = window.setInterval(() => {
+    void refreshDashboardData()
+  }, DASHBOARD_POLL_MS)
   
   // Verificar después de múltiples delays para asegurar que authStore esté listo
   setTimeout(() => {
@@ -859,6 +874,13 @@ onMounted(async () => {
     })
     updateModulesForSuperuser()
   }, 1000)
+})
+
+onUnmounted(() => {
+  if (dashboardPollTimer != null) {
+    clearInterval(dashboardPollTimer)
+    dashboardPollTimer = null
+  }
 })
 
 const agentsData = ref([

@@ -1,10 +1,10 @@
 // ZEUS-IA Enterprise - Service Worker
-// Versión: 1.3.0 — nunca cachear POST; API network-only; SPA network-first
+// Versión: 1.4.0 — SPA offline-safe; nunca cachear POST; API network-only
 
-const CACHE_NAME = 'zeus-enterprise-v4';
-const RUNTIME_CACHE = 'zeus-runtime-v4';
+const CACHE_NAME = 'zeus-enterprise-v5';
+const RUNTIME_CACHE = 'zeus-runtime-v5';
 
-const STATIC_ASSETS = ['/favicon.ico'];
+const PRECACHE = ['/favicon.ico', '/index.html'];
 
 const SPA_PATH_PREFIXES = [
   '/dashboard',
@@ -18,9 +18,7 @@ const SPA_PATH_PREFIXES = [
 ];
 
 function isSpaRoute(pathname) {
-  return SPA_PATH_PREFIXES.some(
-    (p) => pathname === p || pathname.startsWith(p)
-  );
+  return SPA_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(p));
 }
 
 function isCacheableRequest(request) {
@@ -31,13 +29,13 @@ function isApiRequest(pathname) {
   return pathname.startsWith('/api/');
 }
 
+function isNavigation(request) {
+  return request.mode === 'navigate';
+}
+
 async function safeCachePut(cache, request, response) {
-  if (!isCacheableRequest(request)) {
-    return;
-  }
-  if (!response || !response.ok) {
-    return;
-  }
+  if (!isCacheableRequest(request)) return;
+  if (!response || !response.ok) return;
   try {
     await cache.put(request, response.clone());
   } catch (err) {
@@ -45,34 +43,46 @@ async function safeCachePut(cache, request, response) {
   }
 }
 
+async function matchIndexHtml() {
+  return (await caches.match('/index.html')) || (await caches.match('/'));
+}
+
+async function offlineHtmlResponse() {
+  const cached = await matchIndexHtml();
+  if (cached) return cached;
+  return new Response(
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><title>ZEUS</title></head>' +
+      '<body><p>ZEUS — sin conexión. Compruebe la red y recargue.</p></body></html>',
+    { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+  );
+}
+
 self.addEventListener('install', (event) => {
-  console.log('[SW] Service Worker instalando v4...');
+  console.log('[SW] Service Worker instalando v5...');
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => {
-        return cache
-          .addAll(STATIC_ASSETS.map((url) => new Request(url, { cache: 'reload' })))
-          .catch((err) => {
-            console.log('[SW] Error cacheando recursos (continuando):', err);
-            return Promise.resolve();
-          });
+      .then(async (cache) => {
+        for (const url of PRECACHE) {
+          try {
+            const res = await fetch(url, { cache: 'reload' });
+            if (res.ok) await safeCachePut(cache, new Request(url), res);
+          } catch (err) {
+            console.log('[SW] Precache skip:', url, err);
+          }
+        }
       })
       .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Service Worker activando v4...');
+  console.log('[SW] Service Worker activando v5...');
   event.waitUntil(
     caches
       .keys()
-      .then((cacheNames) =>
-        Promise.all(
-          cacheNames
-            .filter((name) => name !== CACHE_NAME && name !== RUNTIME_CACHE)
-            .map((name) => caches.delete(name))
-        )
+      .then((names) =>
+        Promise.all(names.filter((n) => n !== CACHE_NAME && n !== RUNTIME_CACHE).map((n) => caches.delete(n)))
       )
       .then(() => self.clients.claim())
   );
@@ -82,14 +92,8 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  if (!url.protocol.startsWith('http')) {
-    return;
-  }
-
-  // POST/PUT/PATCH/DELETE: no interceptar (Cache API no soporta POST)
-  if (!isCacheableRequest(request)) {
-    return;
-  }
+  if (!url.protocol.startsWith('http')) return;
+  if (!isCacheableRequest(request)) return;
 
   if (url.pathname.endsWith('service-worker.js')) {
     event.respondWith(networkOnlyStrategy(request));
@@ -101,45 +105,76 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  if (isNavigation(request) || isSpaRoute(url.pathname) || url.pathname === '/') {
+    event.respondWith(spaNavigationStrategy(request));
+    return;
+  }
+
   if (url.pathname.startsWith('/assets/')) {
     event.respondWith(networkFirstStrategy(request, { allowCache: true }));
     return;
   }
 
-  if (
-    request.mode === 'navigate' ||
-    url.pathname.endsWith('.html') ||
-    url.pathname === '/' ||
-    isSpaRoute(url.pathname)
-  ) {
-    event.respondWith(networkFirstStrategy(request, { allowCache: false, spaFallback: true }));
+  if (url.pathname.endsWith('.html')) {
+    event.respondWith(networkFirstStrategy(request, { allowCache: true, spaFallback: true }));
     return;
   }
 
   event.respondWith(cacheFirstStrategy(request));
 });
 
+/** SPA: network → index.html cache → offline shell (nunca reject). */
+async function spaNavigationStrategy(request) {
+  try {
+    const networkResponse = await fetch(request);
+    if (networkResponse && networkResponse.ok) {
+      if (request.url.endsWith('/index.html') || new URL(request.url).pathname === '/') {
+        const cache = await caches.open(CACHE_NAME);
+        await safeCachePut(cache, new Request('/index.html'), networkResponse);
+      }
+      return networkResponse;
+    }
+  } catch (err) {
+    console.log('[SW] SPA network fail:', request.url, err);
+  }
+
+  const cachedRoute = await caches.match(request);
+  if (cachedRoute) return cachedRoute;
+
+  const index = await matchIndexHtml();
+  if (index) return index;
+
+  try {
+    const idx = await fetch('/index.html');
+    if (idx.ok) {
+      const cache = await caches.open(CACHE_NAME);
+      await safeCachePut(cache, new Request('/index.html'), idx);
+      return idx;
+    }
+  } catch (err) {
+    console.log('[SW] index.html fetch fail:', err);
+  }
+
+  return offlineHtmlResponse();
+}
+
 async function cacheFirstStrategy(request) {
   try {
     const cachedResponse = await caches.match(request);
-    if (cachedResponse) {
-      return cachedResponse;
-    }
+    if (cachedResponse) return cachedResponse;
 
     const networkResponse = await fetch(request);
-    if (networkResponse && networkResponse.status === 200) {
+    if (networkResponse && networkResponse.ok) {
       const cache = await caches.open(CACHE_NAME);
       await safeCachePut(cache, request, networkResponse);
     }
     return networkResponse;
   } catch (error) {
-    if (request.mode === 'navigate' || isSpaRoute(new URL(request.url).pathname)) {
-      const fallback = await caches.match('/index.html');
-      if (fallback) {
-        return fallback;
-      }
+    console.log('[SW] cache-first fail:', request.url, error);
+    if (isNavigation(request) || isSpaRoute(new URL(request.url).pathname)) {
+      return offlineHtmlResponse();
     }
-    throw error;
+    return new Response('', { status: 503, statusText: 'Offline' });
   }
 }
 
@@ -158,17 +193,11 @@ async function networkFirstStrategy(request, options = {}) {
     }
     return networkResponse;
   } catch (error) {
+    console.log('[SW] network-first fail:', request.url, error);
     const cachedResponse = await caches.match(request);
-    if (cachedResponse) {
-      return cachedResponse;
-    }
-    if (spaFallback) {
-      const index = await caches.match('/index.html');
-      if (index) {
-        return index;
-      }
-    }
-    throw error;
+    if (cachedResponse) return cachedResponse;
+    if (spaFallback) return offlineHtmlResponse();
+    return new Response('', { status: 503, statusText: 'Offline' });
   }
 }
 
@@ -178,4 +207,4 @@ self.addEventListener('message', (event) => {
   }
 });
 
-console.log('[SW] Service Worker cargado v4');
+console.log('[SW] Service Worker cargado v5');

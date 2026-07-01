@@ -140,6 +140,42 @@ def create_rrhh_contract_draft(
         },
     )
 
+    from services.teamflow_persistence_v1 import create_item
+
+    handoff_content = {
+        "event": "contract_rrhh_created",
+        "document_id": legal.get("document_id"),
+        "employee_name": emp.full_name,
+        "employee_code": str(emp.employee_code),
+        "role": role_title,
+        "salary": salary,
+        "legal_document": legal,
+    }
+    create_item(
+        db,
+        user,
+        owner_agent="AFRODITA",
+        source_agent="AFRODITA",
+        target_agent="JUSTICIA",
+        title=f"Contrato RRHH — {emp.full_name}",
+        item_type="contract_rrhh",
+        status="pending",
+        content=handoff_content,
+        company_id=company_id,
+    )
+    create_item(
+        db,
+        user,
+        owner_agent="JUSTICIA",
+        source_agent="AFRODITA",
+        target_agent="JUSTICIA",
+        title=f"Revisión legal — {emp.full_name}",
+        item_type="contract_rrhh",
+        status="pending",
+        content=handoff_content,
+        company_id=company_id,
+    )
+
     return {
         "success": True,
         "contract_id": legal.get("document_id"),

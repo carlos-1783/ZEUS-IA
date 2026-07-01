@@ -41,7 +41,7 @@
             :class="{ active: item.id === selectedId }"
             @click="selectedId = item.id"
           >
-            <div class="title">{{ item.title }}</div>
+            <div class="title">{{ playbookLabel(item) }}</div>
             <div class="meta">
               <span class="source-badge">{{ item.agent_source || 'afrodita' }}</span>
               <span>{{ formatDate(item.created_at) }}</span>
@@ -58,7 +58,14 @@
           </div>
         </header>
 
-        <div class="details-grid">
+        <section v-if="isContractPlaybook" class="card contract-card">
+          <header class="card-header">
+            <h5>📄 Contrato RRHH (persistido)</h5>
+          </header>
+          <ZeusDocumentRenderer :doc="contractDocPayload" />
+        </section>
+
+        <div v-else class="details-grid">
           <section class="card" v-if="currentDetails.support_schedule">
             <header class="card-header">
               <h5>📅 Agenda de Soporte</h5>
@@ -117,10 +124,12 @@
       <div class="empty-state">
         <div class="icon">🤝</div>
         <h4>Sin playbooks en BD</h4>
-        <p v-if="connected">Ejecuta una tarea AFRODITA para generar y persistir un playbook.</p>
+        <p v-if="connected">Ejecuta una tarea AFRODITA (p. ej. contrato RRHH) para generar y persistir un playbook.</p>
         <p v-else>Workspace no conectado — verifique AFRODITA_WORKSPACE_ENABLED y la base de datos.</p>
       </div>
     </section>
+
+    <TeamFlowPanel v-if="!isLoading" ref="teamflowRef" agent="AFRODITA" />
 
     <div v-if="isLoading" class="empty-state">
       <div class="spinner"></div>
@@ -130,13 +139,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   fetchAfroditaWorkspaceFiles,
   type AfroditaWorkspaceFile,
-  type AfroditaWorkspacePlaybook,
 } from '@/api/afrodita_workspace_api'
 import { fetchWorkspacePlaybooks, type WorkspacePlaybookItem } from '@/api/workspace_playbooks_api'
+import ZeusDocumentRenderer from '@/components/documents/ZeusDocumentRenderer.vue'
+import TeamFlowPanel from './TeamFlowPanel.vue'
 
 const props = defineProps<{
   connected?: boolean
@@ -147,6 +157,7 @@ const playbooks = ref<WorkspacePlaybookItem[]>([])
 const selectedId = ref<number | null>(null)
 const isLoading = ref(false)
 const error = ref<string | null>(null)
+const teamflowRef = ref<InstanceType<typeof TeamFlowPanel> | null>(null)
 const connected = computed(() => props.connected ?? false)
 
 const selectedPlaybook = computed(() =>
@@ -154,6 +165,31 @@ const selectedPlaybook = computed(() =>
 )
 
 const currentDetails = computed(() => selectedPlaybook.value?.content || null)
+
+const isContractPlaybook = computed(() => {
+  const c = currentDetails.value
+  if (!c) return false
+  return (
+    c.action === 'contract_draft' ||
+    c.document_type === 'contract_rrhh' ||
+    Boolean((c.result as Record<string, unknown> | undefined)?.legal_document)
+  )
+})
+
+const contractDocPayload = computed(() => {
+  const c = currentDetails.value
+  if (!c) return null
+  const result = (c.result || {}) as Record<string, unknown>
+  return { ...result, agent_source: 'AFRODITA' }
+})
+
+const playbookLabel = (item: WorkspacePlaybookItem) => {
+  const c = item.content || {}
+  if (c.action === 'contract_draft' || c.document_type === 'contract_rrhh') {
+    return `📄 ${item.title}`
+  }
+  return item.title
+}
 
 const reload = async () => {
   isLoading.value = true
@@ -168,6 +204,7 @@ const reload = async () => {
     if (playbooks.value.length && !selectedId.value) {
       selectedId.value = playbooks.value[0].id
     }
+    teamflowRef.value?.reload?.()
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
     files.value = []
@@ -193,7 +230,13 @@ const formatWeek = (label: string | number) =>
 const previewContent = (content: string) =>
   content.length > 120 ? `${content.slice(0, 120)}…` : content
 
-onMounted(reload)
+onMounted(() => {
+  void reload()
+  window.addEventListener('zeus:workspace-refresh', reload)
+})
+onUnmounted(() => {
+  window.removeEventListener('zeus:workspace-refresh', reload)
+})
 </script>
 
 <style scoped>

@@ -52,12 +52,20 @@ class TeamFlowUpdateRequest(BaseModel):
 @router.get("/list")
 async def teamflow_list(
     owner_agent: Optional[str] = None,
+    agent: Optional[str] = None,
     status: Optional[str] = None,
     limit: int = 100,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    items = list_items(db, current_user, owner_agent=owner_agent, status=status, limit=limit)
+    items = list_items(
+        db,
+        current_user,
+        owner_agent=owner_agent,
+        agent=agent,
+        status=status,
+        limit=limit,
+    )
     return {"success": True, "items": items, "count": len(items), "data_origin": "database"}
 
 

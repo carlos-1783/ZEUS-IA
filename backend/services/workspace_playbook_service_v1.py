@@ -161,6 +161,8 @@ def persist_execution_playbook(
             "summary": summary or title,
             "result": payload,
             "execution": "REAL",
+            "document_type": payload.get("document_type")
+            or ("contract_rrhh" if action == "contract_draft" else None),
         }
         return create_playbook(
             db,

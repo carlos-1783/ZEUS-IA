@@ -69,6 +69,12 @@ export async function fetchJusticiaDocuments(status?: string) {
   }>
 }
 
+export async function fetchJusticiaDocumentDetail(documentId: string) {
+  return api.get(`/api/v1/justice/documents/${encodeURIComponent(documentId)}`) as Promise<
+    Record<string, unknown>
+  >
+}
+
 export async function justiciaSign(payload: {
   document_id?: string
   document_name?: string

@@ -6,6 +6,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.teamflow_event import TeamFlowEvent
@@ -105,11 +106,21 @@ def list_items(
     user: User,
     *,
     owner_agent: Optional[str] = None,
+    agent: Optional[str] = None,
     status: Optional[str] = None,
     limit: int = 100,
 ) -> List[Dict[str, Any]]:
     q = db.query(TeamFlowItem).filter(TeamFlowItem.user_id == user.id)
-    if owner_agent:
+    if agent:
+        a = agent.upper()
+        q = q.filter(
+            or_(
+                TeamFlowItem.owner_agent == a,
+                TeamFlowItem.source_agent == a,
+                TeamFlowItem.target_agent == a,
+            )
+        )
+    elif owner_agent:
         q = q.filter(TeamFlowItem.owner_agent == owner_agent.upper())
     if status:
         q = q.filter(TeamFlowItem.status == status)

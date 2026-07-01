@@ -119,6 +119,9 @@
         </button>
         <p v-if="contractResult" class="tool-text">{{ contractResult }}</p>
         <ZeusDocumentRenderer v-if="lastContractDoc" :doc="lastContractDoc" class="contract-preview" />
+        <p v-if="contractResult" class="workspace-hint">
+          También en pestaña <strong>WORKSPACE</strong> y TeamFlow → JUSTICIA.
+        </p>
       </div>
     </div>
     <p v-if="error" class="tool-error">{{ error }}</p>
@@ -344,6 +347,8 @@ const runContract = async () => {
       salary: contractForm.salary,
       employee_name: contractForm.employee_name,
     }
+    window.dispatchEvent(new CustomEvent('zeus:workspace-refresh'))
+    window.dispatchEvent(new CustomEvent('zeus:teamflow-refresh'))
   } catch (err) {
     error.value = formatApiError(err)
   } finally {
@@ -453,5 +458,10 @@ const runContract = async () => {
 }
 .contract-preview {
   margin-top: 12px;
+}
+.workspace-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #047857;
 }
 </style>

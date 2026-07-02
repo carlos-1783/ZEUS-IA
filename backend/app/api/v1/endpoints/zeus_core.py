@@ -244,6 +244,20 @@ async def get_zeus_completion_status(
 
     return run_full_completion(db, current_user, stop_on_error=False)
 
+
+@router.get(
+    "/document-pipeline/status",
+    operation_id="zeus_document_pipeline_status_v1",
+    summary="ZEUS cross-agent document pipeline status",
+)
+async def get_zeus_document_pipeline_status(
+    current_user: User = Depends(get_current_active_user),
+):
+    from services.zeus_document_pipeline_v1 import pipeline_status
+
+    return {"success": True, **pipeline_status()}
+
+
 @router.get(
     "/agents",
     operation_id="zeus_agents_api_v1",

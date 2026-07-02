@@ -122,6 +122,20 @@
         <p v-if="contractResult" class="workspace-hint">
           También en pestaña <strong>WORKSPACE</strong> y TeamFlow → JUSTICIA.
         </p>
+        <div v-if="lastPipeline" class="pipeline-result">
+          <h6>Pipeline ZEUS (PERSEO · RAFAEL · THALOS)</h6>
+          <ul>
+            <li>
+              PERSEO: riesgo {{ lastPipeline.analysis?.risk_score ?? '—' }}
+              · {{ lastPipeline.analysis?.compliance ? 'OK' : 'Revisar' }}
+            </li>
+            <li v-if="lastPipeline.financial?.invoice_required">
+              RAFAEL: facturación estimada {{ lastPipeline.financial?.estimated_value }}€
+            </li>
+            <li v-else>RAFAEL: sin factura automática</li>
+            <li>THALOS: {{ lastPipeline.thalos?.severity || 'monitorizado' }}</li>
+          </ul>
+        </div>
       </div>
     </div>
     <p v-if="error" class="tool-error">{{ error }}</p>
@@ -145,6 +159,7 @@ import {
 import { isVerifiedReal } from '@/utils/zeus_safe_lock'
 import ThalosExecutionBadge from './ThalosExecutionBadge.vue'
 import ZeusDocumentRenderer from '@/components/documents/ZeusDocumentRenderer.vue'
+import type { ZeusPipelineResult } from '@/api/zeus_pipeline_api'
 
 const loading = reactive({
   qr: false,
@@ -182,6 +197,7 @@ const employeeForm = reactive({
 const qrResult = ref<string | null>(null)
 const contractResult = ref<string | null>(null)
 const lastContractDoc = ref<Record<string, unknown> | null>(null)
+const lastPipeline = ref<ZeusPipelineResult | null>(null)
 
 const refreshQrDefault = () => {
   const code = employees.value[0]?.employee_code || 'EMP-001'
@@ -322,6 +338,7 @@ const runContract = async () => {
   error.value = ''
   contractResult.value = null
   lastContractDoc.value = null
+  lastPipeline.value = null
   if (!contractForm.employee_name.trim() && !contractForm.employee_code) {
     error.value = 'Seleccione o indique un empleado registrado en BD.'
     return
@@ -347,6 +364,7 @@ const runContract = async () => {
       salary: contractForm.salary,
       employee_name: contractForm.employee_name,
     }
+    lastPipeline.value = (out as { pipeline?: ZeusPipelineResult }).pipeline || null
     window.dispatchEvent(new CustomEvent('zeus:workspace-refresh'))
     window.dispatchEvent(new CustomEvent('zeus:teamflow-refresh'))
   } catch (err) {
@@ -464,4 +482,14 @@ const runContract = async () => {
   font-size: 12px;
   color: #047857;
 }
+.pipeline-result {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  font-size: 12px;
+}
+.pipeline-result h6 { margin: 0 0 8px; font-size: 13px; }
+.pipeline-result ul { margin: 0; padding-left: 18px; }
 </style>

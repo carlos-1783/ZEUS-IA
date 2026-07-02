@@ -120,9 +120,10 @@ def dispatch_event_handlers(
     user: Optional[User],
     event_name: str,
     payload: Dict[str, Any],
-) -> List[str]:
-    """Run registered handlers for an event. Returns list of handler ids executed."""
+) -> Dict[str, Any]:
+    """Run registered handlers for an event. Returns handlers run + optional pipeline result."""
     done: List[str] = []
+    pipeline: Optional[Dict[str, Any]] = None
     normalized = "document_signed" if event_name == "contract_signed" else event_name
 
     if normalized == "employee_created":
@@ -138,9 +139,19 @@ def dispatch_event_handlers(
             db, user, normalized, payload
         ):
             done.append("workspace.mark_complete" if normalized != "contract_rrhh_created" else "workspace.create_task")
+        if handle_justicia_compliance(db, normalized, payload):
+            done.append("justicia.compliance_record")
         if normalized in ("document_signed", "contract_signed"):
             if handle_perseo_notification(db, normalized, payload):
                 done.append("perseo.send_notification")
+        if normalized == "contract_rrhh_created":
+            try:
+                from services.zeus_document_pipeline_v1 import run_document_pipeline
+
+                pipeline = run_document_pipeline(db, user, event_type=normalized, payload=payload)
+                done.append("pipeline.perseo_rafael_thalos")
+            except Exception as exc:
+                logger.warning("[EVENT_HANDLER] document pipeline failed: %s", exc)
 
     elif normalized == "invoice_generated":
         if handle_workspace_financial_task(db, user, payload):
@@ -156,4 +167,4 @@ def dispatch_event_handlers(
         if handle_workspace_create_task(db, user, normalized, payload):
             done.append("workspace.create_task")
 
-    return done
+    return {"handlers": done, "pipeline": pipeline}

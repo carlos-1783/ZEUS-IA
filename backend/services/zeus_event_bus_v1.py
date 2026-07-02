@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 EVENT_TARGETS: Dict[str, List[str]] = {
     "employee_created": ["ops", "workspace", "justicia"],
-    "contract_rrhh_created": ["workspace", "justicia"],
+    "contract_rrhh_created": ["workspace", "justicia", "perseo", "rafael", "thalos"],
     "ops_route_created": ["workspace"],
     "document_signed": ["workspace", "perseo"],
     "contract_signed": ["workspace", "perseo"],
@@ -57,9 +57,12 @@ def emit_event(
         }
 
     propagated: List[str] = []
+    pipeline_result: Optional[Dict[str, Any]] = None
     try:
-        handlers = dispatch_event_handlers(db, user, event_name, body)
+        dispatch = dispatch_event_handlers(db, user, event_name, body)
+        handlers = dispatch.get("handlers") or []
         propagated.extend(handlers)
+        pipeline_result = dispatch.get("pipeline")
     except Exception as exc:
         logger.warning("[EVENT_BUS] handler dispatch failed: %s", exc)
 
@@ -79,6 +82,7 @@ def emit_event(
         "event_id": row.public_id,
         "event_name": event_name,
         "propagated_to": propagated,
+        "pipeline": pipeline_result,
         "active": True,
     }
 

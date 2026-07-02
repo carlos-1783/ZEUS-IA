@@ -125,7 +125,7 @@ def create_rrhh_contract_draft(
         company_id=company_id,
     )
 
-    emit_event(
+    event_out = emit_event(
         db,
         user,
         event_name="contract_rrhh_created",
@@ -135,6 +135,8 @@ def create_rrhh_contract_draft(
             "employee_code": str(emp.employee_code),
             "employee_name": emp.full_name,
             "contract_type": contract_type,
+            "role": role_title,
+            "salary": salary,
             "legal_document": legal,
             "owner_agent": "AFRODITA",
         },
@@ -190,4 +192,6 @@ def create_rrhh_contract_draft(
         "message": f"Contrato laboral generado para {emp.full_name}",
         "persisted": True,
         "real_execution": True,
+        "pipeline": event_out.get("pipeline"),
+        "event_id": event_out.get("event_id"),
     }

@@ -193,19 +193,13 @@ def create_customer(db: Session, user: User, customer_in: CustomerCreate) -> Cus
             payload={"customer_id": customer.id},
         )
         try:
-            from services.event_bus import emit_client_created
+            from services.zeus_crm_hooks_v1 import on_client_created
 
-            emit_client_created(
-                user_id=user.id,
-                user_email=getattr(user, "email", None),
-                company_id=log_cid,
-                customer_id=customer.id,
-                customer_name=customer.name,
-                customer_email=customer.email,
-                db=db,
-            )
+            on_client_created(db, user, customer)
+            db.commit()
         except Exception:
-            logger.exception("emit_client_created falló customer_id=%s", customer.id)
+            logger.exception("on_client_created falló customer_id=%s", customer.id)
+            db.rollback()
 
     return customer
 
@@ -341,6 +335,14 @@ def update_customer(
         summary=f"Cliente actualizado: {customer.name}",
         payload={},
     )
+    try:
+        from services.zeus_crm_hooks_v1 import on_client_updated
+
+        on_client_updated(db, user, customer)
+        db.commit()
+    except Exception:
+        logger.exception("on_client_updated falló customer_id=%s", customer.id)
+        db.rollback()
     return customer
 
 

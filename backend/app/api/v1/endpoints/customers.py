@@ -201,6 +201,14 @@ def update_customer(
             summary=f"Cliente actualizado: {customer.name}",
             payload={"customer_id": customer.id},
         )
+        try:
+            from services.zeus_crm_hooks_v1 import on_client_updated
+
+            on_client_updated(db, current_user, customer)
+            db.commit()
+        except Exception:
+            logger.exception("on_client_updated falló customer_id=%s", customer.id)
+            db.rollback()
 
     customer_out = CustomerOut.model_validate(customer)
     return CustomerResponse(

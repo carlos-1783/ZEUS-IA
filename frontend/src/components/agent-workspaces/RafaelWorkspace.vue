@@ -16,6 +16,8 @@
       <span>{{ error }}</span>
     </div>
 
+    <CrossAgentWorkspaceFeed agent="RAFAEL" />
+
     <section class="workspace-body" v-if="!isLoading && deliverables.length">
       <aside class="deliverable-list">
         <h4>Entregables</h4>
@@ -175,6 +177,7 @@ import { API_BASE_URL } from '@/config/index';
 import { useAutomationDeliverables, type DeliverableItem } from '@/composables/useAutomationDeliverables';
 import RafaelToolsPanel from './RafaelToolsPanel.vue';
 import DocumentApprovalPanel from '@/components/DocumentApprovalPanel.vue';
+import CrossAgentWorkspaceFeed from './CrossAgentWorkspaceFeed.vue';
 
 const {
   items: deliverables,

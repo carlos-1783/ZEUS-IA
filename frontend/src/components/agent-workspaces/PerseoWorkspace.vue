@@ -18,6 +18,8 @@
       <span>Hubo un problema al cargar los entregables: {{ error }}</span>
     </div>
 
+    <CrossAgentWorkspaceFeed agent="PERSEO" />
+
     <section class="workspace-body" v-if="!isLoading && deliverables.length">
       <aside class="deliverable-list">
         <h4>Entregables</h4>
@@ -428,6 +430,7 @@ import api from '@/services/api';
 import { resolveWorkspaceMediaUrl } from '@/utils/resolveWorkspaceMediaUrl';
 import PerseoToolsPanel from './PerseoToolsPanel.vue';
 import MarketingIntegrationsPanel from './MarketingIntegrationsPanel.vue';
+import CrossAgentWorkspaceFeed from './CrossAgentWorkspaceFeed.vue';
 
 const {
   items: deliverables,

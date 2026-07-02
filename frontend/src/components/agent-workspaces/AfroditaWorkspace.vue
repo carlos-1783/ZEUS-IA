@@ -37,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch, onUnmounted } from 'vue'
 import {
   executionModeLabel,
   fetchAfroditaStatus,
@@ -131,6 +131,7 @@ const tabs = computed(() => {
 })
 
 onMounted(async () => {
+  window.addEventListener('zeus:afrodita-goto-workspace', onGotoWorkspace)
   try {
     const [afrodita, zeus] = await Promise.all([
       fetchAfroditaStatus(),
@@ -141,6 +142,14 @@ onMounted(async () => {
   } catch {
     /* optional */
   }
+})
+
+const onGotoWorkspace = () => {
+  activeTab.value = 'workspace'
+}
+
+onUnmounted(() => {
+  window.removeEventListener('zeus:afrodita-goto-workspace', onGotoWorkspace)
 })
 </script>
 

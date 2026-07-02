@@ -26,6 +26,8 @@
       <span>Error al cargar reportes de seguridad: {{ error }}</span>
     </div>
 
+    <CrossAgentWorkspaceFeed agent="THALOS" />
+
     <section class="workspace-body" v-if="!isLoading && deliverables.length">
       <aside class="deliverable-list">
         <h4>Reportes</h4>
@@ -193,6 +195,7 @@ import { useAutomationDeliverables } from '@/composables/useAutomationDeliverabl
 import { fetchThalosStatus, type ThalosStatusResponse } from '@/api/thalos_workspace_api';
 import ThalosToolsPanel from './ThalosToolsPanel.vue';
 import ThalosExecutionBadge from './ThalosExecutionBadge.vue';
+import CrossAgentWorkspaceFeed from './CrossAgentWorkspaceFeed.vue';
 
 const globalStatus = ref<ThalosStatusResponse | null>(null);
 

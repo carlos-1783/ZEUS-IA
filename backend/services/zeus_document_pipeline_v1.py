@@ -111,37 +111,76 @@ def run_automation_triggers(
     db: Session,
     user: Optional[User],
     pipeline: Dict[str, Any],
+    payload: Optional[Dict[str, Any]] = None,
 ) -> List[str]:
-    """Post-pipeline actions — TeamFlow handoffs, no console.log stubs."""
+    """Post-pipeline TeamFlow items visible in each agent workspace."""
     if not user:
         return []
     triggered: List[str] = []
     financial = pipeline.get("financial") or {}
     analysis = pipeline.get("analysis") or {}
+    data = payload or pipeline.get("document", {}).get("data") or {}
+    legal = data.get("legal_document") or (pipeline.get("document") or {}).get("legal_document") or {}
+    employee = data.get("employee_name") or ""
+    doc_id = legal.get("document_id")
 
     try:
-        if financial.get("invoice_required"):
-            from services.teamflow_persistence_v1 import create_item
+        from services.teamflow_persistence_v1 import create_item
 
-            legal = (pipeline.get("document") or {}).get("legal_document") or {}
-            create_item(
-                db,
-                user,
-                owner_agent="RAFAEL",
-                source_agent="AFRODITA",
-                target_agent="RAFAEL",
-                title="Facturación estimada — contrato RRHH",
-                item_type="invoice_followup",
-                status="pending",
-                content={
-                    "estimated_value": financial.get("estimated_value"),
-                    "document_id": legal.get("document_id"),
-                    "trigger": "pipeline_automation",
-                },
-            )
-            triggered.append("rafael.invoice_followup")
+        base_content = {
+            "document_id": doc_id,
+            "employee_name": employee,
+            "legal_document": legal,
+            "analysis": analysis,
+            "financial": financial,
+            "trigger": "zeus_document_pipeline",
+        }
+
+        create_item(
+            db,
+            user,
+            owner_agent="PERSEO",
+            source_agent="AFRODITA",
+            target_agent="PERSEO",
+            title=f"Compliance — {employee or 'contrato RRHH'}",
+            item_type="compliance_review",
+            status="pending",
+            content=base_content,
+        )
+        triggered.append("perseo.compliance_review")
+
+        create_item(
+            db,
+            user,
+            owner_agent="RAFAEL",
+            source_agent="AFRODITA",
+            target_agent="RAFAEL",
+            title=f"Revisión fiscal — {employee or 'contrato RRHH'}",
+            item_type="contract_fiscal_review",
+            status="pending",
+            content={
+                **base_content,
+                "invoice_required": bool(financial.get("invoice_required")),
+                "estimated_value": financial.get("estimated_value"),
+            },
+        )
+        triggered.append("rafael.contract_fiscal_review")
+
+        create_item(
+            db,
+            user,
+            owner_agent="THALOS",
+            source_agent="AFRODITA",
+            target_agent="THALOS",
+            title=f"Monitor legal — {employee or 'contrato RRHH'}",
+            item_type="contract_monitor",
+            status="pending",
+            content={**base_content, "thalos": pipeline.get("thalos")},
+        )
+        triggered.append("thalos.contract_monitor")
+
     except Exception as exc:
-        logger.warning("[PIPELINE] rafael trigger failed: %s", exc)
+        logger.warning("[PIPELINE] teamflow items failed: %s", exc)
 
     if float(analysis.get("risk_score") or 0) >= HIGH_RISK_THRESHOLD:
         triggered.append("thalos.high_risk_alert")
@@ -182,7 +221,7 @@ def run_document_pipeline(
         "thalos": thalos,
         "real_execution": True,
     }
-    result["automation_triggered"] = run_automation_triggers(db, user, result)
+    result["automation_triggered"] = run_automation_triggers(db, user, result, payload=payload)
     return result
 
 

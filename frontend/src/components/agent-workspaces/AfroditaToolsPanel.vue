@@ -120,7 +120,8 @@
         <p v-if="contractResult" class="tool-text">{{ contractResult }}</p>
         <ZeusDocumentRenderer v-if="lastContractDoc" :doc="lastContractDoc" class="contract-preview" />
         <p v-if="contractResult" class="workspace-hint">
-          También en pestaña <strong>WORKSPACE</strong> y TeamFlow → JUSTICIA.
+          <template v-if="activeTabHint">Abriendo pestaña <strong>WORKSPACE</strong>…</template>
+          <template v-else>También en pestaña <strong>WORKSPACE</strong> y TeamFlow → JUSTICIA.</template>
         </p>
         <div v-if="lastPipeline" class="pipeline-result">
           <h6>Pipeline ZEUS (PERSEO · RAFAEL · THALOS)</h6>
@@ -136,6 +137,7 @@
             <li>THALOS: {{ lastPipeline.thalos?.severity || 'monitorizado' }}</li>
           </ul>
         </div>
+        <CrossAgentWorkspaceFeed ref="teamflowFeedRef" agent="AFRODITA" />
       </div>
     </div>
     <p v-if="error" class="tool-error">{{ error }}</p>
@@ -159,6 +161,7 @@ import {
 import { isVerifiedReal } from '@/utils/zeus_safe_lock'
 import ThalosExecutionBadge from './ThalosExecutionBadge.vue'
 import ZeusDocumentRenderer from '@/components/documents/ZeusDocumentRenderer.vue'
+import CrossAgentWorkspaceFeed from './CrossAgentWorkspaceFeed.vue'
 import type { ZeusPipelineResult } from '@/api/zeus_pipeline_api'
 
 const loading = reactive({
@@ -198,6 +201,8 @@ const qrResult = ref<string | null>(null)
 const contractResult = ref<string | null>(null)
 const lastContractDoc = ref<Record<string, unknown> | null>(null)
 const lastPipeline = ref<ZeusPipelineResult | null>(null)
+const teamflowFeedRef = ref<InstanceType<typeof CrossAgentWorkspaceFeed> | null>(null)
+const activeTabHint = ref(false)
 
 const refreshQrDefault = () => {
   const code = employees.value[0]?.employee_code || 'EMP-001'
@@ -367,6 +372,11 @@ const runContract = async () => {
     lastPipeline.value = (out as { pipeline?: ZeusPipelineResult }).pipeline || null
     window.dispatchEvent(new CustomEvent('zeus:workspace-refresh'))
     window.dispatchEvent(new CustomEvent('zeus:teamflow-refresh'))
+    window.dispatchEvent(new CustomEvent('zeus:afrodita-goto-workspace'))
+    teamflowFeedRef.value?.reload?.()
+    setTimeout(() => {
+      activeTabHint.value = true
+    }, 300)
   } catch (err) {
     error.value = formatApiError(err)
   } finally {

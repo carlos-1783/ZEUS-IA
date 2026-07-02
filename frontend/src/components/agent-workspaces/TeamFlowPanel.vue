@@ -67,6 +67,23 @@ const docPayload = computed(() => {
       contract_id: c.document_id,
     }
   }
+  if (c.analysis) {
+    return {
+      agent_source: 'PERSEO',
+      type: 'compliance_review',
+      data: c.analysis,
+      content: c.analysis,
+    }
+  }
+  if (c.financial || selected.value?.item_type === 'contract_fiscal_review') {
+    return {
+      agent_source: 'RAFAEL',
+      type: 'invoice',
+      client: c.employee_name || 'Contrato RRHH',
+      total: c.financial?.estimated_value ?? c.estimated_value,
+      data: c.financial || c,
+    }
+  }
   return null
 })
 

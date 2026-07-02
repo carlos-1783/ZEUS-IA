@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 EVENT_TARGETS: Dict[str, List[str]] = {
     "employee_created": ["ops", "workspace", "justicia"],
-    "contract_rrhh_created": ["workspace", "justicia", "perseo", "rafael", "thalos"],
+    "contract_rrhh_created": ["workspace", "justicia", "perseo", "rafael", "thalos", "pipeline"],
     "ops_route_created": ["workspace"],
     "document_signed": ["workspace", "perseo"],
     "contract_signed": ["workspace", "perseo"],

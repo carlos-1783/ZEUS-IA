@@ -1,5 +1,5 @@
 <template>
-  <div class="dashboard-profesional">
+  <div class="dashboard-profesional" :class="{ 'dashboard-executive-root': currentView === 'dashboard' }">
     <!-- Overlay para móvil -->
     <div 
       class="sidebar-overlay" 
@@ -100,8 +100,8 @@
 
     <!-- Main Content -->
     <main class="main-content" :class="{ 'main-content--dashboard': currentView === 'dashboard' }">
-      <!-- Header -->
-      <header class="dashboard-header">
+      <!-- Header (analytics / settings views) -->
+      <header v-if="currentView !== 'dashboard'" class="dashboard-header">
         <div class="header-left">
           <!-- Botón hamburguesa para móvil -->
           <button 
@@ -151,13 +151,53 @@
         </div>
       </header>
 
-      <!-- Agents Grid (Dashboard) — fullscreen 3×2 -->
-      <div v-if="currentView === 'dashboard'" class="zeus-dashboard">
-        <section class="agents-grid">
+      <!-- Executive panel — KPI + ZEUS CORE + agents grid -->
+      <div v-if="currentView === 'dashboard'" class="zeus-dashboard dashboard-executive">
+        <button
+          class="hamburger-btn executive-hamburger"
+          :class="{ active: sidebarOpen }"
+          @click="sidebarOpen = !sidebarOpen"
+          type="button"
+          aria-label="Menú"
+        >
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+
+        <div class="executive-section executive-section--kpi">
+          <KPIBar :items="executiveKpis" />
+        </div>
+
+        <div class="executive-section executive-section--zeus">
+          <div class="zeus-core-highlight">
+            <div class="zeus-core-card">
+              <img
+                :src="zeusCoreAgent.image"
+                :alt="zeusCoreAgent.name"
+                class="zeus-core-avatar"
+              />
+              <div class="zeus-core-info">
+                <h2 class="zeus-core-name">{{ zeusCoreAgent.name }}</h2>
+                <p class="zeus-core-role">{{ zeusCoreAgent.role }}</p>
+                <div class="zeus-core-metrics">
+                  <span class="zeus-core-status" :class="backendHealthLabel === 'OK' ? 'online' : 'degraded'">
+                    ● {{ backendHealthLabel === 'OK' ? t('dashboardPro.systemOnline') : backendHealthDetail }}
+                  </span>
+                  <span class="zeus-core-activity">
+                    {{ zeusCoreAgent.activities_24h || 0 }} {{ t('dashboardPro.agentCard.activities24h') }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <section class="agents-grid executive-agents-grid">
         <div 
-          v-for="agent in agentsData" 
+          v-for="agent in executiveGridAgents" 
           :key="agent.name"
-          class="agent-card"
+          class="agent-card agent-card--executive"
           :class="{ 'has-avatar': agent.hasGLB }"
           @click="selectAgent(agent)"
         >
@@ -339,6 +379,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import AgentActivityPanel from './AgentActivityPanel.vue'
+import KPIBar from './KPIBar.vue'
 import { usePWA } from '@/composables/usePWA'
 import { isModuleVisible } from '@/utils/companyModules'
 
@@ -791,7 +832,14 @@ watch(currentView, (view) => {
   if (view === 'analytics') {
     loadFinancialAnalytics()
   }
+  syncExecutiveBodyClass()
 })
+
+const syncExecutiveBodyClass = () => {
+  const active = currentView.value === 'dashboard'
+  document.body.classList.toggle('dashboard-executive-mode', active)
+  document.documentElement.classList.toggle('dashboard-executive-mode', active)
+}
 
 const DASHBOARD_POLL_MS = 30000
 let dashboardPollTimer = null
@@ -821,6 +869,8 @@ onMounted(async () => {
     router.push('/tpv')
     return
   }
+
+  syncExecutiveBodyClass()
 
   // Debug: Verificar estado de authStore
   console.log('🔍 Estado inicial de authStore:', {
@@ -883,6 +933,8 @@ onUnmounted(() => {
     clearInterval(dashboardPollTimer)
     dashboardPollTimer = null
   }
+  document.body.classList.remove('dashboard-executive-mode')
+  document.documentElement.classList.remove('dashboard-executive-mode')
 })
 
 const agentsData = ref([
@@ -922,6 +974,57 @@ const agentsData = ref([
     image: '/images/avatars/Afrodita-avatar.jpg',
     activities_24h: 0
   }
+])
+
+const zeusCoreAgent = computed(() =>
+  agentsData.value.find((a) => a.name.includes('ZEUS')) || agentsData.value[0]
+)
+
+const executiveGridAgents = computed(() =>
+  agentsData.value.filter((a) => !a.name.includes('ZEUS'))
+)
+
+const tasksRunning24h = computed(() =>
+  agentsData.value.reduce((sum, a) => sum + (Number(a.activities_24h) || 0), 0)
+)
+
+const executiveKpis = computed(() => [
+  {
+    key: 'agents_active',
+    label: 'Agentes',
+    value: agentsData.value.length,
+    icon: '🤖',
+  },
+  {
+    key: 'tasks_running',
+    label: 'Tareas 24h',
+    value: tasksRunning24h.value,
+    icon: '⚡',
+  },
+  {
+    key: 'efficiency',
+    label: 'Eficiencia',
+    value: dashboardMetrics.value.successRate,
+    icon: '📈',
+  },
+  {
+    key: 'alerts',
+    label: 'Alertas',
+    value: backendHealthLabel.value === 'OK' ? '0' : '1',
+    icon: '🔔',
+  },
+  {
+    key: 'automations',
+    label: 'Automatiz.',
+    value: dashboardMetrics.value.totalInteractions,
+    icon: '⚙️',
+  },
+  {
+    key: 'system_health',
+    label: 'Sistema',
+    value: backendHealthLabel.value,
+    icon: '💚',
+  },
 ])
 
 // Cargar actividades reales de cada agente (últimas 24h) — requiere JWT (igual que /metrics/summary)
@@ -1157,12 +1260,8 @@ const chatWith = (agent) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 10px;
-}
-
-.main-content--dashboard .dashboard-header {
-  flex-shrink: 0;
-  margin-bottom: 10px;
+  padding: 12px;
+  gap: 12px;
 }
 
 .zeus-dashboard {
@@ -1171,6 +1270,121 @@ const chatWith = (agent) => {
   width: 100%;
   overflow: hidden;
   box-sizing: border-box;
+}
+
+/* EXECUTIVE PANEL MODE */
+.dashboard-executive {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  padding: 0;
+  position: relative;
+}
+
+.executive-hamburger {
+  display: none;
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 10;
+}
+
+.executive-section {
+  flex-shrink: 0;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.executive-section--kpi {
+  flex: 0 0 12%;
+  max-height: 12%;
+  min-height: 52px;
+}
+
+.executive-section--zeus {
+  flex: 0 0 23%;
+  max-height: 23%;
+  min-height: 72px;
+}
+
+.zeus-core-highlight {
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.zeus-core-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 720px;
+  height: 100%;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(139, 92, 246, 0.08) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  border-radius: 14px;
+  box-shadow: 0 4px 24px rgba(59, 130, 246, 0.12);
+  box-sizing: border-box;
+}
+
+.zeus-core-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(59, 130, 246, 0.6);
+  flex-shrink: 0;
+}
+
+.zeus-core-info {
+  min-width: 0;
+  text-align: left;
+}
+
+.zeus-core-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.zeus-core-role {
+  margin: 2px 0 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.zeus-core-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 11px;
+}
+
+.zeus-core-status {
+  font-weight: 600;
+}
+
+.zeus-core-status.online {
+  color: #10b981;
+}
+
+.zeus-core-status.degraded {
+  color: #f59e0b;
+}
+
+.zeus-core-activity {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.executive-agents-grid {
+  flex: 1;
+  min-height: 0;
+  height: auto;
 }
 
 .dashboard-header {
@@ -1333,22 +1547,40 @@ const chatWith = (agent) => {
 }
 
   /* Agents grid más compacto en móvil */
+  .executive-hamburger {
+    display: flex;
+  }
+
+  .executive-section--kpi {
+    flex: 0 0 auto;
+    max-height: none;
+    min-height: 88px;
+    padding-top: 36px;
+  }
+
+  .executive-section--zeus {
+    flex: 0 0 auto;
+    max-height: none;
+    min-height: 100px;
+  }
+
   .main-content--dashboard {
     overflow-y: auto;
   }
 
-  .zeus-dashboard {
+  .dashboard-executive {
     min-height: auto;
   }
 
-  .agents-grid {
+  .executive-agents-grid {
     grid-template-columns: 1fr;
     grid-template-rows: auto;
     height: auto;
+    flex: none;
   }
 
-  .agent-card {
-    min-height: 280px;
+  .agent-card--executive {
+    min-height: 220px;
   }
 
   .agent-overlay {
@@ -1401,6 +1633,31 @@ const chatWith = (agent) => {
   transform: translateY(-4px);
   border-color: rgba(59, 130, 246, 0.5);
   box-shadow: 0 8px 32px rgba(59, 130, 246, 0.2);
+}
+
+.agent-card--executive .avatar-container {
+  width: 64px;
+  height: 64px;
+}
+
+.agent-card--executive .agent-name {
+  font-size: 14px;
+}
+
+.agent-card--executive .agent-role {
+  font-size: 11px;
+}
+
+.agent-card--executive .stat-label,
+.agent-card--executive .stat-value {
+  font-size: 10px;
+}
+
+.agent-card--executive .btn-interact {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 12px;
+  font-size: 11px;
 }
 
 .avatar-container {

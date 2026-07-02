@@ -413,3 +413,15 @@ body {
 @import './theme.css';
 @import './index.css';
 @import './css_system_enforcer_v1.css';
+
+// Executive dashboard — no scroll on dashboard route only
+body.dashboard-executive-mode,
+html.dashboard-executive-mode {
+  overflow: hidden;
+  height: 100%;
+}
+
+.dashboard-executive-root {
+  height: 100vh;
+  overflow: hidden;
+}

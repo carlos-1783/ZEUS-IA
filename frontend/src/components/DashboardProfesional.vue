@@ -99,7 +99,7 @@
     </aside>
 
     <!-- Main Content -->
-    <main class="main-content">
+    <main class="main-content" :class="{ 'main-content--dashboard': currentView === 'dashboard' }">
       <!-- Header -->
       <header class="dashboard-header">
         <div class="header-left">
@@ -151,8 +151,9 @@
         </div>
       </header>
 
-      <!-- Agents Grid (Dashboard) -->
-      <section v-if="currentView === 'dashboard'" class="agents-grid">
+      <!-- Agents Grid (Dashboard) — fullscreen 3×2 -->
+      <div v-if="currentView === 'dashboard'" class="zeus-dashboard">
+        <section class="agents-grid">
         <div 
           v-for="agent in agentsData" 
           :key="agent.name"
@@ -191,7 +192,8 @@
             </button>
           </div>
         </div>
-      </section>
+        </section>
+      </div>
 
       <!-- Analytics View -->
       <section v-if="currentView === 'analytics'" class="analytics-view">
@@ -958,12 +960,14 @@ const chatWith = (agent) => {
 <style scoped>
 .dashboard-profesional {
   display: flex;
+  height: 100vh;
   min-height: 100vh;
-  height: auto;
+  max-height: 100vh;
   background: #0a0e1a;
   color: #fff;
   font-family: 'Inter', -apple-system, sans-serif;
-  overflow-x: hidden;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 /* SIDEBAR OVERLAY (solo móvil) */
@@ -1143,8 +1147,30 @@ const chatWith = (agent) => {
 /* MAIN CONTENT */
 .main-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 32px 40px;
+  box-sizing: border-box;
+}
+
+.main-content--dashboard {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 10px;
+}
+
+.main-content--dashboard .dashboard-header {
+  flex-shrink: 0;
+  margin-bottom: 10px;
+}
+
+.zeus-dashboard {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .dashboard-header {
@@ -1307,8 +1333,22 @@ const chatWith = (agent) => {
 }
 
   /* Agents grid más compacto en móvil */
+  .main-content--dashboard {
+    overflow-y: auto;
+  }
+
+  .zeus-dashboard {
+    min-height: auto;
+  }
+
   .agents-grid {
     grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    height: auto;
+  }
+
+  .agent-card {
+    min-height: 280px;
   }
 
   .agent-overlay {
@@ -1329,20 +1369,32 @@ const chatWith = (agent) => {
   }
 }
 
-/* AGENTS GRID */
+/* AGENTS GRID — fullscreen 3×2 */
 .agents-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 10px;
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .agent-card {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  padding: 24px;
+  border-radius: 12px;
+  padding: 10px;
   cursor: pointer;
   transition: all 0.3s;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .agent-card:hover {
@@ -1352,9 +1404,10 @@ const chatWith = (agent) => {
 }
 
 .avatar-container {
-  width: 250px;
-  height: 250px;
-  margin: 0 auto 20px;
+  width: 80px;
+  height: 80px;
+  margin: auto;
+  flex-shrink: 0;
   border-radius: 50%;
   overflow: hidden;
   background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, transparent 70%);
@@ -1383,26 +1436,32 @@ const chatWith = (agent) => {
 
 .agent-info {
   text-align: center;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .agent-name {
-  font-size: 22px;
+  font-size: 16px;
   font-weight: 700;
-  margin: 0 0 8px;
+  margin: 0;
   color: #fff;
 }
 
 .agent-role {
   color: rgba(255, 255, 255, 0.6);
-  font-size: 14px;
-  margin: 0 0 20px;
+  font-size: 12px;
+  margin: 0;
 }
 
 .agent-stats {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   justify-content: center;
-  margin-bottom: 20px;
+  margin-bottom: 6px;
 }
 
 .stat {
@@ -1427,7 +1486,7 @@ const chatWith = (agent) => {
 }
 
 .btn-interact {
-  padding: 10px 24px;
+  padding: 8px 16px;
   background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
   border: none;
   border-radius: 8px;
@@ -1435,10 +1494,13 @@ const chatWith = (agent) => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
-  font-size: 14px;
+  font-size: 12px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 6px;
+  align-self: center;
+  flex-shrink: 0;
 }
 
 .btn-interact:hover {

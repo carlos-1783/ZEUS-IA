@@ -210,6 +210,10 @@ async def get_dashboard_summary(
         from services.analytics_service import build_analytics_summary
 
         analytics = build_analytics_summary(db, current_user, days=days)
+        from services.zeus_analytics_real_v1 import backfill_events_from_domain_bus, build_executive_analytics
+
+        backfill_events_from_domain_bus(db)
+        executive = build_executive_analytics(db, current_user)
         
         return {
             "success": True,
@@ -240,6 +244,7 @@ async def get_dashboard_summary(
                 "tpv_sales_count": analytics["financial"]["tpv_sales_count"],
             },
             "analytics": analytics,
+            "executive": executive,
             "available_modules": available_modules,
             "timezone": "UTC",
             "date_range": {

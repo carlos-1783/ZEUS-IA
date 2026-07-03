@@ -569,6 +569,29 @@ const dashboardMetrics = ref({
   successTrend: '0%'
 })
 
+const executiveAnalytics = ref({
+  agents: 6,
+  tasks24h: 0,
+  alerts: 0,
+  automations: 0,
+  efficiency: 0,
+  system: 'unknown',
+})
+
+const applyExecutiveAnalytics = (data) => {
+  if (!data) return
+  const ex = data.executive || null
+  if (!ex) return
+  executiveAnalytics.value = {
+    agents: ex.agents ?? 6,
+    tasks24h: ex.tasks24h ?? 0,
+    alerts: ex.alerts ?? 0,
+    automations: ex.automations ?? 0,
+    efficiency: ex.efficiency ?? 0,
+    system: ex.system ?? 'unknown',
+  }
+}
+
 const financialMetrics = ref({
   totalRevenue: 0,
   salesCount: 0,
@@ -717,8 +740,11 @@ const loadDashboardMetrics = async () => {
         })
       }
 
+      applyExecutiveAnalytics(data)
+
       console.log('✅ Dashboard unificado cargado:', {
         metrics: dashboardMetrics.value,
+        executive: executiveAnalytics.value,
         modules: availableModules.value,
         isSuperuser: data.user?.is_superuser
       })
@@ -759,7 +785,10 @@ const loadFinancialAnalytics = async () => {
     await authStore.ensureAccessTokenFresh(300)
     const api = (await import('@/services/api')).default
     const data = await api.get('/api/v1/analytics/summary?days=30').catch(() => null)
-    if (data) applyAnalyticsPayload(data)
+    if (data) {
+      applyAnalyticsPayload(data)
+      applyExecutiveAnalytics(data)
+    }
   } catch (error) {
     console.error('❌ Error cargando analytics financieros:', error)
   }
@@ -988,44 +1017,48 @@ const tasksRunning24h = computed(() =>
   agentsData.value.reduce((sum, a) => sum + (Number(a.activities_24h) || 0), 0)
 )
 
-const executiveKpis = computed(() => [
-  {
-    key: 'agents_active',
-    label: 'Agentes',
-    value: agentsData.value.length,
-    icon: '🤖',
-  },
-  {
-    key: 'tasks_running',
-    label: 'Tareas 24h',
-    value: tasksRunning24h.value,
-    icon: '⚡',
-  },
-  {
-    key: 'efficiency',
-    label: 'Eficiencia',
-    value: dashboardMetrics.value.successRate,
-    icon: '📈',
-  },
-  {
-    key: 'alerts',
-    label: 'Alertas',
-    value: backendHealthLabel.value === 'OK' ? '0' : '1',
-    icon: '🔔',
-  },
-  {
-    key: 'automations',
-    label: 'Automatiz.',
-    value: dashboardMetrics.value.totalInteractions,
-    icon: '⚙️',
-  },
-  {
-    key: 'system_health',
-    label: 'Sistema',
-    value: backendHealthLabel.value,
-    icon: '💚',
-  },
-])
+const executiveKpis = computed(() => {
+  const ex = executiveAnalytics.value
+  const systemOk = ex.system === 'healthy' && backendHealthLabel.value === 'OK'
+  return [
+    {
+      key: 'agents_active',
+      label: 'Agentes',
+      value: ex.agents || agentsData.value.length,
+      icon: '🤖',
+    },
+    {
+      key: 'tasks_running',
+      label: 'Tareas 24h',
+      value: ex.tasks24h ?? tasksRunning24h.value,
+      icon: '⚡',
+    },
+    {
+      key: 'efficiency',
+      label: 'Eficiencia',
+      value: `${ex.efficiency ?? 0}%`,
+      icon: '📈',
+    },
+    {
+      key: 'alerts',
+      label: 'Alertas',
+      value: ex.alerts ?? 0,
+      icon: '🔔',
+    },
+    {
+      key: 'automations',
+      label: 'Automatiz.',
+      value: ex.automations ?? 0,
+      icon: '⚙️',
+    },
+    {
+      key: 'system_health',
+      label: 'Sistema',
+      value: systemOk ? 'OK' : '!',
+      icon: '💚',
+    },
+  ]
+})
 
 // Cargar actividades reales de cada agente (últimas 24h) — requiere JWT (igual que /metrics/summary)
 const loadAgentsActivities = async () => {

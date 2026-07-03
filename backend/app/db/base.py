@@ -53,6 +53,7 @@ def ensure_schema_patches():
         _migrate_time_cost_engine_v1()
         _migrate_cashflow_ledger()
         _migrate_zeus_domain_events()
+        _migrate_zeus_analytics_tables()
         print("[SCHEMA] Parches de esquema completados")
     except Exception as e:
         logger.warning("ensure_schema_patches: %s", e)
@@ -646,6 +647,23 @@ def _migrate_zeus_domain_events():
         print("[MIGRATION] [OK] zeus_domain_events creada")
     except Exception as e:
         print(f"[MIGRATION] [WARN] zeus_domain_events migrate: {e}")
+
+
+def _migrate_zeus_analytics_tables():
+    """Tablas zeus_events, zeus_alerts, zeus_automations (executive analytics)."""
+    from sqlalchemy import inspect
+
+    try:
+        from app.models.zeus_analytics import ZeusAlert, ZeusAutomation, ZeusEvent
+
+        inspector = inspect(engine)
+        names = set(inspector.get_table_names())
+        for model in (ZeusEvent, ZeusAlert, ZeusAutomation):
+            if model.__tablename__ not in names:
+                model.__table__.create(bind=engine, checkfirst=True)
+                print(f"[MIGRATION] [OK] {model.__tablename__} creada")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] zeus_analytics tables migrate: {e}")
 
 
 def _migrate_firewall_columns_legacy():

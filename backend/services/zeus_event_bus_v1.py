@@ -81,6 +81,20 @@ def emit_event(
         pass
 
     logger.info("[EVENT_BUS] %s from %s → %s (async=%s)", event_name, source_module, propagated, async_mode)
+
+    try:
+        from services.zeus_analytics_real_v1 import record_zeus_event
+
+        record_zeus_event(
+            db,
+            event_type=event_name,
+            agent=source_module,
+            status="success",
+            user_id=user.id if user else None,
+        )
+    except Exception as exc:
+        logger.warning("[EVENT_BUS] analytics event record failed: %s", exc)
+
     return {
         "event_id": row.public_id,
         "event_name": event_name,

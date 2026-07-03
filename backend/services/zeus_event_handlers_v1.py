@@ -174,6 +174,24 @@ def handle_payment_risk_agents(
                 details_json=json.dumps(payload, ensure_ascii=False, default=str),
             )
         )
+        try:
+            from services.zeus_analytics_real_v1 import record_zeus_alert, record_zeus_event
+
+            record_zeus_alert(
+                db,
+                level=payload.get("risk_level") or "medium",
+                message=f"Riesgo pago — {payload.get('name') or 'cliente'}",
+                user_id=user.id,
+            )
+            record_zeus_event(
+                db,
+                event_type="alert_triggered",
+                agent="THALOS",
+                status="success",
+                user_id=user.id,
+            )
+        except Exception:
+            pass
         db.flush()
         return True
     except Exception as exc:

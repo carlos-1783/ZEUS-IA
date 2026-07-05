@@ -263,6 +263,40 @@ const router = createRouter({
       },
     },
     {
+      path: '/system-health',
+      redirect: { name: 'SystemStatus' },
+    },
+    {
+      path: '/agents',
+      name: 'KpiAgents',
+      component: () => import('../views/kpi/KpiAgentsView.vue'),
+      meta: { title: 'Agentes activos - ZEUS-IA', requiresAuth: true },
+    },
+    {
+      path: '/analytics/tasks',
+      name: 'KpiTasks',
+      component: () => import('../views/kpi/KpiTasksView.vue'),
+      meta: { title: 'Tareas 24h - ZEUS-IA', requiresAuth: true },
+    },
+    {
+      path: '/analytics/efficiency',
+      name: 'KpiEfficiency',
+      component: () => import('../views/kpi/KpiEfficiencyView.vue'),
+      meta: { title: 'Eficiencia - ZEUS-IA', requiresAuth: true },
+    },
+    {
+      path: '/alerts',
+      name: 'KpiAlerts',
+      component: () => import('../views/kpi/KpiAlertsView.vue'),
+      meta: { title: 'Alertas - ZEUS-IA', requiresAuth: true },
+    },
+    {
+      path: '/automations',
+      name: 'KpiAutomations',
+      component: () => import('../views/kpi/KpiAutomationsView.vue'),
+      meta: { title: 'Automatizaciones - ZEUS-IA', requiresAuth: true },
+    },
+    {
       path: '/scan',
       name: 'ScanHub',
       component: ScanHub,

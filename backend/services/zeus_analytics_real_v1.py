@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -196,6 +196,112 @@ def build_executive_analytics(db: Session, user: Optional[User]) -> Dict[str, An
         "real_data": True,
         "success_events_24h": success24h,
     }
+
+
+def list_recent_events(
+    db: Session,
+    user: Optional[User],
+    *,
+    hours: int = 24,
+    limit: int = 100,
+) -> List[Dict[str, Any]]:
+    since = _utcnow() - timedelta(hours=hours)
+    try:
+        q = _user_scope_event_q(db, user).filter(ZeusEvent.created_at >= since)
+        rows = q.order_by(ZeusEvent.created_at.desc()).limit(limit).all()
+        if rows:
+            return [
+                {
+                    "id": r.id,
+                    "type": r.type,
+                    "agent": r.agent,
+                    "status": r.status,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                }
+                for r in rows
+            ]
+    except Exception as exc:
+        logger.warning("[ANALYTICS] list_recent_events: %s", exc)
+
+    try:
+        dq = db.query(ZeusDomainEvent).filter(ZeusDomainEvent.created_at >= since)
+        if user and not getattr(user, "is_superuser", False):
+            dq = dq.filter(ZeusDomainEvent.user_id == user.id)
+        rows = dq.order_by(ZeusDomainEvent.created_at.desc()).limit(limit).all()
+        return [
+            {
+                "id": r.public_id,
+                "type": r.event_name,
+                "agent": r.source_module,
+                "status": "success",
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+    except Exception:
+        return []
+
+
+def list_unresolved_alerts(
+    db: Session,
+    user: Optional[User],
+    *,
+    limit: int = 50,
+) -> List[Dict[str, Any]]:
+    try:
+        q = db.query(ZeusAlert).filter(ZeusAlert.resolved.is_(False))
+        if user and not getattr(user, "is_superuser", False):
+            q = q.filter(ZeusAlert.user_id == user.id)
+        rows = q.order_by(ZeusAlert.created_at.desc()).limit(limit).all()
+        if rows:
+            return [
+                {
+                    "id": a.id,
+                    "level": a.level,
+                    "message": a.message,
+                    "created_at": a.created_at.isoformat() if a.created_at else None,
+                }
+                for a in rows
+            ]
+    except Exception as exc:
+        logger.warning("[ANALYTICS] list_unresolved_alerts: %s", exc)
+
+    try:
+        since = _utcnow() - timedelta(days=7)
+        cq = db.query(ComplianceEvent).filter(
+            ComplianceEvent.severity.in_(("high", "medium")),
+            ComplianceEvent.created_at >= since,
+        )
+        rows = cq.order_by(ComplianceEvent.created_at.desc()).limit(limit).all()
+        return [
+            {
+                "id": c.public_id,
+                "level": c.severity,
+                "message": c.event_type,
+                "created_at": c.created_at.isoformat() if c.created_at else None,
+            }
+            for c in rows
+        ]
+    except Exception:
+        return []
+
+
+def list_automation_rows(db: Session, *, limit: int = 50) -> List[Dict[str, Any]]:
+    try:
+        ensure_default_automations(db)
+        rows = db.query(ZeusAutomation).order_by(ZeusAutomation.name.asc()).limit(limit).all()
+        return [
+            {
+                "id": r.id,
+                "name": r.name,
+                "status": r.status,
+                "last_run": r.last_run.isoformat() if r.last_run else None,
+            }
+            for r in rows
+        ]
+    except Exception as exc:
+        logger.warning("[ANALYTICS] list_automation_rows: %s", exc)
+        return [{"name": n, "status": "active", "last_run": None} for n in DEFAULT_AUTOMATIONS]
 
 
 def backfill_events_from_domain_bus(db: Session, *, limit: int = 500) -> int:

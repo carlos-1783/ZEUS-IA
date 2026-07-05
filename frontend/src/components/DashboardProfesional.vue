@@ -993,36 +993,42 @@ const executiveKpis = computed(() => {
       label: 'Agentes',
       value: ex.agents || agentsData.value.length,
       icon: '🤖',
+      route: '/agents',
     },
     {
       key: 'tasks_running',
       label: 'Tareas 24h',
       value: ex.tasks24h ?? tasksRunning24h.value,
       icon: '⚡',
+      route: '/analytics/tasks',
     },
     {
       key: 'efficiency',
       label: 'Eficiencia',
       value: `${ex.efficiency ?? 0}%`,
       icon: '📈',
+      route: '/analytics/efficiency',
     },
     {
       key: 'alerts',
       label: 'Alertas',
       value: ex.alerts ?? 0,
       icon: '🔔',
+      route: '/alerts',
     },
     {
       key: 'automations',
       label: 'Automatiz.',
       value: ex.automations ?? 0,
       icon: '⚙️',
+      route: '/automations',
     },
     {
       key: 'system_health',
       label: 'Sistema',
       value: systemOk ? 'OK' : '!',
       icon: '💚',
+      route: '/system-health',
     },
   ]
 })

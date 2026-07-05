@@ -1,25 +1,41 @@
 <template>
   <section class="kpi-bar" aria-label="Executive KPIs">
-    <div
+    <button
       v-for="item in items"
       :key="item.key"
+      type="button"
       class="kpi-item kpi-card"
-      :class="{ 'kpi-item--alert': item.key === 'alerts' && item.value !== '0' }"
+      :class="{
+        'kpi-item--alert': item.key === 'alerts' && item.value !== '0' && item.value !== 0,
+        'kpi-item--clickable': !!item.route,
+      }"
+      :title="item.route ? `Ver ${item.label}` : item.label"
+      @click="onKpiClick(item)"
     >
       <span class="kpi-icon" aria-hidden="true">{{ item.icon }}</span>
       <span class="kpi-value">{{ item.value }}</span>
       <span class="kpi-label">{{ item.label }}</span>
-    </div>
+    </button>
   </section>
 </template>
 
 <script setup>
+import { useRouter } from 'vue-router'
+
 defineProps({
   items: {
     type: Array,
     required: true,
   },
 })
+
+const router = useRouter()
+
+const onKpiClick = (item) => {
+  if (item?.route) {
+    router.push(item.route)
+  }
+}
 </script>
 
 <style scoped>
@@ -45,6 +61,24 @@ defineProps({
   padding: 6px 4px;
   min-width: 0;
   overflow: hidden;
+  font: inherit;
+  color: inherit;
+  text-align: center;
+}
+
+.kpi-item--clickable {
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.kpi-item--clickable:hover {
+  transform: translateY(-2px);
+  border-color: rgba(59, 130, 246, 0.45);
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.15);
+}
+
+.kpi-item--clickable:active {
+  transform: translateY(0);
 }
 
 .kpi-item--alert {

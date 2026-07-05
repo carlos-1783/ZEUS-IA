@@ -10,7 +10,13 @@ from app.core.auth import get_current_active_user
 from app.db.session import get_db
 from app.models.user import User
 from services.analytics_service import build_analytics_summary
-from services.zeus_analytics_real_v1 import backfill_events_from_domain_bus, build_executive_analytics
+from services.zeus_analytics_real_v1 import (
+    backfill_events_from_domain_bus,
+    build_executive_analytics,
+    list_automation_rows,
+    list_recent_events,
+    list_unresolved_alerts,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -73,3 +79,31 @@ async def analytics_summary(
     except Exception as exc:
         logger.warning("analytics_summary failsafe: %s", exc, exc_info=True)
         return _analytics_safe_fallback(days=days, error=str(exc))
+
+
+@router.get("/alerts")
+async def analytics_alerts(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    items = list_unresolved_alerts(db, current_user)
+    return {"success": True, "alerts": items, "total": len(items)}
+
+
+@router.get("/automations")
+async def analytics_automations(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    items = list_automation_rows(db)
+    return {"success": True, "automations": items, "total": len(items)}
+
+
+@router.get("/events")
+async def analytics_events(
+    hours: int = Query(24, ge=1, le=168),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    items = list_recent_events(db, current_user, hours=hours)
+    return {"success": True, "events": items, "total": len(items)}

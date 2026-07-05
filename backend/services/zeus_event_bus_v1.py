@@ -19,6 +19,7 @@ EVENT_TARGETS: Dict[str, List[str]] = {
     "contract_rrhh_created": ["workspace", "justicia", "perseo", "rafael", "thalos", "pipeline"],
     "client_created": ["perseo", "workspace"],
     "client_updated": ["thalos", "workspace"],
+    "payment_due": ["rafael", "crm_payment_risk"],
     "payment_risk": ["rafael", "justicia", "thalos"],
     "ops_route_created": ["workspace"],
     "document_signed": ["workspace", "perseo"],

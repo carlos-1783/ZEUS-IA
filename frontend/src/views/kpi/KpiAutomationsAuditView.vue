@@ -16,8 +16,19 @@
       >
         {{ phaseBRunning ? 'Ejecutando…' : '🚀 Test flujo RRHH' }}
       </button>
+      <button
+        type="button"
+        class="phase-c-btn"
+        :disabled="phaseCRunning"
+        @click="runPhaseCTest"
+      >
+        {{ phaseCRunning ? 'Evaluando…' : '💰 Test Payment Risk' }}
+      </button>
       <p v-if="phaseBResult" class="phase-b-result" :class="{ ok: phaseBResult.triggered, warn: !phaseBResult.triggered }">
         {{ phaseBMessage }}
+      </p>
+      <p v-if="phaseCResult" class="phase-c-result" :class="{ ok: phaseCResult.triggered, warn: !phaseCResult.triggered }">
+        {{ phaseCMessage }}
       </p>
     </div>
 
@@ -72,6 +83,35 @@ const error = ref('')
 const data = ref(null)
 const phaseBRunning = ref(false)
 const phaseBResult = ref(null)
+const phaseCRunning = ref(false)
+const phaseCResult = ref(null)
+
+const phaseCMessage = computed(() => {
+  const r = phaseCResult.value
+  if (!r) return ''
+  if (r.triggered) {
+    const risk = r.risk?.risk || r.event?.amount
+    return `Payment risk: ${risk || 'ok'}`
+  }
+  return r.reason || r.hint || 'No disparado — revisa flags Phase C'
+})
+
+const runPhaseCTest = async () => {
+  phaseCRunning.value = true
+  phaseCResult.value = null
+  try {
+    const api = (await import('@/services/api')).default
+    phaseCResult.value = await api.post('/api/v1/test/payment-risk', {})
+    if (phaseCResult.value?.triggered) {
+      const audit = await api.get('/api/v1/automations/audit?limit=100')
+      if (audit?.success !== false) data.value = audit
+    }
+  } catch (e) {
+    phaseCResult.value = { triggered: false, reason: e?.message || 'Error en test' }
+  } finally {
+    phaseCRunning.value = false
+  }
+}
 
 const phaseBMessage = computed(() => {
   const r = phaseBResult.value
@@ -138,6 +178,10 @@ onMounted(async () => {
 
 .phase-b-actions {
   margin-bottom: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
 }
 
 .phase-b-btn {
@@ -150,21 +194,36 @@ onMounted(async () => {
   cursor: pointer;
 }
 
-.phase-b-btn:disabled {
+.phase-c-btn {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.15);
+  color: #fcd34d;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.phase-b-btn:disabled,
+.phase-c-btn:disabled {
   opacity: 0.6;
   cursor: wait;
 }
 
-.phase-b-result {
-  margin: 10px 0 0;
+.phase-b-result,
+.phase-c-result {
+  flex-basis: 100%;
+  margin: 0;
   font-size: 13px;
 }
 
-.phase-b-result.ok {
+.phase-b-result.ok,
+.phase-c-result.ok {
   color: #10b981;
 }
 
-.phase-b-result.warn {
+.phase-b-result.warn,
+.phase-c-result.warn {
   color: #f59e0b;
 }
 

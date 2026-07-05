@@ -265,6 +265,17 @@ def dispatch_event_handlers(
         if handle_workspace_create_task(db, user, normalized, payload):
             done.append("workspace.create_task")
 
+    elif normalized == "payment_due":
+        try:
+            from services.zeus_crm_payment_risk_v1 import handle_crm_payment_risk
+
+            pipeline = handle_crm_payment_risk(db, user, payload)
+            done.append("crm_payment_risk.evaluate")
+            if pipeline.get("payment_risk_emitted"):
+                done.append("rafael.payment_risk_propagate")
+        except Exception as exc:
+            logger.warning("[EVENT_HANDLER] payment_due crm risk failed: %s", exc)
+
     elif normalized == "payment_risk":
         if handle_payment_risk_agents(db, user, payload):
             done.append("rafael.notify_client")

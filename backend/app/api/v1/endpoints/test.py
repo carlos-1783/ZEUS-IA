@@ -7,6 +7,7 @@ from app.core.auth import get_current_active_user
 from app.db.session import get_db
 from app.models.user import User
 from services.zeus_phase_b_test_v1 import check_phase_b_env, run_test_contract_flow
+from services.zeus_phase_c_test_v1 import check_phase_c_env, run_test_payment_risk_flow
 
 router = APIRouter()
 
@@ -45,4 +46,25 @@ async def test_contract_flow(
     Synthetic payload only — does not require employee in company_employees.
     """
     result = run_test_contract_flow(db, current_user)
+    return result
+
+
+@router.get("/phase-c-env")
+async def phase_c_env_status(
+    current_user: User = Depends(get_current_active_user),
+):
+    """Read-only Phase C flag check (no side effects)."""
+    return {"success": True, **check_phase_c_env()}
+
+
+@router.post("/payment-risk")
+async def test_payment_risk_flow(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Safe Phase C test: emit payment_due → CRM risk scoring → RAFAEL agents.
+    Synthetic demo payload only.
+    """
+    result = run_test_payment_risk_flow(db, current_user)
     return result

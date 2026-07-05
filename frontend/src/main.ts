@@ -1,5 +1,8 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+import { bootstrapPWAInstallCapture } from '@/utils/pwaInstallBootstrap'
+
+bootstrapPWAInstallCapture()
 
 // Importar el router
 import router from './router/index.js'

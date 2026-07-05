@@ -119,40 +119,22 @@
           </div>
         </div>
         <div class="header-right">
-          <!-- Botón Instalar PWA -->
-          <button 
-            v-if="!isInstalled"
-            @click="handleInstallPWA"
-            class="pwa-install-btn"
-            :title="t('dashboardPro.pwa.installTitle')"
-          >
-            📲 {{ t('dashboardPro.pwa.install') }}
-          </button>
-          <a
-            href="/clear-pwa-cache.html"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="pwa-clear-cache-link"
-            :title="t('dashboardPro.pwa.clearCacheTitle')"
-          >
-            {{ t('dashboardPro.pwa.clearCache') }}
-          </a>
-          <!-- Diagnóstico PWA solo en desarrollo -->
-          <div
-            v-if="!isProd"
-            class="pwa-debug-info"
-            :title="`PWA: installable=${isInstallable}, installed=${isInstalled}`"
-          >
-            🔧 PWA: {{ isInstalled ? t('dashboardPro.pwa.stateInstalled') : isInstallable ? t('dashboardPro.pwa.stateInstallable') : t('dashboardPro.pwa.stateUnavailable') }}
-          </div>
-          <div class="status-badge" :class="backendHealthLabel === 'OK' ? 'online' : 'degraded'">
-            ● {{ backendHealthLabel === 'OK' ? t('dashboardPro.systemOnline') : backendHealthDetail }}
-          </div>
+          <PWAControls
+            :system-online="backendHealthLabel === 'OK'"
+            :system-detail="backendHealthDetail"
+          />
         </div>
       </header>
 
       <!-- Executive panel — KPI + ZEUS CORE + agents grid -->
       <div v-if="currentView === 'dashboard'" class="zeus-dashboard dashboard-executive">
+        <div class="executive-pwa-bar">
+          <PWAControls
+            compact
+            :system-online="backendHealthLabel === 'OK'"
+            :system-detail="backendHealthDetail"
+          />
+        </div>
         <button
           class="hamburger-btn executive-hamburger"
           :class="{ active: sidebarOpen }"
@@ -380,17 +362,13 @@ import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import AgentActivityPanel from './AgentActivityPanel.vue'
 import KPIBar from './KPIBar.vue'
-import { usePWA } from '@/composables/usePWA'
+import PWAControls from './PWAControls.vue'
 import { isModuleVisible } from '@/utils/companyModules'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 const { t } = useI18n()
-
-// PWA Install
-const { isInstallable, isInstalled, promptInstall } = usePWA()
-const isProd = import.meta.env.PROD
 
 const props = defineProps({
   agents: Array
@@ -445,17 +423,6 @@ const goToPayroll = () => {
 
 const goToUserSettings = () => {
   router.push('/settings')
-}
-
-// Instalar PWA
-const handleInstallPWA = async () => {
-  const installed = await promptInstall()
-  if (installed) {
-    console.log('✅ PWA instalación iniciada')
-    return
-  }
-  // Fallback cuando beforeinstallprompt no está disponible.
-  alert('No se pudo mostrar el instalador automático.\n\nInstálala manualmente desde el menú del navegador:\n• Chrome/Edge: Menú (⋮) → Instalar aplicación\n• También puedes abrir /clear-pwa-cache.html y recargar.')
 }
 
 // Settings handlers
@@ -1323,6 +1290,14 @@ const chatWith = (agent) => {
   z-index: 10;
 }
 
+.executive-pwa-bar {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 11;
+  max-width: calc(100% - 48px);
+}
+
 .executive-section {
   flex-shrink: 0;
   min-height: 0;
@@ -1580,6 +1555,13 @@ const chatWith = (agent) => {
 }
 
   /* Agents grid más compacto en móvil */
+  .executive-pwa-bar {
+    top: 40px;
+    right: 4px;
+    left: 4px;
+    max-width: none;
+  }
+
   .executive-hamburger {
     display: flex;
   }

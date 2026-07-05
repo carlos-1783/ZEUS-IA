@@ -297,6 +297,12 @@ const router = createRouter({
       meta: { title: 'Automatizaciones - ZEUS-IA', requiresAuth: true },
     },
     {
+      path: '/automations/audit',
+      name: 'KpiAutomationsAudit',
+      component: () => import('../views/kpi/KpiAutomationsAuditView.vue'),
+      meta: { title: 'Auditoría automatizaciones - ZEUS-IA', requiresAuth: true },
+    },
+    {
       path: '/scan',
       name: 'ScanHub',
       component: ScanHub,

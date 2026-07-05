@@ -16,6 +16,7 @@ from app.api.v1.endpoints import (
     agents,
     metrics,
     analytics,
+    automations,
     chat,
     integrations,
     google,
@@ -94,6 +95,7 @@ api_router.include_router(zeus_transactions_v1.router, tags=["zeus-transactions"
 api_router.include_router(agents.router, prefix="/agents", tags=["agents"])
 api_router.include_router(metrics.router, prefix="/metrics", tags=["metrics"])
 api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
+api_router.include_router(automations.router, prefix="/automations", tags=["automations"])
 
 # Chat endpoint (para interactuar con agentes)
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])

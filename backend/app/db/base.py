@@ -654,11 +654,11 @@ def _migrate_zeus_analytics_tables():
     from sqlalchemy import inspect
 
     try:
-        from app.models.zeus_analytics import ZeusAlert, ZeusAutomation, ZeusEvent
+        from app.models.zeus_analytics import ZeusAlert, ZeusAutomation, ZeusAutomationLog, ZeusEvent
 
         inspector = inspect(engine)
         names = set(inspector.get_table_names())
-        for model in (ZeusEvent, ZeusAlert, ZeusAutomation):
+        for model in (ZeusEvent, ZeusAlert, ZeusAutomation, ZeusAutomationLog):
             if model.__tablename__ not in names:
                 model.__table__.create(bind=engine, checkfirst=True)
                 print(f"[MIGRATION] [OK] {model.__tablename__} creada")

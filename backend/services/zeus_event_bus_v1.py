@@ -95,6 +95,29 @@ def emit_event(
     except Exception as exc:
         logger.warning("[EVENT_BUS] analytics event record failed: %s", exc)
 
+    try:
+        from services.zeus_automation_audit_v1 import record_automation_audit
+
+        audit_status = "success"
+        if pipeline_result and isinstance(pipeline_result, dict) and pipeline_result.get("real_execution") is False:
+            audit_status = "partial"
+        record_automation_audit(
+            db,
+            automation_name=event_name,
+            agent=source_module,
+            trigger_type="event_bus",
+            status=audit_status,
+            input_data=body,
+            output_data={
+                "event_id": row.public_id,
+                "propagated_to": propagated,
+                "pipeline": pipeline_result,
+            },
+            user_id=user.id if user else None,
+        )
+    except Exception as exc:
+        logger.warning("[EVENT_BUS] automation audit record failed: %s", exc)
+
     return {
         "event_id": row.public_id,
         "event_name": event_name,

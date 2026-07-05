@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text
 
 from app.db.base import Base
 
@@ -49,3 +49,22 @@ class ZeusAutomation(Base):
     name = Column(String(128), nullable=False, unique=True, index=True)
     status = Column(String(32), nullable=False, default="active", index=True)
     last_run = Column(DateTime(timezone=True), nullable=True)
+
+
+class ZeusAutomationLog(Base):
+    __tablename__ = "zeus_automation_logs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    automation_name = Column(String(128), nullable=False, index=True)
+    agent = Column(String(64), nullable=False, default="unknown", index=True)
+    trigger_type = Column(String(32), nullable=False, default="manual", index=True)
+    status = Column(String(32), nullable=False, default="unknown", index=True)
+    input_data = Column(JSON, nullable=True)
+    output_data = Column(JSON, nullable=True)
+    executed_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True,
+    )

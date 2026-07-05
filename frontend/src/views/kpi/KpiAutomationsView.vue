@@ -13,6 +13,7 @@
       </li>
     </ul>
     <p v-else class="empty">No hay automatizaciones registradas.</p>
+    <router-link class="audit-link" to="/automations/audit">Ver auditoría completa →</router-link>
   </KpiPageShell>
 </template>
 
@@ -82,6 +83,18 @@ onMounted(async () => {
 
 .empty {
   color: rgba(255, 255, 255, 0.5);
+}
+
+.audit-link {
+  display: inline-block;
+  margin-top: 20px;
+  color: #3b82f6;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.audit-link:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 768px) {

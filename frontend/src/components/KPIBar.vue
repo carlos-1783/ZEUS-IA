@@ -3,7 +3,7 @@
     <div
       v-for="item in items"
       :key="item.key"
-      class="kpi-item"
+      class="kpi-item kpi-card"
       :class="{ 'kpi-item--alert': item.key === 'alerts' && item.value !== '0' }"
     >
       <span class="kpi-icon" aria-hidden="true">{{ item.icon }}</span>
@@ -80,11 +80,26 @@ defineProps({
 @media (max-width: 768px) {
   .kpi-bar {
     grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(2, 1fr);
+    grid-template-rows: repeat(2, auto);
+    gap: 8px;
+    height: auto;
+  }
+
+  .kpi-item,
+  .kpi-card {
+    padding: 8px;
   }
 
   .kpi-value {
-    font-size: 14px;
+    font-size: 12px;
+  }
+
+  .kpi-label {
+    font-size: 9px;
+  }
+
+  .kpi-icon {
+    font-size: 12px;
   }
 }
 </style>

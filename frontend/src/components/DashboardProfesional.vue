@@ -1,5 +1,5 @@
 <template>
-  <div class="dashboard-profesional" :class="{ 'dashboard-executive-root': currentView === 'dashboard' }">
+  <div class="dashboard-profesional dashboard-root" :class="{ 'dashboard-executive-root': currentView === 'dashboard' }">
     <!-- Overlay para móvil -->
     <div 
       class="sidebar-overlay" 
@@ -152,7 +152,7 @@
         </div>
 
         <div class="executive-section executive-section--zeus">
-          <div class="zeus-core-highlight">
+          <div class="zeus-core-highlight zeus-core">
             <div class="zeus-core-card">
               <img
                 :src="zeusCoreAgent.image"
@@ -2130,5 +2130,72 @@ const chatWith = (agent) => {
 .btn-secondary:hover {
   background: rgba(59, 130, 246, 0.25);
   border-color: rgba(59, 130, 246, 0.5);
+}
+
+/* Mobile-only executive dashboard (≤768px) */
+@media (max-width: 768px) {
+  .main-content--dashboard {
+    padding: 8px;
+    overflow-y: auto;
+  }
+
+  .dashboard-executive-root {
+    height: auto;
+    min-height: 100vh;
+    overflow-y: auto;
+  }
+
+  .dashboard-executive {
+    min-height: auto;
+    gap: 8px;
+  }
+
+  .executive-section--kpi {
+    min-height: 80px;
+    padding-top: 72px;
+  }
+
+  .executive-agents-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .agent-card--executive {
+    min-height: 160px;
+    padding: 10px;
+    border-radius: 12px;
+  }
+
+  .agent-card--executive .avatar-container {
+    width: 70px;
+    height: 70px;
+  }
+
+  .agent-card--executive .agent-name {
+    font-size: 14px;
+  }
+
+  .agent-card--executive .agent-role {
+    font-size: 11px;
+  }
+
+  .agent-card--executive .btn-interact {
+    font-size: 12px;
+    height: 32px;
+    min-height: 32px;
+  }
+
+  .zeus-core-card {
+    padding: 10px;
+  }
+
+  .zeus-core-avatar {
+    width: 60px;
+    height: 60px;
+  }
+
+  .zeus-core-name {
+    font-size: 15px;
+  }
 }
 </style>

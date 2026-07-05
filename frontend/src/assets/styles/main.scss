@@ -425,3 +425,20 @@ html.dashboard-executive-mode {
   height: 100vh;
   overflow: hidden;
 }
+
+@media (max-width: 768px) {
+  body.dashboard-executive-mode,
+  html.dashboard-executive-mode {
+    overflow-y: auto;
+    height: auto;
+    min-height: 100%;
+  }
+
+  .dashboard-root.dashboard-executive-root,
+  .dashboard-executive-root {
+    padding: 8px;
+    height: auto;
+    min-height: 100vh;
+    overflow-y: auto;
+  }
+}

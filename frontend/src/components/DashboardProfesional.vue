@@ -2136,18 +2136,35 @@ const chatWith = (agent) => {
 @media (max-width: 768px) {
   .main-content--dashboard {
     padding: 8px;
+    padding-bottom: 20px;
     overflow-y: auto;
+    overflow-x: hidden;
+    flex: none;
+    min-height: 0;
   }
 
   .dashboard-executive-root {
-    height: auto;
+    height: 100vh;
     min-height: 100vh;
     overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 20px;
   }
 
+  .zeus-dashboard,
   .dashboard-executive {
+    height: auto;
     min-height: auto;
+    overflow: visible;
+    flex: none;
     gap: 8px;
+    padding-bottom: 8px;
+  }
+
+  .executive-section--kpi,
+  .executive-section--zeus {
+    flex: none;
+    max-height: none;
   }
 
   .executive-section--kpi {
@@ -2155,34 +2172,61 @@ const chatWith = (agent) => {
     padding-top: 72px;
   }
 
+  .agents-grid,
   .executive-agents-grid {
+    display: grid;
     grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: auto;
     gap: 10px;
+    height: auto;
+    flex: none;
+    min-height: 0;
   }
 
+  .agent-card,
   .agent-card--executive {
+    height: auto;
     min-height: 160px;
+    max-height: 220px;
     padding: 10px;
     border-radius: 12px;
+    overflow: hidden;
   }
 
-  .agent-card--executive .avatar-container {
-    width: 70px;
-    height: 70px;
+  .agent-card--executive .avatar-container,
+  .agent-card .avatar-container {
+    width: 60px;
+    height: 60px;
+    margin: 4px auto;
   }
 
-  .agent-card--executive .agent-name {
-    font-size: 14px;
+  .agent-card--executive .agent-name,
+  .agent-card .agent-name {
+    font-size: 13px;
+    margin: 4px 0;
   }
 
-  .agent-card--executive .agent-role {
+  .agent-card--executive .agent-role,
+  .agent-card .agent-role {
+    font-size: 10px;
+    margin: 0 0 4px;
+  }
+
+  .agent-card--executive .agent-stats {
+    margin-bottom: 4px;
+    gap: 8px;
+  }
+
+  .agent-card--executive .btn-interact,
+  .agent-card .btn-interact {
     font-size: 11px;
+    height: 30px;
+    min-height: 30px;
+    padding: 0 10px;
   }
 
-  .agent-card--executive .btn-interact {
-    font-size: 12px;
-    height: 32px;
-    min-height: 32px;
+  .agent-card--executive .agent-info {
+    gap: 2px;
   }
 
   .zeus-core-card {

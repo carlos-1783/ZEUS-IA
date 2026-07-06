@@ -1,5 +1,7 @@
 <template>
   <div class="system-status-panel">
+    <router-link to="/dashboard" class="back-link">← Volver al Dashboard</router-link>
+
     <header class="panel-header">
       <div>
         <h2>Estado del sistema</h2>
@@ -105,6 +107,19 @@ onMounted(load)
   max-width: 960px;
   margin: 0 auto;
   padding: 32px 24px 64px;
+}
+
+.back-link {
+  display: inline-block;
+  margin-bottom: 16px;
+  color: #2563eb;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.back-link:hover {
+  text-decoration: underline;
 }
 
 .panel-header {

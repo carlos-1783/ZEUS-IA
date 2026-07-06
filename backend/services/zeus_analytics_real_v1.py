@@ -35,7 +35,7 @@ def _utcnow() -> datetime:
 
 def _user_scope_event_q(db: Session, user: Optional[User]):
     q = db.query(ZeusEvent)
-    if user and not getattr(user, "is_superuser", False):
+    if user and getattr(user, "id", None) is not None:
         q = q.filter(ZeusEvent.user_id == user.id)
     return q
 
@@ -121,7 +121,7 @@ def _count_events_24h(db: Session, user: Optional[User]) -> tuple[int, int]:
 
     try:
         dq = db.query(ZeusDomainEvent).filter(ZeusDomainEvent.created_at >= since)
-        if user and not getattr(user, "is_superuser", False):
+        if user and getattr(user, "id", None) is not None:
             dq = dq.filter(ZeusDomainEvent.user_id == user.id)
         total = dq.count()
         return total, total
@@ -130,7 +130,7 @@ def _count_events_24h(db: Session, user: Optional[User]) -> tuple[int, int]:
 
     try:
         aq = db.query(AgentActivity).filter(AgentActivity.created_at >= since)
-        if user and not getattr(user, "is_superuser", False):
+        if user and getattr(user, "email", None):
             aq = aq.filter(AgentActivity.user_email == user.email)
         total = aq.count()
         success = aq.filter(AgentActivity.status.in_(("completed", "success"))).count()
@@ -142,7 +142,7 @@ def _count_events_24h(db: Session, user: Optional[User]) -> tuple[int, int]:
 def _count_alerts(db: Session, user: Optional[User]) -> int:
     try:
         q = db.query(ZeusAlert).filter(ZeusAlert.resolved.is_(False))
-        if user and not getattr(user, "is_superuser", False):
+        if user and getattr(user, "id", None) is not None:
             q = q.filter(ZeusAlert.user_id == user.id)
         count = q.count()
         if count > 0:
@@ -225,7 +225,7 @@ def list_recent_events(
 
     try:
         dq = db.query(ZeusDomainEvent).filter(ZeusDomainEvent.created_at >= since)
-        if user and not getattr(user, "is_superuser", False):
+        if user and getattr(user, "id", None) is not None:
             dq = dq.filter(ZeusDomainEvent.user_id == user.id)
         rows = dq.order_by(ZeusDomainEvent.created_at.desc()).limit(limit).all()
         return [
@@ -250,7 +250,7 @@ def list_unresolved_alerts(
 ) -> List[Dict[str, Any]]:
     try:
         q = db.query(ZeusAlert).filter(ZeusAlert.resolved.is_(False))
-        if user and not getattr(user, "is_superuser", False):
+        if user and getattr(user, "id", None) is not None:
             q = q.filter(ZeusAlert.user_id == user.id)
         rows = q.order_by(ZeusAlert.created_at.desc()).limit(limit).all()
         if rows:

@@ -16,11 +16,11 @@ import services.crm_office_service as crm_svc
 
 def _sales_query(db: Session, user: User, since: datetime):
     q = db.query(TPVSale).filter(TPVSale.sale_date >= since)
-    is_superuser = bool(getattr(user, "is_superuser", False))
     company_id = crm_svc.primary_company_id(db, user)
+    is_superuser = bool(getattr(user, "is_superuser", False))
     if company_id is not None and not is_superuser:
         q = q.filter(TPVSale.company_id == company_id)
-    elif not is_superuser:
+    elif getattr(user, "id", None) is not None:
         q = q.filter(TPVSale.user_id == user.id)
     return q
 
@@ -57,7 +57,7 @@ def build_analytics_summary(
     active_customers = len(customers)
 
     act_q = db.query(AgentActivity).filter(AgentActivity.created_at >= since)
-    if not getattr(user, "is_superuser", False):
+    if getattr(user, "email", None):
         act_q = act_q.filter(AgentActivity.user_email == user.email)
     activity_total = act_q.count()
 

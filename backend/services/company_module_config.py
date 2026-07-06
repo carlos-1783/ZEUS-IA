@@ -99,6 +99,16 @@ def modules_for_company_type(company_type: str, *, is_superuser: bool = False) -
 
 
 def get_company_config_for_user(db: Session, user: User) -> Dict[str, Any]:
+    is_superuser = bool(getattr(user, "is_superuser", False))
+    if is_superuser:
+        return {
+            "company_id": None,
+            "company_name": "ZEUS Platform",
+            "company_type": "platform",
+            "modules": modules_for_company_type(COMPANY_TYPE_OFFICE, is_superuser=True),
+            "module_list": list(MODULES_BY_COMPANY_TYPE.get(COMPANY_TYPE_OFFICE, [])),
+        }
+
     company = get_primary_company(db, user)
     if not company:
         ct = COMPANY_TYPE_BAR

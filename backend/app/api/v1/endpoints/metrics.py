@@ -156,11 +156,10 @@ async def get_dashboard_summary(
             AgentActivity.created_at <= end_date
         )
         
-        # Si no es superusuario, filtrar por email de usuario (AgentActivity usa user_email)
-        if not is_superuser:
-            activities_query = activities_query.filter(
-                AgentActivity.user_email == current_user.email
-            )
+        # Siempre filtrar por usuario autenticado (evita mezcla entre cuentas en BD compartida)
+        activities_query = activities_query.filter(
+            AgentActivity.user_email == current_user.email
+        )
         
         activities = activities_query.all()
         
@@ -190,10 +189,9 @@ async def get_dashboard_summary(
             AgentActivity.created_at < start_date
         )
         
-        if not is_superuser:
-            prev_activities_query = prev_activities_query.filter(
-                AgentActivity.user_email == current_user.email
-            )
+        prev_activities_query = prev_activities_query.filter(
+            AgentActivity.user_email == current_user.email
+        )
         
         prev_activities = prev_activities_query.count()
         

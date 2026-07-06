@@ -824,6 +824,46 @@ watch(isAdmin, (isAdmin) => {
   }
 }, { immediate: true })
 
+const resetDashboardSessionState = () => {
+  dashboardMetrics.value = {
+    totalInteractions: 0,
+    avgResponseTime: '0.0s',
+    costSavings: '$0',
+    successRate: '0%',
+    interactionsTrend: '0%',
+    responseTrend: '0%',
+    savingsTrend: '0%',
+    successTrend: '0%',
+  }
+  executiveAnalytics.value = {
+    agents: 6,
+    tasks24h: 0,
+    alerts: 0,
+    automations: 0,
+    efficiency: 0,
+    system: 'unknown',
+  }
+  financialMetrics.value = {
+    totalRevenue: 0,
+    salesCount: 0,
+    avgTicket: 0,
+    activeCustomers: 0,
+    cmrPayments: 0,
+    tpvSales: 0,
+  }
+  salesByDay.value = []
+}
+
+watch(
+  () => authStore.user?.id,
+  async (newId, oldId) => {
+    if (!newId || newId === oldId) return
+    resetDashboardSessionState()
+    updateModulesForSuperuser()
+    await refreshDashboardData()
+  },
+)
+
 watch(currentView, (view) => {
   if (view === 'analytics') {
     loadFinancialAnalytics()

@@ -224,6 +224,10 @@ export const useAuthStore = defineStore('auth', () => {
     // Clear storage
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
+
+    import('@/utils/sessionCache')
+      .then(({ clearSessionCaches }) => clearSessionCaches())
+      .catch(() => {});
     
     console.log('[AuthStore] Auth state reset complete');
     import('@/stores/settings')
@@ -420,6 +424,10 @@ export const useAuthStore = defineStore('auth', () => {
         }
 
         await bootstrapSettingsAfterAuth();
+
+        import('@/utils/sessionCache')
+          .then(({ clearSessionCaches }) => clearSessionCaches())
+          .catch(() => {});
         
         console.log('[AuthStore] Authentication successful');
         return {

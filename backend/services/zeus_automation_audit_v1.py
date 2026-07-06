@@ -60,7 +60,7 @@ def get_automation_audit(
     limit = min(max(limit, 1), 500)
     try:
         q = db.query(ZeusAutomationLog)
-        if user and not getattr(user, "is_superuser", False):
+        if user and getattr(user, "id", None) is not None:
             q = q.filter(ZeusAutomationLog.user_id == user.id)
         logs = q.order_by(ZeusAutomationLog.executed_at.desc()).limit(limit).all()
 
@@ -69,7 +69,7 @@ def get_automation_audit(
             func.count(ZeusAutomationLog.id).label("total_runs"),
             func.max(ZeusAutomationLog.executed_at).label("last_run"),
         )
-        if user and not getattr(user, "is_superuser", False):
+        if user and getattr(user, "id", None) is not None:
             sq = sq.filter(ZeusAutomationLog.user_id == user.id)
         summary_rows = (
             sq.group_by(ZeusAutomationLog.automation_name)

@@ -3,12 +3,13 @@ from pydantic import BaseModel
 from typing import List, Optional
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_active_user
+from app.core.auth import get_current_active_superuser, get_current_active_user
 from app.db.session import get_db
 from app.models.user import User
 from services.zeus_phase_b_test_v1 import check_phase_b_env, run_test_contract_flow
 from services.zeus_phase_c_test_v1 import check_phase_c_env, run_test_payment_risk_flow
 from services.zeus_core_orchestrator_v1 import check_core_orchestration_env
+from services.zeus_integrations_e2e_v1 import run_integrations_e2e
 
 router = APIRouter()
 
@@ -77,3 +78,15 @@ async def core_orchestration_env_status(
 ):
     """Read-only ZEUS CORE multi-agent flag check."""
     return {"success": True, **check_core_orchestration_env()}
+
+
+@router.post("/integrations-e2e")
+async def test_integrations_e2e(
+    current_user: User = Depends(get_current_active_superuser),
+    db: Session = Depends(get_db),
+):
+    """
+    E2E sin cargo: valida Stripe, Twilio, SendGrid/Resend/SMTP y OpenAI contra APIs reales.
+    No envía emails, WhatsApp ni cobra pagos.
+    """
+    return await run_integrations_e2e(db)

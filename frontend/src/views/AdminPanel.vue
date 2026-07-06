@@ -342,16 +342,44 @@
           <div class="integration-status">
             <div class="integration-item">
               <span>💳 Stripe</span>
-              <span class="status-dot" :class="{ active: integrationStatus.stripe }"></span>
+              <span class="status-dot" :class="{ active: integrationProbe.stripe ?? integrationStatus.stripe }"></span>
             </div>
             <div class="integration-item">
               <span>📱 WhatsApp (Twilio)</span>
-              <span class="status-dot" :class="{ active: integrationStatus.whatsapp }"></span>
+              <span class="status-dot" :class="{ active: integrationProbe.whatsapp ?? integrationStatus.whatsapp }"></span>
             </div>
             <div class="integration-item">
               <span>📧 Email (SendGrid)</span>
-              <span class="status-dot" :class="{ active: integrationStatus.email }"></span>
+              <span class="status-dot" :class="{ active: integrationProbe.email ?? integrationStatus.email }"></span>
             </div>
+          </div>
+          <p class="integration-hint">
+            El punto verde solo indica que la variable existe en Railway. Para garantía real antes de pagar, ejecuta la verificación E2E.
+          </p>
+          <button
+            type="button"
+            class="btn-e2e"
+            :disabled="e2eRunning"
+            @click="runIntegrationsE2E"
+          >
+            {{ e2eRunning ? 'Verificando APIs reales…' : '🔍 Verificar E2E (sin cargo)' }}
+          </button>
+          <div v-if="e2eResult" class="e2e-results" :class="{ ok: e2eResult.external_ready, warn: !e2eResult.external_ready }">
+            <p class="e2e-summary">
+              {{ e2eResult.summary.passed }}/{{ e2eResult.summary.total }} OK
+              <span v-if="e2eResult.external_ready"> · Externas listas</span>
+              <span v-else> · Revisa externas antes de pagar</span>
+            </p>
+            <p class="e2e-recommendation">{{ e2eResult.recommendation }}</p>
+            <ul class="e2e-checks">
+              <li v-for="check in e2eResult.checks" :key="check.id" :class="{ pass: check.ok, fail: !check.ok }">
+                <strong>{{ check.name }}</strong>
+                <span>{{ check.ok ? '✓' : '✗' }}</span>
+                <small>{{ check.detail }}</small>
+                <small v-if="check.error" class="e2e-error">{{ check.error }}</small>
+              </li>
+            </ul>
+            <p class="e2e-disclaimer">{{ e2eResult.disclaimer }}</p>
           </div>
         </div>
 
@@ -469,6 +497,15 @@ const integrationStatus = ref({
   email: false
 })
 
+const integrationProbe = ref({
+  stripe: null,
+  whatsapp: null,
+  email: null,
+})
+
+const e2eRunning = ref(false)
+const e2eResult = ref(null)
+
 // Auto-refresh interval
 let refreshInterval = null
 
@@ -576,6 +613,35 @@ const loadIntegrationStatus = async () => {
     console.log('✅ Estado de integraciones cargado:', integrationStatus.value)
   } catch (err) {
     console.error('Error cargando estado de integraciones:', err)
+  }
+}
+
+const runIntegrationsE2E = async () => {
+  e2eRunning.value = true
+  e2eResult.value = null
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    if (!token) return
+    const api = (await import('@/services/api')).default
+    const data = await api.post('/api/v1/test/integrations-e2e', {}, token)
+    e2eResult.value = data
+    const byId = Object.fromEntries((data.checks || []).map((c) => [c.id, c.ok]))
+    integrationProbe.value = {
+      stripe: byId.stripe ?? null,
+      whatsapp: byId.whatsapp ?? null,
+      email: byId.email ?? null,
+    }
+  } catch (err) {
+    console.error('Error E2E integraciones:', err)
+    e2eResult.value = {
+      external_ready: false,
+      summary: { passed: 0, failed: 1, total: 1 },
+      recommendation: err?.message || 'No se pudo ejecutar la verificación E2E',
+      checks: [],
+      disclaimer: '',
+    }
+  } finally {
+    e2eRunning.value = false
   }
 }
 
@@ -1554,6 +1620,97 @@ td {
 .status-dot.active {
   background: #10b981;
   box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}
+
+.integration-hint {
+  margin: 12px 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.4;
+}
+
+.btn-e2e {
+  margin-top: 8px;
+  padding: 12px 20px;
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-e2e:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.e2e-results {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.e2e-results.ok {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.e2e-results.warn {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.e2e-summary {
+  margin: 0 0 8px;
+  font-weight: 700;
+}
+
+.e2e-recommendation {
+  margin: 0 0 12px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.e2e-checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.e2e-checks li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.e2e-checks li.pass strong {
+  color: #6ee7b7;
+}
+
+.e2e-checks li.fail strong {
+  color: #fca5a5;
+}
+
+.e2e-checks li small {
+  grid-column: 1 / -1;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.e2e-error {
+  color: #f87171 !important;
+}
+
+.e2e-disclaimer {
+  margin: 12px 0 0;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
 }
 
 .checkbox-label {

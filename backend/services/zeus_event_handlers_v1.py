@@ -267,14 +267,25 @@ def dispatch_event_handlers(
 
     elif normalized == "payment_due":
         try:
-            from services.zeus_crm_payment_risk_v1 import handle_crm_payment_risk
+            from services.zeus_core_orchestrator_v1 import (
+                is_core_orchestration_active,
+                zeus_core_orchestrate_payment_due,
+            )
 
-            pipeline = handle_crm_payment_risk(db, user, payload)
-            done.append("crm_payment_risk.evaluate")
-            if pipeline.get("payment_risk_emitted"):
-                done.append("rafael.payment_risk_propagate")
+            if is_core_orchestration_active():
+                pipeline = zeus_core_orchestrate_payment_due(db, user, payload)
+                done.append("zeus_core.orchestrate")
+                for agent in pipeline.get("agents_invoked") or []:
+                    done.append(f"zeus_core.{agent}")
+            else:
+                from services.zeus_crm_payment_risk_v1 import handle_crm_payment_risk
+
+                pipeline = handle_crm_payment_risk(db, user, payload)
+                done.append("crm_payment_risk.evaluate")
+                if pipeline.get("payment_risk_emitted"):
+                    done.append("rafael.payment_risk_propagate")
         except Exception as exc:
-            logger.warning("[EVENT_HANDLER] payment_due crm risk failed: %s", exc)
+            logger.warning("[EVENT_HANDLER] payment_due failed: %s", exc)
 
     elif normalized == "payment_risk":
         if handle_payment_risk_agents(db, user, payload):

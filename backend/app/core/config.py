@@ -306,6 +306,7 @@ class Settings(BaseSettings):
     TEAMFLOW_ENABLED: bool = os.getenv("TEAMFLOW_ENABLED", "true").lower() in ("true", "1", "yes")
     TEAMFLOW_STRICT_AUDIT: bool = os.getenv("TEAMFLOW_STRICT_AUDIT", "true").lower() in ("true", "1", "yes")
     ZEUS_AGENT_ENABLED: bool = os.getenv("ZEUS_AGENT_ENABLED", "true").lower() in ("true", "1", "yes")
+    ZEUS_CORE_ENABLED: bool = os.getenv("ZEUS_CORE_ENABLED", "false").lower() in ("true", "1", "yes")
 
     # zeus_total_system_closure_v1
     ZEUS_TOTAL_SYSTEM_CLOSURE_ENABLED: bool = os.getenv(

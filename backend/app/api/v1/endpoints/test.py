@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.models.user import User
 from services.zeus_phase_b_test_v1 import check_phase_b_env, run_test_contract_flow
 from services.zeus_phase_c_test_v1 import check_phase_c_env, run_test_payment_risk_flow
+from services.zeus_core_orchestrator_v1 import check_core_orchestration_env
 
 router = APIRouter()
 
@@ -68,3 +69,11 @@ async def test_payment_risk_flow(
     """
     result = run_test_payment_risk_flow(db, current_user)
     return result
+
+
+@router.get("/core-orchestration-env")
+async def core_orchestration_env_status(
+    current_user: User = Depends(get_current_active_user),
+):
+    """Read-only ZEUS CORE multi-agent flag check."""
+    return {"success": True, **check_core_orchestration_env()}

@@ -13,9 +13,8 @@
     <button
       type="button"
       class="pwa-btn pwa-btn--cache"
-      :disabled="clearing"
       :title="t('dashboardPro.pwa.clearCacheTitle')"
-      @click="clearCache"
+      @click="openClearPwaCachePage"
     >
       🧹 {{ t('dashboardPro.pwa.clearCache') }}
     </button>
@@ -39,7 +38,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { clearPWACache, usePWA } from '@/composables/usePWA'
+import { openClearPwaCachePage, usePWA } from '@/composables/usePWA'
 
 const props = defineProps({
   systemOnline: { type: Boolean, default: true },
@@ -53,7 +52,6 @@ const { t } = useI18n()
 const { isInstallable, isInstalled, promptInstall } = usePWA()
 const isProd = import.meta.env.PROD
 const installing = ref(false)
-const clearing = ref(false)
 
 const installTitle = computed(() => {
   if (isInstallable.value) return t('dashboardPro.pwa.installTitle')
@@ -75,21 +73,10 @@ const installApp = async () => {
       'No se pudo mostrar el instalador automático.\n\n' +
         'Instálala manualmente desde el menú del navegador:\n' +
         '• Chrome/Edge: Menú (⋮) → Instalar aplicación\n' +
-        '• También puedes pulsar «Limpiar caché» y recargar.'
+        '• También puedes pulsar «Limpiar caché» para abrir la herramienta PWA.'
     )
   } finally {
     installing.value = false
-  }
-}
-
-const clearCache = async () => {
-  if (!confirm('¿Limpiar caché PWA y recargar? Esto puede restaurar el botón de instalación.')) return
-  clearing.value = true
-  try {
-    await clearPWACache()
-  } catch (err) {
-    console.error('clearPWACache:', err)
-    clearing.value = false
   }
 }
 </script>

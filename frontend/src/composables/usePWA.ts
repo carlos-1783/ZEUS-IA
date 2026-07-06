@@ -18,6 +18,12 @@ const syncFromGlobal = (deferredPrompt: { value: BeforeInstallPromptEvent | null
   }
 }
 
+export const CLEAR_PWA_CACHE_URL = '/clear-pwa-cache.html'
+
+export function openClearPwaCachePage(): void {
+  window.location.assign(CLEAR_PWA_CACHE_URL)
+}
+
 export async function clearPWACache(): Promise<void> {
   if ('caches' in window) {
     const names = await caches.keys()
@@ -129,5 +135,7 @@ export function usePWA() {
     promptInstall,
     checkIfInstalled,
     clearPWACache,
+    openClearPwaCachePage,
+    CLEAR_PWA_CACHE_URL,
   }
 }

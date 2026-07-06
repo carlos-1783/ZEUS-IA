@@ -19,6 +19,7 @@ export interface SystemExecutionStatusResponse {
   visibility: string
   fake_components: string
   ready_for_flags_activation: boolean
+  zeus_core_orchestration_active?: boolean
   timestamp: string
   flags: Record<string, boolean>
   agents: AgentVisibilityRow[]

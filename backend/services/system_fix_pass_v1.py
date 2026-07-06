@@ -73,6 +73,7 @@ def _flags_audit(flags: Dict[str, bool]) -> Dict[str, Any]:
             flags.get("AFRODITA_EXECUTION_ENABLED"),
             flags.get("THALOS_EXECUTION_ENABLED"),
             flags.get("JUSTICE_REAL_AUDIT_ENABLED"),
+            flags.get("ZEUS_CORE_ENABLED"),
         ]
     )
     return {
@@ -83,6 +84,12 @@ def _flags_audit(flags: Dict[str, bool]) -> Dict[str, Any]:
             "AFRODITA_EXECUTION_ENABLED=true + AFRODITA_READ_ONLY_MODE=false",
             "THALOS_EXECUTION_ENABLED=true",
             "JUSTICE_REAL_AUDIT_ENABLED=true",
+        ],
+        "phase_c_sequence": [
+            "ZEUS_CORE_ENABLED=true + ZEUS_AGENT_ENABLED=true",
+            "RAFAEL_EXECUTION_ENABLED=true",
+            "ZEUS_EVENT_BUS_ENABLED=true",
+            "ZEUS_AUTOMATION_ENGINE_ENABLED=true",
         ],
     }
 
@@ -111,12 +118,20 @@ def fix_pass_payload() -> Dict[str, Any]:
 
     manual_actions = []
     if flag_audit["all_execution_flags_disabled"]:
-        manual_actions.append("Activar flags Railway (Fase B) — ver /system/status")
+        manual_actions.append("Activar flags Railway (Fase B/C) — ver /system/status")
+
+    ready_count = base["summary"]["execution_ready_count"]
+    critical_blockers: List[str] = []
+    if ready_count == 0:
+        critical_blockers = [
+            "ningún agente execution_ready=true",
+            "flags de ejecución desactivados por defecto",
+        ]
 
     return {
         "audit_type": "system_fix_pass_v1",
         "mode": "read_only_then_safe_fix",
-        "system_state": "CONTROLLED_UNTRUSTED",
+        "system_state": base.get("system_state", "CONTROLLED_UNTRUSTED"),
         "ui_status": _ui_audit()["status"],
         "workspace_status": _workspace_audit()["status"],
         "backend_status": _backend_audit()["status"],
@@ -129,13 +144,11 @@ def fix_pass_payload() -> Dict[str, Any]:
             "approval_pipeline": _approval_audit(),
             "agent_execution_flags": flag_audit,
         },
-        "critical_blockers": [
-            "ningún agente execution_ready=true",
-            "flags de ejecución desactivados por defecto",
-        ],
+        "critical_blockers": critical_blockers,
         "safe_fixes_applied": safe_fixes,
         "manual_actions_required": manual_actions,
         "ready_for_phase_B": base.get("ready_for_flags_activation", True),
+        "zeus_core_orchestration_active": base.get("zeus_core_orchestration_active", False),
         "flags": flags,
         "timestamp": base["timestamp"],
     }
@@ -151,8 +164,10 @@ def _agent_critical_issues(name: str, flags: Dict[str, bool]) -> List[str]:
         issues.append("JUSTICE_REAL_AUDIT_ENABLED=false")
     if name == "PERSEO":
         issues.append("tools_heuristic_no_db_persistence")
-    if name == "ZEUS CORE":
-        issues.append("no_workspace_ui")
+    if name == "ZEUS CORE" and not flags.get("ZEUS_CORE_ENABLED"):
+        issues.append("ZEUS_CORE_ENABLED=false")
+    elif name == "ZEUS CORE" and flags.get("ZEUS_CORE_ENABLED") and not flags.get("ZEUS_AGENT_ENABLED"):
+        issues.append("ZEUS_AGENT_ENABLED=false")
     return issues
 
 

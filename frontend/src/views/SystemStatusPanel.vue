@@ -21,7 +21,10 @@
           <span>{{ value ? 'ON' : 'OFF' }}</span>
         </li>
       </ul>
-      <p v-if="status.ready_for_flags_activation" class="hint">
+      <p v-if="status.zeus_core_orchestration_active" class="hint hint-ok">
+        Orquestación ZEUS CORE activa — multi-agente en event bus.
+      </p>
+      <p v-else-if="status.ready_for_flags_activation" class="hint">
         Sistema listo para activación segura de flags (Fase B).
       </p>
       <p v-if="fixPassBlockers" class="blockers">{{ fixPassBlockers }}</p>
@@ -202,6 +205,11 @@ onMounted(load)
   margin: 12px 0 0;
   font-size: 13px;
   color: #475569;
+}
+
+.hint-ok {
+  color: #15803d;
+  font-weight: 600;
 }
 
 .blockers {

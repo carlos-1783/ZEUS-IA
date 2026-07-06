@@ -4,6 +4,7 @@ System visibility v1 — flags Railway + estado por agente (Phase A).
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal
 
@@ -14,6 +15,14 @@ from services.execution_mode_v1 import normalize_execution_mode
 AgentStatusLabel = Literal["REAL", "PARTIAL", "FAKE", "DISCONNECTED"]
 
 SYSTEM_STATE = "CONTROLLED_UNTRUSTED"
+SYSTEM_STATE_ORCHESTRATION = "ORCHESTRATION_ACTIVE"
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("true", "1", "yes", "on")
 
 
 def _railway_flags() -> Dict[str, bool]:
@@ -28,6 +37,11 @@ def _railway_flags() -> Dict[str, bool]:
         "THALOS_BACKUP_ENABLED": bool(getattr(settings, "THALOS_BACKUP_ENABLED", False)),
         "JUSTICE_REAL_AUDIT_ENABLED": bool(getattr(settings, "JUSTICE_REAL_AUDIT_ENABLED", False)),
         "JUSTICE_READ_ONLY_MODE": bool(getattr(settings, "JUSTICE_READ_ONLY_MODE", True)),
+        "ZEUS_CORE_ENABLED": bool(getattr(settings, "ZEUS_CORE_ENABLED", False)),
+        "ZEUS_AGENT_ENABLED": bool(getattr(settings, "ZEUS_AGENT_ENABLED", True)),
+        "RAFAEL_EXECUTION_ENABLED": _env_bool("RAFAEL_EXECUTION_ENABLED", False),
+        "ZEUS_EVENT_BUS_ENABLED": _env_bool("ZEUS_EVENT_BUS_ENABLED", True),
+        "ZEUS_AUTOMATION_ENGINE_ENABLED": _env_bool("ZEUS_AUTOMATION_ENGINE_ENABLED", False),
     }
 
 
@@ -51,6 +65,48 @@ def _justicia_execution_mode(flags: Dict[str, bool]) -> str:
     if flags["JUSTICE_READ_ONLY_MODE"]:
         return "READ_ONLY"
     return "SIMULATED"
+
+
+def _zeus_core_agent(flags: Dict[str, bool]) -> Dict[str, Any]:
+    from services.zeus_core_orchestrator_v1 import check_core_orchestration_env
+
+    orch = check_core_orchestration_env()
+    base: Dict[str, Any] = {
+        "name": "ZEUS CORE",
+        "api_prefix": "/api/v1/zeus-core",
+        "orchestration_active": orch["all_ok"],
+    }
+    if orch["all_ok"]:
+        return {
+            **base,
+            "status": "REAL",
+            "execution_mode": "REAL",
+            "execution_ready": True,
+            "notes": (
+                "Orquestación multi-agente activa "
+                "(payment_due → RAFAEL/AFRODITA/JUSTICIA/THALOS + auditoría)"
+            ),
+        }
+    if flags.get("ZEUS_CORE_ENABLED") and flags.get("ZEUS_AGENT_ENABLED"):
+        missing = [name for name, meta in orch["flags"].items() if not meta.get("ok")]
+        return {
+            **base,
+            "status": "PARTIAL",
+            "execution_mode": "REAL",
+            "execution_ready": False,
+            "notes": (
+                "CORE habilitado — completar flags: " + ", ".join(missing)
+                if missing
+                else "CORE habilitado — revisar orquestación"
+            ),
+        }
+    return {
+        **base,
+        "status": "DISCONNECTED",
+        "execution_mode": "SIMULATED",
+        "execution_ready": False,
+        "notes": "Activar ZEUS_CORE_ENABLED + ZEUS_AGENT_ENABLED para orquestación real",
+    }
 
 
 def _agent_catalog(flags: Dict[str, bool]) -> List[Dict[str, Any]]:
@@ -99,31 +155,28 @@ def _agent_catalog(flags: Dict[str, bool]) -> List[Dict[str, Any]]:
             "api_prefix": "/api/v1/perseo",
             "notes": "LLM chat REAL; tools heurísticos SIMULATED; video edit REAL con FFmpeg",
         },
-        {
-            "name": "ZEUS CORE",
-            "status": "DISCONNECTED",
-            "execution_mode": "SIMULATED",
-            "execution_ready": False,
-            "api_prefix": "/api/v1/zeus-core",
-            "notes": "Sin workspace UI; orquestación chat",
-        },
+        _zeus_core_agent(flags),
     ]
 
 
 def execution_status_payload() -> Dict[str, Any]:
     flags = _railway_flags()
     agents = _agent_catalog(flags)
+    zeus_core_active = False
     for agent in agents:
         agent["execution_mode"] = normalize_execution_mode(agent["execution_mode"])
         agent["execution_ready"] = agent["status"] == "REAL" and agent["execution_mode"] == "REAL"
+        if agent.get("name") == "ZEUS CORE" and agent.get("execution_ready"):
+            zeus_core_active = True
 
     return {
-        "phase": "A",
+        "phase": "C" if zeus_core_active else "A",
         "system_id": "system_visibility_and_cleanup_v1",
-        "system_state": SYSTEM_STATE,
+        "system_state": SYSTEM_STATE_ORCHESTRATION if zeus_core_active else SYSTEM_STATE,
         "visibility": "FULL",
         "fake_components": "EXPLICIT",
-        "ready_for_flags_activation": True,
+        "ready_for_flags_activation": not zeus_core_active,
+        "zeus_core_orchestration_active": zeus_core_active,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "flags": flags,
         "agents": agents,

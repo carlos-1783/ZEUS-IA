@@ -36,6 +36,7 @@ FIELD_ALIASES: Dict[str, List[str]] = {
     "phone": ["telefono", "tel", "movil", "mobile", "phone", "celular"],
     "notes": ["notas", "observaciones", "notes", "comentarios"],
     "tax_id": ["nif", "cif", "dni", "tax_id", "nif_cif", "identificacion"],
+    "importe": ["importe", "amount", "monto", "cantidad", "pendiente", "deuda", "saldo"],
 }
 
 
@@ -191,6 +192,7 @@ def detect_column_mapping(columns: List[str]) -> CrmImportColumnMapping:
         "phone": None,
         "notes": None,
         "tax_id": None,
+        "importe": None,
     }
     for field, aliases in FIELD_ALIASES.items():
         for alias in aliases:
@@ -208,6 +210,19 @@ def _pick_row(row: pd.Series, col: Optional[str]) -> Optional[str]:
     return v or None
 
 
+def _parse_importe(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    text = str(value).strip().replace(",", ".")
+    if not text:
+        return None
+    try:
+        amount = float(text)
+        return amount if amount >= 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _map_row(row: pd.Series, mapping: CrmImportColumnMapping) -> Dict[str, Optional[str]]:
     name = _pick_row(row, mapping.name)
     email_raw = _pick_row(row, mapping.email)
@@ -220,12 +235,18 @@ def _map_row(row: pd.Series, mapping: CrmImportColumnMapping) -> Dict[str, Optio
     if tax_id:
         tax_id = re.sub(r"\s+", "", tax_id)[:50] or None
 
+    importe = None
+    importe_col = getattr(mapping, "importe", None)
+    if importe_col:
+        importe = _parse_importe(_pick_row(row, importe_col))
+
     return {
         "name": name[:100] if name else None,
         "email": email,
         "phone": phone[:20] if phone else None,
         "notes": notes,
         "tax_id": tax_id,
+        "importe": importe,
     }
 
 
@@ -277,142 +298,15 @@ def confirm_import(
     *,
     file_id: str,
     mapping: CrmImportColumnMapping,
+    source: str = "admin_clients_import",
 ) -> Dict[str, Any]:
-    if not mapping.name:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Debes indicar la columna de nombre en el mapeo.",
-        )
+    """Delegates to CLIENT_EXCEL_IMPORT_PIPELINE_V2 (real execution + events)."""
+    from services.client_excel_import_pipeline_v2 import run_client_excel_import_pipeline_v2
 
-    df, filename = _read_dataframe(file_id, user.id)
-    if mapping.name not in df.columns:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"La columna «{mapping.name}» no existe en el archivo.",
-        )
-
-    company_id = crm_svc.primary_company_id(db, user)
-    if company_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Se requiere una empresa asociada para importar clientes.",
-        )
-
-    existing_emails, existing_phones = _existing_email_phone_sets(db, company_id)
-    batch_emails: Set[str] = set()
-    batch_phones: Set[str] = set()
-
-    to_insert: List[Customer] = []
-    skipped_empty = 0
-    skipped_duplicates = 0
-    skipped_invalid = 0
-    errors: List[str] = []
-
-    for idx, row in df.iterrows():
-        row_num = int(idx) + 2 if isinstance(idx, (int, float)) else len(to_insert) + 2
-        mapped = _map_row(row, mapping)
-
-        if not mapped.get("name"):
-            skipped_empty += 1
-            continue
-
-        name = mapped["name"]
-        if len(name) < 2:
-            skipped_invalid += 1
-            if len(errors) < 20:
-                errors.append(f"Fila {row_num}: nombre demasiado corto.")
-            continue
-
-        email = mapped.get("email")
-        phone = mapped.get("phone")
-
-        if email and (email in existing_emails or email in batch_emails):
-            skipped_duplicates += 1
-            continue
-        if phone and (phone in existing_phones or phone in batch_phones):
-            skipped_duplicates += 1
-            continue
-
-        to_insert.append(
-            Customer(
-                name=name,
-                email=email,
-                phone=phone,
-                tax_id=mapped.get("tax_id"),
-                notes=mapped.get("notes"),
-                is_active=True,
-                is_company=True,
-                company_id=company_id,
-                owner_user_id=user.id,
-            )
-        )
-        if email:
-            batch_emails.add(email)
-            existing_emails.add(email)
-        if phone:
-            batch_phones.add(phone)
-            existing_phones.add(phone)
-
-    imported = len(to_insert)
-    skipped = skipped_empty + skipped_duplicates + skipped_invalid
-
-    if imported == 0:
-        delete_upload(file_id)
-        return {
-            "success": True,
-            "imported": 0,
-            "skipped": skipped,
-            "skipped_empty": skipped_empty,
-            "skipped_duplicates": skipped_duplicates,
-            "skipped_invalid": skipped_invalid,
-            "errors": errors,
-            "message": "No se importó ningún cliente (filas vacías, duplicadas o inválidas).",
-        }
-
-    try:
-        for start in range(0, imported, BATCH_SIZE):
-            db.bulk_save_objects(to_insert[start : start + BATCH_SIZE])
-        db.flush()
-        crm_svc.log_activity(
-            db,
-            company_id=company_id,
-            user_id=user.id,
-            customer_id=None,
-            record_id=None,
-            action="customers_imported",
-            summary=f"Importación masiva: {imported} cliente(s) desde {filename}",
-            payload={
-                "file_id": file_id,
-                "filename": filename,
-                "imported": imported,
-                "skipped_duplicates": skipped_duplicates,
-                "skipped_empty": skipped_empty,
-                "skipped_invalid": skipped_invalid,
-            },
-            commit=False,
-        )
-        db.commit()
-        logger.info("crm import ok user=%s imported=%s skipped=%s", user.id, imported, skipped)
-    except HTTPException:
-        db.rollback()
-        raise
-    except Exception as exc:
-        db.rollback()
-        logger.exception("confirm_import failed file_id=%s", file_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al importar: {exc}",
-        ) from exc
-    finally:
-        delete_upload(file_id)
-
-    return {
-        "success": True,
-        "imported": imported,
-        "skipped": skipped,
-        "skipped_empty": skipped_empty,
-        "skipped_duplicates": skipped_duplicates,
-        "skipped_invalid": skipped_invalid,
-        "errors": errors,
-        "message": f"Importados {imported} cliente(s). Omitidas {skipped} fila(s).",
-    }
+    return run_client_excel_import_pipeline_v2(
+        db,
+        user,
+        file_id=file_id,
+        mapping=mapping,
+        source=source,
+    )

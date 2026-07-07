@@ -80,7 +80,7 @@
 
         <div class="import-actions">
           <button type="button" class="btn-secondary" @click="backToUpload">{{ t('officeCrm.import.back') }}</button>
-          <button type="button" class="btn-primary" :disabled="!mapping.name || loading || !fileId" @click="runImport">
+          <button type="button" class="btn-primary" :disabled="!mapping.name || !mapping.phone || loading || !fileId" @click="runImport">
             {{ loading ? t('officeCrm.loading') : t('officeCrm.import.confirm') }}
           </button>
         </div>
@@ -91,8 +91,11 @@
         <ul class="import-stats">
           <li>{{ t('officeCrm.import.imported', { count: result?.imported ?? 0 }) }}</li>
           <li>{{ t('officeCrm.import.skipped', { count: result?.skipped ?? 0 }) }}</li>
-          <li v-if="result?.skipped_duplicates">
-            {{ t('officeCrm.import.skippedDuplicates', { count: result.skipped_duplicates }) }}
+          <li v-if="result?.updated">{{ t('officeCrm.import.updated', { count: result.updated }) }}</li>
+          <li v-if="result?.trace_id">Trace: {{ result.trace_id }}</li>
+          <li v-if="result?.events_emitted">
+            Eventos: {{ result.events_emitted.client_created ?? 0 }} client_created,
+            {{ result.events_emitted.payment_due ?? 0 }} payment_due
           </li>
         </ul>
         <ul v-if="result?.errors?.length" class="import-warnings">
@@ -135,12 +138,14 @@ const mapping = reactive({
   phone: null,
   notes: null,
   tax_id: null,
+  importe: null,
 })
 
 const mappingFields = computed(() => [
   { key: 'name', label: t('officeCrm.name') + ' *' },
+  { key: 'phone', label: t('officeCrm.phone') + ' *' },
   { key: 'email', label: t('officeCrm.email') },
-  { key: 'phone', label: t('officeCrm.phone') },
+  { key: 'importe', label: 'Importe' },
   { key: 'tax_id', label: t('officeCrm.taxId') },
   { key: 'notes', label: t('officeCrm.notes') },
 ])
@@ -197,6 +202,7 @@ function applySuggested(suggested) {
   mapping.phone = suggested?.phone ?? null
   mapping.notes = suggested?.notes ?? null
   mapping.tax_id = suggested?.tax_id ?? null
+  mapping.importe = suggested?.importe ?? null
 }
 
 async function runPreview() {
@@ -240,6 +246,7 @@ async function runImport() {
         phone: mapping.phone,
         notes: mapping.notes,
         tax_id: mapping.tax_id,
+        importe: mapping.importe,
       },
     })
     result.value = res

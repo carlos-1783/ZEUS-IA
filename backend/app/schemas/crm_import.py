@@ -12,9 +12,10 @@ class CrmImportColumnMapping(BaseModel):
 
     name: Optional[str] = Field(None, description="Columna del archivo para nombre")
     email: Optional[str] = None
-    phone: Optional[str] = None
+    phone: Optional[str] = Field(None, description="Columna teléfono (requerida en pipeline V2)")
     notes: Optional[str] = None
     tax_id: Optional[str] = None
+    importe: Optional[str] = Field(None, description="Columna importe/deuda pendiente")
 
 
 class CrmImportPreviewOut(BaseModel):
@@ -34,10 +35,16 @@ class CrmImportConfirmIn(BaseModel):
 
 class CrmImportResultOut(BaseModel):
     success: bool = True
+    pipeline: Optional[str] = None
+    trace_id: Optional[str] = None
     imported: int = 0
+    inserted: int = 0
+    updated: int = 0
     skipped: int = 0
     skipped_empty: int = 0
     skipped_duplicates: int = 0
     skipped_invalid: int = 0
     errors: List[str] = Field(default_factory=list)
+    events_emitted: Optional[Dict[str, int]] = None
+    demo_boost_emitted: bool = False
     message: str = ""

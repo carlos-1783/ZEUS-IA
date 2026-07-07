@@ -58,5 +58,6 @@ async def crm_import_clients_confirm(
         current_user,
         file_id=body.file_id,
         mapping=body.mapping,
+        source="admin_clients_import",
     )
     return CrmImportResultOut(**result)

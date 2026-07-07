@@ -26,15 +26,15 @@
       <div class="summary-grid" v-if="summary">
         <div class="summary-item">
           <span class="label">Modo</span>
-          <span class="value">{{ summary.mode || 'analysis_only' }}</span>
+          <span class="value">{{ modeLabel }}</span>
         </div>
         <div class="summary-item">
           <span class="label">Agentes detectados</span>
           <span class="value">{{ summary.available_agents || 0 }}/{{ summary.total_agents || 0 }}</span>
         </div>
         <div class="summary-item">
-          <span class="label">Entrada recomendada</span>
-          <span class="value mono">{{ summary.recommended_entrypoint || '/api/v1/zeus-core/workspace-bootstrap' }}</span>
+          <span class="label">Punto de partida</span>
+          <span class="value">{{ entrypointLabel }}</span>
         </div>
       </div>
 
@@ -85,10 +85,53 @@ const summary = computed(() => brain.value?.summary || null)
 
 const agentPurposeMap: Record<string, string> = {
   AFRODITA: 'Operaciones internas y RRHH.',
-  RAFAEL: 'Fiscalidad, scoring y análisis de riesgo.',
+  RAFAEL: 'Fiscalidad, puntuación de riesgo y análisis.',
   THALOS: 'Monitorización, eventos y alertas.',
-  JUSTICIA: 'Auditoría, compliance y revisión legal.',
+  JUSTICIA: 'Auditoría, cumplimiento normativo y revisión legal.',
   PERSEO: 'Asistente inteligente, chat y tareas creativas.',
+}
+
+const capabilityLabelsEs: Record<string, string> = {
+  create_employee: 'Crear empleados',
+  qr_checkin: 'Fichaje por QR',
+  list_schedules: 'Consultar horarios',
+  inventory_ops: 'Gestión de inventario',
+  workspace_reads: 'Consultar workspace',
+  create_client_via_cross_agent: 'Alta de cliente vía otros agentes',
+  ops_routes: 'Rutas operativas',
+  generate_invoice_pdf: 'Generar PDF de factura',
+  generate_model_303: 'Generar modelo 303',
+  payment_risk_scoring: 'Evaluar riesgo de cobro',
+  scan_flow: 'Flujos de escaneo (QR/NFC/DNI)',
+  tax_summary: 'Resumen fiscal',
+  workspace_forms: 'Formularios del workspace',
+  monitoring: 'Monitorización activa',
+  alerts: 'Alertas',
+  event_audit: 'Auditoría de eventos',
+  workspace_items: 'Elementos del workspace',
+  active_execution_guarded: 'Ejecución activa (protegida por flags)',
+  system_audit: 'Auditoría del sistema',
+  documents_read: 'Consulta de documentos',
+  compliance_review: 'Revisión de cumplimiento',
+  read_only_mixed_tools: 'Herramientas mixtas en solo lectura',
+  llm_chat: 'Chat con IA',
+  video_edit_jobs: 'Trabajos de edición de vídeo',
+  audit_report: 'Informes de auditoría',
+  assistant_fallbacks: 'Respuestas de respaldo del asistente',
+  ai_generation_depends_on_provider: 'Generación IA según proveedor externo',
+}
+
+const modeLabelsEs: Record<string, string> = {
+  analysis_only: 'Solo análisis (sin ejecución)',
+}
+
+const entrypointLabelsEs: Record<string, string> = {
+  '/api/v1/zeus-core/workspace-bootstrap': 'Bootstrap de análisis del workspace',
+}
+
+const translateCapability = (key: string) => {
+  const normalized = key.trim().toLowerCase()
+  return capabilityLabelsEs[normalized] || key.replaceAll('_', ' ')
 }
 
 const toHumanList = (value: string) => {
@@ -97,9 +140,19 @@ const toHumanList = (value: string) => {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean)
-    .map((item) => item.replaceAll('_', ' '))
+    .map((item) => translateCapability(item))
     .join(', ')
 }
+
+const modeLabel = computed(() => {
+  const mode = summary.value?.mode
+  return (mode && modeLabelsEs[mode]) || modeLabelsEs.analysis_only
+})
+
+const entrypointLabel = computed(() => {
+  const ep = summary.value?.recommended_entrypoint
+  return (ep && entrypointLabelsEs[ep]) || entrypointLabelsEs['/api/v1/zeus-core/workspace-bootstrap']
+})
 
 const agentRows = computed(() => {
   const agents = brain.value?.agents || {}

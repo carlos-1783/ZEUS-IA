@@ -16,11 +16,11 @@ ARTIFACT_TYPE = "ZEUS_CORE_WORKSPACE_CONFIG"
 SCHEMA_VERSION = "zeus_core_workspace_bootstrap_v1"
 
 TARGET_PREFIXES: Dict[str, List[str]] = {
-    "AFRODITA": ["/api/v1/afrodita", "/api/v1/afrodita/rrhh/v1", "/api/v1/afrodita/ops/v1"],
-    "RAFAEL": ["/api/v1/rafael", "/api/v1/rafael-fiscal", "/api/v1/scan"],
-    "THALOS": ["/api/v1/thalos", "/api/v1/thalos/v1"],
-    "JUSTICIA": ["/api/v1/justicia", "/api/v1/justicia/v1", "/api/v1/justice"],
-    "PERSEO": ["/api/v1/perseo", "/api/v1/perseo/v2"],
+    "AFRODITA": ["/afrodita", "/afrodita/rrhh/v1", "/afrodita/ops/v1"],
+    "RAFAEL": ["/rafael", "/rafael-fiscal", "/scan"],
+    "THALOS": ["/thalos", "/thalos/v1"],
+    "JUSTICIA": ["/justicia", "/justicia/v1", "/justice"],
+    "PERSEO": ["/perseo", "/perseo/v2"],
 }
 
 CAPABILITY_RULES: Dict[str, List[str]] = {

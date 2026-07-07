@@ -16,7 +16,7 @@ from services.zeus_core_workspace_bootstrap_v1 import (
 def test_discover_available_agents_from_routes():
     with patch(
         "services.zeus_core_workspace_bootstrap_v1._all_route_paths",
-        return_value=["/api/v1/afrodita/rrhh/v1/status", "/api/v1/perseo/status"],
+        return_value=["/afrodita/rrhh/v1/status", "/perseo/status"],
     ):
         agents = discover_available_agents()
     by_name = {row["name"]: row for row in agents}

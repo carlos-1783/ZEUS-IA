@@ -153,7 +153,7 @@
 
         <div class="executive-section executive-section--zeus">
           <div class="zeus-core-highlight zeus-core">
-            <div class="zeus-core-card">
+            <div class="zeus-core-card" @click="selectAgent(zeusCoreAgent)">
               <img
                 :src="zeusCoreAgent.image"
                 :alt="zeusCoreAgent.name"
@@ -170,6 +170,10 @@
                     {{ zeusCoreAgent.activities_24h || 0 }} {{ t('dashboardPro.agentCard.activities24h') }}
                   </span>
                 </div>
+                <button class="btn-interact zeus-core-interact" @click.stop="chatWith(zeusCoreAgent)">
+                  <span>💬</span>
+                  {{ t('dashboardPro.agentCard.interact') }}
+                </button>
               </div>
             </div>
           </div>
@@ -1383,6 +1387,7 @@ const chatWith = (agent) => {
   border-radius: 14px;
   box-shadow: 0 4px 24px rgba(59, 130, 246, 0.12);
   box-sizing: border-box;
+  cursor: pointer;
 }
 
 .zeus-core-avatar {
@@ -1396,7 +1401,12 @@ const chatWith = (agent) => {
 
 .zeus-core-info {
   min-width: 0;
+  flex: 1;
   text-align: left;
+}
+
+.zeus-core-interact {
+  margin-top: 12px;
 }
 
 .zeus-core-name {

@@ -15,6 +15,7 @@ import services.crm_office_service as crm_svc
 from services.zeus_agent_executor_v1 import execute_agent_action
 from services.zeus_agenda_optimizer_v1 import propose_meeting_slots, schedule_meeting
 from services.zeus_core_metrics_v1 import get_core_metrics
+from services.zeus_core_workspace_bootstrap_v1 import run_zeus_core_workspace_bootstrap
 from services.zeus_external_intelligence_v1 import research_business
 from services.zeus_human_approval_v1 import list_pending, resolve_approval
 from services.zeus_scoring_engine_v1 import convert_lead_to_customer, create_lead, score_lead
@@ -43,6 +44,12 @@ class ScheduleMeetingRequest(BaseModel):
 
 class ApprovalResolveRequest(BaseModel):
     approve: bool = True
+
+
+class WorkspaceBootstrapRequest(BaseModel):
+    analysis_only: bool = True
+    persist_artifact: bool = True
+    company_id: Optional[int] = None
 
 
 @router.get("/metrics")
@@ -176,4 +183,19 @@ def external_research(
 ):
     return research_business(
         db, user=current_user, query=query, lead_id=lead_id, customer_id=customer_id
+    )
+
+
+@router.post("/workspace-bootstrap")
+def workspace_bootstrap(
+    body: WorkspaceBootstrapRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    return run_zeus_core_workspace_bootstrap(
+        db,
+        user=current_user,
+        analysis_only=body.analysis_only,
+        persist_artifact=body.persist_artifact,
+        company_id=body.company_id,
     )

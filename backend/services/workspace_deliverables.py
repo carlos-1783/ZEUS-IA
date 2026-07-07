@@ -22,6 +22,7 @@ WORKSPACE_DOCUMENT_TYPES: List[str] = [
     "fiscal_document",
     "legal_document",
     "hr_document",
+    "workspace_config",
 ]
 
 AGENT_WORKSPACE_CATEGORY: Dict[str, str] = {
@@ -30,6 +31,7 @@ AGENT_WORKSPACE_CATEGORY: Dict[str, str] = {
     "JUSTICIA": "legal_document",
     "AFRODITA": "hr_document",
     "THALOS": "legal_document",
+    "ZEUS CORE": "workspace_config",
 }
 
 DEFAULT_CONTENT_TYPE: Dict[str, str] = {
@@ -38,6 +40,7 @@ DEFAULT_CONTENT_TYPE: Dict[str, str] = {
     "JUSTICIA": "legal_document",
     "AFRODITA": "hr_document",
     "THALOS": "legal_document",
+    "ZEUS CORE": "workspace_config",
 }
 
 

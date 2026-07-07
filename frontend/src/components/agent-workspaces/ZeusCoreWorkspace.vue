@@ -39,7 +39,7 @@
       </div>
 
       <div v-if="agentRows.length" class="agents-list">
-        <h4>Capacidades detectadas</h4>
+        <h4>Resumen operativo de agentes</h4>
         <div v-for="row in agentRows" :key="row.name" class="agent-row">
           <div class="agent-row-head">
             <strong>{{ row.name }}</strong>
@@ -47,10 +47,10 @@
               {{ row.available ? 'Disponible' : 'No detectado' }}
             </span>
           </div>
-          <p class="targets">{{ row.discoveredTargets }}</p>
-          <p class="caps"><strong>Reglas:</strong> {{ row.rules }}</p>
-          <p class="caps"><strong>Reales:</strong> {{ row.real }}</p>
-          <p class="caps"><strong>Parciales:</strong> {{ row.partial }}</p>
+          <p class="purpose"><strong>Para qué sirve:</strong> {{ row.purpose }}</p>
+          <p class="targets"><strong>Endpoints detectados:</strong> {{ row.discoveredTargets }}</p>
+          <p class="caps"><strong>Qué puede hacer ya:</strong> {{ row.real }}</p>
+          <p class="caps"><strong>Qué depende de contexto o configuración:</strong> {{ row.partial }}</p>
         </div>
       </div>
     </section>
@@ -83,15 +83,33 @@ const createdAt = computed(() => {
 const brain = computed(() => latest.value?.document_payload?.content?.zeus_brain || null)
 const summary = computed(() => brain.value?.summary || null)
 
+const agentPurposeMap: Record<string, string> = {
+  AFRODITA: 'Operaciones internas y RRHH.',
+  RAFAEL: 'Fiscalidad, scoring y análisis de riesgo.',
+  THALOS: 'Monitorización, eventos y alertas.',
+  JUSTICIA: 'Auditoría, compliance y revisión legal.',
+  PERSEO: 'Asistente inteligente, chat y tareas creativas.',
+}
+
+const toHumanList = (value: string) => {
+  if (!value || value === '—') return '—'
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => item.replaceAll('_', ' '))
+    .join(', ')
+}
+
 const agentRows = computed(() => {
   const agents = brain.value?.agents || {}
   return Object.entries(agents).map(([name, info]: any) => ({
     name,
     available: Boolean(info?.available),
+    purpose: agentPurposeMap[name] || 'Capacidades operativas del agente.',
     discoveredTargets: (info?.discovered_targets || []).join(' · ') || 'Sin endpoints detectados',
-    rules: (info?.rules || []).join(', ') || '—',
-    real: (info?.capabilities_real || []).join(', ') || '—',
-    partial: (info?.capabilities_partial || []).join(', ') || '—',
+    real: toHumanList((info?.capabilities_real || []).join(', ')),
+    partial: toHumanList((info?.capabilities_partial || []).join(', ')),
   }))
 })
 
@@ -258,6 +276,7 @@ onMounted(loadWorkspace)
   color: #fcd34d;
 }
 
+.purpose,
 .targets,
 .caps {
   margin: 4px 0 0;

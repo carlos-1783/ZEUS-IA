@@ -238,6 +238,7 @@ import RafaelWorkspace from './agent-workspaces/RafaelWorkspace.vue'
 import AfroditaWorkspace from './agent-workspaces/AfroditaWorkspace.vue'
 import ThalosWorkspace from './agent-workspaces/ThalosWorkspace.vue'
 import JusticiaWorkspace from './agent-workspaces/JusticiaWorkspace.vue'
+import ZeusCoreWorkspace from './agent-workspaces/ZeusCoreWorkspace.vue'
 import ImageUploader from '@/components/ImageUploader.jsx'
 import { isForbiddenAiFallback, sanitizeAgentChatForMediaFlow } from '@/utils/mediaUploadPolicy'
 import { getAgentChatUrl, getChatMessagesUrl, AGENT_CHAT_TIMEOUT_MS } from '@/utils/chatApi'
@@ -253,12 +254,12 @@ const authStore = useAuthStore()
 
 // Workspaces mapping
 const workspaces = {
+  'ZEUS': ZeusCoreWorkspace,
   'PERSEO': PerseoWorkspace,
   'RAFAEL': RafaelWorkspace,
   'AFRODITA': AfroditaWorkspace,
   'THALOS': ThalosWorkspace,
   'JUSTICIA': JusticiaWorkspace
-  // ZEUS CORE no tiene workspace específico (es el orquestador)
 }
 
 const currentWorkspace = computed(() => {

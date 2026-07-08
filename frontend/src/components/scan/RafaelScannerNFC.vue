@@ -11,6 +11,7 @@ const emit = defineEmits<{
 const status = ref('Acerca etiqueta NFC fiscal (TPV, cobro, cliente)…')
 const supported = ref(false)
 const fallbackHex = ref('')
+const fallbackText = ref('')
 const lastResult = ref<Record<string, unknown> | null>(null)
 
 interface NdefRecordLike { recordType?: string; data?: DataView }
@@ -21,6 +22,12 @@ interface NdefReaderLike {
 }
 
 let abort: AbortController | null = null
+let handled = false
+
+function recordsToText(records: NdefRecordLike[]): string {
+  const parts = records.map(decodeRecord).filter(Boolean)
+  return parts[0] || parts.join('')
+}
 
 function decodeRecord(record: NdefRecordLike): string {
   if (!record.data) return ''
@@ -39,6 +46,8 @@ function toHex(text: string): string {
 async function processFiscalPayload(text: string) {
   const trimmed = text.trim()
   if (!trimmed) throw new Error('Etiqueta NFC vacía')
+  if (handled) return
+  handled = true
 
   status.value = 'Procesando etiqueta NFC (RAFAEL)…'
   let result: Record<string, unknown>
@@ -55,7 +64,23 @@ async function processFiscalPayload(text: string) {
   status.value = String(result.message || 'NFC fiscal procesado')
 }
 
+async function submitText() {
+  if (!fallbackText.value.trim()) {
+    emit('error', 'Introduce el contenido de la etiqueta NFC')
+    return
+  }
+  try {
+    await processFiscalPayload(fallbackText.value.trim())
+  } catch (err) {
+    handled = false
+    const msg = err instanceof Error ? err.message : 'Error procesando NFC'
+    status.value = msg
+    emit('error', msg)
+  }
+}
+
 async function startNfc() {
+  handled = false
   const NdefReaderCtor = (window as unknown as { NDEFReader?: new () => NdefReaderLike }).NDEFReader
   if (!NdefReaderCtor) {
     supported.value = false
@@ -68,8 +93,18 @@ async function startNfc() {
   try {
     const reader = new NdefReaderCtor()
     reader.addEventListener('reading', async (event) => {
-      const text = (event.message?.records || []).map(decodeRecord).filter(Boolean).join('')
-      if (text) await processFiscalPayload(text)
+      if (handled) return
+      const text = recordsToText(event.message?.records || [])
+      if (text) {
+        try {
+          await processFiscalPayload(text)
+        } catch (err) {
+          handled = false
+          const msg = err instanceof Error ? err.message : 'Error procesando NFC'
+          status.value = msg
+          emit('error', msg)
+        }
+      }
     })
     await reader.scan({ signal: abort.signal })
   } catch (err) {
@@ -93,6 +128,7 @@ async function submitHex() {
     )
     await processFiscalPayload(text || bytes)
   } catch (err) {
+    handled = false
     const msg = err instanceof Error ? err.message : 'Error procesando NFC'
     status.value = msg
     emit('error', msg)
@@ -106,6 +142,16 @@ onMounted(startNfc)
   <div class="rafael-nfc">
     <p class="status">{{ status }}</p>
     <p class="hint">RAFAEL: etiquetas con formato <code>ZEUS|Cliente|importe|EUR</code> o payload de terminal.</p>
+    <div class="fallback">
+      <label>Contenido NFC (manual)</label>
+      <input
+        v-model="fallbackText"
+        class="input"
+        placeholder="ZEUS|Cliente Demo|120.00|EUR|cliente@empresa.com"
+        spellcheck="false"
+      />
+      <button type="button" class="btn" @click="submitText">Procesar NFC fiscal manual</button>
+    </div>
     <div v-if="!supported" class="fallback">
       <label>Payload HEX (fallback)</label>
       <input v-model="fallbackHex" class="input" placeholder="5a4555537c436c69656e74657c313230" />

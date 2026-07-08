@@ -10,22 +10,46 @@ const emit = defineEmits<{
 const mrz = ref('')
 const email = ref('')
 const phone = ref('')
-const status = ref('Pega las líneas MRZ del reverso del DNIe')
+const status = ref('Pega las 3 líneas completas del MRZ del reverso del DNIe')
 const loading = ref(false)
 const lastResult = ref<Record<string, unknown> | null>(null)
 
+function normalizeMrzInput(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n')
+}
+
+const DEMO_MRZ = `I<UTOD231458907<<<<<<<
+7408122F1204159UTO<<<<<<<<<<<6
+ERIKSSON<<ANNA<MARIA<<<<<<<<<<`
+
+function fillDemoMrz() {
+  mrz.value = DEMO_MRZ
+  status.value = 'MRZ de ejemplo cargado. Pulsa «Crear cliente desde DNI».'
+}
+
 async function submitMrz() {
-  if (!mrz.value.trim()) {
+  const normalizedMrz = normalizeMrzInput(mrz.value)
+  if (!normalizedMrz) {
     status.value = 'MRZ requerido'
+    emit('error', status.value)
+    return
+  }
+  const lines = normalizedMrz.split('\n').filter(Boolean)
+  if (lines.length === 2 && Math.max(lines[0]?.length || 0, lines[1]?.length || 0) < 36) {
+    status.value = 'Para DNIe español pega las 3 líneas completas del MRZ'
     emit('error', status.value)
     return
   }
   loading.value = true
   status.value = 'Validando MRZ y creando cliente…'
   try {
-    const result = await scanFlowApi.scanDni(mrz.value.trim(), {
-      email: email.value || undefined,
-      phone: phone.value || undefined,
+    const result = await scanFlowApi.scanDni(normalizedMrz, {
+      email: email.value.trim() || undefined,
+      phone: phone.value.trim() || undefined,
     })
     lastResult.value = result
     emit('parsed', result)
@@ -43,14 +67,16 @@ async function submitMrz() {
 <template>
   <div class="parser-dni">
     <p class="status">{{ status }}</p>
-    <label>MRZ (líneas del DNIe)</label>
+    <label>MRZ del DNIe (3 líneas completas)</label>
     <textarea
       v-model="mrz"
       class="mrz-input"
       rows="4"
-      placeholder="IDESP12345678Z&#10;7408122M2504159ESP…"
+      placeholder="I&lt;ESPABC123456&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&#10;9001011M3001017ESP&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;2&#10;APELLIDO&lt;&lt;NOMBRE&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;"
       spellcheck="false"
     />
+    <small class="hint">El texto gris del campo no cuenta como MRZ: debes pegar o cargar el ejemplo.</small>
+    <button type="button" class="btn demo" @click="fillDemoMrz">Cargar MRZ de ejemplo</button>
     <div class="row">
       <div class="field">
         <label>Email (opcional)</label>
@@ -71,6 +97,7 @@ async function submitMrz() {
 <style scoped>
 .parser-dni { display: flex; flex-direction: column; gap: 0.75rem; }
 .status { margin: 0; color: #cbd5e1; }
+.hint { color: #94a3b8; font-size: 0.8rem; margin-top: -0.25rem; }
 .mrz-input, .input {
   width: 100%; padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid #334155;
   background: #0f172a; color: #f8fafc; font-family: ui-monospace, monospace; font-size: 0.85rem;
@@ -82,6 +109,10 @@ async function submitMrz() {
   padding: 0.55rem 1.1rem; border-radius: 8px; cursor: pointer; font-weight: 600;
 }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn.demo {
+  align-self: flex-start; background: #334155; color: #fff; border: none;
+  padding: 0.45rem 0.9rem; border-radius: 8px; cursor: pointer; font-weight: 600;
+}
 .result {
   background: #0f172a; color: #e2e8f0; padding: 0.75rem; border-radius: 8px;
   font-size: 0.75rem; overflow: auto; max-height: 240px;

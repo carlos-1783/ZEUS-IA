@@ -7,6 +7,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from services.mrz_parser_v1 import parse_mrz
+
 from .base import log_tool_execution
 
 
@@ -42,21 +44,10 @@ def scan_nfc_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def parse_dnie_mrz(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Parsear MRZ de DNIe (2 líneas)."""
-    mrz = payload.get("mrz", "").splitlines()
-    if len(mrz) < 2:
-        raise ValueError("MRZ incompleto")
-    line1, line2 = mrz[0], mrz[1]
-    document_number = line1[5:14].replace("<", "")
-    birth_date = line2[0:6]
-    expiry = line2[8:14]
-    result = {
-        "document_number": document_number,
-        "birth_date": f"20{birth_date[0:2]}-{birth_date[2:4]}-{birth_date[4:6]}",
-        "expiry_date": f"20{expiry[0:2]}-{expiry[2:4]}-{expiry[4:6]}",
-        "nationality": line2[15:18].replace("<", ""),
-    }
-    log_tool_execution("RAFAEL", "dni_ocr_parser", "MRZ parseado", {"mrz": mrz, "result": result})
+    """Parsear MRZ de DNIe usando el parser central (TD1/TD2)."""
+    raw_mrz = payload.get("mrz", "")
+    result = parse_mrz(raw_mrz)
+    log_tool_execution("RAFAEL", "dni_ocr_parser", "MRZ parseado", {"mrz": raw_mrz, "result": result})
     return result
 
 

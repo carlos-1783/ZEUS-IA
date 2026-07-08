@@ -23,7 +23,6 @@ from app.schemas.customer import CustomerCreate
 import services.crm_office_service as crm_svc
 from services.event_bus import (
     emit_cashflow_updated,
-    emit_client_created,
     emit_invoice_generated,
     emit_scan_detected,
 )
@@ -129,15 +128,6 @@ def _find_or_create_customer(
         db,
         user,
         CustomerCreate(name=name, email=safe_email, phone=phone, tax_id=tax_id),
-    )
-    emit_client_created(
-        user_id=user.id,
-        user_email=getattr(user, "email", None),
-        company_id=company_id,
-        customer_id=cust.id,
-        customer_name=cust.name,
-        customer_email=cust.email,
-        db=db,
     )
     return cust, True
 
@@ -420,7 +410,13 @@ def process_dni_scan(
 ) -> Dict[str, Any]:
     """DNI MRZ → cliente CRM + scoring + lead (ZEUS)."""
     cid = _company_id(db, user, company_id)
-    identity = parse_mrz(mrz)
+    normalized_mrz = (mrz or "").strip()
+    normalized_email = (email or "").strip() or None
+    normalized_phone = (phone or "").strip() or None
+    try:
+        identity = parse_mrz(normalized_mrz)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     emit_scan_detected(
         user_id=user.id,
@@ -440,9 +436,9 @@ def process_dni_scan(
         user,
         company_id=cid,
         name=full_name,
-        email=email,
+        email=normalized_email,
         tax_id=tax_id,
-        phone=phone,
+        phone=normalized_phone,
     )
 
     scoring = score_customer(db, user=user, customer_id=cust.id)
@@ -450,8 +446,8 @@ def process_dni_scan(
         db,
         user=user,
         name=full_name,
-        email=email or cust.email,
-        phone=phone,
+        email=normalized_email or cust.email,
+        phone=normalized_phone,
         sector="dni_scan",
         estimated_value=50.0,
     )
@@ -479,7 +475,7 @@ def process_dni_scan(
         user=user,
         scan_type="dni",
         agent_name="ZEUS",
-        raw_payload=mrz[:4000],
+        raw_payload=normalized_mrz[:4000],
         parsed=identity,
         result=result,
     )

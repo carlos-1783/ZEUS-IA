@@ -28,16 +28,35 @@ def _validate_check(data: str, expected: str) -> bool:
     return _check_digit(data) == expected
 
 
+def _compact_mrz(raw: str) -> str:
+    return re.sub(r"[^A-Z0-9<]", "", (raw or "").upper())
+
+
 def _clean_lines(mrz: str) -> List[str]:
-    lines = [re.sub(r"\s+", "", ln.upper()) for ln in (mrz or "").strip().splitlines() if ln.strip()]
-    # TD1 usa 30 caracteres por línea; normalizar relleno
-    return [ln.ljust(30, "<")[:30] for ln in lines if ln]
+    return [re.sub(r"\s+", "", ln.upper()) for ln in (mrz or "").strip().splitlines() if ln.strip()]
+
+
+def _coerce_lines(mrz: str) -> List[str]:
+    lines = _clean_lines(mrz)
+    if len(lines) >= 2:
+        return lines
+
+    compact = _compact_mrz(mrz)
+    if not compact:
+        return []
+    if len(compact) == 90:
+        return [compact[0:30], compact[30:60], compact[60:90]]
+    if len(compact) == 72:
+        return [compact[0:36], compact[36:72]]
+    return lines or [compact]
 
 
 def _parse_td1(lines: List[str]) -> Dict[str, Any]:
     if len(lines) < 3:
         raise ValueError("MRZ TD1 incompleto (se requieren 3 líneas)")
-    l1, l2, l3 = lines[0], lines[1], lines[2]
+    l1 = lines[0].ljust(30, "<")[:30]
+    l2 = lines[1].ljust(30, "<")[:30]
+    l3 = lines[2].ljust(30, "<")[:30]
     if len(l1) < 30 or len(l2) < 30:
         raise ValueError("Líneas MRZ TD1 demasiado cortas")
 
@@ -122,9 +141,13 @@ def _parse_td2(lines: List[str]) -> Dict[str, Any]:
 
 def parse_mrz(mrz: str) -> Dict[str, Any]:
     """Parsear MRZ con validación de checksums ICAO."""
-    lines = _clean_lines(mrz)
+    lines = _coerce_lines(mrz)
     if not lines:
         raise ValueError("MRZ vacío")
     if len(lines) >= 3:
         return _parse_td1(lines[:3])
+    if len(lines) == 1:
+        raise ValueError("MRZ incompleto: pega cada línea en su propia línea.")
+    if len(lines) == 2 and max(len(lines[0]), len(lines[1])) < 36:
+        raise ValueError("MRZ incompleto: para DNIe/TD1 pega las 3 líneas completas.")
     return _parse_td2(lines[:2])

@@ -10,6 +10,29 @@ const buildHeaders = () => {
   return headers
 }
 
+function formatApiError(data: unknown, fallback: string): string {
+  const payload = data as { detail?: unknown; message?: unknown }
+  const detail = payload?.detail ?? payload?.message
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === 'string') return item
+        if (item && typeof item === 'object') {
+          const row = item as { msg?: string; message?: string }
+          return row.msg || row.message || JSON.stringify(item)
+        }
+        return String(item)
+      })
+      .join('; ')
+  }
+  if (detail && typeof detail === 'object') {
+    const row = detail as { msg?: string; message?: string }
+    return row.msg || row.message || JSON.stringify(detail)
+  }
+  return fallback
+}
+
 async function postScan<T = Record<string, unknown>>(path: string, body: Payload): Promise<T> {
   const response = await fetch(`${API_BASE_URL}/scan${path}`, {
     method: 'POST',
@@ -18,8 +41,7 @@ async function postScan<T = Record<string, unknown>>(path: string, body: Payload
   })
   const data = await response.json()
   if (!response.ok) {
-    const detail = data?.detail || data?.message || 'Error en escaneo'
-    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
+    throw new Error(formatApiError(data, 'Error en escaneo'))
   }
   return data as T
 }

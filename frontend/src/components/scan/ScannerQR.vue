@@ -11,6 +11,8 @@ const videoRef = ref<HTMLVideoElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const status = ref('Solicitando cámara…')
 const scanning = ref(false)
+const cameraAvailable = ref(true)
+const manualQr = ref('')
 const lastResult = ref<Record<string, unknown> | null>(null)
 const facingMode = ref<'environment' | 'user'>('environment')
 
@@ -44,7 +46,7 @@ async function decodeQrFrame(imageData: ImageData): Promise<string | null> {
   try {
     const mod = await import('jsqr')
     const jsQR = mod.default
-    const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' })
+    const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' })
     return code?.data ?? null
   } catch {
     return null
@@ -77,9 +79,10 @@ async function startCamera() {
     status.value = 'Apunta al código QR'
     tick()
   } catch (err) {
+    cameraAvailable.value = false
     const msg = err instanceof Error ? err.message : 'No se pudo abrir la cámara'
-    status.value = msg
-    emit('error', msg)
+    status.value = `${msg}. Usa el campo manual debajo.`
+    emit('error', status.value)
   }
 }
 
@@ -88,13 +91,30 @@ function switchCamera() {
   startCamera()
 }
 
+async function submitManualQr() {
+  const data = manualQr.value.trim()
+  if (!data) {
+    status.value = 'Introduce el contenido del código QR'
+    emit('error', status.value)
+    return
+  }
+  stopCamera()
+  await onQrDetected(data)
+}
+
 async function onQrDetected(data: string) {
+  const payload = data.trim()
+  if (!payload) {
+    status.value = 'QR vacío'
+    emit('error', status.value)
+    return
+  }
   if (handled) return
   handled = true
   stopCamera()
   status.value = 'QR detectado — procesando…'
   try {
-    const result = await scanFlowApi.scanQr(data)
+    const result = await scanFlowApi.scanQr(payload)
     lastResult.value = result
     emit('scanned', result)
     status.value = String(result.message || 'QR procesado')
@@ -142,7 +162,8 @@ function tick() {
 }
 onMounted(() => {
   if (!navigator.mediaDevices?.getUserMedia) {
-    status.value = 'Cámara no disponible en este navegador'
+    cameraAvailable.value = false
+    status.value = 'Cámara no disponible — usa el campo manual debajo'
     emit('error', status.value)
     return
   }
@@ -161,8 +182,19 @@ onBeforeUnmount(stopCamera)
     </div>
     <p class="status">{{ status }}</p>
     <div class="actions">
-      <button type="button" class="btn" @click="switchCamera">Cambiar cámara</button>
-      <button type="button" class="btn secondary" @click="startCamera">Reiniciar</button>
+      <button v-if="cameraAvailable" type="button" class="btn" @click="switchCamera">Cambiar cámara</button>
+      <button v-if="cameraAvailable" type="button" class="btn secondary" @click="startCamera">Reiniciar</button>
+    </div>
+    <div class="fallback">
+      <label>Contenido QR (manual o demo)</label>
+      <input
+        v-model="manualQr"
+        class="input"
+        placeholder="ZEUS|Cliente Demo|120.00|EUR|cliente@empresa.com"
+        spellcheck="false"
+      />
+      <button type="button" class="btn manual" @click="submitManualQr">Procesar QR manual</button>
+      <small class="hint">Útil en escritorio sin cámara o para probar el flujo fiscal sin escanear.</small>
     </div>
     <pre v-if="lastResult" class="result">{{ JSON.stringify(lastResult, null, 2) }}</pre>
   </div>
@@ -184,6 +216,13 @@ onBeforeUnmount(stopCamera)
   border-radius: 8px; cursor: pointer; font-weight: 600;
 }
 .btn.secondary { background: #334155; }
+.btn.manual { background: #10b981; }
+.fallback { display: flex; flex-direction: column; gap: 0.4rem; }
+.input {
+  padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid #334155;
+  background: #0f172a; color: #f8fafc; font-family: ui-monospace, monospace; font-size: 0.85rem;
+}
+.hint { color: #94a3b8; font-size: 0.8rem; margin: 0; }
 .result {
   background: #0f172a; color: #e2e8f0; padding: 0.75rem; border-radius: 8px;
   font-size: 0.75rem; overflow: auto; max-height: 200px;

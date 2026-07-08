@@ -29,6 +29,12 @@ interface NdefReaderLike {
 }
 
 let abort: AbortController | null = null
+let handled = false
+
+function recordsToText(records: NdefRecordLike[]): string {
+  const parts = records.map(decodeRecord).filter(Boolean)
+  return parts[0] || parts.join('')
+}
 
 function decodeRecord(record: NdefRecordLike): string {
   if (!record.data) return ''
@@ -41,6 +47,7 @@ function decodeRecord(record: NdefRecordLike): string {
 }
 
 async function startNfcScan() {
+  handled = false
   const NdefReaderCtor = (window as unknown as { NDEFReader?: new () => NdefReaderLike }).NDEFReader
   if (!NdefReaderCtor) {
     supported.value = false
@@ -54,8 +61,9 @@ async function startNfcScan() {
   try {
     const reader = new NdefReaderCtor()
     reader.addEventListener('reading', async (event) => {
+      if (handled) return
       const records = event.message?.records || []
-      const text = records.map(decodeRecord).filter(Boolean).join('|') || ''
+      const text = recordsToText(records)
       if (text) await submitNfc(text)
     })
     await reader.scan({ signal: abort.signal })
@@ -69,13 +77,21 @@ async function startNfcScan() {
 }
 
 async function submitNfc(text: string) {
+  const payload = text.trim()
+  if (!payload) {
+    status.value = 'Etiqueta NFC vacía'
+    emit('error', status.value)
+    return
+  }
+  if (handled) return
+  handled = true
   scanning.value = false
   abort?.abort()
   status.value = 'NFC detectado — procesando…'
   try {
-    const payloadHex = [...new TextEncoder().encode(text)].map((b) => b.toString(16).padStart(2, '0')).join('')
+    const payloadHex = [...new TextEncoder().encode(payload)].map((b) => b.toString(16).padStart(2, '0')).join('')
     const result = await scanFlowApi.scanNfc({
-      text,
+      text: payload,
       payload_hex: payloadHex,
       checkin_type: checkinType.value,
     })
@@ -86,6 +102,7 @@ async function submitNfc(text: string) {
     const msg = err instanceof Error ? err.message : 'Error procesando NFC'
     status.value = msg
     emit('error', msg)
+    handled = false
   }
 }
 
@@ -122,6 +139,11 @@ onMounted(startNfcScan)
       <label>Contenido NFC (fallback)</label>
       <input v-model="fallbackText" class="input" placeholder="ZEUSCHECK|W001|2026-05-29T10:00:00Z" />
       <button type="button" class="btn" @click="submitFallback">Procesar etiqueta</button>
+    </div>
+    <div v-else class="fallback">
+      <label>Contenido NFC (manual)</label>
+      <input v-model="fallbackText" class="input" placeholder="ZEUSCHECK|W001|2026-05-29T10:00:00Z" />
+      <button type="button" class="btn" @click="submitFallback">Procesar sin lector</button>
     </div>
     <div class="actions">
       <button v-if="supported" type="button" class="btn" @click="startNfcScan">Escanear NFC</button>

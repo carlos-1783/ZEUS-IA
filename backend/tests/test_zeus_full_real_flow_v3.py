@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 
 import pytest  # pyright: ignore[reportMissingImports]
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.security import get_password_hash
@@ -69,6 +70,37 @@ def test_mrz_parser_checksums():
     assert parsed["full_name"]
 
 
+def test_mrz_parser_accepts_crlf_and_extra_spaces():
+    spaced = "  \r\n".join(SAMPLE_MRZ.splitlines())
+    parsed = parse_mrz(spaced)
+    assert parsed["format"] == "TD1"
+    assert parsed["document_number"] == "D23145890"
+
+
+def test_mrz_parser_rejects_incomplete_td1_with_clear_message():
+    incomplete = "\n".join(SAMPLE_MRZ.splitlines()[:2])
+    with pytest.raises(ValueError, match="3 líneas completas"):
+        parse_mrz(incomplete)
+
+
+def test_parse_qr_zeus_format_trims_input():
+    from services.scan_flow_service_v1 import _parse_qr_data
+
+    parsed = _parse_qr_data("  ZEUS|Buyer|50.5|EUR|buyer@test.com  ")
+    assert parsed["kind"] == "fiscal"
+    assert parsed["customer_name"] == "Buyer"
+    assert parsed["amount"] == 50.5
+    assert parsed["email"] == "buyer@test.com"
+
+
+def test_parse_qr_checkin_routes_to_checkin_kind():
+    from services.scan_flow_service_v1 import _parse_qr_data
+
+    parsed = _parse_qr_data("ZEUSCHECK|W001|2026-05-29T10:00:00Z")
+    assert parsed["kind"] == "checkin"
+    assert parsed["employee_id"] == "W001"
+
+
 def test_qr_to_invoice(db: Session):
     user, company, _ = _seed(db)
     email = f"qr_buyer_{uuid.uuid4().hex[:6]}@test.com"
@@ -90,6 +122,13 @@ def test_dni_to_customer(db: Session):
     assert out["lead_score"] is not None
     assert db.query(Customer).filter(Customer.id == out["customer_id"]).count() == 1
     assert db.query(ScanEvent).filter(ScanEvent.scan_type == "dni").count() >= 1
+
+
+def test_dni_invalid_mrz_returns_422(db: Session):
+    user, company, _ = _seed(db)
+    with pytest.raises(HTTPException, match="3 líneas completas") as exc:
+        process_dni_scan(db, user, mrz="\n".join(SAMPLE_MRZ.splitlines()[:2]), company_id=company.id)
+    assert exc.value.status_code == 422
 
 
 def test_nfc_to_checkin(db: Session):

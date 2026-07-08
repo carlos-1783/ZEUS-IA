@@ -78,6 +78,7 @@ RUN apt-get update && apt-get install -y \
     g++ \
     ffmpeg \
     fonts-dejavu-core \
+    tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
 # Set work directory (debe coincidir con resolución de STATIC_DIR en app/core/config.py)

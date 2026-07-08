@@ -54,6 +54,18 @@
       ]
     },
     {
+      "name": "Escaneo",
+      "short_name": "Scan",
+      "description": "QR · NFC · DNI — escaneo físico",
+      "url": "/scan",
+      "icons": [
+        {
+          "src": "/images/logo-zeus.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
       "name": "Admin",
       "short_name": "Admin",
       "description": "Panel de administración",

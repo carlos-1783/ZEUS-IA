@@ -1,18 +1,30 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { scanFlowApi } from '@/api/scanFlow'
+import { capturePhotoBase64, getScanRuntime } from '@/services/scanHardware'
 
 const emit = defineEmits<{
   (e: 'parsed', result: Record<string, unknown>): void
   (e: 'error', message: string): void
 }>()
 
+const mode = ref<'manual' | 'camera'>('manual')
 const mrz = ref('')
 const email = ref('')
 const phone = ref('')
-const status = ref('Pega las 3 líneas completas del MRZ del reverso del DNIe')
+const status = ref('Pega las 3 líneas completas del MRZ o usa la cámara del reverso')
 const loading = ref(false)
 const lastResult = ref<Record<string, unknown> | null>(null)
+const runtime = ref({ native: false, platform: 'web', nfcMode: 'manual' as string })
+
+const videoRef = ref<HTMLVideoElement | null>(null)
+const canvasRef = ref<HTMLCanvasElement | null>(null)
+const cameraActive = ref(false)
+let stream: MediaStream | null = null
+
+const DEMO_MRZ = `I<UTOD231458907<<<<<<<
+7408122F1204159UTO<<<<<<<<<<<6
+ERIKSSON<<ANNA<MARIA<<<<<<<<<<`
 
 function normalizeMrzInput(value: string) {
   return value
@@ -22,13 +34,85 @@ function normalizeMrzInput(value: string) {
     .join('\n')
 }
 
-const DEMO_MRZ = `I<UTOD231458907<<<<<<<
-7408122F1204159UTO<<<<<<<<<<<6
-ERIKSSON<<ANNA<MARIA<<<<<<<<<<`
-
 function fillDemoMrz() {
   mrz.value = DEMO_MRZ
+  mode.value = 'manual'
   status.value = 'MRZ de ejemplo cargado. Pulsa «Crear cliente desde DNI».'
+}
+
+function stopCamera() {
+  if (stream) {
+    stream.getTracks().forEach((t) => t.stop())
+    stream = null
+  }
+  cameraActive.value = false
+}
+
+async function startCamera() {
+  stopCamera()
+  if (!navigator.mediaDevices?.getUserMedia) {
+    status.value = 'Cámara no disponible en este dispositivo'
+    return
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    })
+    const video = videoRef.value
+    if (!video) return
+    video.srcObject = stream
+    await video.play()
+    cameraActive.value = true
+    status.value = 'Enfoca las 3 líneas MRZ del reverso del DNI'
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : 'No se pudo abrir la cámara'
+    emit('error', status.value)
+  }
+}
+
+async function captureFromVideo(): Promise<string> {
+  const video = videoRef.value
+  const canvas = canvasRef.value
+  if (!video || !canvas || !video.videoWidth) {
+    throw new Error('Cámara no lista')
+  }
+  canvas.width = video.videoWidth
+  canvas.height = video.videoHeight
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('No se pudo capturar imagen')
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+  return canvas.toDataURL('image/jpeg', 0.92)
+}
+
+async function submitCameraMrz() {
+  loading.value = true
+  status.value = 'Capturando y extrayendo MRZ (OCR)…'
+  try {
+    let imageBase64 = ''
+    try {
+      imageBase64 = await capturePhotoBase64()
+    } catch (err) {
+      if (err instanceof Error && err.message === 'USE_INLINE_CAMERA') {
+        imageBase64 = await captureFromVideo()
+      } else {
+        throw err
+      }
+    }
+    const result = await scanFlowApi.scanDniImage(imageBase64, {
+      email: email.value.trim() || undefined,
+      phone: phone.value.trim() || undefined,
+    })
+    lastResult.value = result
+    emit('parsed', result)
+    status.value = String(result.message || 'DNI procesado por OCR')
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Error OCR DNI'
+    status.value = msg
+    emit('error', msg)
+  } finally {
+    loading.value = false
+  }
 }
 
 async function submitMrz() {
@@ -62,21 +146,61 @@ async function submitMrz() {
     loading.value = false
   }
 }
+
+function switchMode(next: 'manual' | 'camera') {
+  mode.value = next
+  if (next === 'camera') {
+    startCamera()
+  } else {
+    stopCamera()
+    status.value = 'Pega las 3 líneas completas del MRZ del reverso del DNIe'
+  }
+}
+
+onMounted(async () => {
+  runtime.value = await getScanRuntime()
+})
+
+onBeforeUnmount(stopCamera)
 </script>
 
 <template>
   <div class="parser-dni">
     <p class="status">{{ status }}</p>
-    <label>MRZ del DNIe (3 líneas completas)</label>
-    <textarea
-      v-model="mrz"
-      class="mrz-input"
-      rows="4"
-      placeholder="I&lt;ESPABC123456&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&#10;9001011M3001017ESP&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;2&#10;APELLIDO&lt;&lt;NOMBRE&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;"
-      spellcheck="false"
-    />
-    <small class="hint">El texto gris del campo no cuenta como MRZ: debes pegar o cargar el ejemplo.</small>
-    <button type="button" class="btn demo" @click="fillDemoMrz">Cargar MRZ de ejemplo</button>
+    <p class="runtime">Modo: {{ runtime.native ? `nativo (${runtime.platform})` : 'web/PWA' }}</p>
+
+    <nav class="mode-tabs">
+      <button type="button" :class="{ active: mode === 'manual' }" @click="switchMode('manual')">MRZ manual</button>
+      <button type="button" :class="{ active: mode === 'camera' }" @click="switchMode('camera')">Cámara OCR</button>
+    </nav>
+
+    <template v-if="mode === 'manual'">
+      <label>MRZ del DNIe (3 líneas completas)</label>
+      <textarea
+        v-model="mrz"
+        class="mrz-input"
+        rows="4"
+        placeholder="I&lt;ESPABC123456&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&#10;9001011M3001017ESP&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;2&#10;APELLIDO&lt;&lt;NOMBRE&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;"
+        spellcheck="false"
+      />
+      <small class="hint">El texto gris no cuenta como MRZ. Pega las líneas o carga el ejemplo.</small>
+      <button type="button" class="btn demo" @click="fillDemoMrz">Cargar MRZ de ejemplo</button>
+      <button type="button" class="btn" :disabled="loading" @click="submitMrz">
+        {{ loading ? 'Procesando…' : 'Crear cliente desde DNI' }}
+      </button>
+    </template>
+
+    <template v-else>
+      <div class="camera-wrap">
+        <video ref="videoRef" class="preview" playsinline muted />
+        <canvas ref="canvasRef" class="hidden-canvas" />
+      </div>
+      <button type="button" class="btn secondary" @click="startCamera">Reiniciar cámara</button>
+      <button type="button" class="btn" :disabled="loading || !cameraActive" @click="submitCameraMrz">
+        {{ loading ? 'OCR en curso…' : 'Capturar reverso y crear cliente' }}
+      </button>
+    </template>
+
     <div class="row">
       <div class="field">
         <label>Email (opcional)</label>
@@ -87,9 +211,7 @@ async function submitMrz() {
         <input v-model="phone" type="tel" class="input" placeholder="+34 600 000 000" />
       </div>
     </div>
-    <button type="button" class="btn" :disabled="loading" @click="submitMrz">
-      {{ loading ? 'Procesando…' : 'Crear cliente desde DNI' }}
-    </button>
+
     <pre v-if="lastResult" class="result">{{ JSON.stringify(lastResult, null, 2) }}</pre>
   </div>
 </template>
@@ -97,17 +219,28 @@ async function submitMrz() {
 <style scoped>
 .parser-dni { display: flex; flex-direction: column; gap: 0.75rem; }
 .status { margin: 0; color: #cbd5e1; }
+.runtime { margin: 0; color: #64748b; font-size: 0.8rem; }
+.mode-tabs { display: flex; gap: 0.5rem; }
+.mode-tabs button {
+  border: 1px solid #334155; background: #1e293b; color: #cbd5e1;
+  border-radius: 999px; padding: 0.35rem 0.85rem; cursor: pointer;
+}
+.mode-tabs button.active { background: #10b981; color: #fff; border-color: #10b981; }
 .hint { color: #94a3b8; font-size: 0.8rem; margin-top: -0.25rem; }
 .mrz-input, .input {
   width: 100%; padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid #334155;
   background: #0f172a; color: #f8fafc; font-family: ui-monospace, monospace; font-size: 0.85rem;
 }
+.camera-wrap { background: #111; border-radius: 12px; overflow: hidden; }
+.preview { width: 100%; max-height: 280px; object-fit: cover; display: block; }
+.hidden-canvas { display: none; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
 .field { display: flex; flex-direction: column; gap: 0.35rem; }
 .btn {
   align-self: flex-start; background: #10b981; color: #fff; border: none;
   padding: 0.55rem 1.1rem; border-radius: 8px; cursor: pointer; font-weight: 600;
 }
+.btn.secondary { background: #334155; }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn.demo {
   align-self: flex-start; background: #334155; color: #fff; border: none;

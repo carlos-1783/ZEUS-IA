@@ -93,6 +93,13 @@ def _parse_qr_data(data: str) -> Dict[str, Any]:
             "employee_id": parts[1] if len(parts) > 1 else None,
             "timestamp": parts[2] if len(parts) > 2 else None,
         }
+    if parts[0].upper() == "CLIENT":
+        return {
+            "kind": "client_action",
+            "raw": raw,
+            "customer_ref": parts[1] if len(parts) > 1 else "",
+            "action": (parts[2] if len(parts) > 2 else "VIEW").upper(),
+        }
     return {"kind": "unknown", "raw": raw, "text": raw}
 
 
@@ -181,6 +188,116 @@ def _create_invoice_draft(
     return inv
 
 
+def _resolve_customer_ref(
+    db: Session,
+    user: User,
+    *,
+    company_id: int,
+    customer_ref: str,
+) -> Customer:
+    ref = (customer_ref or "").strip()
+    if not ref:
+        raise HTTPException(status_code=422, detail="Referencia de cliente vacía.")
+    q = db.query(Customer).filter(Customer.company_id == company_id)
+    if ref.isdigit():
+        row = q.filter(Customer.id == int(ref)).first()
+        if row:
+            return row
+    row = q.filter(Customer.tax_id == ref).first()
+    if row:
+        return row
+    row = q.filter(Customer.name == ref).first()
+    if row:
+        return row
+    raise HTTPException(status_code=404, detail=f"Cliente no encontrado: {ref}")
+
+
+def _process_client_qr_action(
+    db: Session,
+    user: User,
+    *,
+    company_id: int,
+    parsed: Dict[str, Any],
+    raw_data: str,
+    force_execute: bool = False,
+) -> Dict[str, Any]:
+    """CLIENT|ID|ACTION — acciones CRM/fichaje desde QR."""
+    action = str(parsed.get("action") or "VIEW").upper()
+    customer_ref = str(parsed.get("customer_ref") or "").strip()
+
+    if action == "CHECKIN":
+        token = raw_data if raw_data.upper().startswith("ZEUSCHECK|") else f"ZEUSCHECK|{customer_ref}|"
+        return process_nfc_scan(
+            db,
+            user,
+            text=token,
+            company_id=company_id,
+            checkin_type="entrada",
+            employee_id=customer_ref or None,
+        )
+
+    if action == "CREATE":
+        name = customer_ref or "Cliente QR"
+        cust, created = _find_or_create_customer(
+            db,
+            user,
+            company_id=company_id,
+            name=name,
+        )
+        result = {
+            "success": True,
+            "executed": True,
+            "action": action,
+            "customer_id": cust.id,
+            "customer_created": created,
+            "message": f"Cliente {'creado' if created else 'existente'}: {cust.name}",
+        }
+        scan = _persist_scan(
+            db,
+            company_id=company_id,
+            user=user,
+            scan_type="qr",
+            agent_name="ZEUS",
+            raw_payload=raw_data,
+            parsed=parsed,
+            result=result,
+        )
+        db.commit()
+        return {**result, "scan_event_id": scan.id}
+
+    cust = _resolve_customer_ref(db, user, company_id=company_id, customer_ref=customer_ref)
+    if action == "PAYMENT":
+        return process_qr_scan(
+            db,
+            user,
+            data=f"ZEUS|{cust.name}|0|EUR|{cust.email or ''}",
+            company_id=company_id,
+            force_execute=force_execute,
+        )
+
+    result = {
+        "success": True,
+        "executed": True,
+        "action": action,
+        "customer_id": cust.id,
+        "customer_name": cust.name,
+        "customer_email": cust.email,
+        "message": f"Cliente localizado: {cust.name}",
+    }
+    scan = _persist_scan(
+        db,
+        company_id=company_id,
+        user=user,
+        scan_type="qr",
+        agent_name="ZEUS",
+        raw_payload=raw_data,
+        parsed=parsed,
+        result=result,
+    )
+    db.commit()
+    return {**result, "scan_event_id": scan.id}
+
+
 def process_qr_scan(
     db: Session,
     user: User,
@@ -213,6 +330,17 @@ def process_qr_scan(
         )
         db.commit()
         return {**nfc_result, "scan_event_id": scan.id, "routed": "checkin"}
+
+    if parsed.get("kind") == "client_action":
+        out = _process_client_qr_action(
+            db,
+            user,
+            company_id=cid,
+            parsed=parsed,
+            raw_data=data,
+            force_execute=force_execute,
+        )
+        return {**out, "routed": "client_action"}
 
     emit_scan_detected(
         user_id=user.id,

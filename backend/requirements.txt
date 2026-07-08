@@ -62,3 +62,6 @@ pillow>=11.2.0
 moviepy>=2.2.0
 numpy>=2.2.0
 imageio-ffmpeg>=0.6.0
+
+# DNI MRZ OCR (scan production)
+pytesseract>=0.3.10

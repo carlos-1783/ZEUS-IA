@@ -20,7 +20,7 @@ function onError(msg: string) {
   <div class="scan-hub">
     <header class="header">
       <h1>Escaneo físico</h1>
-      <p>QR · NFC · DNI — flujo real con persistencia en backend</p>
+      <p>QR · NFC · DNI — flujo real v2 (pipeline unificado + OCR)</p>
     </header>
 
     <nav class="tabs">

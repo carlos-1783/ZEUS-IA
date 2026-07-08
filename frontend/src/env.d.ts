@@ -103,3 +103,29 @@ declare module 'jsqr' {
     options?: { inversionAttempts?: 'dontInvert' | 'onlyInvert' | 'attemptBoth' | 'invertFirst' },
   ): QRCode | null
 }
+
+declare module '@capacitor/core' {
+  export const Capacitor: {
+    isNativePlatform: () => boolean
+    getPlatform: () => string
+  }
+}
+
+declare module '@capacitor/camera' {
+  export const Camera: {
+    getPhoto: (opts: Record<string, unknown>) => Promise<{ base64String?: string }>
+  }
+  export const CameraResultType: { Base64: string }
+  export const CameraSource: { Camera: string }
+}
+
+declare module '@capgo/capacitor-nfc' {
+  export const CapacitorNfc: {
+    addListener: (
+      event: string,
+      cb: (ev: { tag?: { message?: string; data?: string } }) => void,
+    ) => Promise<{ remove: () => void }>
+    startScanning: () => Promise<void>
+    stopScanning: () => Promise<void>
+  }
+}

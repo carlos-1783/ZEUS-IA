@@ -46,9 +46,30 @@ async function postScan<T = Record<string, unknown>>(path: string, body: Payload
   return data as T
 }
 
+export type ScanIngestBody = {
+  scan_type: 'QR_SCAN' | 'NFC_SCAN' | 'MRZ_SCAN' | 'qr' | 'nfc' | 'mrz' | 'dni'
+  payload?: string
+  payload_hex?: string
+  image_base64?: string
+  company_id?: number
+  email?: string
+  phone?: string
+  employee_id?: string
+  checkin_type?: string
+  force_execute?: boolean
+}
+
 export const scanFlowApi = {
+  /** Pipeline unificado v2 — producción */
+  ingest: (body: ScanIngestBody) => postScan('/ingest', body),
+
   scanQr: (data: string, companyId?: number, forceExecute = false) =>
-    postScan('/qr', { data, company_id: companyId, force_execute: forceExecute }),
+    scanFlowApi.ingest({
+      scan_type: 'QR_SCAN',
+      payload: data,
+      company_id: companyId,
+      force_execute: forceExecute,
+    }),
 
   scanNfc: (opts: {
     text?: string
@@ -56,8 +77,31 @@ export const scanFlowApi = {
     company_id?: number
     employee_id?: string
     checkin_type?: string
-  }) => postScan('/nfc', opts),
+  }) =>
+    scanFlowApi.ingest({
+      scan_type: 'NFC_SCAN',
+      payload: opts.text,
+      payload_hex: opts.payload_hex,
+      company_id: opts.company_id,
+      employee_id: opts.employee_id,
+      checkin_type: opts.checkin_type,
+    }),
 
   scanDni: (mrz: string, opts?: { company_id?: number; email?: string; phone?: string }) =>
-    postScan('/dni', { mrz, ...opts }),
+    scanFlowApi.ingest({
+      scan_type: 'MRZ_SCAN',
+      payload: mrz,
+      company_id: opts?.company_id,
+      email: opts?.email,
+      phone: opts?.phone,
+    }),
+
+  scanDniImage: (imageBase64: string, opts?: { company_id?: number; email?: string; phone?: string }) =>
+    scanFlowApi.ingest({
+      scan_type: 'MRZ_SCAN',
+      image_base64: imageBase64,
+      company_id: opts?.company_id,
+      email: opts?.email,
+      phone: opts?.phone,
+    }),
 }

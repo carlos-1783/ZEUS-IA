@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { scanFlowApi } from '@/api/scanFlow'
+import { getScanRuntime, startNativeNfc } from '@/services/scanHardware'
 
 const emit = defineEmits<{
   (e: 'scanned', result: Record<string, unknown>): void
@@ -30,6 +31,7 @@ interface NdefReaderLike {
 
 let abort: AbortController | null = null
 let handled = false
+let stopNative: (() => void) | null = null
 
 function recordsToText(records: NdefRecordLike[]): string {
   const parts = records.map(decodeRecord).filter(Boolean)
@@ -48,6 +50,18 @@ function decodeRecord(record: NdefRecordLike): string {
 
 async function startNfcScan() {
   handled = false
+  stopNative?.()
+  stopNative = null
+  const runtime = await getScanRuntime()
+  const nativeStop = await startNativeNfc((text) => submitNfc(text))
+  if (nativeStop) {
+    stopNative = nativeStop
+    supported.value = true
+    scanning.value = true
+    status.value = 'NFC nativo activo — acerca la etiqueta…'
+    return
+  }
+
   const NdefReaderCtor = (window as unknown as { NDEFReader?: new () => NdefReaderLike }).NDEFReader
   if (!NdefReaderCtor) {
     supported.value = false
@@ -116,11 +130,14 @@ async function submitFallback() {
 
 function stopScan() {
   abort?.abort()
+  stopNative?.()
+  stopNative = null
   scanning.value = false
   status.value = 'Escaneo detenido'
 }
 
 onMounted(startNfcScan)
+onBeforeUnmount(stopScan)
 </script>
 
 <template>

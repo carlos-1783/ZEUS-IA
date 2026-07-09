@@ -103,6 +103,45 @@ export async function fetchPerseoVideoEngineInfo() {
   }>
 }
 
+export interface PerseoVideoProPayload {
+  tenant_id: string
+  image_url: string
+  product_info?: string
+  branding?: { logo?: string; primary_color?: string; font_style?: string }
+  platform?: string
+  lead_id?: number
+  campaign_id?: string
+  customer_id?: number
+  enable_audio?: boolean
+  enable_voiceover?: boolean
+}
+
+export interface PerseoVideoProResponse {
+  success: boolean
+  engine: string
+  version: string
+  video_url: string
+  preview?: string | null
+  script: Record<string, string>
+  ready_for_ads: boolean
+  validation: Record<string, boolean>
+  audio_engine?: { enabled?: boolean; voiceover?: boolean }
+}
+
+export async function generatePerseoVideoPro(payload: PerseoVideoProPayload) {
+  return api.post('/api/v1/perseo/video-pro/generate', payload) as Promise<PerseoVideoProResponse>
+}
+
+export async function fetchPerseoVideoProEngineInfo() {
+  return api.get('/api/v1/perseo/video-pro/engine') as Promise<{
+    success: boolean
+    engine: string
+    version: string
+    configured: boolean
+    mode: string
+  }>
+}
+
 export async function fetchPerseoV2Status() {
   return api.get('/api/v1/perseo/v2/status') as Promise<{
     success: boolean

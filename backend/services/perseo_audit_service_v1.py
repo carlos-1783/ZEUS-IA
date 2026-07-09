@@ -26,6 +26,7 @@ AUDIT_TARGETS = (
     "image_generation",
     "video_generation",
     "video_engine_v3",
+    "video_engine_pro_v4",
     "image_analyzer",
     "video_recommender",
     "seo_audit",
@@ -59,6 +60,7 @@ def build_feature_status_map(db: Session | None = None) -> Dict[str, Dict[str, A
         from services.perseo_image_engine_v2 import _provider_configured
         from services.perseo_video_gen_engine_v2 import video_gen_configured
         from services.perseo_video_engine_v3 import video_engine_v3_configured
+        from services.perseo_video_pro_engine_v4 import video_pro_engine_v4_configured
         from services.perseo_ai_service_v2 import openai_configured
         from services.perseo_ads_engine_v2 import _meta_configured, _google_configured
         from services.perseo_publishing_v1 import _instagram_configured
@@ -66,6 +68,7 @@ def build_feature_status_map(db: Session | None = None) -> Dict[str, Dict[str, A
         _provider_configured = lambda: False  # type: ignore
         video_gen_configured = lambda: False  # type: ignore
         video_engine_v3_configured = lambda: False  # type: ignore
+        video_pro_engine_v4_configured = lambda: False  # type: ignore
         openai_configured = lambda: False  # type: ignore
         _meta_configured = lambda: False  # type: ignore
         _google_configured = lambda: False  # type: ignore
@@ -99,6 +102,9 @@ def build_feature_status_map(db: Session | None = None) -> Dict[str, Dict[str, A
     )
     pipeline_status_val: FeatureStatus = "REAL" if (ffmpeg_ok and (not v2 or s3_configured())) else "BROKEN"
     v3_status: FeatureStatus = "REAL" if (ffmpeg_ok and execution["writes_enabled"]) else (
+        "BROKEN" if not ffmpeg_ok else "SIMULATED"
+    )
+    v4_status: FeatureStatus = "REAL" if (ffmpeg_ok and execution["writes_enabled"]) else (
         "BROKEN" if not ffmpeg_ok else "SIMULATED"
     )
 
@@ -135,6 +141,14 @@ def build_feature_status_map(db: Session | None = None) -> Dict[str, Dict[str, A
             "ffmpeg_available": ffmpeg_ok,
             "openai_copy": ai_on,
             "engine": "perseo_video_engine_v3",
+        },
+        "video_engine_pro_v4": {
+            "status": v4_status,
+            "endpoint": "POST /api/v1/perseo/video-pro/generate",
+            "notes": "Ads performance 9:16 — Ken Burns, CTA pulse, audio TTS, preview GIF (v4.0.0)",
+            "ffmpeg_available": ffmpeg_ok,
+            "openai_copy": ai_on,
+            "engine": "perseo_video_pro_engine_v4",
         },
         "image_analyzer": {
             "status": ai_tool_status,

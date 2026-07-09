@@ -155,10 +155,12 @@ def _branding_for_tenant(
     if not re.match(r"^#[0-9A-Fa-f]{6}$", primary):
         primary = "#4338ca"
     logo = str(override.get("logo") or brand_block.get("logo") or "").strip()
+    font_style = str(override.get("font_style") or brand_block.get("font_style") or "bold").strip()
     return {
         "company_name": company.company_name,
         "primary_color": primary,
         "logo": logo,
+        "font_style": font_style,
     }
 
 
@@ -339,6 +341,7 @@ def _persist_video(
     *,
     user_id: int,
     company_id: int,
+    prefix: str = "perseo_v3",
 ) -> Dict[str, Any]:
     if storage_backend() == "s3" and s3_configured():
         stored = upload_file(
@@ -351,7 +354,7 @@ def _persist_video(
 
     dest_dir = Path(settings.STATIC_DIR) / "uploads" / "videos" / f"tenant_{company_id}"
     dest_dir.mkdir(parents=True, exist_ok=True)
-    fname = f"perseo_v3_{uuid.uuid4().hex[:10]}.mp4"
+    fname = f"{prefix}_{uuid.uuid4().hex[:10]}.mp4"
     final = dest_dir / fname
     shutil.copy2(video_path, final)
     return {
@@ -371,12 +374,15 @@ def _crm_integrate(
     lead_id: Optional[int],
     campaign_id: Optional[str],
     customer_id: Optional[int],
+    engine: str = "perseo_video_engine_v3",
+    version: str = ENGINE_VERSION,
+    summary: str = "Vídeo PERSEO generado",
 ) -> Dict[str, Any]:
     payload = {
         "video_url": video_url,
         "script": script,
-        "engine": "perseo_video_engine_v3",
-        "version": ENGINE_VERSION,
+        "engine": engine,
+        "version": version,
         "campaign_id": campaign_id,
     }
     log_activity(
@@ -386,7 +392,7 @@ def _crm_integrate(
         customer_id=customer_id,
         record_id=None,
         action="perseo_video_generated",
-        summary="Vídeo PERSEO v3 generado",
+        summary=summary,
         payload=payload,
         commit=False,
     )

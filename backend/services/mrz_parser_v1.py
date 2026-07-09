@@ -51,7 +51,7 @@ def _coerce_lines(mrz: str) -> List[str]:
     return lines or [compact]
 
 
-def _parse_td1(lines: List[str]) -> Dict[str, Any]:
+def _parse_td1(lines: List[str], *, validate_checksums: bool = True) -> Dict[str, Any]:
     if len(lines) < 3:
         raise ValueError("MRZ TD1 incompleto (se requieren 3 líneas)")
     l1 = lines[0].ljust(30, "<")[:30]
@@ -62,24 +62,29 @@ def _parse_td1(lines: List[str]) -> Dict[str, Any]:
 
     doc_number = l1[5:14].replace("<", "")
     doc_check = l1[14]
-    if not _validate_check(doc_number, doc_check):
+    if validate_checksums and not _validate_check(doc_number, doc_check):
         raise ValueError("Checksum de número de documento inválido")
 
     birth_raw = l2[0:6]
     birth_check = l2[6]
-    if not _validate_check(birth_raw, birth_check):
+    if validate_checksums and not _validate_check(birth_raw, birth_check):
         raise ValueError("Checksum de fecha de nacimiento inválido")
 
     sex = l2[7]
     expiry_raw = l2[8:14]
     expiry_check = l2[14]
-    if not _validate_check(expiry_raw, expiry_check):
+    if validate_checksums and not _validate_check(expiry_raw, expiry_check):
         raise ValueError("Checksum de fecha de caducidad inválido")
 
     nationality = l2[15:18].replace("<", "")
     composite = l1[5:30] + l2[0:7] + l2[8:15] + l2[18:29]
     composite_check = l2[29] if len(l2) > 29 else ""
-    if composite_check and composite_check != "<" and not _validate_check(composite, composite_check):
+    if (
+        validate_checksums
+        and composite_check
+        and composite_check != "<"
+        and not _validate_check(composite, composite_check)
+    ):
         raise ValueError("Checksum compuesto inválido")
 
     names_raw = l3.replace("<", " ").strip()
@@ -87,7 +92,7 @@ def _parse_td1(lines: List[str]) -> Dict[str, Any]:
     surname = name_parts[0] if name_parts else ""
     given_names = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
 
-    return {
+    out = {
         "format": "TD1",
         "document_number": doc_number,
         "birth_date": f"19{birth_raw[0:2]}-{birth_raw[2:4]}-{birth_raw[4:6]}" if int(birth_raw[0:2]) > 30 else f"20{birth_raw[0:2]}-{birth_raw[2:4]}-{birth_raw[4:6]}",
@@ -98,6 +103,9 @@ def _parse_td1(lines: List[str]) -> Dict[str, Any]:
         "given_names": given_names,
         "full_name": f"{given_names} {surname}".strip() or surname,
     }
+    if not validate_checksums:
+        out["checksum_relaxed"] = True
+    return out
 
 
 def _parse_td2(lines: List[str]) -> Dict[str, Any]:
@@ -139,15 +147,75 @@ def _parse_td2(lines: List[str]) -> Dict[str, Any]:
     }
 
 
-def parse_mrz(mrz: str) -> Dict[str, Any]:
+def parse_mrz(mrz: str, *, strict: bool = True) -> Dict[str, Any]:
     """Parsear MRZ con validación de checksums ICAO."""
     lines = _coerce_lines(mrz)
     if not lines:
         raise ValueError("MRZ vacío")
     if len(lines) >= 3:
-        return _parse_td1(lines[:3])
+        return _parse_td1(lines[:3], validate_checksums=strict)
     if len(lines) == 1:
         raise ValueError("MRZ incompleto: pega cada línea en su propia línea.")
     if len(lines) == 2 and max(len(lines[0]), len(lines[1])) < 36:
         raise ValueError("MRZ incompleto: para DNIe/TD1 pega las 3 líneas completas.")
     return _parse_td2(lines[:2])
+
+
+_OCR_AMBIGUOUS = {"O": "0", "Q": "0", "I": "1", "L": "1", "S": "5", "B": "8", "G": "6", "Z": "2"}
+
+
+def _fix_ocr_line(line: str) -> str:
+    cleaned = re.sub(r"[^A-Z0-9<]", "", (line or "").upper())
+    if cleaned.startswith("IDESP"):
+        cleaned = "I<ESP" + cleaned[5:]
+    if cleaned.startswith("IDES"):
+        cleaned = "I<ES" + cleaned[4:]
+    return cleaned.ljust(30, "<")[:30]
+
+
+def _try_ocr_char_fixes(line: str) -> List[str]:
+    base = _fix_ocr_line(line)
+    variants = {base}
+    chars = list(base)
+    for idx, ch in enumerate(chars):
+        if ch in _OCR_AMBIGUOUS:
+            alt = list(chars)
+            alt[idx] = _OCR_AMBIGUOUS[ch]
+            variants.add("".join(alt))
+    return list(variants)
+
+
+def _plausible_td1(lines: List[str]) -> bool:
+    if len(lines) < 3:
+        return False
+    doc = lines[0][5:14].replace("<", "")
+    if len(doc) < 6:
+        return False
+    nat = lines[1][15:18].replace("<", "")
+    if nat and nat not in ("ESP", "UTO", "XXX") and not nat.isalpha():
+        return False
+    return bool(lines[2].replace("<", "").strip())
+
+
+def parse_mrz_ocr(mrz: str) -> Dict[str, Any]:
+    """Parser tolerante para MRZ extraído por OCR (foto real de DNI)."""
+    try:
+        return parse_mrz(mrz, strict=True)
+    except ValueError:
+        pass
+
+    lines = [_fix_ocr_line(ln) for ln in _coerce_lines(mrz)]
+    if len(lines) >= 3:
+        for l1 in _try_ocr_char_fixes(lines[0]):
+            for l2 in _try_ocr_char_fixes(lines[1]):
+                candidate = "\n".join([l1, l2, lines[2]])
+                try:
+                    return parse_mrz(candidate, strict=True)
+                except ValueError:
+                    continue
+        if _plausible_td1(lines[:3]):
+            return _parse_td1(lines[:3], validate_checksums=False)
+
+    raise ValueError(
+        "No se pudo leer el MRZ con claridad. Enfoca las 3 líneas del reverso o usa MRZ manual."
+    )

@@ -148,5 +148,6 @@ def scan_dni_image(
         company_id=body.company_id,
         email=body.email,
         phone=body.phone,
+        ocr_relaxed=True,
     )
     return {**out, "mrz_extracted": mrz, "ocr": True}

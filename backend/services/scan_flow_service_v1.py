@@ -26,7 +26,7 @@ from services.event_bus import (
     emit_invoice_generated,
     emit_scan_detected,
 )
-from services.mrz_parser_v1 import parse_mrz
+from services.mrz_parser_v1 import parse_mrz, parse_mrz_ocr
 from services.time_cost_engine_v1 import register_checkin
 from services.zeus_human_approval_v1 import request_approval, requires_approval
 from services.zeus_scoring_engine_v1 import create_lead, score_customer, score_lead
@@ -535,6 +535,7 @@ def process_dni_scan(
     company_id: Optional[int] = None,
     email: Optional[str] = None,
     phone: Optional[str] = None,
+    ocr_relaxed: bool = False,
 ) -> Dict[str, Any]:
     """DNI MRZ → cliente CRM + scoring + lead (ZEUS)."""
     cid = _company_id(db, user, company_id)
@@ -542,7 +543,7 @@ def process_dni_scan(
     normalized_email = (email or "").strip() or None
     normalized_phone = (phone or "").strip() or None
     try:
-        identity = parse_mrz(normalized_mrz)
+        identity = parse_mrz_ocr(normalized_mrz) if ocr_relaxed else parse_mrz(normalized_mrz)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

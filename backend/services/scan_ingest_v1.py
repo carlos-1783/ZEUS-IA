@@ -65,8 +65,12 @@ def ingest_physical_scan(
         return {**out, "pipeline": "NFC_SCAN", "normalized": True}
 
     mrz = normalize_text_payload(payload)
+    ocr_relaxed = False
     if not mrz and image_base64:
         mrz = extract_mrz_from_image_base64(image_base64)
+        ocr_relaxed = True
+    elif image_base64:
+        ocr_relaxed = True
     if not mrz:
         raise HTTPException(status_code=422, detail="MRZ requerido (texto o imagen).")
     out = process_dni_scan(
@@ -76,6 +80,7 @@ def ingest_physical_scan(
         company_id=company_id,
         email=normalized_email,
         phone=normalized_phone,
+        ocr_relaxed=ocr_relaxed,
     )
     mrz_source = "ocr" if image_base64 and not normalize_text_payload(payload) else "text"
     return {**out, "pipeline": "MRZ_SCAN", "normalized": True, "mrz_source": mrz_source}

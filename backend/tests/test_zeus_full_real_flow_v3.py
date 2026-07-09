@@ -18,7 +18,7 @@ from app.models.erp import Invoice
 from app.models.scan_event import ScanEvent
 from app.models.user import User
 from services.cashflow_ledger_service import get_balance
-from services.mrz_parser_v1 import parse_mrz
+from services.mrz_parser_v1 import parse_mrz, parse_mrz_ocr
 from services.scan_flow_service_v1 import process_dni_scan, process_nfc_scan, process_qr_scan
 
 # MRZ TD1 ICAO test vector (checksums válidos)
@@ -81,6 +81,13 @@ def test_mrz_parser_rejects_incomplete_td1_with_clear_message():
     incomplete = "\n".join(SAMPLE_MRZ.splitlines()[:2])
     with pytest.raises(ValueError, match="3 líneas completas"):
         parse_mrz(incomplete)
+
+
+def test_parse_mrz_ocr_tolerates_ocr_noise():
+  corrupted = SAMPLE_MRZ.replace("D23145890", "D2314589O")
+  parsed = parse_mrz_ocr(corrupted)
+  assert parsed["document_number"]
+  assert parsed.get("checksum_relaxed") or parsed["format"] == "TD1"
 
 
 def test_parse_qr_zeus_format_trims_input():

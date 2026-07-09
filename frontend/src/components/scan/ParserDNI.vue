@@ -64,7 +64,7 @@ async function startCamera() {
     video.srcObject = stream
     await video.play()
     cameraActive.value = true
-    status.value = 'Enfoca las 3 líneas MRZ del reverso del DNI'
+    status.value = 'Enfoca solo el reverso: las 3 líneas MRZ deben verse nítidas y con buena luz'
   } catch (err) {
     status.value = err instanceof Error ? err.message : 'No se pudo abrir la cámara'
     emit('error', status.value)
@@ -77,12 +77,16 @@ async function captureFromVideo(): Promise<string> {
   if (!video || !canvas || !video.videoWidth) {
     throw new Error('Cámara no lista')
   }
-  canvas.width = video.videoWidth
-  canvas.height = video.videoHeight
+  const fullW = video.videoWidth
+  const fullH = video.videoHeight
+  const cropTop = Math.floor(fullH * 0.58)
+  const cropH = fullH - cropTop
+  canvas.width = fullW
+  canvas.height = cropH
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('No se pudo capturar imagen')
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-  return canvas.toDataURL('image/jpeg', 0.92)
+  ctx.drawImage(video, 0, cropTop, fullW, cropH, 0, 0, fullW, cropH)
+  return canvas.toDataURL('image/jpeg', 0.95)
 }
 
 async function submitCameraMrz() {
@@ -110,6 +114,9 @@ async function submitCameraMrz() {
     const msg = err instanceof Error ? err.message : 'Error OCR DNI'
     status.value = msg
     emit('error', msg)
+    if (msg.toLowerCase().includes('checksum') || msg.toLowerCase().includes('mrz')) {
+      status.value = `${msg}. Prueba MRZ manual o vuelve a capturar con más luz.`
+    }
   } finally {
     loading.value = false
   }
@@ -194,7 +201,9 @@ onBeforeUnmount(stopCamera)
       <div class="camera-wrap">
         <video ref="videoRef" class="preview" playsinline muted />
         <canvas ref="canvasRef" class="hidden-canvas" />
+        <div class="mrz-guide">Zona MRZ (reverso)</div>
       </div>
+      <small class="hint">Consejo: apoya el DNI, evita reflejos y captura solo el reverso con las 3 líneas.</small>
       <button type="button" class="btn secondary" @click="startCamera">Reiniciar cámara</button>
       <button type="button" class="btn" :disabled="loading || !cameraActive" @click="submitCameraMrz">
         {{ loading ? 'OCR en curso…' : 'Capturar reverso y crear cliente' }}
@@ -231,8 +240,14 @@ onBeforeUnmount(stopCamera)
   width: 100%; padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid #334155;
   background: #0f172a; color: #f8fafc; font-family: ui-monospace, monospace; font-size: 0.85rem;
 }
-.camera-wrap { background: #111; border-radius: 12px; overflow: hidden; }
+.camera-wrap { position: relative; background: #111; border-radius: 12px; overflow: hidden; }
 .preview { width: 100%; max-height: 280px; object-fit: cover; display: block; }
+.mrz-guide {
+  position: absolute; left: 8%; right: 8%; bottom: 8%; height: 34%;
+  border: 2px dashed #22d3ee; border-radius: 8px;
+  color: #7dd3fc; font-size: 0.75rem; display: flex; align-items: flex-end; justify-content: center;
+  padding-bottom: 6px; pointer-events: none;
+}
 .hidden-canvas { display: none; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
 .field { display: flex; flex-direction: column; gap: 0.35rem; }

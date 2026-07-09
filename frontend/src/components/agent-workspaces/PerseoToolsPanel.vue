@@ -11,8 +11,11 @@
           :real-execution="verifiedReal"
           :inline="true"
         />
+        <button type="button" class="retry-btn" @click="loadPerseoStatus">Reintentar</button>
       </div>
     </header>
+
+    <p v-if="error" class="tool-error">{{ error }}</p>
 
     <div class="tools-grid">
       <div class="tool-card" :class="{ real: featureStatus('video_editing') === 'REAL' }">
@@ -118,7 +121,6 @@
         <p v-if="adsResult" class="tool-text">{{ adsResult }}</p>
       </div>
     </div>
-    <p v-if="error" class="tool-error">{{ error }}</p>
   </section>
 </template>
 
@@ -129,6 +131,7 @@ import {
   fetchPerseoV2Status,
   perseoAnalyzeImage,
   perseoFeatureBadge,
+  probeBackendHealth,
   perseoGenerateAds,
   perseoRecommendVideo,
   perseoSeoAudit,
@@ -145,6 +148,8 @@ import ThalosExecutionBadge from './ThalosExecutionBadge.vue'
 
 const loading = reactive({ image: false, video: false, seo: false, ads: false, videoEdit: false })
 const error = ref('')
+const apiReachable = ref<boolean | null>(null)
+const apiProbeDetail = ref('')
 const globalMode = ref<'REAL' | 'SIMULATED' | 'ERROR' | 'UNKNOWN'>('UNKNOWN')
 const zeusTruth = ref<{ execution_mode?: string; writes_enabled?: boolean } | null>(null)
 const verifiedReal = computed(() => isVerifiedReal(zeusTruth.value))
@@ -169,7 +174,13 @@ const featureStatus = (key: string): PerseoFeatureStatus =>
   (featureMap.value[key]?.status as PerseoFeatureStatus) || 'SIMULATED'
 
 const statusNote = computed(() => {
+  if (apiReachable.value === false) {
+    return `API no accesible (${apiProbeDetail.value || 'Network Error'}). Backend: verifica Railway y limpia caché PWA.`
+  }
   const keys = Object.keys(featureMap.value)
+  if (!keys.length) {
+    return 'Estado PERSEO no cargado. Inicia sesión de nuevo o pulsa Reintentar.'
+  }
   const real = keys.filter((k) => featureStatus(k) === 'REAL')
   const sim = keys.filter((k) => featureStatus(k) === 'SIMULATED')
   return `REAL: ${real.join(', ') || '—'} · SIMULADO: ${sim.join(', ') || '—'}`
@@ -189,7 +200,18 @@ const formatResult = (data: Record<string, unknown>) => {
 const parseCsv = (value: string) =>
   value.split(',').map((item) => item.trim()).filter(Boolean)
 
-onMounted(async () => {
+onMounted(loadPerseoStatus)
+
+async function loadPerseoStatus() {
+  error.value = ''
+  const probe = await probeBackendHealth()
+  apiReachable.value = probe.ok
+  apiProbeDetail.value = probe.detail || ''
+  if (!probe.ok) {
+    globalMode.value = 'ERROR'
+    error.value = `No se pudo conectar con ${probe.apiBase}. ${probe.detail || ''}`
+    return
+  }
   try {
     const [st, v2, zeus] = await Promise.all([
       fetchPerseoStatus(),
@@ -213,10 +235,11 @@ onMounted(async () => {
     } else if (v2?.perseo_v2_enabled) {
       useV2.value = true
     }
-  } catch {
-    /* optional */
+  } catch (err) {
+    globalMode.value = 'ERROR'
+    error.value = err instanceof Error ? err.message : 'No se pudo cargar el estado de PERSEO'
   }
-})
+}
 
 const runVideoEdit = async () => {
   error.value = ''
@@ -351,6 +374,17 @@ const runAdsBuilder = async () => {
   align-items: flex-start;
   gap: 12px;
   margin-bottom: 18px;
+}
+
+.retry-btn {
+  border: 1px solid rgba(99, 102, 241, 0.45);
+  background: #fff;
+  color: #4338ca;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .card-title-row {

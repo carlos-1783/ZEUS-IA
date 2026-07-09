@@ -31,6 +31,23 @@ export interface PerseoVideoEditResponse {
   error?: string
 }
 
+export async function probeBackendHealth(): Promise<{ ok: boolean; apiBase: string; detail?: string }> {
+  const { API_BASE_URL } = await import('@/config')
+  const base = (API_BASE_URL || '').replace(/\/api\/v1\/?$/, '')
+  const url = `${base}/api/v1/health`
+  try {
+    const res = await fetch(url, { method: 'GET', cache: 'no-store' })
+    if (!res.ok) return { ok: false, apiBase: API_BASE_URL, detail: `HTTP ${res.status}` }
+    return { ok: true, apiBase: API_BASE_URL }
+  } catch (err) {
+    return {
+      ok: false,
+      apiBase: API_BASE_URL,
+      detail: err instanceof Error ? err.message : 'Network Error',
+    }
+  }
+}
+
 export async function fetchPerseoStatus() {
   return api.get('/api/v1/perseo/status') as Promise<PerseoStatusResponse>
 }

@@ -25,6 +25,7 @@ AUDIT_TARGETS = (
     "video_editing",
     "image_generation",
     "video_generation",
+    "video_engine_v3",
     "image_analyzer",
     "video_recommender",
     "seo_audit",
@@ -57,12 +58,14 @@ def build_feature_status_map(db: Session | None = None) -> Dict[str, Dict[str, A
     try:
         from services.perseo_image_engine_v2 import _provider_configured
         from services.perseo_video_gen_engine_v2 import video_gen_configured
+        from services.perseo_video_engine_v3 import video_engine_v3_configured
         from services.perseo_ai_service_v2 import openai_configured
         from services.perseo_ads_engine_v2 import _meta_configured, _google_configured
         from services.perseo_publishing_v1 import _instagram_configured
     except ImportError:
         _provider_configured = lambda: False  # type: ignore
         video_gen_configured = lambda: False  # type: ignore
+        video_engine_v3_configured = lambda: False  # type: ignore
         openai_configured = lambda: False  # type: ignore
         _meta_configured = lambda: False  # type: ignore
         _google_configured = lambda: False  # type: ignore
@@ -95,6 +98,9 @@ def build_feature_status_map(db: Session | None = None) -> Dict[str, Dict[str, A
         "BROKEN" if video_gen_configured() and not s3_configured() else ("SIMULATED" if not video_gen_configured() else "REAL")
     )
     pipeline_status_val: FeatureStatus = "REAL" if (ffmpeg_ok and (not v2 or s3_configured())) else "BROKEN"
+    v3_status: FeatureStatus = "REAL" if (ffmpeg_ok and execution["writes_enabled"]) else (
+        "BROKEN" if not ffmpeg_ok else "SIMULATED"
+    )
 
     return {
         "content_generation": {
@@ -121,6 +127,14 @@ def build_feature_status_map(db: Session | None = None) -> Dict[str, Dict[str, A
             "endpoint": "/api/v1/perseo/v2/ai/generate-video",
             "notes": "Replicate zeroscope-v2-xl → S3",
             "model": "zeroscope-v2-xl",
+        },
+        "video_engine_v3": {
+            "status": v3_status,
+            "endpoint": "POST /api/v1/perseo/video/generate",
+            "notes": "FFmpeg imagen→MP4 vertical 15s + copy conversión + CRM (v3.0.0)",
+            "ffmpeg_available": ffmpeg_ok,
+            "openai_copy": ai_on,
+            "engine": "perseo_video_engine_v3",
         },
         "image_analyzer": {
             "status": ai_tool_status,

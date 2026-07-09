@@ -13,6 +13,7 @@ from app.db.session import get_db
 from app.models.user import User
 from services.perseo_audit_service_v1 import build_audit_report, build_feature_status_map
 from services.perseo_video_engine_v1 import create_video_edit_job, get_video_job
+from services.perseo_video_engine_v3 import ENGINE_VERSION, generate_perseo_video_v3
 from services.zeus_execution_controller_v1 import get_execution_status
 
 router = APIRouter(prefix="/perseo", tags=["perseo"])
@@ -30,6 +31,21 @@ class VideoEditRequest(BaseModel):
     input_url: str = Field(..., min_length=1)
     operations: List[VideoEditOperation] = Field(default_factory=list)
     transaction_id: Optional[str] = None
+
+
+class VideoBranding(BaseModel):
+    logo: Optional[str] = None
+    primary_color: Optional[str] = None
+
+
+class VideoGenerateRequest(BaseModel):
+    tenant_id: str = Field(..., min_length=1)
+    image_url: str = Field(..., min_length=1)
+    product_info: Optional[str] = None
+    branding: Optional[VideoBranding] = None
+    lead_id: Optional[int] = None
+    campaign_id: Optional[str] = None
+    customer_id: Optional[int] = None
 
 
 @router.get("/status")
@@ -57,6 +73,46 @@ def perseo_audit(
 ) -> Dict[str, Any]:
     _ = current_user
     return {"success": True, **build_audit_report(db)}
+
+
+@router.post("/video/generate")
+def perseo_video_generate(
+    body: VideoGenerateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """PERSEO Video Engine v3 — imagen + copy conversión → MP4 vertical 15s (FFmpeg real)."""
+    branding = body.branding.model_dump(exclude_none=True) if body.branding else None
+    result = generate_perseo_video_v3(
+        db,
+        current_user,
+        tenant_id=body.tenant_id,
+        image_url=body.image_url,
+        product_info=body.product_info,
+        branding=branding,
+        lead_id=body.lead_id,
+        campaign_id=body.campaign_id,
+        customer_id=body.customer_id,
+    )
+    return result
+
+
+@router.get("/video/engine")
+def perseo_video_engine_info(
+    current_user: User = Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    _ = current_user
+    from services.perseo_video_engine_v3 import video_engine_v3_configured
+
+    return {
+        "success": True,
+        "engine": "perseo_video_engine_v3",
+        "version": ENGINE_VERSION,
+        "endpoint": "POST /api/v1/perseo/video/generate",
+        "configured": video_engine_v3_configured(),
+        "execution": "real",
+        "tool": "ffmpeg",
+    }
 
 
 @router.post("/video/edit")

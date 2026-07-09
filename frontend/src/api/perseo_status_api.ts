@@ -68,6 +68,41 @@ export async function pollPerseoVideoJob(jobId: string) {
   return api.get(`/api/v1/perseo/video/jobs/${jobId}`) as Promise<PerseoVideoEditResponse>
 }
 
+export interface PerseoVideoGeneratePayload {
+  tenant_id: string
+  image_url: string
+  product_info?: string
+  branding?: { logo?: string; primary_color?: string }
+  lead_id?: number
+  campaign_id?: string
+  customer_id?: number
+}
+
+export interface PerseoVideoGenerateResponse {
+  success: boolean
+  engine: string
+  version: string
+  video_url: string
+  script: { hook: string; problem: string; solution: string; cta: string }
+  storage: string
+  crm: { crm_saved: boolean; store_video_asset: boolean; link_to_campaign: boolean }
+  copy_engine?: { ai_powered?: boolean; mode?: string }
+}
+
+export async function generatePerseoVideo(payload: PerseoVideoGeneratePayload) {
+  return api.post('/api/v1/perseo/video/generate', payload) as Promise<PerseoVideoGenerateResponse>
+}
+
+export async function fetchPerseoVideoEngineInfo() {
+  return api.get('/api/v1/perseo/video/engine') as Promise<{
+    success: boolean
+    engine: string
+    version: string
+    configured: boolean
+    execution: string
+  }>
+}
+
 export async function fetchPerseoV2Status() {
   return api.get('/api/v1/perseo/v2/status') as Promise<{
     success: boolean

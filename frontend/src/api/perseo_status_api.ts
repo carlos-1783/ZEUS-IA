@@ -104,16 +104,19 @@ export async function fetchPerseoVideoEngineInfo() {
 }
 
 export interface PerseoVideoProPayload {
-  tenant_id: string
+  tenant_id?: string
   image_url: string
+  hook?: string
+  problem?: string
+  solution?: string
+  cta?: string
   product_info?: string
   branding?: { logo?: string; primary_color?: string; font_style?: string }
   platform?: string
   lead_id?: number
   campaign_id?: string
   customer_id?: number
-  enable_audio?: boolean
-  enable_voiceover?: boolean
+  enable_preview_gif?: boolean
 }
 
 export interface PerseoVideoProResponse {

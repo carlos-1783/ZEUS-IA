@@ -47,16 +47,19 @@ class VideoProBranding(BaseModel):
 
 
 class VideoProGenerateRequest(BaseModel):
-    tenant_id: str = Field(..., min_length=1)
+    tenant_id: Optional[str] = None
     image_url: str = Field(..., min_length=1)
+    hook: Optional[str] = None
+    problem: Optional[str] = None
+    solution: Optional[str] = None
+    cta: Optional[str] = None
     product_info: Optional[str] = None
     branding: Optional[VideoProBranding] = None
     platform: str = "meta_ads"
     lead_id: Optional[int] = None
     campaign_id: Optional[str] = None
     customer_id: Optional[int] = None
-    enable_audio: bool = True
-    enable_voiceover: bool = True
+    enable_preview_gif: bool = True
 
 
 class VideoGenerateRequest(BaseModel):
@@ -142,21 +145,24 @@ def perseo_video_pro_generate(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """PERSEO Video Pro Engine v4 — anuncios performance 9:16 con motion, audio y preview GIF."""
+    """PERSEO FFmpeg production — imagen + copy (manual o IA) → MP4 15s real."""
     branding = body.branding.model_dump(exclude_none=True) if body.branding else None
     return generate_perseo_video_pro_v4(
         db,
         current_user,
         tenant_id=body.tenant_id,
         image_url=body.image_url,
+        hook=body.hook,
+        problem=body.problem,
+        solution=body.solution,
+        cta=body.cta,
         product_info=body.product_info,
         branding=branding,
         platform=body.platform,
         lead_id=body.lead_id,
         campaign_id=body.campaign_id,
         customer_id=body.customer_id,
-        enable_audio=body.enable_audio,
-        enable_voiceover=body.enable_voiceover,
+        enable_preview_gif=body.enable_preview_gif,
     )
 
 

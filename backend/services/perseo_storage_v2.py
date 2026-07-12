@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import mimetypes
+import shutil
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -64,6 +65,60 @@ def _s3_client():
 def build_object_key(*, user_id: int, category: str, filename: str) -> str:
     safe = filename.replace("..", "").lstrip("/")
     return f"perseo/u{user_id}/{category}/{safe}"
+
+
+def upload_tenant_video(
+    local_path: Path,
+    *,
+    tenant_id: int,
+    user_id: int,
+    filename: Optional[str] = None,
+) -> Dict[str, Any]:
+    """S3/local upload at videos/{tenant_id}/{timestamp}.mp4 (PERSEO FFmpeg production)."""
+    from datetime import datetime, timezone
+
+    fname = filename or f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}.mp4"
+    ct = "video/mp4"
+
+    if storage_backend() == "s3" and s3_configured():
+        key = f"videos/{tenant_id}/{fname}"
+        client = _s3_client()
+        bucket = settings.AWS_S3_BUCKET
+        with open(local_path, "rb") as fh:
+            client.upload_fileobj(fh, bucket, key, ExtraArgs={"ContentType": ct})
+        prefix = getattr(settings, "AWS_S3_PUBLIC_URL_PREFIX", "") or ""
+        if prefix:
+            url = f"{prefix}/{key}"
+            signed = False
+        else:
+            url = client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": bucket, "Key": key},
+                ExpiresIn=int(getattr(settings, "AWS_S3_SIGNED_URL_TTL_SEC", 3600)),
+            )
+            signed = True
+        logger.info("[PERSEO_STORAGE] tenant video key=%s tenant=%s", key, tenant_id)
+        return {
+            "storage": "s3",
+            "bucket": bucket,
+            "key": key,
+            "url": url,
+            "signed_url": signed,
+            "content_type": ct,
+            "size_bytes": local_path.stat().st_size,
+        }
+
+    dest_dir = Path(settings.STATIC_DIR) / "uploads" / "videos" / str(tenant_id)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    final = dest_dir / fname
+    shutil.copy2(local_path, final)
+    return {
+        "storage": "local",
+        "url": f"/static/uploads/videos/{tenant_id}/{fname}",
+        "path": str(final),
+        "key": f"videos/{tenant_id}/{fname}",
+        "size_bytes": local_path.stat().st_size,
+    }
 
 
 def upload_file(

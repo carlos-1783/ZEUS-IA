@@ -145,7 +145,7 @@ def build_feature_status_map(db: Session | None = None) -> Dict[str, Dict[str, A
         "video_engine_pro_v4": {
             "status": v4_status,
             "endpoint": "POST /api/v1/perseo/video-pro/generate",
-            "notes": "Ads performance 9:16 — Ken Burns, CTA pulse, audio TTS, preview GIF (v4.0.0)",
+            "notes": "PERSEO_FFMPEG_VIDEO_PRODUCTION — zoompan filter_complex, copy manual/IA, S3 videos/{tenant}/ (v4.1.0)",
             "ffmpeg_available": ffmpeg_ok,
             "openai_copy": ai_on,
             "engine": "perseo_video_pro_engine_v4",

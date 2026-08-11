@@ -2,13 +2,15 @@
 📅 Google Workspace Endpoints
 Endpoints para Google Calendar, Gmail, Drive, Sheets
 """
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 # Importar servicio
 from services.google_service import google_service
+from app.core.auth import get_current_active_user
+from app.models.user import User
 
 router = APIRouter()
 
@@ -54,7 +56,10 @@ class SpreadsheetRead(BaseModel):
 # ============================================================================
 
 @router.post("/calendar/event")
-async def create_calendar_event(event: CalendarEvent):
+async def create_calendar_event(
+    event: CalendarEvent,
+    current_user: User = Depends(get_current_active_user),
+):
     """Crear evento en Google Calendar"""
     result = await google_service.create_calendar_event(
         summary=event.summary,
@@ -74,7 +79,8 @@ async def create_calendar_event(event: CalendarEvent):
 async def list_calendar_events(
     start_date: datetime,
     end_date: datetime,
-    max_results: int = 10
+    max_results: int = 10,
+    current_user: User = Depends(get_current_active_user),
 ):
     """Listar eventos de calendario"""
     result = await google_service.list_calendar_events(
@@ -93,7 +99,10 @@ async def list_calendar_events(
 # ============================================================================
 
 @router.post("/gmail/send")
-async def send_gmail(message: GmailMessage):
+async def send_gmail(
+    message: GmailMessage,
+    current_user: User = Depends(get_current_active_user),
+):
     """Enviar email vía Gmail API"""
     result = await google_service.send_gmail(
         to_email=message.to_email,
@@ -110,7 +119,8 @@ async def send_gmail(message: GmailMessage):
 @router.get("/gmail/inbox")
 async def read_gmail_inbox(
     max_results: int = 10,
-    query: Optional[str] = None
+    query: Optional[str] = None,
+    current_user: User = Depends(get_current_active_user),
 ):
     """Leer bandeja de entrada de Gmail"""
     result = await google_service.read_gmail_inbox(
@@ -128,7 +138,10 @@ async def read_gmail_inbox(
 # ============================================================================
 
 @router.post("/drive/upload")
-async def upload_to_drive(upload: DriveUpload):
+async def upload_to_drive(
+    upload: DriveUpload,
+    current_user: User = Depends(get_current_active_user),
+):
     """Subir archivo a Google Drive"""
     result = await google_service.upload_to_drive(
         file_path=upload.file_path,
@@ -144,7 +157,8 @@ async def upload_to_drive(upload: DriveUpload):
 @router.get("/drive/files")
 async def list_drive_files(
     folder_id: Optional[str] = None,
-    max_results: int = 10
+    max_results: int = 10,
+    current_user: User = Depends(get_current_active_user),
 ):
     """Listar archivos de Drive"""
     result = await google_service.list_drive_files(
@@ -162,7 +176,10 @@ async def list_drive_files(
 # ============================================================================
 
 @router.post("/sheets/create")
-async def create_spreadsheet(spreadsheet: SpreadsheetCreate):
+async def create_spreadsheet(
+    spreadsheet: SpreadsheetCreate,
+    current_user: User = Depends(get_current_active_user),
+):
     """Crear nueva hoja de cálculo"""
     result = await google_service.create_spreadsheet(
         title=spreadsheet.title,
@@ -175,7 +192,10 @@ async def create_spreadsheet(spreadsheet: SpreadsheetCreate):
     return result
 
 @router.post("/sheets/write")
-async def write_to_sheet(data: SpreadsheetWrite):
+async def write_to_sheet(
+    data: SpreadsheetWrite,
+    current_user: User = Depends(get_current_active_user),
+):
     """Escribir datos en hoja de cálculo"""
     result = await google_service.write_to_sheet(
         spreadsheet_id=data.spreadsheet_id,
@@ -190,7 +210,10 @@ async def write_to_sheet(data: SpreadsheetWrite):
     return result
 
 @router.post("/sheets/read")
-async def read_from_sheet(data: SpreadsheetRead):
+async def read_from_sheet(
+    data: SpreadsheetRead,
+    current_user: User = Depends(get_current_active_user),
+):
     """Leer datos de hoja de cálculo"""
     result = await google_service.read_from_sheet(
         spreadsheet_id=data.spreadsheet_id,
@@ -207,7 +230,9 @@ async def read_from_sheet(data: SpreadsheetRead):
 # ============================================================================
 
 @router.get("/status")
-async def google_status():
+async def google_status(
+    current_user: User = Depends(get_current_active_user),
+):
     """Obtener estado de las integraciones Google"""
     return google_service.get_status()
 

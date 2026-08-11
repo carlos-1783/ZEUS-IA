@@ -4,33 +4,47 @@ Endpoints para métricas y analytics del sistema
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.core.auth import get_current_active_user
 from app.models.user import User
+import services.crm_office_service as crm_svc
 
 router = APIRouter()
 
 @router.get("/dashboard")
 async def get_dashboard_metrics(
     days: int = Query(30, ge=1, le=365),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
     Métricas del dashboard principal
-    Devuelve métricas calculadas de actividades reales de agentes
+    Devuelve métricas calculadas de actividades reales de agentes,
+    aisladas por tenant (company_id). Mismo patrón que
+    services/crm_office_service.py: permitido si AgentActivity.company_id
+    está entre las empresas del usuario, o si es una actividad legacy sin
+    company_id que quedó asociada a este mismo usuario por email.
     """
     try:
         from app.models.agent_activity import AgentActivity
-        
+
+        allowed_company_ids = crm_svc.company_ids_for_user(db, current_user)
+        tenant_filter = or_(
+            AgentActivity.company_id.in_(allowed_company_ids),
+            and_(AgentActivity.company_id.is_(None), AgentActivity.user_email == current_user.email),
+        )
+
         # Calcular rango de fechas
         end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=days)
-        
-        # Consultar actividades
+
+        # Consultar actividades del tenant del usuario autenticado
         activities = db.query(AgentActivity).filter(
             AgentActivity.created_at >= start_date,
-            AgentActivity.created_at <= end_date
+            AgentActivity.created_at <= end_date,
+            tenant_filter,
         ).all()
         
         # Calcular métricas
@@ -57,11 +71,12 @@ async def get_dashboard_metrics(
         prev_start = start_date - timedelta(days=days)
         prev_activities = db.query(AgentActivity).filter(
             AgentActivity.created_at >= prev_start,
-            AgentActivity.created_at < start_date
+            AgentActivity.created_at < start_date,
+            tenant_filter,
         ).count()
-        
+
         interactions_change = ((total_interactions - prev_activities) / prev_activities * 100) if prev_activities > 0 else 0
-        
+
         return {
             "success": True,
             "total_interactions": total_interactions,
@@ -73,7 +88,7 @@ async def get_dashboard_metrics(
             "savings_trend": f"+{interactions_change:+.0f}% this month" if interactions_change > 0 else "stable",
             "success_trend": f"+{success_rate-96:.1f}% improvement" if success_rate > 96 else "stable"
         }
-        
+
     except Exception as e:
         print(f"❌ Error calculando métricas: {e}")
         # Devolver valores por defecto si hay error

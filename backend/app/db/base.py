@@ -54,6 +54,7 @@ def ensure_schema_patches():
         _migrate_cashflow_ledger()
         _migrate_zeus_domain_events()
         _migrate_zeus_analytics_tables()
+        _migrate_agent_activities_company_id()
         print("[SCHEMA] Parches de esquema completados")
     except Exception as e:
         logger.warning("ensure_schema_patches: %s", e)
@@ -513,6 +514,83 @@ def _migrate_tpv_company_columns():
                     print(f"[MIGRATION] [WARN] backfill invoices.company_id: {e}")
     except Exception as e:
         print(f"[MIGRATION] [WARN] No se pudo verificar tpv company_id: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def _migrate_agent_activities_company_id():
+    """company_id en agent_activities (aislamiento multi-tenant de la actividad
+    de agentes IA). Necesario porque en despliegues existentes (Railway con
+    `users` ya presente) alembic_conditional_stamp.py hace `stamp head` sin
+    ejecutar las migraciones — este parche idempotente es el único mecanismo
+    que realmente añade la columna ahí, igual que _migrate_tpv_company_columns
+    para invoices/tpv_*."""
+    from sqlalchemy import inspect, text
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+
+    try:
+        inspector = inspect(engine)
+        is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
+        table_name = "agent_activities"
+        if table_name not in inspector.get_table_names():
+            return
+        cols = {c["name"] for c in inspector.get_columns(table_name)}
+        if "company_id" not in cols:
+            try:
+                with engine.begin() as conn:
+                    if is_postgres:
+                        conn.execute(
+                            text(f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "company_id" INTEGER')
+                        )
+                    else:
+                        conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN company_id INTEGER"))
+                print(f"[MIGRATION] [OK] {table_name}.company_id agregada")
+            except (OperationalError, ProgrammingError) as e:
+                em = str(e).lower()
+                if "duplicate column" in em or "already exists" in em:
+                    print(f"[MIGRATION] [INFO] {table_name}.company_id ya existe")
+                else:
+                    print(f"[MIGRATION] [WARN] No se pudo agregar {table_name}.company_id: {e}")
+
+        try:
+            indexes = {ix["name"] for ix in inspector.get_indexes(table_name)}
+            idx_name = f"ix_{table_name}_company_id"
+            if idx_name not in indexes:
+                with engine.begin() as conn:
+                    if is_postgres:
+                        conn.execute(
+                            text(f'CREATE INDEX IF NOT EXISTS "{idx_name}" ON "{table_name}" (company_id)')
+                        )
+                    else:
+                        conn.execute(
+                            text(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table_name}(company_id)")
+                        )
+                print(f"[MIGRATION] [OK] Índice {idx_name} creado")
+        except Exception as e:
+            print(f"[MIGRATION] [WARN] No se pudo crear índice company_id en {table_name}: {e}")
+
+        # Backfill best-effort desde user_email -> users -> user_companies
+        try:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        """
+                        UPDATE agent_activities
+                        SET company_id = (
+                            SELECT uc.company_id FROM user_companies uc
+                            JOIN users u ON u.id = uc.user_id
+                            WHERE u.email = agent_activities.user_email
+                            ORDER BY uc.id ASC LIMIT 1
+                        )
+                        WHERE company_id IS NULL AND user_email IS NOT NULL
+                        """
+                    )
+                )
+            print("[MIGRATION] [OK] agent_activities.company_id backfill desde user_email")
+        except Exception as e:
+            print(f"[MIGRATION] [WARN] backfill agent_activities.company_id: {e}")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] No se pudo verificar agent_activities.company_id: {e}")
         import traceback
         traceback.print_exc()
 

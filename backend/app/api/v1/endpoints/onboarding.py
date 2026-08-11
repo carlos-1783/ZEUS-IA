@@ -114,6 +114,44 @@ def get_db():
     finally:
         db.close()
 
+
+def _verify_stripe_payment_completed(payment_intent_id: Optional[str]) -> None:
+    """
+    Verifica contra Stripe que el payment_intent_id recibido corresponde a un
+    pago real y completado antes de activar una cuenta. Lanza HTTPException si
+    no se puede confirmar el pago — nunca deja pasar una cuenta sin pago
+    verificado.
+    """
+    if not payment_intent_id:
+        raise HTTPException(
+            status_code=400,
+            detail="payment_intent_id requerido: no se puede activar una cuenta sin verificar el pago",
+        )
+
+    from services.stripe_service import stripe_service
+
+    if not stripe_service.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Stripe no está configurado: no se puede verificar el pago",
+        )
+
+    import stripe
+
+    try:
+        payment_intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=402,
+            detail=f"No se pudo verificar el pago en Stripe: {str(e)}",
+        )
+
+    if payment_intent.status != "succeeded":
+        raise HTTPException(
+            status_code=402,
+            detail=f"El pago no está completado (estado actual: {payment_intent.status})",
+        )
+
 # ============================================================================
 # ENDPOINTS
 # ============================================================================
@@ -157,7 +195,12 @@ async def create_account_after_payment(
                 status_code=400,
                 detail="Ya existe una cuenta con este email"
             )
-        
+
+        # 2.5. Verificar el pago contra Stripe ANTES de crear ninguna cuenta.
+        # No se activa (is_active=True) ninguna cuenta sin confirmar que el
+        # payment_intent recibido corresponde a un pago real y completado.
+        _verify_stripe_payment_completed(request.payment_intent_id)
+
         # 3. Generar contraseña temporal
         temp_password = generate_random_password()
         

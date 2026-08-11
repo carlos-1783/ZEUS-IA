@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Path, Body
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, and_
 from datetime import date, datetime
 
 from app.db.session import get_db
@@ -55,17 +55,25 @@ def get_invoice_or_404(
     ).filter(
         Invoice.id == invoice_id
     ).first()
-    
+
     if not invoice:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Invoice with ID {invoice_id} not found"
         )
-    
-    # Verificar que el usuario tenga acceso a la factura
-    # Aquí podrías agregar lógica de autorización adicional según tus necesidades
-    # Por ejemplo, verificar si el usuario pertenece a la misma organización
-    
+
+    # Verificar que el usuario pertenece a la misma organización que la factura.
+    # Mismo patrón que services/crm_office_service.py: permitido si company_id
+    # de la factura está entre las empresas del usuario, o si es una factura
+    # legacy sin company_id creada por ese mismo usuario.
+    allowed_company_ids = crm_svc.company_ids_for_user(db, current_user)
+    is_owner_of_legacy_invoice = invoice.company_id is None and invoice.created_by == current_user.id
+    if invoice.company_id not in allowed_company_ids and not is_owner_of_legacy_invoice:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para acceder a esta factura"
+        )
+
     # Convertir el modelo SQLAlchemy a Pydantic
     return InvoiceInDB.model_validate(invoice)
 
@@ -112,7 +120,18 @@ def list_invoices(
     List all invoices with optional filtering and pagination
     """
     query = db.query(Invoice)
-    
+
+    # Aislamiento de tenant: solo facturas de las empresas del usuario
+    # autenticado (o facturas legacy sin company_id creadas por él mismo).
+    # Mismo patrón que services/crm_office_service.py.
+    allowed_company_ids = crm_svc.company_ids_for_user(db, current_user)
+    query = query.filter(
+        or_(
+            Invoice.company_id.in_(allowed_company_ids),
+            and_(Invoice.company_id.is_(None), Invoice.created_by == current_user.id),
+        )
+    )
+
     # Apply filters
     if customer_id:
         query = query.filter(Invoice.customer_id == customer_id)

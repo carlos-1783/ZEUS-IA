@@ -14,23 +14,28 @@ router = APIRouter()
 @router.get("/dashboard")
 async def get_dashboard_metrics(
     days: int = Query(30, ge=1, le=365),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
     Métricas del dashboard principal
-    Devuelve métricas calculadas de actividades reales de agentes
+    Devuelve métricas calculadas de actividades reales de agentes,
+    limitadas al usuario autenticado (mismo patrón que /performance y /summary
+    en este archivo: AgentActivity no tiene company_id propio, así que el
+    aislamiento se hace por user_email).
     """
     try:
         from app.models.agent_activity import AgentActivity
-        
+
         # Calcular rango de fechas
         end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=days)
-        
-        # Consultar actividades
+
+        # Consultar actividades del usuario autenticado (no de todos los tenants)
         activities = db.query(AgentActivity).filter(
             AgentActivity.created_at >= start_date,
-            AgentActivity.created_at <= end_date
+            AgentActivity.created_at <= end_date,
+            AgentActivity.user_email == current_user.email
         ).all()
         
         # Calcular métricas
@@ -57,11 +62,12 @@ async def get_dashboard_metrics(
         prev_start = start_date - timedelta(days=days)
         prev_activities = db.query(AgentActivity).filter(
             AgentActivity.created_at >= prev_start,
-            AgentActivity.created_at < start_date
+            AgentActivity.created_at < start_date,
+            AgentActivity.user_email == current_user.email
         ).count()
-        
+
         interactions_change = ((total_interactions - prev_activities) / prev_activities * 100) if prev_activities > 0 else 0
-        
+
         return {
             "success": True,
             "total_interactions": total_interactions,

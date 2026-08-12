@@ -28,7 +28,10 @@ class Customer(Base):
     
     # Relationships
     contacts = relationship("ContactPerson", back_populates="customer", cascade="all, delete-orphan")
-    # invoices = relationship("Invoice", back_populates="customer")  # TEMPORALMENTE COMENTADO PARA EVITAR ERROR DE IMPORTACIÓN CIRCULAR
+    # Ver comentario en app/models/erp.py:Invoice.customer — no era un
+    # problema real de importación circular, era resoluble con el orden de
+    # imports que create_tables() ya garantiza.
+    invoices = relationship("Invoice", back_populates="customer")
     
     # Metadata
     metadata_ = Column("metadata", JSON, nullable=True)

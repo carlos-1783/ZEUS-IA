@@ -168,7 +168,14 @@ class Invoice(Base):
     electronic_invoice_status = Column(String(20), nullable=True)
     
     # Relationships
-    # customer = relationship("Customer", back_populates="invoices")  # TEMPORALMENTE COMENTADO PARA EVITAR ERROR DE IMPORTACIÓN CIRCULAR
+    # No hay import directo de app.models.customer aquí (ni falta hace: la
+    # referencia es un string, resuelta de forma perezosa por el registry de
+    # SQLAlchemy). El error de "importación circular" original no era tal —
+    # create_tables() en app/db/base.py ya importa tanto Customer como
+    # Invoice antes de configurar los mappers, así que el registry siempre
+    # tiene ambas clases disponibles cuando SQLAlchemy resuelve el string.
+    # Verificado: arranque completo + tests con la relación activa, sin error.
+    customer = relationship("Customer", back_populates="invoices")
     items = relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="invoice", cascade="all, delete-orphan")
     inventory_movements = relationship("InventoryMovement", back_populates="invoice")

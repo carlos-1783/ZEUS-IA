@@ -266,14 +266,36 @@ def get_current_user(db: Session, token: str) -> User:
                 logger.info(f"  {k}: {v}")
         except Exception as e:
             logger.warning(f"No se pudo decodificar el token sin verificar: {str(e)}")
-        
+            unverified_payload = {}
+
+        # BUG histórico (auditoría feature/auditoria-real-nucleo): jose.jwt.decode()
+        # exige que 'audience' sea un único string, no una lista — a diferencia de
+        # PyJWT (usado en app/core/jwt_auth.py), que sí acepta una lista. Pasar
+        # directamente settings.JWT_AUDIENCE (lista) aquí hacía que CUALQUIER
+        # token, válido o no, fuera rechazado con "audience must be a string or
+        # None" — rompía por completo /api/v1/invoices/* y /api/v1/products/*
+        # (los únicos endpoints que usan este get_current_user, vía
+        # get_current_active_user en este mismo módulo).
+        # Fix: como distintos tipos de token llevan distinto 'aud'
+        # ("zeus-ia:auth" | "zeus-ia:access" | "zeus-ia:websocket"), se lee la
+        # audiencia que reclama el propio token (sin verificar todavía) y se
+        # confirma que esté en la lista de audiencias válidas; ese valor único
+        # es el que se verifica de verdad contra la firma a continuación. No se
+        # confía en el claim no verificado para autorizar nada — solo se usa
+        # para elegir CUÁL de las audiencias permitidas comprobar; si el token
+        # fue manipulado, la verificación de firma de más abajo lo rechaza igual.
+        claimed_audience = unverified_payload.get("aud")
+        if claimed_audience not in settings.JWT_AUDIENCE:
+            logger.error(f"Audiencia del token no reconocida o ausente: {claimed_audience!r}")
+            raise credentials_exception
+
         # Ahora intentamos la verificación completa
         try:
             payload = jwt.decode(
                 token,
                 secret_key_str,
                 algorithms=[settings.ALGORITHM],
-                audience=settings.JWT_AUDIENCE,
+                audience=claimed_audience,
                 issuer=settings.JWT_ISSUER,
                 options={
                     "verify_signature": True,
@@ -368,21 +390,31 @@ def get_current_user(db: Session, token: str) -> User:
                 headers={"WWW-Authenticate": "Bearer"},
             )
             
-        # Obtener el email del token
-        email: str = payload.get("sub")
-        if email is None:
-            logger.warning("Token sin campo 'sub' (email)")
+        # Obtener el identificador del usuario del token. El 'sub' real que
+        # emite el login (app/core/jwt_auth.py / auth.py) es el ID numérico
+        # del usuario como string, no un email — pese a que este código
+        # asumía "email" (segundo bug encontrado junto al de audience: con
+        # el de audience arreglado, esta función seguía fallando el 100% de
+        # las veces porque comparaba User.email contra un ID, ej. "2").
+        # Mismo fallback que ya usa app/core/auth.py: intentar como ID
+        # primero, si no es numérico tratarlo como email.
+        subject: str = payload.get("sub")
+        if subject is None:
+            logger.warning("Token sin campo 'sub'")
             raise credentials_exception
-            
-        # Buscar el usuario en la base de datos
-        logger.info(f"Buscando usuario en la base de datos: {email}")
-        user = db.query(User).filter(User.email == email).first()
-        
+
+        logger.info(f"Buscando usuario en la base de datos: {subject}")
+        user = None
+        try:
+            user = db.query(User).filter(User.id == int(subject)).first()
+        except (ValueError, TypeError):
+            user = db.query(User).filter(User.email == subject).first()
+
         if user is None:
-            logger.warning(f"Usuario no encontrado: {email}")
+            logger.warning(f"Usuario no encontrado: {subject}")
             raise credentials_exception
-            
-        logger.info(f"Usuario autenticado correctamente: {email}")
+
+        logger.info(f"Usuario autenticado correctamente: {user.email}")
         return user
         
     except JWTError as e:

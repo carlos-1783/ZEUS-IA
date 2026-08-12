@@ -262,4 +262,137 @@ probarla end-to-end.
 **No se tocó**: `zeus_core.py`, `zeus_agents.py`, ni nada de la vertical de
 seguros, tal como pedía el alcance de este bloque.
 
+---
+
+## Tarea adicional — Bug de guardado en "Configuración inicial ZEUS" (onboarding)
+
+Reportado tras cerrar las 7 tareas: el formulario de onboarding (3 pasos)
+fallaba al pulsar "Finalizar configuración" con "No se pudo guardar la
+configuración".
+
+**Hipótesis a descartar primero (pedida explícitamente)**: que el fix de
+Stripe del Bloque 1 en `/api/v1/onboarding/create-account` estuviera
+bloqueando este flujo. **Descartada con evidencia**: el formulario llama a
+`POST /api/v1/auth/onboarding/profile`, un endpoint completamente distinto.
+Además esta rama parte de `main` y no incluye el fix de Stripe del Bloque 1
+(vive sin mergear en `feature/fix-seguridad-critica`) — no había nada de
+Stripe que pudiera interferir aquí.
+
+**Causa real** (reproducida en el navegador contra la BD SQLite local real
+del usuario, leyendo la consola del backend):
+```
+sqlite3.OperationalError: no such column: companies.company_type
+sqlite3.OperationalError: no such column: company_employees.tpv_pin_hash
+```
+Ambas columnas existen en los modelos y tienen migración Alembic (0022 y
+0019) pero nunca tuvieron parche de arranque en `ensure_schema_patches()`
+— mismo patrón de deuda técnica que el resto de este bloque. Cualquier
+query ORM sobre `Company`/`CompanyEmployee` rompía.
+
+**Fix**: `_migrate_company_type_column()` y
+`_migrate_company_employees_tpv_pin_hash()` en `app/db/base.py`, mismo
+patrón que el resto de parches de este archivo.
+
+**Verificado**: reproducido el error contra copia exacta de la BD real del
+usuario; con el fix, `onboarding_status()` y `onboarding_profile()`
+ejecutan sin error; verificado además en el navegador real, con la cuenta
+real del usuario, contra sus datos reales ya corregidos — 3 pasos,
+"Finalizar configuración" → `POST /onboarding/profile` → 200 OK →
+`/dashboard`. Datos de prueba descartados tras la verificación; la BD local
+del usuario quedó restaurada a su estado original (el fix vive en el
+código, se autoaplica en el próximo arranque). Suite completa: 7 failed/214
+passed/2 skipped/3 errors — sin regresiones.
+
+Commit: `bf418ca`.
+
+---
+
+## Tarea adicional — Auditoría del menú lateral (sidebar): opción "Administrador"
+
+**1. Dónde se decide qué se muestra.** Dos sitios distintos deciden la
+visibilidad del botón de administración, con criterios diferentes:
+
+- `frontend/src/components/DashboardProfesional.vue:27-35` (el dashboard
+  real que ven los usuarios por defecto — confirmado en la auditoría
+  original, `firstPersonMode` por defecto renderiza este componente):
+  ```
+  v-if="!isEmployee && (authStore.isAdmin || authStore.user?.is_superuser)"
+  ```
+  `authStore.isAdmin` está definido en `frontend/src/stores/auth.ts:106`
+  como `computed(() => !!user.value?.is_superuser)` — es decir, la
+  condición completa equivale a `is_superuser` (la segunda mitad es
+  redundante, pero no está mal). **Depende del rol real** (`is_superuser`
+  del usuario autenticado), no de `role` ("owner"/"employee") ni de
+  `UserCompany.role` ("company_admin") — un owner de empresa cliente NO
+  cumple esta condición.
+
+- `frontend/src/views/OlymposDashboard.vue:208-211` (la vista 2D "Olimpo",
+  parte del mismo componente padre pero solo se renderiza si
+  `firstPersonMode === false`): el botón `⚙️ ADMIN` **no tenía ningún
+  `v-if`** — se mostraba a cualquier usuario autenticado, sin comprobar rol.
+  Hallazgo aparte: `firstPersonMode` es `const firstPersonMode = ref(true)`
+  ([OlymposDashboard.vue:299](frontend/src/views/OlymposDashboard.vue))
+  **sin ningún setter en toda la base de código** (grep exhaustivo) — la
+  vista 2D con el botón sin proteger es código inalcanzable hoy, no hay
+  forma de que un usuario real llegue a verlo con la UI actual.
+
+En ambos casos, la navegación (`goToAdmin()`) es un simple
+`router.push('/admin')` sin comprobación propia — toda la protección real
+recae en el guard global del router y en el backend.
+
+**2. Prueba con usuario real no-superuser de una empresa cliente.** Creada
+cuenta de prueba (`sidebar.test.companyA@example.com`, registro normal,
+`is_superuser=0`, `role='owner'`) y logueada en el navegador real:
+- Sidebar de `DashboardProfesional.vue`: **NO aparece "Administrador"**
+  (solo Panel, Analíticas, CRM oficina, Ajustes) — correcto.
+- Navegación manual forzada a `http://localhost:5173/admin`: redirige
+  automáticamente de vuelta al dashboard (guard en
+  `frontend/src/router/index.js:514-517`:
+  `if (to.meta.requiresSuperuser && !authStore.isAdmin) next(...)`, y la
+  ruta `/admin` está declarada con `meta: { requiresSuperuser: true }` en
+  `router/index.js:204-210`).
+- Backend directo con curl y el token real de esa cuenta:
+  ```
+  GET /api/v1/admin/stats    -> 403 {"detail":"El usuario no tiene suficientes privilegios"}
+  GET /api/v1/admin/customers -> 403
+  ```
+  Confirmado que los 11 endpoints de `backend/app/api/v1/endpoints/admin.py`
+  (10 funciones, dos de ellas registradas en dos rutas) usan
+  `Depends(get_current_active_superuser)` — ninguno se salta la
+  comprobación.
+
+**3. Veredicto: NO es el hallazgo crítico.** Un cliente normal (owner de
+empresa, no superusuario) no ve la opción, y si fuerza la URL o llama a la
+API directamente, es rechazado tanto en frontend (redirect) como en
+backend (403 real) — el backend nunca confía solo en ocultar el botón, ya
+lo hacía bien antes de este audit. Esto corresponde al **punto 4** de la
+tarea (menor gravedad), no al punto 3.
+
+**4. Fix aplicado igualmente** (por consistencia y para que no se convierta
+en un problema real si `firstPersonMode` llega a ser togglable en el
+futuro): añadido `v-if="authStore.isAdmin"` al botón `⚙️ ADMIN` de
+`OlymposDashboard.vue`, mismo criterio que `DashboardProfesional.vue`.
+
+Verificado en el navegador tras el cambio: login con la cuenta de prueba,
+sidebar sigue sin mostrar "Administrador", sin errores nuevos en consola
+(el único error de consola presente, `shouldShowTPV is not defined` en
+`DashboardProfesional.vue:586/598/610`, es preexistente y no relacionado
+con este cambio — no se toca, fuera de alcance de esta tarea).
+
+Commit: pendiente de esta misma sesión.
+
+---
+
+## Tarea adicional — Prueba de RLS contra PostgreSQL real (Bloque 2, cierre pendiente)
+
+**Bloqueada**: el usuario indicó que proporcionaría la connection string de
+un Postgres de prueba de Railway, pero el mensaje llegó con el placeholder
+sin rellenar (`[PEGA AQUÍ LA DATABASE_URL...]`) y, en un segundo intento,
+con la plantilla de formato de Railway sin sustituir
+(`postgresql://USER:PASSWORD@HOST:PORT/DATABASE`). No se ha podido ejecutar
+ninguna migración ni prueba contra Postgres real todavía. **La Tarea 7 (RLS)
+sigue sin verificar contra Postgres real** — no se da por cerrada. Pendiente
+de que el usuario aporte la cadena de conexión real (host/usuario/
+contraseña reales de la pestaña "Connect" de Railway) para continuar.
+
 **No se hizo merge ni push a `main`.**

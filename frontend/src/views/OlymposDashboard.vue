@@ -205,8 +205,8 @@
       {{ showMetrics ? '📊 OCULTAR' : '📊 MÉTRICAS' }}
     </button>
 
-    <!-- Botón Admin Panel -->
-    <button @click="goToAdmin" class="admin-toggle">
+    <!-- Botón Admin Panel: solo superusuario (mismo criterio que DashboardProfesional.vue) -->
+    <button v-if="authStore.isAdmin" @click="goToAdmin" class="admin-toggle">
       ⚙️ ADMIN
     </button>
 

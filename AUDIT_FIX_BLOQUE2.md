@@ -379,7 +379,7 @@ sidebar sigue sin mostrar "Administrador", sin errores nuevos en consola
 `DashboardProfesional.vue:586/598/610`, es preexistente y no relacionado
 con este cambio — no se toca, fuera de alcance de esta tarea).
 
-Commit: pendiente de esta misma sesión.
+Commit: `3430ec9`.
 
 ---
 

@@ -49,6 +49,8 @@ def ensure_schema_patches():
         _migrate_document_approvals_columns()
         _migrate_rafael_fiscal_tables()
         _migrate_tpv_company_columns()
+        _migrate_company_type_column()
+        _migrate_company_employees_tpv_pin_hash()
         _migrate_smart_time_control_tables()
         _migrate_time_cost_engine_v1()
         _migrate_cashflow_ledger()
@@ -516,6 +518,131 @@ def _migrate_tpv_company_columns():
                     print(f"[MIGRATION] [WARN] backfill invoices.company_id: {e}")
     except Exception as e:
         print(f"[MIGRATION] [WARN] No se pudo verificar tpv company_id: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def _migrate_company_type_column():
+    """companies.company_type — existe en el modelo (Company.company_type)
+    desde hace tiempo y tiene migración Alembic (0022), pero nunca tuvo un
+    parche de arranque como el resto de columnas de este archivo. En
+    cualquier instalación donde esa migración no se haya ejecutado de verdad
+    (mismo motivo que el resto de parches de aquí: bases 'legacy' donde
+    alembic_conditional_stamp.py hace `stamp head` sin ejecutar), CUALQUIER
+    query ORM sobre Company (SELECT * de facto) rompe con
+    'no such column: companies.company_type' — incluye GET /onboarding/status
+    y POST /onboarding/profile, confirmado reproduciendo el error real."""
+    from sqlalchemy import inspect, text
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+
+    try:
+        inspector = inspect(engine)
+        is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
+        table_name = "companies"
+        if table_name not in inspector.get_table_names():
+            return
+        cols = {c["name"] for c in inspector.get_columns(table_name)}
+        if "company_type" not in cols:
+            try:
+                with engine.begin() as conn:
+                    if is_postgres:
+                        conn.execute(
+                            text('ALTER TABLE "companies" ADD COLUMN IF NOT EXISTS "company_type" VARCHAR(32)')
+                        )
+                    else:
+                        conn.execute(text("ALTER TABLE companies ADD COLUMN company_type VARCHAR(32)"))
+                print("[MIGRATION] [OK] companies.company_type agregada")
+            except (OperationalError, ProgrammingError) as e:
+                em = str(e).lower()
+                if "duplicate column" in em or "already exists" in em:
+                    print("[MIGRATION] [INFO] companies.company_type ya existe")
+                else:
+                    print(f"[MIGRATION] [WARN] No se pudo agregar companies.company_type: {e}")
+
+        try:
+            indexes = {ix["name"] for ix in inspector.get_indexes(table_name)}
+            idx_name = "ix_companies_company_type"
+            if idx_name not in indexes:
+                with engine.begin() as conn:
+                    if is_postgres:
+                        conn.execute(
+                            text(f'CREATE INDEX IF NOT EXISTS "{idx_name}" ON "companies" (company_type)')
+                        )
+                    else:
+                        conn.execute(
+                            text(f"CREATE INDEX IF NOT EXISTS {idx_name} ON companies(company_type)")
+                        )
+                print(f"[MIGRATION] [OK] Índice {idx_name} creado")
+        except Exception as e:
+            print(f"[MIGRATION] [WARN] No se pudo crear índice company_type: {e}")
+
+        # Backfill best-effort en Python (evita operadores JSON ->> específicos
+        # de Postgres que no son portables a SQLite) — mismo criterio que la
+        # migración 0022: business_type/sector -> office | bar_restaurant.
+        try:
+            from app.models.company import Company
+
+            session = SessionLocal()
+            try:
+                rows = session.query(Company).filter(Company.company_type.is_(None)).all()
+                for co in rows:
+                    meta = co.metadata_ if isinstance(co.metadata_, dict) else {}
+                    business_type = str(meta.get("business_type") or "").strip().lower()
+                    sector = str(co.sector or "").strip().lower()
+                    if business_type == "services" or "servicio" in sector or "oficina" in sector:
+                        co.company_type = "office"
+                    else:
+                        co.company_type = "bar_restaurant"
+                    session.add(co)
+                if rows:
+                    session.commit()
+                    print(f"[MIGRATION] [OK] companies.company_type backfill aplicado a {len(rows)} filas")
+            finally:
+                session.close()
+        except Exception as e:
+            print(f"[MIGRATION] [WARN] backfill companies.company_type: {e}")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] No se pudo verificar companies.company_type: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def _migrate_company_employees_tpv_pin_hash():
+    """company_employees.tpv_pin_hash — misma historia que company_type:
+    columna añadida por la migración 0019 (op.add_column, no create_table),
+    sin parche de arranque. Bloqueaba GET /onboarding/status (cuenta de
+    empleados vía COUNT(*) sobre company_employees, que selecciona todas
+    las columnas) con 'no such column: company_employees.tpv_pin_hash' en
+    cualquier instalación donde esa migración no se ejecutó de verdad."""
+    from sqlalchemy import inspect, text
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+
+    try:
+        inspector = inspect(engine)
+        is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
+        table_name = "company_employees"
+        if table_name not in inspector.get_table_names():
+            return
+        cols = {c["name"] for c in inspector.get_columns(table_name)}
+        if "tpv_pin_hash" in cols:
+            return
+        try:
+            with engine.begin() as conn:
+                if is_postgres:
+                    conn.execute(
+                        text('ALTER TABLE "company_employees" ADD COLUMN IF NOT EXISTS "tpv_pin_hash" VARCHAR(255)')
+                    )
+                else:
+                    conn.execute(text("ALTER TABLE company_employees ADD COLUMN tpv_pin_hash VARCHAR(255)"))
+            print("[MIGRATION] [OK] company_employees.tpv_pin_hash agregada")
+        except (OperationalError, ProgrammingError) as e:
+            em = str(e).lower()
+            if "duplicate column" in em or "already exists" in em:
+                print("[MIGRATION] [INFO] company_employees.tpv_pin_hash ya existe")
+            else:
+                print(f"[MIGRATION] [WARN] No se pudo agregar company_employees.tpv_pin_hash: {e}")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] No se pudo verificar company_employees.tpv_pin_hash: {e}")
         import traceback
         traceback.print_exc()
 

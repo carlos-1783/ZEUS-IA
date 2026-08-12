@@ -36,7 +36,7 @@ async def list_payroll_drafts(
     _require_owner_or_superuser(current_user)
     drafts = (
         db.query(PayrollDraft)
-        .filter(PayrollDraft.company_id == current_user.id)
+        .filter(PayrollDraft.owner_user_id == current_user.id)
         .order_by(PayrollDraft.generated_at.desc())
         .limit(50)
         .all()
@@ -69,7 +69,7 @@ async def download_payroll_draft(
     draft = db.query(PayrollDraft).filter(PayrollDraft.id == draft_id).first()
     if not draft:
         raise HTTPException(status_code=404, detail="Borrador no encontrado")
-    if draft.company_id != current_user.id and not current_user.is_superuser:
+    if draft.owner_user_id != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="No autorizado")
     if not draft.pdf_path or not Path(draft.pdf_path).exists():
         raise HTTPException(status_code=404, detail="Archivo no encontrado")

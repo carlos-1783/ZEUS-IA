@@ -151,9 +151,9 @@ def purge_user_scoped_rows(db: Session, user: User, dry_run: bool) -> dict:
         _del(label, n)
 
     # automation_readiness usa company_id -> users.id (legacy)
-    n = db.query(AutomationReadiness).filter(AutomationReadiness.company_id == uid).count()
+    n = db.query(AutomationReadiness).filter(AutomationReadiness.user_id == uid).count()
     if n and not dry_run:
-        db.query(AutomationReadiness).filter(AutomationReadiness.company_id == uid).delete(
+        db.query(AutomationReadiness).filter(AutomationReadiness.user_id == uid).delete(
             synchronize_session=False
         )
     _del("automation_readiness", n)

@@ -179,7 +179,7 @@ def generate_and_persist(
     ss = payroll["social_security_estimated"]
 
     record = PayrollDraft(
-        company_id=company_id,
+        owner_user_id=company_id,
         employee_id=employee_id,
         gross_salary=gross_salary,
         irpf_estimated=irpf,

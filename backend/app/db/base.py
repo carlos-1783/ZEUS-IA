@@ -56,6 +56,7 @@ def ensure_schema_patches():
         _migrate_zeus_analytics_tables()
         _migrate_agent_activities_company_id()
         _migrate_role_check_constraints()
+        _migrate_rename_misleading_company_id_columns()
         print("[SCHEMA] Parches de esquema completados")
     except Exception as e:
         logger.warning("ensure_schema_patches: %s", e)
@@ -656,6 +657,38 @@ def _migrate_role_check_constraints():
                     print(f"[MIGRATION] [WARN] No se pudo crear ck_user_companies_role: {e}")
     except Exception as e:
         print(f"[MIGRATION] [WARN] No se pudo verificar role check constraints: {e}")
+
+
+def _migrate_rename_misleading_company_id_columns():
+    """payroll_drafts.company_id -> owner_user_id, automation_readiness.company_id
+    -> user_id. Ambas columnas apuntan (y siempre apuntaron) a users.id, nunca a
+    companies.id — solo se corrige el nombre engañoso, ver alembic/versions/
+    0045_fix_misleading_company_id_naming.py para el detalle completo."""
+    from sqlalchemy import inspect, text
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+
+    try:
+        inspector = inspect(engine)
+        renames = (
+            ("payroll_drafts", "company_id", "owner_user_id"),
+            ("automation_readiness", "company_id", "user_id"),
+        )
+        for table_name, old_col, new_col in renames:
+            if table_name not in inspector.get_table_names():
+                continue
+            cols = {c["name"] for c in inspector.get_columns(table_name)}
+            if new_col in cols:
+                continue
+            if old_col not in cols:
+                continue
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text(f"ALTER TABLE {table_name} RENAME COLUMN {old_col} TO {new_col}"))
+                print(f"[MIGRATION] [OK] {table_name}.{old_col} renombrada a {new_col}")
+            except (OperationalError, ProgrammingError) as e:
+                print(f"[MIGRATION] [WARN] No se pudo renombrar {table_name}.{old_col}: {e}")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] No se pudo verificar rename de columnas company_id: {e}")
 
 
 def _migrate_smart_time_control_tables():

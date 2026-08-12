@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 from app.db.session import get_db
+from app.db.tenant_context import get_db_scoped
 from app.core.auth import get_current_active_user
 from app.models.user import User
 import services.crm_office_service as crm_svc
@@ -17,7 +18,7 @@ router = APIRouter()
 async def get_dashboard_metrics(
     days: int = Query(30, ge=1, le=365),
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db_scoped)
 ) -> Dict[str, Any]:
     """
     Métricas del dashboard principal

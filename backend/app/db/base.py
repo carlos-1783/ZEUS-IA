@@ -55,6 +55,7 @@ def ensure_schema_patches():
         _migrate_zeus_domain_events()
         _migrate_zeus_analytics_tables()
         _migrate_agent_activities_company_id()
+        _migrate_role_check_constraints()
         print("[SCHEMA] Parches de esquema completados")
     except Exception as e:
         logger.warning("ensure_schema_patches: %s", e)
@@ -593,6 +594,68 @@ def _migrate_agent_activities_company_id():
         print(f"[MIGRATION] [WARN] No se pudo verificar agent_activities.company_id: {e}")
         import traceback
         traceback.print_exc()
+
+
+def _migrate_role_check_constraints():
+    """CHECK constraint real en users.role y user_companies.role (antes texto
+    libre). Solo se aplica aquí en Postgres: en SQLite, añadir un CHECK a una
+    tabla existente exige recrearla (lo que Alembic hace de forma segura vía
+    batch_alter_table en la migración 0044); reimplementar esa recreación a
+    mano en un patch de arranque es riesgo innecesario para las tablas
+    users/user_companies. En local, la migración de Alembic es la vía
+    correcta para aplicar este constraint."""
+    from sqlalchemy import inspect, text
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+
+    is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
+    if not is_postgres:
+        return
+
+    try:
+        inspector = inspect(engine)
+
+        if "users" in inspector.get_table_names():
+            try:
+                with engine.begin() as conn:
+                    conn.execute(
+                        text("UPDATE users SET role = 'owner' WHERE role IS NULL OR role NOT IN ('owner', 'employee')")
+                    )
+                    conn.execute(
+                        text(
+                            "ALTER TABLE users ADD CONSTRAINT ck_users_role "
+                            "CHECK (role IN ('owner', 'employee'))"
+                        )
+                    )
+                print("[MIGRATION] [OK] ck_users_role creado")
+            except (OperationalError, ProgrammingError) as e:
+                if "already exists" in str(e).lower():
+                    print("[MIGRATION] [INFO] ck_users_role ya existe")
+                else:
+                    print(f"[MIGRATION] [WARN] No se pudo crear ck_users_role: {e}")
+
+        if "user_companies" in inspector.get_table_names():
+            try:
+                with engine.begin() as conn:
+                    conn.execute(
+                        text(
+                            "UPDATE user_companies SET role = 'company_admin' "
+                            "WHERE role IS NULL OR role NOT IN ('company_admin', 'member', 'owner')"
+                        )
+                    )
+                    conn.execute(
+                        text(
+                            "ALTER TABLE user_companies ADD CONSTRAINT ck_user_companies_role "
+                            "CHECK (role IN ('company_admin', 'member', 'owner'))"
+                        )
+                    )
+                print("[MIGRATION] [OK] ck_user_companies_role creado")
+            except (OperationalError, ProgrammingError) as e:
+                if "already exists" in str(e).lower():
+                    print("[MIGRATION] [INFO] ck_user_companies_role ya existe")
+                else:
+                    print(f"[MIGRATION] [WARN] No se pudo crear ck_user_companies_role: {e}")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] No se pudo verificar role check constraints: {e}")
 
 
 def _migrate_smart_time_control_tables():

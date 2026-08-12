@@ -3,10 +3,18 @@ ZEUS_INTERNAL_COMPANY_BOOTSTRAP_002
 Modelos Company y UserCompany para empresa interna y vinculación de usuarios.
 NO pilot_company, NO modificar SUPERUSER, NO cobros.
 """
-from sqlalchemy import Boolean, Column, Integer, String, DateTime, ForeignKey, JSON
+from sqlalchemy import Boolean, CheckConstraint, Column, Integer, String, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.base import Base
+
+# Valores válidos de UserCompany.role. "company_admin"/"member" son los que
+# escribe el código de producción (app/, services/); "owner" se añadió tras
+# confirmar que 9 suites de tests (tests/test_zeus_*.py, test_afrodita_*,
+# test_thalos_*, test_time_cost_engine_v1.py) lo usan de forma consistente
+# como valor real al crear UserCompany en sus fixtures — no es un typo
+# aislado, así que se trata como valor válido en vez de romper esos tests.
+USER_COMPANY_ROLE_VALUES = ("company_admin", "member", "owner")
 
 
 class Company(Base):
@@ -35,6 +43,9 @@ class Company(Base):
 class UserCompany(Base):
     """Vinculación usuario-empresa con rol. company_admin solo aplica a esta empresa; SUPERUSER es global."""
     __tablename__ = "user_companies"
+    __table_args__ = (
+        CheckConstraint("role IN ('company_admin', 'member', 'owner')", name="ck_user_companies_role"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)

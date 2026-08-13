@@ -899,8 +899,13 @@ const refreshDashboardData = async () => {
 
 // Cargar al montar y refrescar periódicamente (un solo interval, cleanup en unmount)
 onMounted(async () => {
-  // Inicializar authStore si no está inicializado
-  if (!authStore.isAuthenticated && authStore.initialize) {
+  // Inicializar authStore si aún no tiene el usuario cargado. OJO:
+  // authStore.isAuthenticated solo indica que hay un token válido (ver
+  // stores/auth.ts), no que authStore.user ya se haya rellenado desde
+  // /auth/me — comprobar isAuthenticated aquí hacía que, en una recarga
+  // directa con sesión ya guardada, nunca se llamara a initialize() y
+  // authStore.user se quedara en null para siempre en esta vista.
+  if (!authStore.user && authStore.initialize) {
     console.log('🔄 Inicializando authStore...')
     await authStore.initialize()
   }
@@ -930,40 +935,36 @@ onMounted(async () => {
     void refreshDashboardData()
   }, DASHBOARD_POLL_MS)
   
-  // Verificar después de múltiples delays para asegurar que authStore esté listo
-  setTimeout(() => {
-    console.log('🔍 Estado después de delay 100ms:', {
+  // Verificar después de múltiples delays para asegurar que authStore esté listo.
+  // Antes esto referenciaba shouldShowTPV/shouldShowControlHorario/shouldShowAdmin,
+  // que no existían en ningún sitio del componente: el ReferenceError se lanzaba
+  // al construir el objeto del console.log, ANTES de llegar a llamar a
+  // updateModulesForSuperuser() — es decir, los 3 reintentos estaban muertos
+  // desde siempre. Se usa showModule(), la función real que decide qué ve el
+  // usuario, para que el log refleje el estado real y el reintento se ejecute.
+  const logModuleVisibilityState = (label) => {
+    console.log(`🔍 Estado de módulos (${label}):`, {
       isAdmin: authStore.isAdmin,
       userIsSuperuser: authStore.user?.is_superuser,
       user: authStore.user,
-      shouldShowTPV: shouldShowTPV.value,
-      shouldShowControlHorario: shouldShowControlHorario.value,
-      shouldShowAdmin: shouldShowAdmin.value
+      showTPV: showModule('tpv'),
+      showControlHorario: showModule('control_horario'),
+      showAdmin: showModule('admin'),
     })
+  }
+
+  setTimeout(() => {
+    logModuleVisibilityState('100ms')
     updateModulesForSuperuser()
   }, 100)
-  
+
   setTimeout(() => {
-    console.log('🔍 Estado después de delay 500ms:', {
-      isAdmin: authStore.isAdmin,
-      userIsSuperuser: authStore.user?.is_superuser,
-      user: authStore.user,
-      shouldShowTPV: shouldShowTPV.value,
-      shouldShowControlHorario: shouldShowControlHorario.value,
-      shouldShowAdmin: shouldShowAdmin.value
-    })
+    logModuleVisibilityState('500ms')
     updateModulesForSuperuser()
   }, 500)
-  
+
   setTimeout(() => {
-    console.log('🔍 Estado después de delay 1000ms:', {
-      isAdmin: authStore.isAdmin,
-      userIsSuperuser: authStore.user?.is_superuser,
-      user: authStore.user,
-      shouldShowTPV: shouldShowTPV.value,
-      shouldShowControlHorario: shouldShowControlHorario.value,
-      shouldShowAdmin: shouldShowAdmin.value
-    })
+    logModuleVisibilityState('1000ms')
     updateModulesForSuperuser()
   }, 1000)
 })

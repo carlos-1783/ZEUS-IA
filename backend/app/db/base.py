@@ -743,45 +743,53 @@ def _migrate_role_check_constraints():
         inspector = inspect(engine)
 
         if "users" in inspector.get_table_names():
-            try:
-                with engine.begin() as conn:
-                    conn.execute(
-                        text("UPDATE users SET role = 'owner' WHERE role IS NULL OR role NOT IN ('owner', 'employee')")
-                    )
-                    conn.execute(
-                        text(
-                            "ALTER TABLE users ADD CONSTRAINT ck_users_role "
-                            "CHECK (role IN ('owner', 'employee'))"
+            existing_ck = {c["name"] for c in inspector.get_check_constraints("users")}
+            if "ck_users_role" in existing_ck:
+                print("[MIGRATION] [INFO] ck_users_role ya existe")
+            else:
+                try:
+                    with engine.begin() as conn:
+                        conn.execute(
+                            text("UPDATE users SET role = 'owner' WHERE role IS NULL OR role NOT IN ('owner', 'employee')")
                         )
-                    )
-                print("[MIGRATION] [OK] ck_users_role creado")
-            except (OperationalError, ProgrammingError) as e:
-                if "already exists" in str(e).lower():
-                    print("[MIGRATION] [INFO] ck_users_role ya existe")
-                else:
-                    print(f"[MIGRATION] [WARN] No se pudo crear ck_users_role: {e}")
+                        conn.execute(
+                            text(
+                                "ALTER TABLE users ADD CONSTRAINT ck_users_role "
+                                "CHECK (role IN ('owner', 'employee'))"
+                            )
+                        )
+                    print("[MIGRATION] [OK] ck_users_role creado")
+                except (OperationalError, ProgrammingError) as e:
+                    if "already exists" in str(e).lower():
+                        print("[MIGRATION] [INFO] ck_users_role ya existe")
+                    else:
+                        print(f"[MIGRATION] [WARN] No se pudo crear ck_users_role: {e}")
 
         if "user_companies" in inspector.get_table_names():
-            try:
-                with engine.begin() as conn:
-                    conn.execute(
-                        text(
-                            "UPDATE user_companies SET role = 'company_admin' "
-                            "WHERE role IS NULL OR role NOT IN ('company_admin', 'member', 'owner')"
+            existing_ck = {c["name"] for c in inspector.get_check_constraints("user_companies")}
+            if "ck_user_companies_role" in existing_ck:
+                print("[MIGRATION] [INFO] ck_user_companies_role ya existe")
+            else:
+                try:
+                    with engine.begin() as conn:
+                        conn.execute(
+                            text(
+                                "UPDATE user_companies SET role = 'company_admin' "
+                                "WHERE role IS NULL OR role NOT IN ('company_admin', 'member', 'owner')"
+                            )
                         )
-                    )
-                    conn.execute(
-                        text(
-                            "ALTER TABLE user_companies ADD CONSTRAINT ck_user_companies_role "
-                            "CHECK (role IN ('company_admin', 'member', 'owner'))"
+                        conn.execute(
+                            text(
+                                "ALTER TABLE user_companies ADD CONSTRAINT ck_user_companies_role "
+                                "CHECK (role IN ('company_admin', 'member', 'owner'))"
+                            )
                         )
-                    )
-                print("[MIGRATION] [OK] ck_user_companies_role creado")
-            except (OperationalError, ProgrammingError) as e:
-                if "already exists" in str(e).lower():
-                    print("[MIGRATION] [INFO] ck_user_companies_role ya existe")
-                else:
-                    print(f"[MIGRATION] [WARN] No se pudo crear ck_user_companies_role: {e}")
+                    print("[MIGRATION] [OK] ck_user_companies_role creado")
+                except (OperationalError, ProgrammingError) as e:
+                    if "already exists" in str(e).lower():
+                        print("[MIGRATION] [INFO] ck_user_companies_role ya existe")
+                    else:
+                        print(f"[MIGRATION] [WARN] No se pudo crear ck_user_companies_role: {e}")
     except Exception as e:
         print(f"[MIGRATION] [WARN] No se pudo verificar role check constraints: {e}")
 

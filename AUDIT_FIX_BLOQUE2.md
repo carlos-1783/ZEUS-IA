@@ -552,24 +552,90 @@ usuarios no-superuser, así que el intento de inyectar el email de la otra
 empresa por query param se ignora — confirmado en vivo, no solo por
 lectura de código.
 
-### Hallazgo adicional (no aislamiento, pero relacionado) — sin arreglar, documentado
+### Hallazgo adicional — `POST /activities/log` sin autenticación (CERRADO)
 
-`POST /api/v1/activities/log` **no tiene autenticación** (sin
-`Depends(get_current_active_user)`) y acepta un `user_email` arbitrario en
-el body. No es una fuga de lectura entre tenants — no permite ver datos
-ajenos —, pero sí permite a cualquiera, sin login, inyectar actividades de
-agente falsas atribuidas al email de cualquier usuario/empresa, ensuciando
-su dashboard. Queda fuera del alcance de esta tarea (aislamiento de
-lectura) pero se deja anotado como hallazgo a corregir antes de producción.
+`POST /api/v1/activities/log` **no tenía autenticación** (sin
+`Depends(get_current_active_user)`) y aceptaba un `user_email` arbitrario
+en el body. No era una fuga de lectura entre tenants — no permitía ver
+datos ajenos —, pero sí permitía a cualquiera, sin login, inyectar
+actividades de agente falsas atribuidas al email de cualquier
+usuario/empresa, ensuciando su dashboard.
 
-### Regresión — suite completa tras todos los arreglos
+**Arreglo**: añadido `current_user: User = Depends(get_current_active_user)`,
+el mismo patrón (`app.core.auth.get_current_active_user`) que ya usan el
+resto de endpoints de `activities.py`.
+
+**Verificado con curl real**:
+```
+POST /activities/log sin token           → 401 "No se pudieron validar las credenciales"
+POST /activities/log con token inválido  → 401 "No se pudieron validar las credenciales"
+POST /activities/log con token válido    → 200 {"success": true, "activity_id": ..., ...}
+```
+
+### Regresión — suite completa tras todos los arreglos (los 6 de la verificación de RLS + este)
 
 `214 passed, 7 failed, 2 skipped, 3 errors` — **idéntico al baseline
-documentado arriba**, cero regresiones introducidas por los 6 arreglos de
-este bloque. (Una primera pasada mostró 6 fallos adicionales relacionados
-con ERP/facturas; se debían a un `zeus.db` local obsoleto con datos
+documentado arriba**, cero regresiones introducidas por ninguno de los 7
+arreglos de este bloque (los 6 de la verificación de RLS contra Postgres
+real + este de autenticación en `/activities/log`). (Una primera pasada,
+antes del último arreglo, mostró 6 fallos adicionales relacionados con
+ERP/facturas; se debían a un `zeus.db` local obsoleto con datos
 pre-existentes en el formato antiguo de los ENUM, ajeno a este trabajo —
 al moverlo aparte y regenerarse limpio, la suite volvió a los 7 fallos
 preexistentes de siempre, no relacionados con multi-tenant.)
 
 **No se hizo merge ni push a `main`.**
+
+---
+
+## Cierre del Bloque 2 — estado final
+
+Las 7 tareas originales más el hallazgo adicional de autenticación quedan
+**cerrados y verificados** en `feature/multi-tenant-bd`:
+
+| # | Tarea | Estado |
+|---|---|---|
+| 1 | `company_id` real en `AgentActivity` + `/metrics/dashboard` | Cerrada |
+| 2 | `User.role`/`UserCompany.role` a valores controlados (CHECK constraint) | Cerrada |
+| 3 | Naming engañoso `PayrollDraft.company_id`/`AutomationReadiness.company_id` | Cerrada |
+| 4 | Migraciones Alembic reales para las 9 tablas restantes | Cerrada |
+| 5 | Relación ORM `Invoice.customer` ↔ `Customer.invoices` | Cerrada |
+| 6 | Bug de audience-lista en `app/core/security.py` | Cerrada |
+| 7 | Row Level Security en PostgreSQL | **Cerrada — verificada contra Postgres real** (ver sección de arriba) |
+| + | Bug de guardado en onboarding ("Configuración inicial ZEUS") | Cerrada |
+| + | Sidebar: opción "Administrador" visible sin protección | Cerrada |
+| + | `POST /activities/log` sin autenticación | Cerrada |
+
+**Verificación de fondo que respalda este cierre**: la Tarea 7 es la única
+de las 7 que dependía de un Postgres real para probarse de verdad, y es
+también la que reveló más problemas ocultos — 2 bugs de migraciones nunca
+ejecutadas desde cero, 1 timeout de arranque, 7 tipos ENUM mal declarados,
+2 bugs de serialización en los schemas de factura, y el hallazgo crítico
+de que RLS estaba inerte por el rol de conexión. Todo eso se descubrió y
+se corrigió en la misma sesión de verificación, con evidencia real (curl,
+consultas SQL directas), no solo revisión de código.
+
+**Cabos sueltos conocidos que quedan fuera de esta rama** (no bloquean el
+cierre del Bloque 2, pero conviene tenerlos presentes antes de producción):
+
+- El fix de rol no-superusuario (`zeus_app`) se aplicó solo contra el
+  Postgres de **staging** usado en esta verificación. Railway
+  producción/otros entornos probablemente siguen conectando como
+  `postgres` (superusuario) — si es así, RLS está igual de inerte ahí
+  hasta que se replique el mismo cambio de rol allí.
+  **Acción explícita pendiente antes de la demo de septiembre.**
+- Recomendación de separar credenciales de migración/DDL (rol dueño de
+  las tablas) de credenciales de runtime de la aplicación (rol sin
+  `BYPASSRLS` ni superusuario) — documentada arriba, no implementada como
+  cambio de infraestructura permanente.
+- Las Tareas 1-6 y las dos tareas adicionales de onboarding/sidebar siguen
+  con el mismo nivel de confianza que cuando se cerraron (alta, pero solo
+  1, 2, 3 y 4 sin verificación directa contra Postgres real más allá de lo
+  que la Tarea 7 probó indirectamente al ejecutar la cadena completa de
+  migraciones).
+- Este bloque no toca `zeus_core.py`, `zeus_agents.py`, ni la vertical de
+  seguros — fuera de su alcance desde el inicio.
+
+No queda ningún hallazgo de aislamiento multi-tenant ni de autenticación
+abierto y sin documentar en esta rama. `feature/multi-tenant-bd` sigue sin
+merge ni push a `main`.

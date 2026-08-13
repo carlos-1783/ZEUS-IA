@@ -242,14 +242,16 @@ onMounted(async () => {
     globalStatus.value = await fetchAfroditaStatus()
     const s = globalStatus.value
     if (s.execution_mode === 'ERROR') {
-      statusNote.value = 'SYSTEM ERROR — base de datos no disponible.'
+      statusNote.value = 'No se pudo conectar con la base de datos. Esta herramienta no está disponible en este momento.'
     } else if (s.execution_mode === 'REAL') {
       statusNote.value = 'Ejecución activa: fichajes y altas persisten en BD.'
     } else if (s.salvaged_from_misconfigured_env) {
-      statusNote.value =
-        'Flags recuperados de otra variable Railway — corrija STATIC_DIR y cree AFRODITA_EXECUTION_ENABLED por separado.'
+      statusNote.value = 'Esta herramienta está en modo de solo lectura mientras se completa su configuración.'
+      console.warn(
+        '[AFRODITA] Flags recuperados de otra variable Railway — corrija STATIC_DIR y cree AFRODITA_EXECUTION_ENABLED por separado.'
+      )
     } else {
-      statusNote.value = `NO EXECUTION — ${executionModeLabel(s.execution_mode)} (configure flags en Railway).`
+      statusNote.value = `Modo actual: ${executionModeLabel(s.execution_mode)}. Los cambios no se guardan todavía — contacta con el equipo de ZEUS-IA para activar esta herramienta.`
     }
     await loadEmployees(true)
     refreshQrDefault()

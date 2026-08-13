@@ -106,8 +106,15 @@ class InvoiceBase(BaseModel):
     customer_id: Optional[int] = Field(None, gt=0, description="Customer ID")
     invoice_type: InvoiceType = Field(InvoiceType.INVOICE, description="Type of invoice")
     status: InvoiceStatus = Field(InvoiceStatus.DRAFT, description="Invoice status")
-    issue_date: date = Field(default_factory=date.today, description="Date the invoice was issued")
-    due_date: Optional[date] = Field(None, description="Due date for payment")
+    # NOTA (envio-gestoria): tipado como datetime (no date) porque la
+    # columna real en BD es DateTime (app/models/erp.py Invoice.issue_date/
+    # due_date) con default datetime.utcnow(). Con `date`, Pydantic v2
+    # rechaza la respuesta (ResponseValidationError:
+    # date_from_datetime_inexact) en cuanto la hora no es exactamente
+    # medianoche — rompía SIEMPRE la creación de facturas. Mismo bug ya
+    # diagnosticado y arreglado en otra rama (multi-tenant-bd).
+    issue_date: datetime = Field(default_factory=datetime.utcnow, description="Date the invoice was issued")
+    due_date: Optional[datetime] = Field(None, description="Due date for payment")
     notes: Optional[str] = Field(None, description="Additional notes")
     
     @model_validator(mode='after')
@@ -138,7 +145,7 @@ class PaymentBase(BaseModel):
     transaction_id: Optional[str] = Field(None, max_length=100, description="Transaction ID")
     reference: Optional[str] = Field(None, max_length=100, description="Reference number")
     notes: Optional[str] = Field(None, description="Additional notes")
-    payment_date: date = Field(default_factory=date.today, description="Date of payment")
+    payment_date: datetime = Field(default_factory=datetime.utcnow, description="Date of payment")
 
 # Create schemas
 class ProductVariantCreate(ProductVariantBase):

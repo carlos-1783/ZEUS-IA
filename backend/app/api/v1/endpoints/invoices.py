@@ -216,7 +216,14 @@ def create_invoice(
                 # Update stock level
                 product.quantity_on_hand = max(0, product.quantity_on_hand - item.quantity)
     
-    # Calculate and update totals
+    # Calculate and update totals. flush + expire "items" fuerza a
+    # SQLAlchemy a releer la relación desde BD: sin esto, calculate_invoice_totals
+    # podía ver invoice.items vacío (los items se añadieron con db.add(item)
+    # suelto, no invoice.items.append(item)) y devolver subtotal/tax/total
+    # en 0 pese a que los items sí tenían unit_price/tax_rate reales —
+    # rompía la generación de factura PDF de RAFAEL, que exige total > 0.
+    db.flush()
+    db.expire(invoice, ["items"])
     totals = calculate_invoice_totals(invoice, db)
     for key, value in totals.items():
         setattr(invoice, key, value)

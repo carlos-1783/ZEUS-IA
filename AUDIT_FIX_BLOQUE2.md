@@ -572,13 +572,79 @@ POST /activities/log con token inválido  → 401 "No se pudieron validar las cr
 POST /activities/log con token válido    → 200 {"success": true, "activity_id": ..., ...}
 ```
 
-### Regresión — suite completa tras todos los arreglos (los 6 de la verificación de RLS + este)
+### Hallazgo adicional — acceso total de superusuarios sin bypass explícito (CERRADO)
+
+Petición explícita de verificación: confirmar que un usuario
+`is_superuser=True` sigue teniendo acceso completo, sin ninguna
+restricción de RLS ni de tenant, y que ese bypass está en la lógica de la
+aplicación — no en el rol de conexión de Postgres (`zeus_app` sigue sin
+ser superusuario ni tener `BYPASSRLS`, eso no cambia y no debe cambiar).
+
+**Estado antes de esta verificación**: ningún sitio comprobaba
+`is_superuser` de forma explícita para esto. El superusuario real
+(`admin@zeus-ia.com`) **no tiene ninguna fila en `user_companies`**
+(confirmado por consulta directa a Postgres), así que:
+
+- `get_db_scoped()` (`app/db/tenant_context.py`) llamaba a
+  `primary_company_id()` incondicionalmente. Para el admin esto devuelve
+  `None` → RLS fail-open → **veía todo, pero por coincidencia**, no por
+  diseño. Si en el futuro se le asignara una empresa en `user_companies`
+  (p. ej. al usarlo también como owner de una empresa de demo), habría
+  quedado silenciosamente restringido a esa única empresa, como un
+  usuario normal — una regresión real esperando a pasar.
+- `get_dashboard_metrics()` (`app/api/v1/endpoints/metrics.py`) tiene su
+  **propio filtro de tenant a nivel de aplicación, independiente de
+  RLS**. Sin bypass, este SÍ estaba activamente roto para el
+  superusuario: con `company_ids_for_user()` devolviendo `[]`, el filtro
+  colapsaba a "solo actividades con `company_id IS NULL` y
+  `user_email = admin@zeus-ia.com`" — es decir, solo el ruido de arranque
+  del propio sistema (`zeus_launch_started`), no los datos reales de
+  ninguna empresa.
+
+**Arreglo** (mismo patrón que ya usa `/performance` en el propio
+`metrics.py` y que usa `/activities/{agent_name}`): comprobación explícita
+`if getattr(current_user, "is_superuser", False)` en ambos sitios —
+`get_db_scoped()` nunca fija `company_id` de tenant para un superusuario
+(deja RLS en fail-open sea cual sea su estado en `user_companies`), y
+`get_dashboard_metrics()` usa `tenant_filter = true()` en vez de construir
+el filtro por empresas del usuario.
+
+**Verificado con curl real contra el Postgres de staging**, login como
+`admin@zeus-ia.com` (superusuario real, `is_superuser=true`,
+`scopes: ["*"]` en el token):
+
+```
+GET /invoices/ (token superusuario)
+  ANTES del fix → total: 12, ids [3,4,5,6,7,8,9,10,11,12,13,14] (ambas empresas — ya funcionaba, por coincidencia)
+  DESPUÉS       → total: 12, ids [3,4,5,6,7,8,9,10,11,12,13,14] (idéntico, ahora por diseño explícito)
+
+GET /metrics/dashboard (token superusuario)
+  ANTES del fix → total_interactions: 8   (solo ruido de arranque del propio admin — ROTO)
+  DESPUÉS       → total_interactions: 37  (datos reales combinados de Empresa A + Empresa B + sistema)
+
+GET /activities/ZEUS (token superusuario)
+  ANTES y DESPUÉS → total: 14 (ya eral correcto: este endpoint no depende de RLS/get_db_scoped,
+                                usa su propio mecanismo explícito is_superuser-aware)
+```
+
+**Regresión para usuarios normales, verificada tras el fix** (mismo
+Postgres, mismos datos de prueba):
+```
+GET /invoices/ (token Empresa A) → total: 6, solo sus propias facturas — sin cambios
+GET /invoices/ (token Empresa B) → total: 6, solo sus propias facturas — sin cambios
+GET /metrics/dashboard (token A) → total_interactions: 8 — sin cambios
+GET /metrics/dashboard (token B) → total_interactions: 8 — sin cambios
+GET /invoices/5 (factura de B) con token A → 404 "Invoice with ID 5 not found" — sigue rechazado
+```
+
+### Regresión — suite completa tras todos los arreglos
 
 `214 passed, 7 failed, 2 skipped, 3 errors` — **idéntico al baseline
-documentado arriba**, cero regresiones introducidas por ninguno de los 7
+documentado arriba**, cero regresiones introducidas por ninguno de los 8
 arreglos de este bloque (los 6 de la verificación de RLS contra Postgres
-real + este de autenticación en `/activities/log`). (Una primera pasada,
-antes del último arreglo, mostró 6 fallos adicionales relacionados con
+real + autenticación en `/activities/log` + bypass explícito de
+superusuarios). (Una primera pasada, antes del arreglo de
+`/activities/log`, mostró 6 fallos adicionales relacionados con
 ERP/facturas; se debían a un `zeus.db` local obsoleto con datos
 pre-existentes en el formato antiguo de los ENUM, ajeno a este trabajo —
 al moverlo aparte y regenerarse limpio, la suite volvió a los 7 fallos
@@ -590,8 +656,8 @@ preexistentes de siempre, no relacionados con multi-tenant.)
 
 ## Cierre del Bloque 2 — estado final
 
-Las 7 tareas originales más el hallazgo adicional de autenticación quedan
-**cerrados y verificados** en `feature/multi-tenant-bd`:
+Las 7 tareas originales más los hallazgos adicionales quedan **cerrados y
+verificados** en `feature/multi-tenant-bd`:
 
 | # | Tarea | Estado |
 |---|---|---|
@@ -605,6 +671,7 @@ Las 7 tareas originales más el hallazgo adicional de autenticación quedan
 | + | Bug de guardado en onboarding ("Configuración inicial ZEUS") | Cerrada |
 | + | Sidebar: opción "Administrador" visible sin protección | Cerrada |
 | + | `POST /activities/log` sin autenticación | Cerrada |
+| + | Superusuarios sin bypass explícito de RLS/tenant-filter | Cerrada |
 
 **Verificación de fondo que respalda este cierre**: la Tarea 7 es la única
 de las 7 que dependía de un Postgres real para probarse de verdad, y es

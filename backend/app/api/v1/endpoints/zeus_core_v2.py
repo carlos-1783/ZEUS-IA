@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -21,6 +22,7 @@ from services.zeus_human_approval_v1 import list_pending, resolve_approval
 from services.zeus_scoring_engine_v1 import convert_lead_to_customer, create_lead, score_lead
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class AgentExecuteRequest(BaseModel):
@@ -199,3 +201,93 @@ def workspace_bootstrap(
         persist_artifact=body.persist_artifact,
         company_id=body.company_id,
     )
+
+
+# ----------------------------------------------------------------------------
+# Endpoints de estado/auditoría, migrados desde el antiguo
+# app/api/v1/endpoints/zeus_core.py (Bloque 3, limpieza de simulación). Ese
+# archivo mezclaba estos endpoints reales (llaman a servicios reales:
+# zeus_execution_controller_v1, zeus_safe_lock_v1, zeus_controlled_repair_v1,
+# zeus_full_completion_v1, zeus_document_pipeline_v1) con /activate, /execute,
+# /agents y /commands, que solo devolvían dicts fijos de
+# app/core/zeus_agents.py (ZeusAgent en memoria, sin persistencia real,
+# "status": "success" hardcodeado siempre). Esos cuatro se eliminaron junto
+# con zeus_agents.py; estos cuatro se migraron aquí, al orquestador real,
+# quitando la única referencia que tenían al zeus_manager legacy (el campo
+# "timestamp"/"data.legacy" de /status, que ningún consumidor real leía —
+# ver frontend/src/api/zeus_status_api.ts).
+# ----------------------------------------------------------------------------
+
+
+@router.get("/status")
+async def get_zeus_status(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Estado real de ejecución del núcleo ZEUS: execution_mode, writes_enabled,
+    módulos conectados y safe_lock (zeus_execution_controller_v1 /
+    zeus_safe_lock_v1) — no simulado."""
+    from datetime import datetime
+
+    from services.zeus_data_pipeline_v1 import get_pipeline_status
+    from services.zeus_execution_controller_v1 import get_execution_status
+    from services.zeus_safe_lock_v1 import run_safe_lock
+
+    try:
+        execution = get_execution_status(db)
+        pipeline_user = get_pipeline_status(db, current_user.id)
+        safe_lock = run_safe_lock(db, execution_status=execution, log_warnings=True)
+
+        return {
+            "status": "success",
+            "message": "Estado del Núcleo ZEUS obtenido correctamente",
+            "timestamp": datetime.utcnow().isoformat(),
+            "execution_mode": execution["execution_mode"],
+            "writes_enabled": execution["writes_enabled"],
+            "db_status": execution["db_status"],
+            "connected_modules": execution["connected_modules"],
+            "modules": execution["modules"],
+            "simulation_layers_present": execution["simulation_layers_present"],
+            "flag_consistency": execution["flag_consistency"],
+            "verified_real": safe_lock["verified_real"],
+            "safe_lock": safe_lock,
+            "pipeline": {**execution["pipeline"], "user": pipeline_user},
+        }
+    except Exception as e:
+        logger.error(f"Error obteniendo estado ZEUS: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error obteniendo estado: {str(e)}",
+        )
+
+
+@router.get("/repair/status")
+async def get_zeus_repair_status(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Auditoría secuencial de fases controlled_repair (sin mutaciones)."""
+    from services.zeus_controlled_repair_v1 import run_controlled_repair
+
+    return run_controlled_repair(db, current_user, stop_on_error=False)
+
+
+@router.get("/completion/status")
+async def get_zeus_completion_status(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Valida las fases de zeus_full_completion_v1 para ejecución 100% real."""
+    from services.zeus_full_completion_v1 import run_full_completion
+
+    return run_full_completion(db, current_user, stop_on_error=False)
+
+
+@router.get("/document-pipeline/status")
+async def get_zeus_document_pipeline_status(
+    current_user: User = Depends(get_current_active_user),
+):
+    """Estado del pipeline de documentos cross-agent."""
+    from services.zeus_document_pipeline_v1 import pipeline_status
+
+    return {"success": True, **pipeline_status()}

@@ -12,7 +12,6 @@ from app.api.v1.endpoints import (
     office_mode,
     company,
     test,
-    zeus_core,
     agents,
     metrics,
     analytics,
@@ -88,7 +87,6 @@ api_router.include_router(company.router, prefix="/company", tags=["company"])
 api_router.include_router(test.router, prefix="/test", tags=["test"])
 
 # Núcleo ZEUS endpoints
-api_router.include_router(zeus_core.router, prefix="/zeus", tags=["zeus-core"])
 api_router.include_router(zeus_transactions_v1.router, tags=["zeus-transactions"])
 
 # Agents & Metrics endpoints (para dashboard)

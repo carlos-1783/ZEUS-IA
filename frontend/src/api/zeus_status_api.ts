@@ -40,7 +40,10 @@ export interface ZeusExecutionStatus {
 }
 
 export async function fetchZeusExecutionStatus() {
-  return api.get('/api/v1/zeus/status') as Promise<ZeusExecutionStatus>
+  // Migrado de /api/v1/zeus/status a /api/v1/zeus-core/status (Bloque 3,
+  // limpieza de simulación): el endpoint real se movió al orquestador
+  // zeus_core_v2.py al eliminar app/api/v1/endpoints/zeus_core.py.
+  return api.get('/api/v1/zeus-core/status') as Promise<ZeusExecutionStatus>
 }
 
 export function moduleStatusLabel(status?: ZeusModuleStatus | string): string {

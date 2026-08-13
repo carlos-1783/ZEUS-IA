@@ -269,15 +269,22 @@ def get_current_user(db: Session, token: str) -> User:
         
         # Ahora intentamos la verificación completa
         try:
+            # python-jose's audience= solo acepta un string (o None) — nunca
+            # una lista. settings.JWT_AUDIENCE es una lista de audiencias
+            # válidas, así que pasarla directamente rompía SIEMPRE con
+            # "audience must be a string or None" antes de llegar al bloque
+            # de validación manual de audience de abajo (líneas ~337+), que
+            # sí soporta listas y es el que realmente hace la comprobación.
+            # verify_aud desactivado aquí a propósito: la validación real
+            # ocurre después, no aquí.
             payload = jwt.decode(
                 token,
                 secret_key_str,
                 algorithms=[settings.ALGORITHM],
-                audience=settings.JWT_AUDIENCE,
                 issuer=settings.JWT_ISSUER,
                 options={
                     "verify_signature": True,
-                    "verify_aud": True,
+                    "verify_aud": False,
                     "verify_iss": True,
                     "verify_exp": True,
                     "verify_nbf": True,
@@ -368,21 +375,32 @@ def get_current_user(db: Session, token: str) -> User:
                 headers={"WWW-Authenticate": "Bearer"},
             )
             
-        # Obtener el email del token
-        email: str = payload.get("sub")
-        if email is None:
-            logger.warning("Token sin campo 'sub' (email)")
+        # 'sub' puede ser el ID de usuario (tokens actuales, ver
+        # app.core.auth.get_current_user) o el email (convención antigua) —
+        # antes se asumía que 'sub' era siempre el email, así que la
+        # búsqueda fallaba siempre para tokens reales (sub="191", no
+        # coincide con ningún email) y devolvía 401 pese a tener un token
+        # válido recién verificado. Mismo patrón robusto que ya usa
+        # app.core.auth.py: probar como ID primero, si no como email.
+        user_identifier = payload.get("sub")
+        if user_identifier is None:
+            logger.warning("Token sin campo 'sub'")
             raise credentials_exception
-            
-        # Buscar el usuario en la base de datos
-        logger.info(f"Buscando usuario en la base de datos: {email}")
-        user = db.query(User).filter(User.email == email).first()
-        
+
+        logger.info(f"Buscando usuario en la base de datos: {user_identifier}")
+        user = None
+        try:
+            user = db.query(User).filter(User.id == int(user_identifier)).first()
+        except (TypeError, ValueError):
+            pass
         if user is None:
-            logger.warning(f"Usuario no encontrado: {email}")
+            user = db.query(User).filter(User.email == str(user_identifier)).first()
+
+        if user is None:
+            logger.warning(f"Usuario no encontrado: {user_identifier}")
             raise credentials_exception
-            
-        logger.info(f"Usuario autenticado correctamente: {email}")
+
+        logger.info(f"Usuario autenticado correctamente: {user.email}")
         return user
         
     except JWTError as e:

@@ -23,7 +23,6 @@ import AuthLayout from '../layouts/AuthLayout.vue'
 
 // Lazy loading de componentes pesados
 const MainLayout = () => import('../layouts/MainLayout.vue')
-const Dashboard = () => import('../views/Dashboard.vue')
 const OlymposDashboard = () => import('../views/OlymposDashboard.vue')
 const Login = () => import('../views/auth/Login.vue')
 const Register = () => import('../views/auth/Register.vue')
@@ -385,16 +384,6 @@ const router = createRouter({
       ]
     },
     
-    // Protected routes
-    {
-      path: '/dashboard',
-      name: 'DashboardProtected',
-      component: Dashboard,
-      meta: { 
-        title: 'Panel de control',
-        requiresAuth: true
-      }
-    },
 
         // Test routes (temporarily public)
     {

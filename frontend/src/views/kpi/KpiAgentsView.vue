@@ -1,26 +1,62 @@
 <template>
-  <KpiPageShell title="Agentes activos" subtitle="Olimpo ZEUS — 6 agentes operativos">
+  <KpiPageShell
+    title="Agentes activos"
+    subtitle="Olimpo ZEUS — estado real, calculado desde agent_activities"
+    :loading="loading"
+    :error="error"
+  >
     <ul class="kpi-list">
       <li v-for="agent in agents" :key="agent.name" class="kpi-list-item">
         <strong>{{ agent.name }}</strong>
         <span>{{ agent.role }}</span>
-        <span class="pill online">Online</span>
+        <span class="pill" :class="agent.status">{{ agent.status === 'online' ? 'Online' : 'Idle' }}</span>
+        <span class="metric">{{ agent.uptime || 'Sin datos' }}</span>
+        <span class="metric">{{ agent.decisionsToday }} hoy</span>
+        <span class="last-activity">{{ formatDate(agent.lastActivity) }}</span>
       </li>
+      <li v-if="!agents.length" class="empty">Sin agentes registrados.</li>
     </ul>
   </KpiPageShell>
 </template>
 
 <script setup>
+import { ref, onMounted } from 'vue'
 import KpiPageShell from '@/components/kpi/KpiPageShell.vue'
 
-const agents = [
-  { name: 'ZEUS CORE', role: 'Supreme Orchestrator' },
-  { name: 'PERSEO', role: 'Growth Strategist' },
-  { name: 'RAFAEL', role: 'Fiscal Guardian' },
-  { name: 'THALOS', role: 'Cybersecurity Defender' },
-  { name: 'JUSTICIA', role: 'Legal & GDPR Advisor' },
-  { name: 'AFRODITA', role: 'HR & Logistics Manager' },
-]
+const loading = ref(true)
+const error = ref('')
+const agents = ref([])
+
+const formatDate = (iso) => {
+  if (!iso) return 'Sin actividad'
+  try {
+    return new Date(iso).toLocaleString()
+  } catch {
+    return iso
+  }
+}
+
+onMounted(async () => {
+  try {
+    const api = (await import('@/services/api')).default
+    // Mismo endpoint que consume OlymposDashboard.vue — GET /api/v1/agents/status
+    // ahora calcula status/uptime/last_activity/decisions_today desde
+    // agent_activities en vez de devolver valores fijos (Bloque 3, tarea 2).
+    const data = await api.get('/api/v1/agents/status')
+    agents.value = Object.entries(data?.agents || {}).map(([name, info]) => ({
+      name,
+      role: info.role,
+      status: info.status,
+      uptime: info.uptime,
+      decisionsToday: info.decisions_today ?? 0,
+      lastActivity: info.last_activity,
+    }))
+  } catch (e) {
+    error.value = e?.message || 'Error cargando estado de agentes'
+  } finally {
+    loading.value = false
+  }
+})
 </script>
 
 <style scoped>
@@ -34,7 +70,7 @@ const agents = [
 
 .kpi-list-item {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: 1fr 1fr auto auto auto 1fr;
   gap: 12px;
   align-items: center;
   padding: 14px 16px;
@@ -44,16 +80,44 @@ const agents = [
   font-size: 14px;
 }
 
-.pill.online {
-  color: #10b981;
+.pill {
   font-size: 12px;
   font-weight: 600;
+}
+
+.pill.online {
+  color: #10b981;
+}
+
+.pill.idle {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.metric {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.last-activity {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+  text-align: right;
+}
+
+.empty {
+  color: rgba(255, 255, 255, 0.5);
+  padding: 14px 16px;
 }
 
 @media (max-width: 768px) {
   .kpi-list-item {
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+
+  .last-activity {
+    text-align: left;
   }
 }
 </style>

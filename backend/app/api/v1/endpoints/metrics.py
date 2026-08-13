@@ -30,12 +30,23 @@ async def get_dashboard_metrics(
     """
     try:
         from app.models.agent_activity import AgentActivity
+        from sqlalchemy import true
 
-        allowed_company_ids = crm_svc.company_ids_for_user(db, current_user)
-        tenant_filter = or_(
-            AgentActivity.company_id.in_(allowed_company_ids),
-            and_(AgentActivity.company_id.is_(None), AgentActivity.user_email == current_user.email),
-        )
+        if getattr(current_user, "is_superuser", False):
+            # Bypass explícito: este filtro es independiente de RLS (se
+            # aplica a nivel de aplicación sobre `db`, que ya viene con RLS
+            # bypasseado por get_db_scoped para superusuarios — ver
+            # app/db/tenant_context.py). Sin este check, un superusuario sin
+            # empresa asignada en user_companies solo veía las actividades
+            # de sistema (company_id NULL) atribuidas a su propio email, no
+            # los datos reales de ninguna empresa.
+            tenant_filter = true()
+        else:
+            allowed_company_ids = crm_svc.company_ids_for_user(db, current_user)
+            tenant_filter = or_(
+                AgentActivity.company_id.in_(allowed_company_ids),
+                and_(AgentActivity.company_id.is_(None), AgentActivity.user_email == current_user.email),
+            )
 
         # Calcular rango de fechas
         end_date = datetime.utcnow()

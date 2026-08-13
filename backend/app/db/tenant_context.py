@@ -69,6 +69,21 @@ def get_db_scoped(
     0047_row_level_security.py) filtren de verdad en Postgres."""
     import services.crm_office_service as crm_svc
 
+    if getattr(current_user, "is_superuser", False):
+        # Bypass explícito para superusuarios, a nivel de aplicación (NO en
+        # el rol de conexión de Postgres — zeus_app sigue sin ser
+        # superusuario ni tener BYPASSRLS). No se fija ningún company_id de
+        # tenant, así que las policies de RLS (fail-open cuando no hay
+        # contexto) dejan ver todo. Deliberadamente independiente de si el
+        # superusuario tiene o no una fila en user_companies: antes de este
+        # fix, un admin sin empresa asignada "veía todo" solo por
+        # coincidencia (primary_company_id devolvía None); si en el futuro
+        # se le asignara una empresa, habría quedado restringido a esa única
+        # empresa como cualquier usuario normal. Con el check explícito, el
+        # acceso total del superusuario no depende de ese detalle.
+        set_tenant_context(db, None, user_id=current_user.id, user_email=current_user.email)
+        return db
+
     company_id = crm_svc.primary_company_id(db, current_user)
     set_tenant_context(db, company_id, user_id=current_user.id, user_email=current_user.email)
     return db

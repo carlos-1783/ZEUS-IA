@@ -379,13 +379,17 @@ class LegalFiscalFirewall:
                 if self.db:
                     self.db.rollback()
         
-        # Enviar al asesor
+        # Enviar al asesor — adjuntando el fichero real (PDF/XLSX) generado
+        # por RAFAEL si el documento aprobado lo tiene (facturas, modelo 303).
         send_result = await self._send_to_advisor(
             advisor_email=advisor_email,
             agent_name=agent_name,
             document_content=document_content,
             user_email=user_email,
-            metadata=approval_record
+            metadata=approval_record,
+            file_path=getattr(doc_approval, "file_path", None) if doc_approval else None,
+            mime_type=getattr(doc_approval, "mime_type", None) if doc_approval else None,
+            fiscal_document_type=getattr(doc_approval, "fiscal_document_type", None) if doc_approval else None,
         )
         
         # Actualizar estado final en BD
@@ -453,26 +457,36 @@ class LegalFiscalFirewall:
         return labels.get(agent_name, "Aprobar y Enviar al Asesor")
     
     def _get_advisor_email(self, user_id: int, agent_name: str) -> Optional[str]:
-        """Obtener email del asesor desde la BD del usuario"""
-        if not self.db:
-            return None
-        
-        try:
-            from app.models.user import User
-            user = self.db.query(User).filter(User.id == user_id).first()
-            
-            if not user:
-                return None
-            
-            if agent_name == "RAFAEL":
-                return user.email_gestor_fiscal
-            elif agent_name == "JUSTICIA":
-                return user.email_asesor_legal
-            
-            return None
-        except Exception as e:
-            logger.error(f"[FIREWALL] Error obteniendo email asesor: {e}")
-            return None
+        """
+        Obtener email del asesor. Prioridad: el que el propio usuario
+        configuró en su perfil (User.email_gestor_fiscal /
+        email_asesor_legal, vía onboarding o
+        POST /document-approval/update-advisor-emails) — el mecanismo
+        correcto en un SaaS multi-tenant, cada empresa tiene su propia
+        gestoría. GESTORIA_EMAIL_DEFAULT (variable de entorno, opcional) es
+        solo un fallback para cuando el usuario todavía no ha configurado
+        el suyo — nunca sustituye al valor por-usuario si existe.
+        """
+        import os
+
+        if self.db:
+            try:
+                from app.models.user import User
+                user = self.db.query(User).filter(User.id == user_id).first()
+
+                if user:
+                    if agent_name == "RAFAEL" and user.email_gestor_fiscal:
+                        return user.email_gestor_fiscal
+                    elif agent_name == "JUSTICIA" and user.email_asesor_legal:
+                        return user.email_asesor_legal
+            except Exception as e:
+                logger.error(f"[FIREWALL] Error obteniendo email asesor: {e}")
+
+        if agent_name == "RAFAEL":
+            fallback = (os.getenv("GESTORIA_EMAIL_DEFAULT") or "").strip()
+            return fallback or None
+
+        return None
 
     def _get_user_email(self, user_id: int) -> Optional[str]:
         """Obtener email del cliente para enlazar actividad visible en panel."""
@@ -492,13 +506,24 @@ class LegalFiscalFirewall:
         agent_name: str,
         document_content: Dict[str, Any],
         user_email: str,
-        metadata: Dict[str, Any]
+        metadata: Dict[str, Any],
+        file_path: Optional[str] = None,
+        mime_type: Optional[str] = None,
+        fiscal_document_type: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Enviar documento al asesor por email.
-        Incluye PDF/JSON como attachments y metadata.
+
+        Si el DocumentApproval tiene un fichero real generado (file_path —
+        factura PDF o modelo 303 XLSX de rafael_fiscal_engine_v2.py), se
+        adjunta el fichero real. Si no lo tiene (p.ej. documentos de
+        JUSTICIA sin exportación a fichero todavía), se cae al resumen en
+        JSON en el cuerpo del email como antes — nunca se envía un email
+        vacío.
         """
         try:
+            from pathlib import Path
+
             from services.email_service import email_service
 
             can_send = (
@@ -516,10 +541,32 @@ class LegalFiscalFirewall:
                     ),
                     "status": "email_not_configured",
                 }
-            
+
+            has_real_file = bool(file_path and Path(file_path).is_file())
+
             # Preparar email
-            subject = f"[ZEUS-IA] Documento {agent_name} - Requiere revisión"
-            
+            doc_label = fiscal_document_type or metadata.get('document_type', 'N/A')
+            subject = f"[ZEUS-IA] Documento {agent_name} ({doc_label}) - Requiere revisión"
+
+            if has_real_file:
+                document_box = f"""
+                    <div class="document-box">
+                        <h3>Tipo de documento:</h3>
+                        <p>{doc_label}</p>
+                        <p>Documento adjunto a este email ({Path(file_path).name}).</p>
+                    </div>
+                """
+            else:
+                document_box = f"""
+                    <div class="document-box">
+                        <h3>Tipo de documento:</h3>
+                        <p>{doc_label}</p>
+
+                        <h3>Contenido:</h3>
+                        <pre>{json.dumps(document_content, indent=2, ensure_ascii=False)}</pre>
+                    </div>
+                """
+
             html_content = f"""
             <html>
             <head>
@@ -537,32 +584,26 @@ class LegalFiscalFirewall:
                     <h1>⚡ ZEUS-IA</h1>
                     <p>Documento {agent_name} - Requiere revisión</p>
                 </div>
-                
+
                 <div class="content">
                     <p>Estimado/a asesor,</p>
-                    
+
                     <p>El cliente <strong>{user_email}</strong> ha aprobado el siguiente documento generado por {agent_name} y solicita su revisión:</p>
-                    
-                    <div class="document-box">
-                        <h3>Tipo de documento:</h3>
-                        <p>{metadata.get('document_type', 'N/A')}</p>
-                        
-                        <h3>Contenido:</h3>
-                        <pre>{json.dumps(document_content, indent=2, ensure_ascii=False)}</pre>
-                    </div>
-                    
+
+                    {document_box}
+
                     <div class="warning">
                         <strong>⚠️ IMPORTANTE:</strong><br>
                         Este documento fue generado por IA en modo borrador y aprobado por el cliente para su revisión.
                         La responsabilidad final sobre presentación y firma recae en el asesor humano.
                         ZEUS-IA no actúa como representante legal.
                     </div>
-                    
+
                     <p>Por favor, revise el documento y proceda según corresponda.</p>
-                    
+
                     <p>Saludos,<br>El equipo de ZEUS-IA</p>
                 </div>
-                
+
                 <div class="footer">
                     <p>Este email fue enviado automáticamente por ZEUS-IA tras aprobación explícita del cliente.</p>
                     <p>© 2025 ZEUS-IA. Todos los derechos reservados.</p>
@@ -570,13 +611,22 @@ class LegalFiscalFirewall:
             </body>
             </html>
             """
-            
-            result = await email_service.send_email(
-                to_email=advisor_email,
-                subject=subject,
-                content=html_content,
-                content_type="text/html",
-            )
+
+            if has_real_file:
+                result = await email_service.send_email_with_attachments(
+                    to_email=advisor_email,
+                    subject=subject,
+                    content=html_content,
+                    attachments=[file_path],
+                    content_type="text/html",
+                )
+            else:
+                result = await email_service.send_email(
+                    to_email=advisor_email,
+                    subject=subject,
+                    content=html_content,
+                    content_type="text/html",
+                )
 
             if not result.get("success"):
                 return {
@@ -591,8 +641,9 @@ class LegalFiscalFirewall:
                 "advisor_email": advisor_email,
                 "sent_at": datetime.utcnow().isoformat(),
                 "provider": result.get("provider", "email"),
+                "attached_real_file": has_real_file,
             }
-            
+
         except Exception as e:
             logger.error(f"[FIREWALL] Error enviando a asesor: {e}")
             return {

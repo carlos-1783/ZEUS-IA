@@ -3,11 +3,15 @@
 Automatiza respuestas por correo electrónico
 """
 import asyncio
+import base64
 import logging
+import mimetypes
 import os
 import smtplib
+from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 import requests  # pyright: ignore[reportMissingImports, reportMissingModuleSource]
@@ -16,12 +20,23 @@ logger = logging.getLogger(__name__)
 
 try:
     from sendgrid import SendGridAPIClient  # pyright: ignore[reportMissingImports]
-    from sendgrid.helpers.mail import Mail, Email, To, Content  # pyright: ignore[reportMissingImports]
+    from sendgrid.helpers.mail import (  # pyright: ignore[reportMissingImports]
+        Mail,
+        Email,
+        To,
+        Content,
+        Attachment,
+        FileContent,
+        FileName,
+        FileType,
+        Disposition,
+    )
     SENDGRID_AVAILABLE = True
 except ImportError:
     SENDGRID_AVAILABLE = False
     SendGridAPIClient = None
     Mail = Email = To = Content = None
+    Attachment = FileContent = FileName = FileType = Disposition = None
  
 class EmailService:
     """Servicio para automatización de email vía SendGrid"""
@@ -67,6 +82,7 @@ class EmailService:
         subject: str,
         content: str,
         content_type: str = "text/html",
+        attachments: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         host = os.getenv("SMTP_HOST", "smtp.gmail.com")
         port = int(os.getenv("SMTP_PORT", "587"))
@@ -75,12 +91,25 @@ class EmailService:
         from_addr = os.getenv("EMAILS_FROM_EMAIL") or os.getenv("SMTP_FROM") or user
         from_name = os.getenv("EMAILS_FROM_NAME") or os.getenv("SMTP_FROM_NAME") or "ZEUS-IA"
 
-        msg = MIMEMultipart("alternative")
+        # "mixed" en vez de "alternative" cuando hay adjuntos: alternative es
+        # para variantes del mismo contenido (texto vs html), mixed es lo
+        # correcto para cuerpo + ficheros adjuntos reales.
+        msg = MIMEMultipart("mixed" if attachments else "alternative")
         msg["Subject"] = subject
         msg["From"] = f"{from_name} <{from_addr}>"
         msg["To"] = to_email
         subtype = "html" if content_type == "text/html" else "plain"
         msg.attach(MIMEText(content, subtype, "utf-8"))
+
+        for file_path in attachments or []:
+            path = Path(file_path)
+            if not path.is_file():
+                raise FileNotFoundError(f"Adjunto no encontrado: {file_path}")
+            mime_type, _ = mimetypes.guess_type(str(path))
+            with open(path, "rb") as f:
+                part = MIMEApplication(f.read(), _subtype=(mime_type or "application/octet-stream").split("/")[-1])
+            part.add_header("Content-Disposition", "attachment", filename=path.name)
+            msg.attach(part)
 
         use_tls = str(os.getenv("SMTP_TLS", "true")).lower() in ("1", "true", "yes")
         if port == 465:
@@ -97,6 +126,7 @@ class EmailService:
             "to": to_email,
             "subject": subject,
             "provider": "smtp_gmail" if "gmail" in host.lower() else "smtp",
+            "attachments": [Path(p).name for p in (attachments or [])],
         }
 
     def _send_via_resend_sync(
@@ -105,6 +135,7 @@ class EmailService:
         subject: str,
         content: str,
         content_type: str = "text/html",
+        attachments: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """POST síncrono a la API de Resend (se ejecuta en thread pool desde async)."""
         payload: Dict[str, Any] = {
@@ -116,6 +147,20 @@ class EmailService:
             payload["html"] = content
         else:
             payload["text"] = content
+        if attachments:
+            resend_attachments = []
+            for file_path in attachments:
+                path = Path(file_path)
+                if not path.is_file():
+                    raise FileNotFoundError(f"Adjunto no encontrado: {file_path}")
+                with open(path, "rb") as f:
+                    resend_attachments.append(
+                        {
+                            "filename": path.name,
+                            "content": base64.b64encode(f.read()).decode("ascii"),
+                        }
+                    )
+            payload["attachments"] = resend_attachments
         resp = requests.post(
             "https://api.resend.com/emails",
             json=payload,
@@ -134,6 +179,7 @@ class EmailService:
                 "subject": subject,
                 "message_id": data.get("id"),
                 "provider": "resend",
+                "attachments": [Path(p).name for p in (attachments or [])],
             }
         return {
             "success": False,
@@ -294,7 +340,181 @@ class EmailService:
             "success": False,
             "error": "No se pudo enviar el email (SendGrid/Resend)",
         }
-    
+
+    async def send_email_with_attachments(
+        self,
+        to_email: str,
+        subject: str,
+        content: str,
+        attachments: List[str],
+        content_type: str = "text/html",
+        cc: Optional[List[str]] = None,
+        bcc: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Enviar email con ficheros adjuntos reales (PDF/XLSX/etc.) — mismos
+        tres proveedores que send_email() (SMTP Gmail / SendGrid / Resend),
+        misma prioridad. Usado por el envío de documentos fiscales de RAFAEL
+        a la gestoría (ver services/legal_fiscal_firewall.py).
+
+        Args:
+            attachments: rutas absolutas a ficheros ya existentes en disco.
+        """
+        for path in attachments:
+            if not Path(path).is_file():
+                return {
+                    "success": False,
+                    "error": f"Adjunto no encontrado en disco: {path}",
+                }
+
+        if (
+            not self.is_configured()
+            and not self.is_resend_configured()
+            and not self.is_smtp_configured()
+        ):
+            return {
+                "success": False,
+                "error": (
+                    "Email no configurado: define SMTP_HOST/SMTP_USER/SMTP_PASSWORD (Gmail), "
+                    "SENDGRID_API_KEY o RESEND_API_KEY + EMAIL_FROM"
+                ),
+            }
+
+        if self.is_smtp_configured():
+            try:
+                return await asyncio.to_thread(
+                    self._send_via_smtp_sync,
+                    to_email,
+                    subject,
+                    content,
+                    content_type,
+                    attachments,
+                )
+            except Exception as smtp_err:
+                logger.warning("[EMAIL] SMTP (adjuntos) falló: %s", smtp_err)
+                if not self.is_configured() and not self.is_resend_configured():
+                    return {"success": False, "error": str(smtp_err), "provider": "smtp"}
+
+        if self.is_configured():
+            try:
+                message = Mail(
+                    from_email=Email(self.from_email, self.from_name),
+                    to_emails=To(to_email),
+                    subject=subject,
+                    html_content=Content(content_type, content),
+                )
+
+                if cc:
+                    for cc_email in cc:
+                        message.add_cc(cc_email)
+                if bcc:
+                    for bcc_email in bcc:
+                        message.add_bcc(bcc_email)
+
+                sg_attachments = []
+                for file_path in attachments:
+                    path = Path(file_path)
+                    mime_type, _ = mimetypes.guess_type(str(path))
+                    with open(path, "rb") as f:
+                        encoded = base64.b64encode(f.read()).decode("ascii")
+                    att = Attachment()
+                    att.file_content = FileContent(encoded)
+                    att.file_name = FileName(path.name)
+                    att.file_type = FileType(mime_type or "application/octet-stream")
+                    att.disposition = Disposition("attachment")
+                    sg_attachments.append(att)
+                message.attachment = sg_attachments
+
+                response = self.client.send(message)
+
+                message_id = None
+                if hasattr(response, "headers") and response.headers:
+                    message_id = response.headers.get("X-Message-Id") or response.headers.get("x-message-id")
+
+                result = {
+                    "success": True,
+                    "status_code": response.status_code,
+                    "to": to_email,
+                    "subject": subject,
+                    "message_id": message_id,
+                    "provider": "sendgrid",
+                    "attachments": [Path(p).name for p in attachments],
+                }
+
+                try:
+                    from services.activity_logger import ActivityLogger
+                    from datetime import datetime
+
+                    ActivityLogger.log_activity(
+                        agent_name="ZEUS",
+                        action_type="email_sent",
+                        action_description=f"Email con adjuntos enviado a {to_email}: {subject}",
+                        details={
+                            "to": to_email,
+                            "subject": subject,
+                            "provider": "sendgrid",
+                            "status_code": response.status_code,
+                            "content_type": content_type,
+                            "message_id": message_id,
+                            "attachments": [Path(p).name for p in attachments],
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "executed_handler": "SENDGRID_HANDLER",
+                        },
+                        metrics={
+                            "status_code": response.status_code,
+                            "executed_handler": "SENDGRID_HANDLER",
+                            "attachment_count": len(attachments),
+                        },
+                        status="completed",
+                        priority="normal",
+                    )
+                except Exception as log_error:
+                    logger.warning("[EMAIL] Error registrando actividad: %s", log_error)
+
+                return result
+
+            except Exception as e:
+                logger.warning("[EMAIL] SendGrid (adjuntos) falló, probando Resend si está configurado: %s", e)
+                try:
+                    from services.activity_logger import ActivityLogger
+
+                    ActivityLogger.log_activity(
+                        agent_name="ZEUS",
+                        action_type="email_error",
+                        action_description=f"Error enviando email con adjuntos a {to_email}: {str(e)}",
+                        details={
+                            "to": to_email,
+                            "subject": subject,
+                            "error": str(e),
+                            "provider": "sendgrid",
+                        },
+                        status="failed",
+                        priority="high",
+                    )
+                except Exception:
+                    pass
+
+        if self.is_resend_configured():
+            try:
+                result = await asyncio.to_thread(
+                    self._send_via_resend_sync,
+                    to_email,
+                    subject,
+                    content,
+                    content_type,
+                    attachments,
+                )
+                if result.get("success"):
+                    return result
+                logger.warning("[EMAIL] Resend (adjuntos): %s", result.get("error"))
+            except Exception as e:
+                logger.warning("[EMAIL] Resend (adjuntos) exception: %s", e, exc_info=True)
+
+        return {
+            "success": False,
+            "error": "No se pudo enviar el email con adjuntos (SendGrid/Resend)",
+        }
+
     async def process_incoming_email(
         self,
         from_email: str,

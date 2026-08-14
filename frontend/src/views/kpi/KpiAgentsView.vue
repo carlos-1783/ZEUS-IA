@@ -37,17 +37,33 @@ const agents = [
   grid-template-columns: 1fr 1fr auto;
   gap: 12px;
   align-items: center;
-  padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  padding: 16px 20px;
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e5e9f0);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow-sm);
   font-size: 14px;
+  color: var(--zeus-text-secondary, #52607a);
+  transition: box-shadow var(--zeus-transition, 150ms), border-color var(--zeus-transition, 150ms);
+}
+
+.kpi-list-item:hover {
+  box-shadow: var(--zeus-shadow);
+  border-color: var(--zeus-border-strong, #d7dce5);
+}
+
+.kpi-list-item strong {
+  color: var(--zeus-text, #0f172a);
 }
 
 .pill.online {
-  color: #10b981;
+  color: #0d9668;
+  background: var(--zeus-success-soft, #e9faf3);
+  padding: 4px 10px;
+  border-radius: var(--zeus-radius-full, 999px);
   font-size: 12px;
   font-weight: 600;
+  justify-self: end;
 }
 
 @media (max-width: 768px) {

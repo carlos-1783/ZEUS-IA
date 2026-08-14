@@ -23,9 +23,10 @@ defineProps({
 <style scoped>
 .kpi-page-shell {
   min-height: 100vh;
-  padding: 24px;
-  background: #0a0e1a;
-  color: #fff;
+  padding: 32px;
+  background: var(--zeus-bg, #f7f8fb);
+  color: var(--zeus-text, #0f172a);
+  font-family: var(--zeus-font-sans, 'Inter', sans-serif);
   box-sizing: border-box;
 }
 
@@ -34,9 +35,10 @@ defineProps({
 }
 
 .kpi-back {
-  color: #3b82f6;
+  color: var(--zeus-accent, #3b82f6);
   text-decoration: none;
   font-size: 14px;
+  font-weight: 500;
   display: inline-block;
   margin-bottom: 12px;
 }
@@ -48,23 +50,27 @@ defineProps({
 .kpi-page-header h1 {
   margin: 0 0 8px;
   font-size: 28px;
+  font-weight: 700;
+  color: var(--zeus-text, #0f172a);
 }
 
 .kpi-subtitle {
   margin: 0;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-secondary, #52607a);
   font-size: 14px;
 }
 
 .kpi-loading,
 .kpi-error {
   padding: 16px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--zeus-radius, 12px);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e5e9f0);
 }
 
 .kpi-error {
-  color: #f59e0b;
+  color: #b45309;
   border: 1px solid rgba(245, 158, 11, 0.3);
+  background: var(--zeus-warning-soft, #fef6e7);
 }
 </style>

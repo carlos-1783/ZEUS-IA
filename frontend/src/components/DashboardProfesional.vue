@@ -348,12 +348,21 @@
       </section>
 
       <!-- Agent Activity Panel (si hay agente seleccionado) -->
-      <div v-if="selectedAgent" class="agent-overlay" @click.self="selectedAgent = null">
-        <div class="agent-panel-container">
-          <button class="btn-close-panel" @click="selectedAgent = null">✕</button>
-          <AgentActivityPanel :agent="selectedAgent" />
+      <Transition name="agent-modal">
+        <div
+          v-if="selectedAgent"
+          class="agent-overlay"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="`Workspace de ${selectedAgent?.name || 'agente'}`"
+          @click.self="closeAgentPanel"
+        >
+          <div class="agent-panel-container">
+            <button class="btn-close-panel" @click="closeAgentPanel" aria-label="Cerrar">✕</button>
+            <AgentActivityPanel :agent="selectedAgent" />
+          </div>
         </div>
-      </div>
+      </Transition>
     </main>
   </div>
 </template>
@@ -1108,6 +1117,24 @@ const chatWith = (agent) => {
   selectedAgent.value = agent
   emit('agentClicked', agent)
 }
+
+const closeAgentPanel = () => {
+  selectedAgent.value = null
+}
+
+const handleAgentPanelKeydown = (event) => {
+  if (event.key === 'Escape' && selectedAgent.value) {
+    closeAgentPanel()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleAgentPanelKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleAgentPanelKeydown)
+})
 </script>
 
 <style scoped>
@@ -1867,6 +1894,47 @@ const chatWith = (agent) => {
   z-index: 1000;
   padding: 32px 24px;
   overflow-y: auto;
+}
+
+/* Modal animado — entrada/salida suave (~220ms), backdrop en fade,
+   panel con fade + escala + desplazamiento sutil. Ver .agent-modal-*
+   más abajo para las clases que genera <Transition name="agent-modal">. */
+.agent-modal-enter-active,
+.agent-modal-leave-active {
+  transition: background-color 220ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.agent-modal-enter-active .agent-panel-container,
+.agent-modal-leave-active .agent-panel-container {
+  transition: opacity 220ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 220ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.agent-modal-enter-from,
+.agent-modal-leave-to {
+  background-color: rgba(15, 23, 42, 0);
+}
+
+.agent-modal-enter-from .agent-panel-container,
+.agent-modal-leave-to .agent-panel-container {
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+}
+
+/* Respeta la preferencia del sistema de reducir movimiento: sin escala
+   ni desplazamiento, solo un fade casi instantáneo. */
+@media (prefers-reduced-motion: reduce) {
+  .agent-modal-enter-active,
+  .agent-modal-leave-active,
+  .agent-modal-enter-active .agent-panel-container,
+  .agent-modal-leave-active .agent-panel-container {
+    transition-duration: 1ms;
+  }
+
+  .agent-modal-enter-from .agent-panel-container,
+  .agent-modal-leave-to .agent-panel-container {
+    transform: none;
+  }
 }
 
 .agent-panel-container {

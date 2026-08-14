@@ -30,12 +30,17 @@
   --zeus-text-muted: #8792a6;      /* texto terciario / hints */
   --zeus-text-on-accent: #ffffff;  /* texto sobre fondo de acento */
 
-  /* ---- Acento (reusa los primitivos de _variables.scss) ---- */
-  --zeus-accent: #3b5bfd;          /* azul índigo — acción primaria */
-  --zeus-accent-hover: #2c46e0;
+  /* ---- Acento — índigo de marca real, tomado de la landing de producción
+     (zeus-ia-production-16d8.up.railway.app): botón primario #4f46e5,
+     texto de acento #818cf8, chips de icono #6366f1. Mismo primitivo que
+     ya existe en _variables.scss ($primary). Un único tono de índigo,
+     no azul+violeta — así el dashboard se siente parte de la misma marca
+     que la landing pública, no una app distinta. ---- */
+  --zeus-accent: #4f46e5;          /* índigo — acción primaria (igual que la landing) */
+  --zeus-accent-hover: #4338ca;
   --zeus-accent-soft: #eef1ff;     /* fondo suave para chips/estados activos */
-  --zeus-accent-2: #7c3aed;        /* violeta — acento secundario (PERSEO, highlights) */
-  --zeus-accent-2-soft: #f3ecfd;
+  --zeus-accent-2: #6366f1;        /* índigo más claro — acento secundario / variación */
+  --zeus-accent-2-soft: #eef2ff;
 
   --zeus-success: #10b981;
   --zeus-success-soft: #e9faf3;

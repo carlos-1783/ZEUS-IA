@@ -1,0 +1,91 @@
+/**
+ * ZEUS-IA — Sistema de diseño "Fase 1" (claro/futurista)
+ * ------------------------------------------------------
+ * Base visual para el rediseño frontend: fondo claro, líneas limpias,
+ * acentos de color puntuales. Referencia: Stripe / Linear / Vercel.
+ *
+ * Reutiliza los primitivos de color ya existentes en _variables.scss
+ * (--color-primary, --color-success, etc.) y añade encima un sistema
+ * de superficie/tipografía/sombra pensado para paneles claros, con
+ * nombre propio (--zeus-*) para no chocar con overrides de tema oscuro
+ * que ya existen en otras partes de la app.
+ *
+ * Pensado para extenderse a Seguros y al resto de la app en fases
+ * futuras sin tocar estos valores base — solo añadiendo pantallas que
+ * los consuman.
+ */
+
+:root {
+  /* ---- Superficie ---- */
+  --zeus-bg: #f7f8fb;              /* fondo de página */
+  --zeus-bg-subtle: #eef1f6;       /* fondo de zonas secundarias (sidebar, headers) */
+  --zeus-surface: #ffffff;         /* tarjetas, paneles */
+  --zeus-surface-raised: #ffffff;  /* tarjetas destacadas / overlays */
+  --zeus-border: #e5e9f0;          /* borde estándar */
+  --zeus-border-strong: #d7dce5;   /* borde con más contraste (hover, foco) */
+
+  /* ---- Texto ---- */
+  --zeus-text: #0f172a;            /* texto principal */
+  --zeus-text-secondary: #52607a;  /* texto secundario / labels */
+  --zeus-text-muted: #8792a6;      /* texto terciario / hints */
+  --zeus-text-on-accent: #ffffff;  /* texto sobre fondo de acento */
+
+  /* ---- Acento (reusa los primitivos de _variables.scss) ---- */
+  --zeus-accent: #3b5bfd;          /* azul índigo — acción primaria */
+  --zeus-accent-hover: #2c46e0;
+  --zeus-accent-soft: #eef1ff;     /* fondo suave para chips/estados activos */
+  --zeus-accent-2: #7c3aed;        /* violeta — acento secundario (PERSEO, highlights) */
+  --zeus-accent-2-soft: #f3ecfd;
+
+  --zeus-success: #10b981;
+  --zeus-success-soft: #e9faf3;
+  --zeus-warning: #f59e0b;
+  --zeus-warning-soft: #fef6e7;
+  --zeus-danger: #ef4444;
+  --zeus-danger-soft: #fdecec;
+  --zeus-info: #3b82f6;
+  --zeus-info-soft: #eaf2ff;
+
+  /* ---- Tipografía ---- */
+  --zeus-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --zeus-font-mono: 'Fira Code', 'Fira Mono', 'Roboto Mono', 'Courier New', monospace;
+
+  --zeus-text-xs: 0.75rem;    /* 12px — metadatos, badges */
+  --zeus-text-sm: 0.8125rem;  /* 13px — texto secundario, labels */
+  --zeus-text-base: 0.9375rem;/* 15px — cuerpo */
+  --zeus-text-md: 1.0625rem;  /* 17px — subtítulos */
+  --zeus-text-lg: 1.25rem;    /* 20px — títulos de tarjeta */
+  --zeus-text-xl: 1.625rem;   /* 26px — títulos de sección */
+  --zeus-text-2xl: 2rem;      /* 32px — cifras destacadas (KPIs) */
+
+  --zeus-weight-normal: 400;
+  --zeus-weight-medium: 500;
+  --zeus-weight-semibold: 600;
+  --zeus-weight-bold: 700;
+
+  /* ---- Espaciado (escala de 4px) ---- */
+  --zeus-space-1: 0.25rem;
+  --zeus-space-2: 0.5rem;
+  --zeus-space-3: 0.75rem;
+  --zeus-space-4: 1rem;
+  --zeus-space-5: 1.5rem;
+  --zeus-space-6: 2rem;
+  --zeus-space-8: 3rem;
+
+  /* ---- Radio de borde ---- */
+  --zeus-radius-sm: 8px;
+  --zeus-radius: 12px;
+  --zeus-radius-lg: 16px;
+  --zeus-radius-full: 999px;
+
+  /* ---- Sombra (muy sutil — el contraste lo da el borde, no la sombra) ---- */
+  --zeus-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --zeus-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --zeus-shadow-md: 0 4px 16px rgba(15, 23, 42, 0.06);
+  --zeus-shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.10);
+  --zeus-shadow-focus: 0 0 0 3px rgba(59, 91, 253, 0.15);
+
+  /* ---- Transición (sutil, nunca > 200ms para no sentirse lenta) ---- */
+  --zeus-transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --zeus-transition-slow: 220ms cubic-bezier(0.4, 0, 0.2, 1);
+}

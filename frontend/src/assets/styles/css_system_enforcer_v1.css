@@ -2,14 +2,14 @@
  * css_system_enforcer_v1 — global UI stability patch
  * Light cards + dark text inside agent workspaces; no * { color: white } globals.
  *
- * .rafael-workspace y .perseo-workspace quedan excluidos de las reglas
- * [class$='-workspace'] (rediseño Fase 1, ver AUDIT_REDISENO_FASE1.md):
- * ya siguen el sistema de diseño claro con sus propios estilos scoped
- * (colores de marca por agente incluidos), y la regla SAFE_BUTTONS de
- * más abajo forzaba background:#111827/color:#fff en TODOS los <button>
- * de cualquier *-workspace — machacando esos botones ya correctamente
- * claros con un botón negro. El resto de workspaces (afrodita, justicia,
- * thalos, zeus) no se tocan en esta fase.
+ * Los 6 workspaces de agente (rafael, perseo, afrodita, thalos, justicia,
+ * zeus) quedan excluidos de las reglas [class$='-workspace'] (rediseño
+ * frontend, ver AUDIT_REDISENO_FASE1.md / AUDIT_REDISENO_COMPLETO.md):
+ * todos siguen ya el sistema de diseño claro con sus propios estilos
+ * scoped (colores de marca por agente incluidos), y la regla SAFE_BUTTONS
+ * de más abajo forzaba background:#111827/color:#fff en TODOS los
+ * <button> de cualquier *-workspace — machacando esos botones ya
+ * correctamente claros con un botón negro.
  */
 
 /* ------------------------------------------------------------------ */
@@ -35,7 +35,7 @@
 .workspace-playbooks,
 .system-status-panel,
 .activity-panel .workspace-content,
-[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace),
+[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace):not(.afrodita-workspace):not(.thalos-workspace):not(.justicia-workspace):not(.zeus-workspace),
 .agent-panel-container .workspace-content,
 .domain-panel {
   background: var(--bg-card) !important;
@@ -45,7 +45,7 @@
 }
 
 .system-status-panel,
-[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace) {
+[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace):not(.afrodita-workspace):not(.thalos-workspace):not(.justicia-workspace):not(.zeus-workspace) {
   border: none;
   background: transparent !important;
 }
@@ -100,11 +100,11 @@
 .system-status-panel li,
 .system-status-panel td,
 .system-status-panel th,
-[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace) h1,
-[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace) h2,
-[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace) h3,
-[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace) p,
-[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace) .subtitle {
+[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace):not(.afrodita-workspace):not(.thalos-workspace):not(.justicia-workspace):not(.zeus-workspace) h1,
+[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace):not(.afrodita-workspace):not(.thalos-workspace):not(.justicia-workspace):not(.zeus-workspace) h2,
+[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace):not(.afrodita-workspace):not(.thalos-workspace):not(.justicia-workspace):not(.zeus-workspace) h3,
+[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace):not(.afrodita-workspace):not(.thalos-workspace):not(.justicia-workspace):not(.zeus-workspace) p,
+[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace):not(.afrodita-workspace):not(.thalos-workspace):not(.justicia-workspace):not(.zeus-workspace) .subtitle {
   color: var(--text-primary) !important;
 }
 
@@ -124,7 +124,7 @@
 .tools-panel button,
 .tool-card button,
 .workspace-playbooks button,
-[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace) button,
+[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace):not(.afrodita-workspace):not(.thalos-workspace):not(.justicia-workspace):not(.zeus-workspace) button,
 .system-status-panel .refresh-btn,
 .action-button {
   color: #ffffff !important;
@@ -139,16 +139,16 @@
 }
 
 .tools-panel .tool-card button:not(:disabled),
-[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace) .domain-tabs button.active {
+[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace):not(.afrodita-workspace):not(.thalos-workspace):not(.justicia-workspace):not(.zeus-workspace) .domain-tabs button.active {
   color: #ffffff !important;
 }
 
-[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace) .domain-tabs button:not(.active) {
+[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace):not(.afrodita-workspace):not(.thalos-workspace):not(.justicia-workspace):not(.zeus-workspace) .domain-tabs button:not(.active) {
   color: var(--text-secondary) !important;
   background: transparent !important;
 }
 
-[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace) .domain-tabs button.active {
+[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace):not(.afrodita-workspace):not(.thalos-workspace):not(.justicia-workspace):not(.zeus-workspace) .domain-tabs button.active {
   color: var(--text-primary) !important;
   background: var(--bg-card) !important;
 }
@@ -204,9 +204,9 @@
 .workspace-playbooks input,
 .workspace-playbooks textarea,
 .workspace-playbooks select,
-[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace) input,
-[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace) textarea,
-[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace) select {
+[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace):not(.afrodita-workspace):not(.thalos-workspace):not(.justicia-workspace):not(.zeus-workspace) input,
+[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace):not(.afrodita-workspace):not(.thalos-workspace):not(.justicia-workspace):not(.zeus-workspace) textarea,
+[class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace):not(.afrodita-workspace):not(.thalos-workspace):not(.justicia-workspace):not(.zeus-workspace) select {
   background: #ffffff !important;
   color: #111827 !important;
   border: 1px solid #d1d5db !important;

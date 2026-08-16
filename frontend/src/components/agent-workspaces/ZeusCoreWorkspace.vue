@@ -205,6 +205,8 @@ onMounted(loadWorkspace)
   display: flex;
   flex-direction: column;
   gap: 16px;
+  font-family: var(--zeus-font-sans, 'Inter', sans-serif);
+  color: var(--zeus-text, #0f172a);
 }
 
 .workspace-header {
@@ -216,7 +218,7 @@ onMounted(loadWorkspace)
 
 .subtitle {
   margin: 6px 0 0;
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .actions {
@@ -227,33 +229,60 @@ onMounted(loadWorkspace)
 .btn-primary,
 .btn-secondary {
   border: none;
-  border-radius: 10px;
+  border-radius: var(--zeus-radius-sm, 10px);
   padding: 10px 14px;
   cursor: pointer;
   font-weight: 600;
+  transition: transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
+/* ZEUS CORE es el orquestador del sistema, sin un color de identidad
+   propio distinto del resto — usa el acento gradiente compartido en su
+   accion primaria (mismo tratamiento que el anillo de su avatar en el
+   modal). */
 .btn-primary {
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
   color: #fff;
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 10px rgba(139, 92, 246, 0.35));
+}
+
+.btn-primary:hover:not(:disabled) {
+  box-shadow: var(--zeus-accent-gradient-shadow-hover, 0 4px 18px rgba(139, 92, 246, 0.45));
+  transform: translateY(-1px);
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: var(--zeus-surface, #fff);
+  color: var(--zeus-text, #0f172a);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  box-shadow: var(--zeus-shadow-sm);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--zeus-border-strong, #cdd3db);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active:not(:disabled),
+.btn-secondary:active:not(:disabled) {
+  transform: translateY(0);
+  transition-duration: var(--zeus-dur-press, 100ms);
 }
 
 .error-banner,
 .workspace-card,
 .empty-state {
-  border-radius: 14px;
+  border-radius: var(--zeus-radius-lg, 14px);
   padding: 16px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  box-shadow: var(--zeus-shadow-sm);
 }
 
 .error-banner {
-  color: #fecaca;
+  color: #b91c1c;
+  background: var(--zeus-danger-soft, #fdecec);
   border-color: rgba(248, 113, 113, 0.35);
 }
 
@@ -273,23 +302,24 @@ onMounted(loadWorkspace)
 
 .summary-item {
   padding: 12px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.15);
+  border-radius: var(--zeus-radius, 12px);
+  background: var(--zeus-bg-subtle, #eef1f6);
 }
 
 .label {
   display: block;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-muted, #8792a6);
   margin-bottom: 6px;
 }
 
 .value {
   font-weight: 700;
+  color: var(--zeus-text, #0f172a);
 }
 
 .mono {
-  font-family: monospace;
+  font-family: var(--zeus-font-mono, monospace);
   font-size: 12px;
 }
 
@@ -301,8 +331,8 @@ onMounted(loadWorkspace)
 
 .agent-row {
   padding: 12px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.15);
+  border-radius: var(--zeus-radius, 12px);
+  background: var(--zeus-bg-subtle, #eef1f6);
 }
 
 .agent-row-head {
@@ -319,14 +349,18 @@ onMounted(loadWorkspace)
   border-radius: 999px;
 }
 
+/* !important necesario: css_system_enforcer_v1.css fuerza .badge global
+   a gris plano con !important; con dos clases (.badge.ok) esta regla ya
+   gana por especificidad, pero se marca !important explicito para no
+   depender del orden de carga entre hojas de estilo. */
 .badge.ok {
-  background: rgba(16, 185, 129, 0.2);
-  color: #86efac;
+  background: var(--zeus-success-soft, #e9faf3) !important;
+  color: #0d9668 !important;
 }
 
 .badge.warn {
-  background: rgba(245, 158, 11, 0.2);
-  color: #fcd34d;
+  background: var(--zeus-warning-soft, #fef6e7) !important;
+  color: #b45309 !important;
 }
 
 .purpose,
@@ -334,6 +368,15 @@ onMounted(loadWorkspace)
 .caps {
   margin: 4px 0 0;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--zeus-text-secondary, #52607a);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-primary:hover:not(:disabled),
+  .btn-secondary:hover:not(:disabled),
+  .btn-primary:active:not(:disabled),
+  .btn-secondary:active:not(:disabled) {
+    transform: none;
+  }
 }
 </style>

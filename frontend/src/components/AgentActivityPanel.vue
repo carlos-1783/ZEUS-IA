@@ -832,7 +832,7 @@ const formatMetricValue = (value) => {
   position: absolute;
   inset: 0;
   background-image: var(--zeus-noise-svg);
-  opacity: 0.035;
+  opacity: 0.03;
   mix-blend-mode: overlay;
   pointer-events: none;
 }
@@ -900,6 +900,11 @@ const formatMetricValue = (value) => {
   box-shadow: var(--zeus-shadow-sm);
 }
 
+/* Toggle Texto/Voz — botón secundario (blanco, sin sombra). El
+   gradiente vibrante queda reservado para el único botón de mayor
+   jerarquía de esta vista (la acción primaria del workspace, ej.
+   "Actualizar") — la selección aquí se comunica solo con peso
+   tipográfico, igual que en preview-rafael.html. */
 .mode-btn {
   padding: 8px 16px;
   background: transparent;
@@ -907,17 +912,14 @@ const formatMetricValue = (value) => {
   color: var(--zeus-text-secondary, #52607a);
   cursor: pointer;
   border-radius: 6px;
-  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  transition: color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   font-size: 14px;
   font-weight: 500;
 }
 
 .mode-btn.active {
-  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
-  color: white;
-  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 10px rgba(139, 92, 246, 0.35));
+  color: var(--zeus-text, #0f172a);
+  font-weight: 700;
 }
 
 /* Tabs */
@@ -940,16 +942,13 @@ const formatMetricValue = (value) => {
   color: var(--zeus-text-secondary, #52607a);
   cursor: pointer;
   border-radius: var(--zeus-radius-sm, 8px);
-  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  transition: color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   font-weight: 500;
 }
 
 .tabs button.active {
-  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
-  color: var(--zeus-text-on-accent, #fff);
-  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 10px rgba(139, 92, 246, 0.35));
+  color: var(--zeus-text, #0f172a);
+  font-weight: 700;
 }
 
 @media (prefers-reduced-motion: reduce) {

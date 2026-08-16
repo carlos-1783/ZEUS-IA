@@ -16,14 +16,20 @@
  */
 
 :root {
-  /* ---- Superficie ----
-     Fondo general: degradado "gris platino" de arriba (casi blanco) a
-     abajo (gris platino más denso) — sutil, no dramático. Es el fondo
-     BASE de toda la app (páginas y contenedores grandes), no solo del
-     modal. Las tarjetas/superficies (--zeus-surface) siguen siendo
-     blanco plano flotando encima, para que el acento de color destaque
-     con claridad sobre el gris del fondo. */
-  --zeus-bg: linear-gradient(180deg, #fbfbfd 0%, #eef0f3 55%, #e3e6eb 100%);
+  /* ---- Superficie: sistema de diseño DEFINITIVO ----
+     Fondo de bandas metálicas — obligatorio en TODA página/modal, sin
+     excepción. Valores exactos, no reinterpretados:
+     repeating-linear-gradient(90deg, #E8E9EB 0px, #F5F6F7 15px,
+     #D4D6D9 35px, #F0F1F3 60px, #C9CCD0 85px, #E5E7E9 110px)
+     + veta diagonal blanco→transparente al 12% + grano SVG al 3%
+     (el grano va en ::before vía .zeus-metal-surface, ver más abajo).
+     Las tarjetas/superficies (--zeus-surface) siguen siendo blanco
+     plano flotando encima. */
+  --zeus-bg-bands: repeating-linear-gradient(90deg,
+      #E8E9EB 0px, #F5F6F7 15px, #D4D6D9 35px,
+      #F0F1F3 60px, #C9CCD0 85px, #E5E7E9 110px);
+  --zeus-bg-sheen: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 55%);
+  --zeus-bg: var(--zeus-bg-sheen), var(--zeus-bg-bands);
   --zeus-bg-flat: #eef0f3;         /* misma gama en plano, para elementos pequeños donde un degradado no aporta */
   --zeus-bg-subtle: #eef1f6;       /* fondo de zonas secundarias (sidebar, headers) */
   --zeus-surface: #ffffff;         /* tarjetas, paneles */
@@ -124,42 +130,22 @@
   --zeus-dur-hover: 180ms;  /* microinteracción hover: dentro de 150-200ms */
   --zeus-dur-press: 100ms;  /* feedback de click: rápido, perceptible */
 
-  /* ---- Acento vibrante — teal→morado→rosa→naranja. Uso deliberadamente
-     restringido: SOLO botón/estado activo, anillo de avatar y badges
-     "online"/seleccionado. Nunca como fondo de página ni de texto — es
-     el detalle que atrae la atención, no la base de la pantalla. ---- */
-  --zeus-accent-gradient: linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%);
-  --zeus-accent-gradient-shadow: 0 2px 10px rgba(139, 92, 246, 0.35);
-  --zeus-accent-gradient-shadow-hover: 0 4px 18px rgba(139, 92, 246, 0.45);
+  /* ---- Acento vibrante — teal→morado→rosa (3 paradas exactas, SIN
+     naranja). Uso deliberadamente restringido: SOLO el botón activo/
+     primario de mayor jerarquía en cada vista — nunca más de uno por
+     vista, nunca como fondo de página ni de texto. El anillo de avatar
+     de cada agente es la única excepción (no es un botón, es marca de
+     identidad). ---- */
+  --zeus-accent-gradient: linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%);
+  --zeus-accent-gradient-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  --zeus-accent-gradient-shadow-hover: 0 4px 14px rgba(0, 0, 0, 0.22);
 
-  /* ---- Superficie "metal cepillado" — para modales/paneles destacados.
-     Base platino + veta fina (repeating-linear-gradient) + barrido de luz
-     diagonal (linear-gradient) + brillo de fuente de luz y sombra de
-     esquina (radial-gradient), más grano SVG vía .zeus-metal-surface::before.
-     Validado en preview-rafael.html antes de aplicarse a componentes reales. ---- */
-  --zeus-metal-top: #f8f9fa;
-  --zeus-metal-bottom: #c8cdd3;
-  --zeus-metal-bg:
-    repeating-linear-gradient(
-      100deg,
-      rgba(255, 255, 255, 0.09) 0px,
-      rgba(255, 255, 255, 0.09) 1px,
-      rgba(15, 23, 42, 0.025) 1px,
-      rgba(15, 23, 42, 0.025) 2px,
-      rgba(255, 255, 255, 0.04) 2px,
-      rgba(255, 255, 255, 0.04) 3px
-    ),
-    linear-gradient(
-      118deg,
-      rgba(255, 255, 255, 0) 22%,
-      rgba(255, 255, 255, 0.32) 41%,
-      rgba(255, 255, 255, 0.58) 47%,
-      rgba(255, 255, 255, 0.30) 53%,
-      rgba(255, 255, 255, 0) 72%
-    ),
-    radial-gradient(ellipse 90% 60% at 15% -5%, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0) 55%),
-    radial-gradient(ellipse 70% 50% at 105% 115%, rgba(0, 0, 0, 0.06) 0%, rgba(0, 0, 0, 0) 60%),
-    linear-gradient(180deg, var(--zeus-metal-top) 0%, var(--zeus-metal-bottom) 100%);
+  /* ---- Grano/ruido del fondo de bandas metálicas — vía
+     .zeus-metal-surface::before, 3% de opacidad exacto. --zeus-metal-bg
+     se mantiene como alias de --zeus-bg: ya no hay dos tratamientos de
+     fondo distintos (página vs modal/panel) — es el mismo en todas
+     partes, sin excepción. */
+  --zeus-metal-bg: var(--zeus-bg);
   --zeus-noise-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
@@ -192,6 +178,12 @@
   transform: none !important;
 }
 
+/* .zeus-btn-primary queda en desuso: el sistema definitivo solo tiene
+   DOS estados de botón (ver .zeus-btn-accent / .zeus-btn-secondary más
+   abajo). Se deja definida por compatibilidad con CSS ya compilado en
+   caché, pero ningún componente nuevo debe usarla — usar
+   .zeus-btn-accent para el único botón primario de la vista y
+   .zeus-btn-secondary para todos los demás. */
 .zeus-btn-primary {
   background: var(--zeus-accent);
   color: var(--zeus-text-on-accent);
@@ -225,6 +217,28 @@
 .zeus-btn-ghost:active:not(:disabled) {
   box-shadow: none;
   transform: translateY(0);
+}
+
+/* ---- Botón secundario — TODOS los botones que no sean el único
+   primario de la vista. Blanco, borde 1px solid #D1D5DB, sin gradiente,
+   sin sombra. La selección dentro de un grupo (toggle/tabs) se comunica
+   solo con peso tipográfico (.zeus-btn-secondary--selected), nunca con
+   color de fondo — así no se crea una tercera variante de botón. ---- */
+.zeus-btn-secondary {
+  background: #ffffff;
+  color: var(--zeus-text);
+  border: 1px solid #D1D5DB;
+  box-shadow: none;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.zeus-btn-secondary:hover:not(:disabled) {
+  border-color: #9aa2af;
+}
+
+.zeus-btn-secondary--selected {
+  font-weight: var(--zeus-weight-bold, 700);
+  color: var(--zeus-text);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -271,17 +285,16 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* Superficie "metal cepillado" — modales y paneles destacados.
-   Requiere position:relative en el elemento (ya suele tenerlo un modal/
-   panel). El grano SVG va en ::before, por encima del contenido de
-   fondo pero por debajo del contenido real (que necesita z-index/
-   position:relative en sus hijos directos si el propio elemento no es
-   ya un contenedor de stacking context aislado). */
+/* Superficie de bandas metálicas — fondo obligatorio de TODA página y
+   modal, sin excepción. Requiere position:relative en el elemento. El
+   grano SVG va en ::before al 3% exacto, por encima del fondo pero por
+   debajo del contenido real (que necesita position:relative en sus
+   hijos directos si el propio elemento no aísla su stacking context). */
 /* ------------------------------------------------------------------ */
 .zeus-metal-surface {
   position: relative;
   overflow: hidden;
-  background-image: var(--zeus-metal-bg);
+  background-image: var(--zeus-bg);
 }
 
 .zeus-metal-surface::before {
@@ -289,7 +302,7 @@
   position: absolute;
   inset: 0;
   background-image: var(--zeus-noise-svg);
-  opacity: 0.035;
+  opacity: 0.03;
   mix-blend-mode: overlay;
   pointer-events: none;
 }

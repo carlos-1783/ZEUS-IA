@@ -1139,15 +1139,34 @@ onUnmounted(() => {
 
 <style scoped>
 .dashboard-profesional {
+  position: relative;
   display: flex;
   height: 100vh;
   min-height: 100vh;
   max-height: 100vh;
-  background: var(--zeus-bg);
+  background-image: var(--zeus-bg);
   color: var(--zeus-text);
   font-family: var(--zeus-font-sans);
   overflow: hidden;
   box-sizing: border-box;
+}
+
+/* Grano/ruido del fondo de bandas metálicas — obligatorio en toda
+   página, sin excepción. */
+.dashboard-profesional::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dashboard-profesional > * {
+  position: relative;
+  z-index: 1;
 }
 
 /* SIDEBAR OVERLAY (solo móvil) */
@@ -1856,17 +1875,23 @@ onUnmounted(() => {
   color: #0d9668;
 }
 
+/* Botón secundario: el Dashboard es una vista de selección entre 6
+   agentes de igual jerarquía — ninguno de los 6 "Interactuar" es "el"
+   botón primario de la vista (mismo criterio que el open-trigger del
+   preview de referencia: un disparador que abre otra vista no es la
+   acción de mayor jerarquía de ESTA vista). El gradiente vibrante queda
+   reservado para la acción única de mayor jerarquía dentro de cada
+   panel de agente ya abierto (ej. "Actualizar"). */
 .btn-interact {
   padding: 8px 16px;
-  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
-  border: none;
+  background: #ffffff;
+  border: 1px solid #D1D5DB;
   border-radius: var(--zeus-radius-sm);
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   font-weight: 600;
   cursor: pointer;
-  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 10px rgba(139, 92, 246, 0.35));
-  transition: transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  box-shadow: none;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   font-size: 12px;
   display: inline-flex;
   align-items: center;
@@ -1877,19 +1902,12 @@ onUnmounted(() => {
 }
 
 .btn-interact:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--zeus-accent-gradient-shadow-hover, 0 4px 18px rgba(139, 92, 246, 0.45));
-}
-
-.btn-interact:active {
-  transform: translateY(0) scale(0.97);
-  transition-duration: var(--zeus-dur-press, 100ms);
+  border-color: #9aa2af;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .btn-interact:hover,
-  .btn-interact:active {
-    transform: none;
+  .btn-interact {
+    transition-duration: 1ms;
   }
 }
 
@@ -1971,16 +1989,6 @@ onUnmounted(() => {
   gap: 16px;
 }
 
-.agent-panel-container::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: 20px;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.6), rgba(139, 92, 246, 0.4));
-  opacity: 0.2;
-  pointer-events: none;
-  z-index: -1;
-}
 
 .btn-close-panel {
   align-self: flex-end;

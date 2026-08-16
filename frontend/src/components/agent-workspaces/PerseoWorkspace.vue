@@ -806,11 +806,12 @@ onMounted(async () => {
   flex-direction: column;
   gap: 28px;
   padding: 32px 48px 64px;
-  background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 55%);
+  background: radial-gradient(circle at top left, rgba(79, 70, 229, 0.08), transparent 55%);
   min-height: calc(100vh - 96px);
   max-width: 98%;
   width: calc(100% - 24px);
   margin: 0 auto 24px;
+  font-family: var(--zeus-font-sans, 'Inter', sans-serif);
 }
 
 .workspace-header {
@@ -823,12 +824,12 @@ onMounted(async () => {
 .workspace-header h3 {
   font-size: 28px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
 }
 
 .workspace-header .subtitle {
   font-size: 15px;
-  color: #475569;
+  color: var(--zeus-text-secondary, #475569);
   margin-top: 4px;
 }
 
@@ -878,11 +879,11 @@ onMounted(async () => {
 }
 
 .deliverable-list {
-  background: #ffffff;
-  border-radius: 20px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: var(--zeus-surface, #ffffff);
+  border-radius: var(--zeus-radius-lg, 20px);
+  border: 1px solid var(--zeus-border, #e5e9f0);
   padding: 28px;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--zeus-shadow-sm);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -893,7 +894,7 @@ onMounted(async () => {
 .deliverable-list h4 {
   font-size: 16px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
 }
 
 .deliverable-list ul {

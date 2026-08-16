@@ -803,8 +803,11 @@ const formatMetricValue = (value) => {
 
 <style scoped>
 .activity-panel {
-  background: var(--zeus-surface, #fff);
-  border: 1px solid var(--zeus-border, #e5e9f0);
+  /* Fondo del sistema: degradado gris platino, no blanco plano — los
+     bloques de contenido (tarjetas, header) flotan encima como
+     superficies blancas con sombra, dando profundidad real al modal. */
+  background: var(--zeus-bg, linear-gradient(180deg, #fbfbfd 0%, #eef0f3 55%, #e3e6eb 100%));
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: var(--zeus-radius-lg, 16px);
   box-shadow: var(--zeus-shadow-lg);
   padding: 32px;
@@ -855,10 +858,12 @@ const formatMetricValue = (value) => {
 /* Communication Toggle */
 .communication-toggle {
   display: flex;
-  gap: 8px;
-  background: var(--zeus-bg-subtle, #eef1f6);
+  gap: 4px;
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   padding: 4px;
-  border-radius: var(--zeus-radius-sm, 8px);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow-sm);
 }
 
 .mode-btn {
@@ -874,32 +879,39 @@ const formatMetricValue = (value) => {
 }
 
 .mode-btn.active {
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  background: var(--zeus-accent, #4f46e5);
   color: white;
+  box-shadow: var(--zeus-shadow-btn);
 }
 
 /* Tabs */
 .tabs {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   margin-bottom: 16px;
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius, 12px);
+  padding: 4px;
+  box-shadow: var(--zeus-shadow-sm);
 }
 
 .tabs button {
   flex: 1;
-  padding: 10px;
-  background: var(--zeus-bg-subtle, #eef1f6);
+  padding: 9px 10px;
+  background: transparent;
   border: none;
   color: var(--zeus-text-secondary, #52607a);
   cursor: pointer;
   border-radius: var(--zeus-radius-sm, 8px);
-  transition: all 0.2s;
+  transition: background-color var(--zeus-transition, 150ms), color var(--zeus-transition, 150ms);
   font-weight: 500;
 }
 
 .tabs button.active {
-  background: var(--zeus-accent-soft, #eef1ff);
-  color: var(--zeus-accent, #3b82f6);
+  background: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-text-on-accent, #fff);
+  box-shadow: var(--zeus-shadow-btn);
 }
 
 /* Tab Content */

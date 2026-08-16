@@ -345,12 +345,24 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  border-radius: 999px;
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  background: rgba(245, 158, 11, 0.1);
+  border-radius: var(--zeus-radius-full, 999px);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: var(--zeus-surface, #fff);
   color: #b45309;
   font-weight: 600;
   cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 3px 8px rgba(245, 158, 11, 0.18);
+  transition: transform var(--zeus-transition, 150ms), box-shadow var(--zeus-transition, 150ms);
+}
+
+.refresh-btn:hover:not(:disabled) {
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.07), 0 6px 16px rgba(245, 158, 11, 0.25);
+  transform: translateY(-1px);
+}
+
+.refresh-btn:active:not(:disabled) {
+  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.08);
+  transform: translateY(0);
 }
 
 .refresh-btn:disabled {
@@ -481,18 +493,30 @@ onMounted(async () => {
 }
 
 .btn {
-  padding: 8px 14px;
-  border-radius: 8px;
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  background: rgba(245, 158, 11, 0.12);
+  padding: 9px 16px;
+  border-radius: var(--zeus-radius-sm, 8px);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: var(--zeus-surface, #fff);
   color: #b45309;
   font-weight: 600;
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  transition: transform var(--zeus-transition, 150ms), box-shadow var(--zeus-transition, 150ms);
+}
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
 }
 .btn.primary {
   background: #d97706;
   border-color: #b45309;
   color: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(217, 119, 6, 0.3);
+}
+.btn.primary:hover {
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(217, 119, 6, 0.38);
 }
 .workspace-fiscal-card {
   border: 1px solid rgba(245, 158, 11, 0.35);

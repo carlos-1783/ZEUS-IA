@@ -16,13 +16,20 @@
  */
 
 :root {
-  /* ---- Superficie ---- */
-  --zeus-bg: #f7f8fb;              /* fondo de página */
+  /* ---- Superficie ----
+     Fondo general: degradado "gris platino" de arriba (casi blanco) a
+     abajo (gris platino más denso) — sutil, no dramático. Es el fondo
+     BASE de toda la app (páginas y contenedores grandes), no solo del
+     modal. Las tarjetas/superficies (--zeus-surface) siguen siendo
+     blanco plano flotando encima, para que el acento de color destaque
+     con claridad sobre el gris del fondo. */
+  --zeus-bg: linear-gradient(180deg, #fbfbfd 0%, #eef0f3 55%, #e3e6eb 100%);
+  --zeus-bg-flat: #eef0f3;         /* misma gama en plano, para elementos pequeños donde un degradado no aporta */
   --zeus-bg-subtle: #eef1f6;       /* fondo de zonas secundarias (sidebar, headers) */
   --zeus-surface: #ffffff;         /* tarjetas, paneles */
   --zeus-surface-raised: #ffffff;  /* tarjetas destacadas / overlays */
-  --zeus-border: #e5e9f0;          /* borde estándar */
-  --zeus-border-strong: #d7dce5;   /* borde con más contraste (hover, foco) */
+  --zeus-border: #e1e5eb;          /* borde estándar */
+  --zeus-border-strong: #cdd3db;   /* borde con más contraste (hover, foco) */
 
   /* ---- Texto ---- */
   --zeus-text: #0f172a;            /* texto principal */
@@ -83,14 +90,97 @@
   --zeus-radius-lg: 16px;
   --zeus-radius-full: 999px;
 
-  /* ---- Sombra (muy sutil — el contraste lo da el borde, no la sombra) ---- */
+  /* ---- Sombra de superficie (tarjetas/paneles — sutil, el contraste
+     lo da sobre todo el borde) ---- */
   --zeus-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
   --zeus-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
   --zeus-shadow-md: 0 4px 16px rgba(15, 23, 42, 0.06);
   --zeus-shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.10);
   --zeus-shadow-focus: 0 0 0 3px rgba(59, 91, 253, 0.15);
 
+  /* ---- Sombra de botón — con más presencia que las de superficie:
+     los botones necesitan profundidad real (no plana) para no
+     fundirse con el fondo gris platino. */
+  --zeus-shadow-btn: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(79, 70, 229, 0.20);
+  --zeus-shadow-btn-hover: 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(79, 70, 229, 0.28);
+  --zeus-shadow-btn-active: 0 1px 1px rgba(15, 23, 42, 0.08);
+  --zeus-shadow-btn-ghost: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --zeus-shadow-btn-ghost-hover: 0 3px 8px rgba(15, 23, 42, 0.08);
+
   /* ---- Transición (sutil, nunca > 200ms para no sentirse lenta) ---- */
   --zeus-transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --zeus-transition-slow: 220ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ------------------------------------------------------------------ */
+/* Botones del sistema — clases globales reutilizables por cualquier
+   componente (agregar junto a las clases propias del componente).
+   Pensadas para que el acento indigo destaque con claridad sobre el
+   fondo gris platino: sombra con tinte de color (no gris plano),
+   elevación al hover, "presión" real al pulsar.               */
+/* ------------------------------------------------------------------ */
+.zeus-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--zeus-font-sans);
+  font-weight: var(--zeus-weight-semibold);
+  font-size: var(--zeus-text-sm);
+  border-radius: var(--zeus-radius-sm);
+  padding: 10px 18px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform var(--zeus-transition), box-shadow var(--zeus-transition),
+    background-color var(--zeus-transition), border-color var(--zeus-transition);
+}
+
+.zeus-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.zeus-btn-primary {
+  background: var(--zeus-accent);
+  color: var(--zeus-text-on-accent);
+  box-shadow: var(--zeus-shadow-btn);
+}
+
+.zeus-btn-primary:hover:not(:disabled) {
+  background: var(--zeus-accent-hover);
+  box-shadow: var(--zeus-shadow-btn-hover);
+  transform: translateY(-1px);
+}
+
+.zeus-btn-primary:active:not(:disabled) {
+  box-shadow: var(--zeus-shadow-btn-active);
+  transform: translateY(0);
+}
+
+.zeus-btn-ghost {
+  background: var(--zeus-surface);
+  color: var(--zeus-text);
+  border-color: var(--zeus-border);
+  box-shadow: var(--zeus-shadow-btn-ghost);
+}
+
+.zeus-btn-ghost:hover:not(:disabled) {
+  border-color: var(--zeus-border-strong);
+  box-shadow: var(--zeus-shadow-btn-ghost-hover);
+  transform: translateY(-1px);
+}
+
+.zeus-btn-ghost:active:not(:disabled) {
+  box-shadow: none;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zeus-btn-primary:hover:not(:disabled),
+  .zeus-btn-ghost:hover:not(:disabled),
+  .zeus-btn-primary:active:not(:disabled),
+  .zeus-btn-ghost:active:not(:disabled) {
+    transform: none;
+  }
 }

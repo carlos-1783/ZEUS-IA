@@ -3,7 +3,9 @@
     <!-- Header con toggle Texto/Voz -->
     <div class="panel-header">
       <div class="agent-info">
-        <img :src="agent.image" :alt="agent.name" class="agent-avatar-small" />
+        <span class="agent-avatar-ring">
+          <img :src="agent.image" :alt="agent.name" class="agent-avatar-small" />
+        </span>
         <div>
           <h3>{{ agent.name }}</h3>
           <p class="agent-role">{{ agent.role }}</p>
@@ -803,10 +805,15 @@ const formatMetricValue = (value) => {
 
 <style scoped>
 .activity-panel {
-  /* Fondo del sistema: degradado gris platino, no blanco plano — los
-     bloques de contenido (tarjetas, header) flotan encima como
-     superficies blancas con sombra, dando profundidad real al modal. */
-  background: var(--zeus-bg, linear-gradient(180deg, #fbfbfd 0%, #eef0f3 55%, #e3e6eb 100%));
+  /* Superficie "metal cepillado" — capas de gradiente (veta + barrido de
+     luz diagonal + brillo/sombra de esquina) sobre la base platino, más
+     grano SVG en ::before. Sistema validado en preview-rafael.html antes
+     de aplicarse aquí; ver tokens zeus-metal y zeus-noise-svg en
+     zeus-light-system.css. Los bloques de contenido (tarjetas, header)
+     siguen flotando encima como superficies blancas con sombra. */
+  position: relative;
+  overflow-x: hidden;
+  background-image: var(--zeus-metal-bg);
   border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: var(--zeus-radius-lg, 16px);
   box-shadow: var(--zeus-shadow-lg);
@@ -818,6 +825,20 @@ const formatMetricValue = (value) => {
   flex-direction: column;
   width: 100%;
   color: var(--zeus-text, #0f172a);
+}
+
+.activity-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+.activity-panel > * {
+  position: relative;
 }
 
 /* Header */
@@ -836,11 +857,24 @@ const formatMetricValue = (value) => {
   gap: 12px;
 }
 
+.agent-avatar-ring {
+  display: block;
+  width: 54px;
+  height: 54px;
+  padding: 3px;
+  border-radius: 50%;
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 10px rgba(139, 92, 246, 0.35));
+  flex-shrink: 0;
+}
+
 .agent-avatar-small {
-  width: 48px;
-  height: 48px;
+  width: 100%;
+  height: 100%;
+  display: block;
   border-radius: 50%;
   object-fit: cover;
+  border: 2px solid var(--zeus-surface, #fff);
 }
 
 .agent-info h3 {
@@ -873,15 +907,17 @@ const formatMetricValue = (value) => {
   color: var(--zeus-text-secondary, #52607a);
   cursor: pointer;
   border-radius: 6px;
-  transition: all 0.2s;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   font-size: 14px;
   font-weight: 500;
 }
 
 .mode-btn.active {
-  background: var(--zeus-accent, #4f46e5);
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
   color: white;
-  box-shadow: var(--zeus-shadow-btn);
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 10px rgba(139, 92, 246, 0.35));
 }
 
 /* Tabs */
@@ -904,14 +940,25 @@ const formatMetricValue = (value) => {
   color: var(--zeus-text-secondary, #52607a);
   cursor: pointer;
   border-radius: var(--zeus-radius-sm, 8px);
-  transition: background-color var(--zeus-transition, 150ms), color var(--zeus-transition, 150ms);
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   font-weight: 500;
 }
 
 .tabs button.active {
-  background: var(--zeus-accent, #4f46e5);
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
   color: var(--zeus-text-on-accent, #fff);
-  box-shadow: var(--zeus-shadow-btn);
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 10px rgba(139, 92, 246, 0.35));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-btn,
+  .mode-btn.active,
+  .tabs button,
+  .tabs button.active {
+    transition-duration: 1ms;
+  }
 }
 
 /* Tab Content */

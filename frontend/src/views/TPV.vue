@@ -2642,8 +2642,9 @@ onUnmounted(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #0f1419 0%, #1a1f2e 100%);
-  color: #fff;
+  background: var(--zeus-bg, linear-gradient(180deg, #fbfbfd 0%, #eef0f3 55%, #e3e6eb 100%));
+  color: var(--zeus-text, #0f172a);
+  font-family: var(--zeus-font-sans, 'Inter', sans-serif);
   padding: 12px;
   box-sizing: border-box;
 }
@@ -2657,18 +2658,27 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   padding: 12px 24px;
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: var(--zeus-accent, #4f46e5);
   border: none;
   border-radius: 10px;
-  color: #fff;
+  color: var(--zeus-text-on-accent, #fff);
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+  box-shadow: var(--zeus-shadow-btn, 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(79, 70, 229, 0.2));
+  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .back-to-dashboard-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
+  background: var(--zeus-accent-hover, #4338ca);
+  transform: translateY(-1px);
+  box-shadow: var(--zeus-shadow-btn-hover, 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(79, 70, 229, 0.28));
+}
+
+.back-to-dashboard-btn:active {
+  transform: translateY(0);
+  box-shadow: var(--zeus-shadow-btn-active, 0 1px 1px rgba(15, 23, 42, 0.08));
 }
 
 .tpv-header {
@@ -2677,11 +2687,11 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 12px;
   margin: 52px 0 8px 0;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--zeus-shadow-md, 0 4px 16px rgba(15, 23, 42, 0.06));
 }
 
 .tpv-title {
@@ -2695,7 +2705,7 @@ onUnmounted(() => {
 }
 
 .tpv-subtitle {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-secondary, #52607a);
   margin: 5px 0 0;
 }
 
@@ -2708,18 +2718,24 @@ onUnmounted(() => {
 
 .header-btn {
   padding: 10px 20px;
-  background: rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 8px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   font-weight: 600;
+  box-shadow: var(--zeus-shadow-btn-ghost, 0 1px 2px rgba(15, 23, 42, 0.05));
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .header-btn:hover,
 .header-btn.active {
-  background: rgba(59, 130, 246, 0.4);
-  border-color: rgba(59, 130, 246, 0.6);
+  background: var(--zeus-accent-soft, #eef1ff);
+  border-color: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-accent, #4f46e5);
+  box-shadow: var(--zeus-shadow-btn-ghost-hover, 0 3px 8px rgba(15, 23, 42, 0.08));
 }
 
 /* Carrito prioridad: ~48% ancho mín; productos compactos a la izquierda */
@@ -2736,12 +2752,12 @@ onUnmounted(() => {
 /* Solo la zona de productos tiene scroll; carrito sin cambios */
 .tpv-left-panel {
   min-height: 0;
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 8px;
   padding: 16px;
   overflow-y: auto;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--zeus-shadow-md, 0 4px 16px rgba(15, 23, 42, 0.06));
 }
 
 .categories-bar {
@@ -2753,20 +2769,30 @@ onUnmounted(() => {
 
 .category-btn {
   padding: 10px 20px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 8px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--zeus-text-secondary, #52607a);
   cursor: pointer;
   font-weight: 600;
-  transition: all 0.2s;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
-.category-btn:hover,
+.category-btn:hover {
+  background: var(--zeus-accent-soft, #eef1ff);
+  border-color: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-accent, #4f46e5);
+}
+
+/* Categoría activa: acento gradiente del sistema — indicador visual claro
+   de "filtro seleccionado" (uso puntual, ver zeus-accent-gradient). */
 .category-btn.active {
-  background: rgba(59, 130, 246, 0.3);
-  border-color: rgba(59, 130, 246, 0.5);
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
+  border-color: transparent;
   color: #fff;
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 10px rgba(139, 92, 246, 0.35));
 }
 
 .products-grid {
@@ -2776,16 +2802,20 @@ onUnmounted(() => {
 }
 
 .product-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 2px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-surface, #fff);
+  border: 2px solid var(--zeus-border, #e1e5eb);
   border-radius: 8px;
   padding: 12px;
-  transition: all 0.3s;
+  transition: transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   text-align: center;
   user-select: none;
   position: relative;
   display: flex;
   flex-direction: column;
+  box-shadow: var(--zeus-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04));
 }
 
 .product-clickable {
@@ -2794,10 +2824,10 @@ onUnmounted(() => {
 }
 
 .product-card:hover {
-  transform: translateY(-5px);
-  border-color: rgba(59, 130, 246, 0.5);
-  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.3);
-  background: rgba(59, 130, 246, 0.1);
+  transform: translateY(-3px);
+  border-color: var(--zeus-accent, #4f46e5);
+  box-shadow: var(--zeus-shadow-md, 0 4px 16px rgba(15, 23, 42, 0.06));
+  background: var(--zeus-accent-soft, #eef1ff);
 }
 
 .product-actions {
@@ -2806,7 +2836,7 @@ onUnmounted(() => {
   justify-content: center;
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--zeus-border, #e1e5eb);
 }
 
 .product-action-btn {
@@ -2815,18 +2845,21 @@ onUnmounted(() => {
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.9rem;
-  transition: all 0.2s;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  color: var(--zeus-text, #0f172a);
 }
 
 .product-action-btn.edit-btn:hover {
-  background: rgba(59, 130, 246, 0.4);
+  background: var(--zeus-accent-soft, #eef1ff);
+  color: var(--zeus-accent, #4f46e5);
   transform: scale(1.1);
 }
 
 .product-action-btn.delete-btn:hover {
-  background: rgba(239, 68, 68, 0.4);
+  background: var(--zeus-danger-soft, #fdecec);
+  color: var(--zeus-danger, #ef4444);
   transform: scale(1.1);
 }
 
@@ -2853,23 +2886,25 @@ onUnmounted(() => {
   max-width: 200px;
   max-height: 200px;
   border-radius: 8px;
-  border: 2px solid rgba(59, 130, 246, 0.3);
+  border: 2px solid var(--zeus-accent, #4f46e5);
   margin-bottom: 10px;
 }
 
 .btn-remove-image {
-  background: rgba(239, 68, 68, 0.3);
-  border: 1px solid rgba(239, 68, 68, 0.5);
-  color: #fca5a5;
+  background: var(--zeus-danger-soft, #fdecec);
+  border: 1px solid var(--zeus-danger, #ef4444);
+  color: var(--zeus-danger, #ef4444);
   padding: 6px 12px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.85rem;
-  transition: all 0.2s;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn-remove-image:hover {
-  background: rgba(239, 68, 68, 0.5);
+  background: var(--zeus-danger, #ef4444);
+  color: #fff;
   transform: scale(1.05);
 }
 
@@ -2877,12 +2912,12 @@ onUnmounted(() => {
   font-size: 1rem;
   font-weight: 600;
   margin: 10px 0 5px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
 }
 
 .product-category {
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
   margin: 0 0 10px;
 }
 
@@ -2896,18 +2931,18 @@ onUnmounted(() => {
 
 .price-label {
   font-size: 1rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .price-value {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #10b981;
+  color: var(--zeus-success, #10b981);
 }
 
 .product-stock {
   font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
   margin-top: 5px;
 }
 
@@ -2927,16 +2962,16 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   max-height: 100%;
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-left: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 8px;
   padding: 12px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
   gap: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--zeus-shadow-md, 0 4px 16px rgba(15, 23, 42, 0.06));
   overflow: hidden;
 }
 
@@ -3001,18 +3036,24 @@ onUnmounted(() => {
 
 .cart-count-badge {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-muted, #8792a6);
   font-weight: 400;
 }
 
 .clear-cart-btn {
   padding: 4px 8px;
-  background: rgba(239, 68, 68, 0.2);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: var(--zeus-danger-soft, #fdecec);
+  border: 1px solid var(--zeus-danger, #ef4444);
   border-radius: 6px;
-  color: #fca5a5;
+  color: var(--zeus-danger, #ef4444);
   cursor: pointer;
   font-size: 12px;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.clear-cart-btn:hover {
+  background: var(--zeus-danger, #ef4444);
+  color: #fff;
 }
 
 .cart-items {
@@ -3030,17 +3071,34 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: flex-start;
   padding: 6px 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--zeus-bg-subtle, #eef1f6);
   border-radius: 8px;
   margin-bottom: 6px;
   flex-shrink: 0;
   min-height: 44px;
+  position: relative;
+  border: 1px solid transparent;
 }
 
+/* Línea activa para edición con el teclado numérico: acento gradiente
+   del sistema como franja lateral — indicador puntual de "seleccionado"
+   (uso deliberadamente restringido, ver token zeus-accent-gradient). */
 .cart-item--active {
-  outline: 1px solid rgba(59, 130, 246, 0.8);
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.5);
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(16, 185, 129, 0.12));
+  background: var(--zeus-accent-soft, #eef1ff);
+  border-color: var(--zeus-accent-2, #6366f1);
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 10px rgba(139, 92, 246, 0.35));
+  padding-left: 12px;
+}
+
+.cart-item--active::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 4px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
 }
 
 .cart-item-info {
@@ -3056,26 +3114,26 @@ onUnmounted(() => {
   font-weight: 600;
   margin-bottom: 2px;
   font-size: 13px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   word-break: break-word;
   min-height: 1.2em;
 }
 
 .cart-item-price {
-  color: #10b981;
+  color: var(--zeus-success, #10b981);
   font-weight: 700;
 }
 
 .cart-item-unit-price {
   display: block;
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
   margin-top: 2px;
 }
 
 .cart-item.read-only {
   opacity: 0.8;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--zeus-bg-subtle, #eef1f6);
 }
 
 .cart-item-readonly {
@@ -3086,7 +3144,7 @@ onUnmounted(() => {
 
 .cart-item-qty-readonly {
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .cart-item-controls {
@@ -3102,19 +3160,21 @@ onUnmounted(() => {
   height: 32px;
   border-radius: 6px;
   border: none;
-  background: rgba(59, 130, 246, 0.3);
-  color: #fff;
+  background: var(--zeus-accent-soft, #eef1ff);
+  color: var(--zeus-accent, #4f46e5);
   cursor: pointer;
   font-weight: 700;
   font-size: 1rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .qty-btn:hover:not(:disabled) {
-  background: rgba(59, 130, 246, 0.5);
+  background: var(--zeus-accent, #4f46e5);
+  color: #fff;
   transform: scale(1.1);
 }
 
@@ -3124,19 +3184,23 @@ onUnmounted(() => {
 }
 
 .increment-btn {
-  background: rgba(16, 185, 129, 0.3);
+  background: var(--zeus-success-soft, #e9faf3);
+  color: var(--zeus-success, #10b981);
 }
 
 .increment-btn:hover:not(:disabled) {
-  background: rgba(16, 185, 129, 0.5);
+  background: var(--zeus-success, #10b981);
+  color: #fff;
 }
 
 .decrement-btn {
-  background: rgba(245, 158, 11, 0.3);
+  background: var(--zeus-warning-soft, #fef6e7);
+  color: var(--zeus-warning, #f59e0b);
 }
 
 .decrement-btn:hover:not(:disabled) {
-  background: rgba(245, 158, 11, 0.5);
+  background: var(--zeus-warning, #f59e0b);
+  color: #fff;
 }
 
 .cart-item-qty {
@@ -3150,25 +3214,27 @@ onUnmounted(() => {
   height: 32px;
   border-radius: 6px;
   border: none;
-  background: rgba(239, 68, 68, 0.3);
-  color: #fca5a5;
+  background: var(--zeus-danger-soft, #fdecec);
+  color: var(--zeus-danger, #ef4444);
   cursor: pointer;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .remove-btn:hover {
-  background: rgba(239, 68, 68, 0.5);
+  background: var(--zeus-danger, #ef4444);
+  color: #fff;
   transform: scale(1.1);
 }
 
 .empty-cart {
   text-align: center;
   padding: 12px 8px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3184,18 +3250,18 @@ onUnmounted(() => {
 .empty-cart-message {
   font-size: 0.9rem;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .empty-cart-hint {
   font-size: 0.8rem;
   margin-top: 6px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .cart-totals {
   flex: 0 0 auto;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-top: 1px solid var(--zeus-border, #e1e5eb);
   padding-top: 6px;
   margin-bottom: 0;
 }
@@ -3204,7 +3270,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   margin-bottom: 2px;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--zeus-text-secondary, #52607a);
   font-size: 12px;
   line-height: 1.2;
   white-space: nowrap;
@@ -3213,8 +3279,8 @@ onUnmounted(() => {
 .total-final {
   font-size: 16px;
   font-weight: 600;
-  color: #fff;
-  border-top: 2px solid rgba(255, 255, 255, 0.2);
+  color: var(--zeus-text, #0f172a);
+  border-top: 2px solid var(--zeus-border-strong, #cdd3db);
   padding-top: 4px;
   margin-top: 4px;
   margin-bottom: 0;
@@ -3247,35 +3313,41 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 6px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  box-shadow: var(--zeus-shadow-btn-ghost, 0 1px 2px rgba(15, 23, 42, 0.05));
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .keyboard-key:hover {
-  background: rgba(59, 130, 246, 0.25);
-  border-color: rgba(59, 130, 246, 0.5);
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+  background: var(--zeus-accent-soft, #eef1ff);
+  border-color: var(--zeus-accent, #4f46e5);
+  box-shadow: var(--zeus-shadow-btn-ghost-hover, 0 3px 8px rgba(15, 23, 42, 0.08));
 }
 
 .keyboard-key:active {
-  background: rgba(59, 130, 246, 0.4);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+  background: var(--zeus-accent, #4f46e5);
+  color: #fff;
+  box-shadow: var(--zeus-shadow-btn-active, 0 1px 1px rgba(15, 23, 42, 0.08));
 }
 
 .key-action {
-  background: rgba(139, 92, 246, 0.3);
-  border-color: rgba(139, 92, 246, 0.5);
+  background: var(--zeus-accent-2-soft, #eef2ff);
+  border-color: var(--zeus-accent-2, #6366f1);
+  color: var(--zeus-accent-2, #6366f1);
 }
 
 .key-enter {
-  background: rgba(16, 185, 129, 0.3);
-  border-color: rgba(16, 185, 129, 0.5);
+  background: var(--zeus-success-soft, #e9faf3);
+  border-color: var(--zeus-success, #10b981);
+  color: var(--zeus-success, #10b981);
 }
 
 .action-buttons {
@@ -3292,7 +3364,9 @@ onUnmounted(() => {
   font-weight: 600;
   font-size: 0.75rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3305,54 +3379,65 @@ onUnmounted(() => {
 }
 
 /* ZEUS_TPV_CART_ULTRA_MINIMAL_003: principal 38px, 14px */
+/* Botón "Cobrar": CTA primaria — índigo de marca plano (no el gradiente
+   vibrante, reservado para indicadores de selección puntual). */
 .pay-btn {
   height: 38px;
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: #fff;
+  background: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-text-on-accent, #fff);
   font-size: 14px;
   font-weight: 600;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+  box-shadow: var(--zeus-shadow-btn, 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(79, 70, 229, 0.2));
 }
 
 .pay-btn:hover:not(:disabled) {
-  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.5);
-  filter: brightness(1.05);
+  background: var(--zeus-accent-hover, #4338ca);
+  box-shadow: var(--zeus-shadow-btn-hover, 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(79, 70, 229, 0.28));
+  transform: translateY(-1px);
+}
+
+.pay-btn:active:not(:disabled) {
+  box-shadow: var(--zeus-shadow-btn-active, 0 1px 1px rgba(15, 23, 42, 0.08));
+  transform: translateY(0);
 }
 
 .secondary-btn {
   height: 30px;
-  background: rgba(59, 130, 246, 0.25);
-  border: 1px solid rgba(59, 130, 246, 0.4);
-  color: rgba(255, 255, 255, 0.95);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  color: var(--zeus-text, #0f172a);
   font-size: 12px;
+  box-shadow: var(--zeus-shadow-btn-ghost, 0 1px 2px rgba(15, 23, 42, 0.05));
 }
 
 .secondary-btn:hover:not(:disabled) {
-  background: rgba(59, 130, 246, 0.4);
-  border-color: rgba(59, 130, 246, 0.6);
+  background: var(--zeus-accent-soft, #eef1ff);
+  border-color: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-accent, #4f46e5);
+  box-shadow: var(--zeus-shadow-btn-ghost-hover, 0 3px 8px rgba(15, 23, 42, 0.08));
 }
 
 .payment-note-section {
   margin-top: 15px;
   padding-top: 15px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--zeus-border, #e1e5eb);
 }
 
 .payment-note-section label {
   display: block;
   margin-bottom: 8px;
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--zeus-text-secondary, #52607a);
   font-weight: 500;
 }
 
 .payment-note-input {
   width: 100%;
   padding: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 6px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   font-family: inherit;
   font-size: 0.9rem;
   resize: vertical;
@@ -3361,12 +3446,13 @@ onUnmounted(() => {
 
 .payment-note-input:focus {
   outline: none;
-  border-color: rgba(59, 130, 246, 0.5);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--zeus-accent, #4f46e5);
+  background: var(--zeus-surface, #fff);
+  box-shadow: var(--zeus-shadow-focus, 0 0 0 3px rgba(59, 91, 253, 0.15));
 }
 
 .payment-note-input::placeholder {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .tpv-operator-badge {
@@ -3375,10 +3461,10 @@ onUnmounted(() => {
   align-items: flex-start;
   justify-content: center;
   padding: 6px 14px;
-  background: rgba(16, 185, 129, 0.18);
-  border: 1px solid rgba(16, 185, 129, 0.45);
+  background: var(--zeus-success-soft, #e9faf3);
+  border: 1px solid var(--zeus-success, #10b981);
   border-radius: 8px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   margin-left: 8px;
   max-width: min(280px, 40vw);
 }
@@ -3387,7 +3473,7 @@ onUnmounted(() => {
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: rgba(226, 232, 240, 0.85);
+  color: var(--zeus-text-secondary, #52607a);
   font-weight: 600;
 }
 
@@ -3406,15 +3492,15 @@ onUnmounted(() => {
   font-size: 0.88rem;
   font-weight: 600;
   margin-left: 8px;
-  background: rgba(148, 163, 184, 0.25);
-  border: 1px solid rgba(148, 163, 184, 0.5);
-  color: rgba(226, 232, 240, 0.95);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .tpv-jornada-badge.on {
-  background: rgba(16, 185, 129, 0.22);
-  border-color: rgba(16, 185, 129, 0.5);
-  color: #ecfdf5;
+  background: var(--zeus-success-soft, #e9faf3);
+  border-color: var(--zeus-success, #10b981);
+  color: var(--zeus-success, #10b981);
 }
 
 /* Barra "Mesa X" cuando hay mesa seleccionada para anotar */
@@ -3424,32 +3510,36 @@ onUnmounted(() => {
   gap: 12px;
   margin-bottom: 12px;
   padding: 8px 12px;
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: var(--zeus-accent-soft, #eef1ff);
+  border: 1px solid var(--zeus-accent, #4f46e5);
   border-radius: 8px;
 }
 .back-to-tables-btn {
   padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 6px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   font-size: 0.9rem;
+  box-shadow: var(--zeus-shadow-btn-ghost, 0 1px 2px rgba(15, 23, 42, 0.05));
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 .back-to-tables-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--zeus-accent-soft, #eef1ff);
+  border-color: var(--zeus-accent, #4f46e5);
 }
 .tables-selected-label {
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.95);
+  color: var(--zeus-text, #0f172a);
 }
 
 /* Reservas del día */
 .reservations-day-block {
   margin-bottom: 16px;
   padding: 12px;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 10px;
 }
 .reservations-day-header {
@@ -3462,17 +3552,22 @@ onUnmounted(() => {
 .reservations-date-input {
   padding: 6px 10px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  background: var(--zeus-surface, #fff);
+  color: var(--zeus-text, #0f172a);
 }
 .reservations-load-btn {
   padding: 6px 12px;
   border-radius: 6px;
-  background: rgba(59, 130, 246, 0.6);
-  color: #fff;
+  background: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-text-on-accent, #fff);
   border: none;
   cursor: pointer;
+  box-shadow: var(--zeus-shadow-btn, 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(79, 70, 229, 0.2));
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+.reservations-load-btn:hover:not(:disabled) {
+  background: var(--zeus-accent-hover, #4338ca);
 }
 .reservations-load-btn:disabled {
   opacity: 0.6;
@@ -3489,21 +3584,21 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 8px;
   padding: 8px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--zeus-border, #e1e5eb);
   font-size: 0.9rem;
 }
 .reservation-item.seated {
   opacity: 0.7;
 }
-.reservation-guest { font-weight: 600; min-width: 100px; }
-.reservation-time { color: rgba(255,255,255,0.8); }
-.reservation-guests { color: rgba(255,255,255,0.7); }
-.reservation-seated { font-style: italic; color: #10b981; }
+.reservation-guest { font-weight: 600; min-width: 100px; color: var(--zeus-text, #0f172a); }
+.reservation-time { color: var(--zeus-text-secondary, #52607a); }
+.reservation-guests { color: var(--zeus-text-secondary, #52607a); }
+.reservation-seated { font-style: italic; color: var(--zeus-success, #10b981); }
 .reservation-seat-btn {
   padding: 4px 10px;
   border-radius: 6px;
-  background: rgba(59, 130, 246, 0.5);
-  color: #fff;
+  background: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-text-on-accent, #fff);
   border: none;
   cursor: pointer;
   font-size: 0.85rem;
@@ -3522,12 +3617,12 @@ onUnmounted(() => {
   cursor: pointer;
   font-size: 0.85rem;
 }
-.table-pick-btn { background: rgba(16, 185, 129, 0.6); color: #fff; }
-.table-pick-cancel { background: rgba(255,255,255,0.2); color: #fff; }
+.table-pick-btn { background: var(--zeus-success, #10b981); color: #fff; }
+.table-pick-cancel { background: var(--zeus-bg-subtle, #eef1f6); color: var(--zeus-text, #0f172a); }
 .reservations-empty {
   margin: 0;
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 /* Mesas */
@@ -3538,80 +3633,108 @@ onUnmounted(() => {
 }
 
 .table-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 2px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-surface, #fff);
+  border: 2px solid var(--zeus-border, #e1e5eb);
   border-radius: 12px;
   padding: 20px;
   cursor: pointer;
   text-align: center;
-  transition: all 0.3s;
+  position: relative;
+  box-shadow: var(--zeus-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04));
+  transition: transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .table-card:hover {
-  transform: translateY(-5px);
-  border-color: rgba(59, 130, 246, 0.5);
+  transform: translateY(-3px);
+  border-color: var(--zeus-accent, #4f46e5);
+  box-shadow: var(--zeus-shadow-md, 0 4px 16px rgba(15, 23, 42, 0.06));
 }
 
+/* Mesa ocupada: color de estado (familia "ocupado" heredada del sistema
+   original — se conserva el verde, no se reinterpreta el significado). */
 .table-card.occupied {
-  border-color: rgba(16, 185, 129, 0.5);
-  background: rgba(16, 185, 129, 0.1);
+  border-color: var(--zeus-success, #10b981);
+  background: var(--zeus-success-soft, #e9faf3);
 }
 
+/* Mesa seleccionada: acento gradiente del sistema — indicador puntual de
+   "seleccionado" (uso deliberadamente restringido). */
 .table-card.selected {
-  border-color: rgba(59, 130, 246, 1);
-  background: rgba(59, 130, 246, 0.2);
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+  border-color: transparent;
+  background: var(--zeus-accent-soft, #eef1ff);
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 10px rgba(139, 92, 246, 0.35));
+}
+
+.table-card.selected::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  height: 3px;
+  border-radius: 0 0 999px 999px;
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
 }
 
 .table-number {
   font-size: 1.5rem;
   font-weight: 700;
   margin-bottom: 10px;
+  color: var(--zeus-text, #0f172a);
 }
 
 .table-status {
   font-size: 0.85rem;
   margin-bottom: 5px;
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .table-total {
   font-size: 1.1rem;
   font-weight: 700;
-  color: #10b981;
+  color: var(--zeus-success, #10b981);
   margin-top: 10px;
 }
 
 .add-table-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 2px dashed rgba(255, 255, 255, 0.3);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  border: 2px dashed var(--zeus-border-strong, #cdd3db);
   border-radius: 12px;
   padding: 40px 20px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
   font-size: 1.2rem;
   font-weight: 600;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .add-table-btn:hover {
-  border-color: rgba(59, 130, 246, 0.5);
-  color: #fff;
-  background: rgba(59, 130, 246, 0.1);
+  border-color: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-accent, #4f46e5);
+  background: var(--zeus-accent-soft, #eef1ff);
 }
 
 .no-products {
   text-align: center;
   padding: 60px 20px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 /* Tarjeta para añadir producto (visible siempre si tiene permisos) */
 .add-product-card {
   min-height: 200px;
-  border: 2px dashed rgba(59, 130, 246, 0.5);
+  border: 2px dashed var(--zeus-accent, #4f46e5);
   border-radius: 12px;
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--zeus-accent-soft, #eef1ff);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3620,24 +3743,28 @@ onUnmounted(() => {
 }
 
 .add-product-card:hover:not(.disabled) {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.8);
+  background: var(--zeus-accent, #4f46e5);
+  border-color: var(--zeus-accent-hover, #4338ca);
   transform: scale(1.02);
+}
+
+.add-product-card:hover:not(.disabled) .add-product-label {
+  color: #fff;
 }
 
 .add-product-card.disabled,
 .add-product-card:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  border-color: rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--zeus-border, #e1e5eb);
+  background: var(--zeus-bg-subtle, #eef1f6);
   pointer-events: none;
 }
 
 .add-product-card:disabled:hover {
   transform: none;
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  border-color: var(--zeus-border, #e1e5eb);
 }
 
 .add-product-content {
@@ -3655,25 +3782,36 @@ onUnmounted(() => {
 .add-product-label {
   font-size: 1.1rem;
   font-weight: 600;
-  color: rgba(59, 130, 246, 0.9);
+  color: var(--zeus-accent, #4f46e5);
+  transition: color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .add-product-btn {
   margin-top: 20px;
   padding: 12px 24px;
-  background: rgba(59, 130, 246, 0.3);
-  border: 1px solid rgba(59, 130, 246, 0.5);
+  background: var(--zeus-accent, #4f46e5);
+  border: none;
   border-radius: 8px;
-  color: #fff;
+  color: var(--zeus-text-on-accent, #fff);
   cursor: pointer;
   font-weight: 600;
+  box-shadow: var(--zeus-shadow-btn, 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(79, 70, 229, 0.2));
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.add-product-btn:hover {
+  background: var(--zeus-accent-hover, #4338ca);
+  box-shadow: var(--zeus-shadow-btn-hover, 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(79, 70, 229, 0.28));
+  transform: translateY(-1px);
 }
 
 .loading-overlay,
 .error-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(15, 23, 42, 0.55);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3687,12 +3825,18 @@ onUnmounted(() => {
 
 .retry-btn {
   padding: 12px 24px;
-  background: rgba(59, 130, 246, 0.3);
-  border: 1px solid rgba(59, 130, 246, 0.5);
+  background: var(--zeus-accent, #4f46e5);
+  border: none;
   border-radius: 8px;
-  color: #fff;
+  color: var(--zeus-text-on-accent, #fff);
   cursor: pointer;
   font-weight: 600;
+  box-shadow: var(--zeus-shadow-btn, 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(79, 70, 229, 0.2));
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.retry-btn:hover {
+  background: var(--zeus-accent-hover, #4338ca);
 }
 
 /* Responsive: 1366x768 y 1920x1080 sin scroll (layout base). Tablet/móvil: columna única */
@@ -3901,10 +4045,10 @@ onUnmounted(() => {
 
 .business-profile-badge {
   padding: 8px 16px;
-  background: rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(59, 130, 246, 0.4);
+  background: var(--zeus-accent-soft, #eef1ff);
+  border: 1px solid var(--zeus-accent, #4f46e5);
   border-radius: 8px;
-  color: #fff;
+  color: var(--zeus-accent, #4f46e5);
   font-size: 0.9rem;
   font-weight: 600;
   margin-left: 10px;
@@ -3914,7 +4058,7 @@ onUnmounted(() => {
 .modal-overlay {
   position: fixed !important;
   inset: 0 !important;
-  background: rgba(0, 0, 0, 0.8) !important;
+  background: rgba(15, 23, 42, 0.55) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -3925,15 +4069,15 @@ onUnmounted(() => {
 }
 
 .modal-content {
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 15px;
   padding: 0;
   max-width: 500px;
   width: 90%;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--zeus-shadow-lg, 0 12px 32px rgba(15, 23, 42, 0.1));
   animation: slideUp 0.3s;
 }
 
@@ -3943,7 +4087,7 @@ onUnmounted(() => {
 
 .operator-switch-warning {
   margin: 0 20px 12px;
-  color: rgba(255, 200, 120, 0.95);
+  color: var(--zeus-warning, #f59e0b);
   font-size: 0.88rem;
   line-height: 1.35;
 }
@@ -3955,7 +4099,7 @@ onUnmounted(() => {
 .operator-switch-modal .form-label {
   display: block;
   margin: 8px 20px 6px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--zeus-text, #0f172a);
   font-weight: 600;
 }
 
@@ -3974,38 +4118,40 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--zeus-border, #e1e5eb);
 }
 
 .modal-header h2 {
   margin: 0;
   font-size: 1.5rem;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
 }
 
 .modal-header h3 {
   margin: 0;
   font-size: 1.25rem;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
 }
 
 .modal-close {
-  background: rgba(239, 68, 68, 0.2);
-  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: var(--zeus-danger-soft, #fdecec);
+  border: 1px solid var(--zeus-danger, #ef4444);
   border-radius: 50%;
   width: 32px;
   height: 32px;
-  color: #fff;
+  color: var(--zeus-danger, #ef4444);
   cursor: pointer;
   font-size: 1.2rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .modal-close:hover {
-  background: rgba(239, 68, 68, 0.4);
+  background: var(--zeus-danger, #ef4444);
+  color: #fff;
   transform: scale(1.1);
 }
 
@@ -4020,7 +4166,7 @@ onUnmounted(() => {
 .form-group label {
   display: block;
   margin-bottom: 8px;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--zeus-text-secondary, #52607a);
   font-weight: 500;
   font-size: 0.9rem;
 }
@@ -4028,28 +4174,29 @@ onUnmounted(() => {
 .form-input {
   width: 100%;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 8px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   font-size: 1rem;
-  transition: all 0.2s;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .form-input:focus {
   outline: none;
-  border-color: rgba(59, 130, 246, 0.5);
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: var(--zeus-accent, #4f46e5);
+  background: var(--zeus-surface, #fff);
+  box-shadow: var(--zeus-shadow-focus, 0 0 0 3px rgba(59, 91, 253, 0.15));
 }
 
 .form-input::placeholder {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .form-hint {
   margin-top: 8px;
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--zeus-text-muted, #8792a6);
   font-size: 0.82rem;
 }
 
@@ -4058,37 +4205,41 @@ onUnmounted(() => {
   gap: 10px;
   justify-content: flex-end;
   padding: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--zeus-border, #e1e5eb);
 }
 
 .btn-cancel {
   padding: 12px 24px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 8px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   font-weight: 600;
-  transition: all 0.2s;
+  box-shadow: var(--zeus-shadow-btn-ghost, 0 1px 2px rgba(15, 23, 42, 0.05));
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn-cancel:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  box-shadow: var(--zeus-shadow-btn-ghost-hover, 0 3px 8px rgba(15, 23, 42, 0.08));
 }
 
 .btn-secondary {
   padding: 12px 24px;
-  background: rgba(59, 130, 246, 0.25);
-  border: 1px solid rgba(59, 130, 246, 0.45);
+  background: var(--zeus-accent-soft, #eef1ff);
+  border: 1px solid var(--zeus-accent, #4f46e5);
   border-radius: 8px;
-  color: #e0f2fe;
+  color: var(--zeus-accent, #4f46e5);
   cursor: pointer;
   font-weight: 600;
-  transition: all 0.2s;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: rgba(59, 130, 246, 0.4);
+  background: var(--zeus-accent, #4f46e5);
+  color: #fff;
 }
 
 .btn-secondary:disabled {
@@ -4098,19 +4249,22 @@ onUnmounted(() => {
 
 .btn-save {
   padding: 12px 24px;
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  background: var(--zeus-accent, #4f46e5);
   border: none;
   border-radius: 8px;
-  color: #fff;
+  color: var(--zeus-text-on-accent, #fff);
   cursor: pointer;
   font-weight: 600;
-  transition: all 0.2s;
-  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  box-shadow: var(--zeus-shadow-btn, 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(79, 70, 229, 0.2));
 }
 
 .btn-save:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+  background: var(--zeus-accent-hover, #4338ca);
+  transform: translateY(-1px);
+  box-shadow: var(--zeus-shadow-btn-hover, 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(79, 70, 229, 0.28));
 }
 
 @keyframes fadeIn {
@@ -4137,29 +4291,29 @@ onUnmounted(() => {
   padding: 12px 16px;
   margin-bottom: 15px;
   border-radius: 8px;
-  background: rgba(16, 185, 129, 0.2);
-  border: 1px solid rgba(16, 185, 129, 0.4);
-  color: #10b981;
+  background: var(--zeus-success-soft, #e9faf3);
+  border: 1px solid var(--zeus-success, #10b981);
+  color: var(--zeus-success, #10b981);
   font-weight: 600;
   animation: slideIn 0.3s ease-out;
 }
 
 .cart-feedback.removed {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.4);
-  color: #ef4444;
+  background: var(--zeus-danger-soft, #fdecec);
+  border-color: var(--zeus-danger, #ef4444);
+  color: var(--zeus-danger, #ef4444);
 }
 
 .cart-feedback.cleared {
-  background: rgba(245, 158, 11, 0.2);
-  border-color: rgba(245, 158, 11, 0.4);
-  color: #f59e0b;
+  background: var(--zeus-warning-soft, #fef6e7);
+  border-color: var(--zeus-warning, #f59e0b);
+  color: var(--zeus-warning, #f59e0b);
 }
 
 .cart-feedback.updated {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.4);
-  color: #3b82f6;
+  background: var(--zeus-info-soft, #eaf2ff);
+  border-color: var(--zeus-info, #3b82f6);
+  color: var(--zeus-info, #3b82f6);
 }
 
 .feedback-icon {
@@ -4184,12 +4338,43 @@ onUnmounted(() => {
 
 .fade-slide-enter-active,
 .fade-slide-leave-active {
-  transition: all 0.3s ease;
+  transition: opacity var(--zeus-transition-slow, 220ms cubic-bezier(0.4, 0, 0.2, 1)),
+    transform var(--zeus-transition-slow, 220ms cubic-bezier(0.4, 0, 0.2, 1));
 }
 
 .fade-slide-enter-from,
 .fade-slide-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+
+/* Respeta la preferencia de movimiento reducido: desactiva los
+   transforms de hover/press/enter-leave añadidos en este rediseño,
+   dejando solo los cambios de color/sombra. */
+@media (prefers-reduced-motion: reduce) {
+  .back-to-dashboard-btn:hover,
+  .back-to-dashboard-btn:active,
+  .product-card:hover,
+  .product-action-btn.edit-btn:hover,
+  .product-action-btn.delete-btn:hover,
+  .btn-remove-image:hover,
+  .qty-btn:hover:not(:disabled),
+  .remove-btn:hover,
+  .keyboard-key:active,
+  .add-product-card:hover:not(.disabled),
+  .add-product-btn:hover,
+  .table-card:hover,
+  .modal-close:hover,
+  .btn-save:hover,
+  .pay-btn:hover:not(:disabled),
+  .pay-btn:active:not(:disabled),
+  .header-btn:hover {
+    transform: none;
+  }
+
+  .fade-slide-enter-active,
+  .fade-slide-leave-active {
+    transition-duration: 1ms;
+  }
 }
 </style>

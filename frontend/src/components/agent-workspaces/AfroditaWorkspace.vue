@@ -159,23 +159,24 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 20px;
   padding: 32px 48px 64px;
-  background: radial-gradient(circle at top left, rgba(16, 185, 129, 0.12), transparent 55%);
+  background: radial-gradient(circle at top left, rgba(16, 185, 129, 0.1), transparent 55%);
   min-height: calc(100vh - 96px);
   max-width: 98%;
   width: calc(100% - 24px);
   margin: 0 auto 24px;
+  font-family: var(--zeus-font-sans, 'Inter', sans-serif);
 }
 
 .workspace-header h3 {
   font-size: 28px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
   margin: 0;
 }
 
 .subtitle {
   font-size: 15px;
-  color: #475569;
+  color: var(--zeus-text-secondary, #475569);
   margin: 4px 0 0;
 }
 
@@ -187,11 +188,12 @@ onUnmounted(() => {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+  border-bottom: 1px solid var(--zeus-border, rgba(148, 163, 184, 0.35));
   padding-bottom: 8px;
 }
 
 .domain-tabs button {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -199,17 +201,38 @@ onUnmounted(() => {
   border: 1px solid transparent;
   border-radius: 10px 10px 0 0;
   background: transparent;
-  color: #475569;
+  color: var(--zeus-text-secondary, #475569);
   font-weight: 600;
   cursor: pointer;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
+/* Pestaña activa — fondo blanco + franja inferior con el acento
+   gradiente del sistema (indicador de "seleccionado"). */
 .domain-tabs button.active {
-  background: #fff;
-  border-color: rgba(148, 163, 184, 0.35);
-  border-bottom-color: #fff;
-  color: #0f172a;
+  background: var(--zeus-surface, #fff);
+  border-color: var(--zeus-border, rgba(148, 163, 184, 0.35));
+  border-bottom-color: var(--zeus-surface, #fff);
+  color: var(--zeus-text, #0f172a);
   margin-bottom: -1px;
+}
+
+.domain-tabs button.active::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .domain-tabs button {
+    transition-duration: 1ms;
+  }
 }
 
 .tab-status {

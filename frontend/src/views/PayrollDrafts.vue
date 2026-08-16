@@ -78,12 +78,17 @@ onMounted(loadDrafts)
 .payroll-drafts {
   max-width: 800px;
   margin: 0 auto;
-  padding: 1.5rem;
+  padding: 2rem 1.5rem;
+  min-height: 100vh;
+  background: var(--zeus-bg, linear-gradient(180deg, #fbfbfd 0%, #eef0f3 55%, #e3e6eb 100%));
+  font-family: var(--zeus-font-sans, 'Inter', sans-serif);
+  color: var(--zeus-text, #0f172a);
+  box-sizing: border-box;
 }
 .back-link {
   display: inline-block;
   margin-bottom: 0.75rem;
-  color: #2563eb;
+  color: var(--zeus-accent, #4f46e5);
   text-decoration: none;
   font-size: 0.9rem;
 }
@@ -96,18 +101,23 @@ onMounted(loadDrafts)
 .payroll-header h1 {
   font-size: 1.5rem;
   margin: 0 0 0.25rem 0;
+  color: var(--zeus-text, #0f172a);
 }
 .subtitle {
-  color: #666;
+  color: var(--zeus-text-secondary, #52607a);
   margin: 0;
 }
 .loading, .error, .empty {
   padding: 2rem;
   text-align: center;
-  color: #666;
+  color: var(--zeus-text-secondary, #52607a);
+  background: var(--zeus-surface, #fff);
+  border-radius: var(--zeus-radius, 12px);
+  border: 1px solid var(--zeus-border, #e1e5eb);
 }
 .error {
-  color: #c00;
+  color: #b91c1c;
+  background: var(--zeus-danger-soft, #fdecec);
 }
 .drafts-list {
   display: flex;
@@ -118,10 +128,11 @@ onMounted(loadDrafts)
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem;
-  background: #f5f5f5;
-  border-radius: 8px;
-  border: 1px solid #eee;
+  padding: 1rem 1.25rem;
+  background: var(--zeus-surface, #fff);
+  border-radius: var(--zeus-radius, 12px);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  box-shadow: var(--zeus-shadow-sm);
 }
 .draft-info {
   display: flex;
@@ -130,29 +141,47 @@ onMounted(loadDrafts)
 }
 .draft-period {
   font-weight: 600;
+  color: var(--zeus-text, #0f172a);
 }
 .draft-salary {
   font-size: 0.9rem;
-  color: #555;
+  color: var(--zeus-text-secondary, #52607a);
 }
 .draft-status {
   font-size: 0.8rem;
-  color: #888;
+  color: var(--zeus-text-muted, #8792a6);
 }
 .btn-download {
-  padding: 0.5rem 1rem;
-  background: #2563eb;
-  color: #fff;
+  padding: 0.6rem 1.1rem;
+  background: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-text-on-accent, #fff);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--zeus-radius-sm, 6px);
   cursor: pointer;
   font-size: 0.9rem;
+  font-weight: 600;
+  box-shadow: var(--zeus-shadow-btn);
+  transition: transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 .btn-download:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: var(--zeus-accent-hover, #4338ca);
+  box-shadow: var(--zeus-shadow-btn-hover);
+  transform: translateY(-1px);
+}
+.btn-download:active:not(:disabled) {
+  box-shadow: var(--zeus-shadow-btn-active);
+  transform: translateY(0);
 }
 .btn-download:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-download:hover:not(:disabled),
+  .btn-download:active:not(:disabled) {
+    transform: none;
+  }
 }
 </style>

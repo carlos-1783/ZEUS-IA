@@ -717,9 +717,23 @@ onUnmounted(() => {
 <style scoped>
 .control-horario-container {
   min-height: 100vh;
-  background: var(--zeus-bg, #f5f5f5);
+  background-image: var(--zeus-bg);
   font-family: var(--zeus-font-sans, 'Inter', sans-serif);
   padding: 20px;
+  position: relative;
+}
+
+.control-horario-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+.control-horario-container > * {
   position: relative;
 }
 
@@ -728,9 +742,9 @@ onUnmounted(() => {
   top: 20px;
   left: 20px;
   padding: 12px 20px;
-  background: var(--zeus-accent, #3b82f6);
-  color: var(--zeus-text-on-accent, white);
-  border: none;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  border: 1px solid #D1D5DB;
   border-radius: var(--zeus-radius-sm, 8px);
   cursor: pointer;
   display: flex;
@@ -745,8 +759,7 @@ onUnmounted(() => {
 }
 
 .back-to-dashboard-btn:hover {
-  background: var(--zeus-accent-hover, #2563eb);
-  box-shadow: var(--zeus-shadow-btn-hover, 0 4px 10px rgba(0, 0, 0, 0.2));
+  border-color: #9aa2af;
   transform: translateY(-1px);
 }
 

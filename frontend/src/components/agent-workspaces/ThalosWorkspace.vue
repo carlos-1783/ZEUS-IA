@@ -300,7 +300,6 @@ onMounted(async () => {
   flex-direction: column;
   gap: 28px;
   padding: 32px 48px 64px;
-  background: radial-gradient(circle at top left, rgba(14, 165, 233, 0.12), transparent 55%);
   min-height: calc(100vh - 96px);
   max-width: 98%;
   width: calc(100% - 24px);
@@ -331,30 +330,31 @@ onMounted(async () => {
   margin-top: 10px;
 }
 
+/* Único botón con gradiente de esta vista. */
 .refresh-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
   border-radius: var(--zeus-radius-full, 999px);
-  border: 1px solid rgba(14, 165, 233, 0.35);
-  background: var(--zeus-surface, #fff);
-  color: #0369a1;
+  border: none;
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%));
+  color: #fff;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 3px 8px rgba(14, 165, 233, 0.2);
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 8px rgba(0, 0, 0, 0.15));
   transition: transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
     box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .refresh-btn:hover:not(:disabled) {
-  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.07), 0 6px 16px rgba(14, 165, 233, 0.28);
+  box-shadow: var(--zeus-accent-gradient-shadow-hover, 0 4px 14px rgba(0, 0, 0, 0.22));
   transform: translateY(-1px);
 }
 
 .refresh-btn:active:not(:disabled) {
-  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.08);
-  transform: translateY(0);
+  transform: translateY(0) scale(0.97);
+  transition-duration: var(--zeus-dur-press, 100ms);
 }
 
 .refresh-btn:disabled {
@@ -435,27 +435,16 @@ onMounted(async () => {
 }
 
 .deliverable-list li.active {
-  border-color: rgba(14, 165, 233, 0.45);
-  background: rgba(14, 165, 233, 0.12);
-  box-shadow: 0 6px 14px rgba(14, 165, 233, 0.18);
-}
-
-/* Indicador de "seleccionado" - acento gradiente puntual en franja lateral,
-   sin competir con el azul cielo de identidad de THALOS. */
-.deliverable-list li.active::before {
-  content: '';
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 6px;
-  width: 3px;
-  border-radius: var(--zeus-radius-full, 999px);
-  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
+  border-color: #9aa2af;
 }
 
 .deliverable-list .title {
   font-weight: 600;
   color: var(--zeus-text, #1e293b);
+}
+
+.deliverable-list li.active .title {
+  font-weight: 700;
 }
 
 .deliverable-list .meta {
@@ -545,20 +534,23 @@ onMounted(async () => {
   gap: 6px;
   padding: 10px 16px;
   border-radius: 10px;
-  border: none;
+  border: 1px solid #D1D5DB;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  box-shadow: none;
   cursor: pointer;
   font-weight: 600;
-  transition: transform 0.15s;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn.ghost {
-  border: 1px solid rgba(14, 165, 233, 0.45);
-  background: rgba(14, 165, 233, 0.12);
-  color: #0369a1;
+  border: 1px solid #D1D5DB;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
 }
 
 .btn:hover {
-  transform: translateY(-1px);
+  border-color: #9aa2af;
 }
 
 .details-grid {

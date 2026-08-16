@@ -378,15 +378,27 @@ const finishSetup = async () => {
 
 <style scoped>
 .setup-wrap {
+  position: relative;
   min-height: 100vh;
   display: grid;
   place-items: center;
   padding: 20px;
-  background: var(--zeus-bg, linear-gradient(180deg, #fbfbfd 0%, #eef0f3 55%, #e3e6eb 100%));
+  background-image: var(--zeus-bg);
   font-family: var(--zeus-font-sans, 'Inter', sans-serif);
 }
 
+.setup-wrap::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
 .setup-card {
+  position: relative;
   width: 100%;
   max-width: 720px;
   background: var(--zeus-surface, #fff);
@@ -407,22 +419,12 @@ const finishSetup = async () => {
   transition: color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
-/* Paso activo del stepper — subrayado con el acento gradiente del
-   sistema, unico indicador de "seleccionado" en esta pantalla. */
+/* Paso activo del stepper — solo negrita. El gradiente vibrante queda
+   reservado al boton "Siguiente"/"Finalizar", la accion primaria real
+   de esta vista. */
 .stepper .active {
   color: var(--zeus-text, #0f172a);
   font-weight: 700;
-}
-
-.stepper .active::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
 }
 
 .section { display: grid; gap: 10px; }
@@ -455,41 +457,42 @@ input:focus, textarea:focus, select:focus {
 
 .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 
+/* Único botón con gradiente de esta vista: "Siguiente"/"Finalizar
+   configuración", la acción primaria real del formulario. */
 button {
-  background: var(--zeus-accent, #4f46e5);
-  color: var(--zeus-text-on-accent, #fff);
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%));
+  color: #fff;
   border: 0;
   border-radius: var(--zeus-radius-sm, 8px);
   padding: 10px 16px;
   cursor: pointer;
   font-weight: 600;
-  box-shadow: var(--zeus-shadow-btn);
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 8px rgba(0, 0, 0, 0.15));
   transition: transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 button:hover:not(:disabled) {
-  background: var(--zeus-accent-hover, #4338ca);
-  box-shadow: var(--zeus-shadow-btn-hover);
+  box-shadow: var(--zeus-accent-gradient-shadow-hover, 0 4px 14px rgba(0, 0, 0, 0.22));
   transform: translateY(-1px);
 }
 
 button:active:not(:disabled) {
-  box-shadow: var(--zeus-shadow-btn-active);
-  transform: translateY(0);
+  transform: translateY(0) scale(0.97);
+  transition-duration: var(--zeus-dur-press, 100ms);
 }
 
 button.ghost {
-  background: var(--zeus-surface, #fff);
+  background: #ffffff;
   color: var(--zeus-text, #0f172a);
-  border: 1px solid var(--zeus-border, #e1e5eb);
-  box-shadow: var(--zeus-shadow-btn-ghost);
+  border: 1px solid #D1D5DB;
+  box-shadow: none;
 }
 
 button.ghost:hover:not(:disabled) {
-  background: var(--zeus-bg-subtle, #eef1f6);
-  box-shadow: var(--zeus-shadow-btn-ghost-hover);
+  border-color: #9aa2af;
+  box-shadow: none;
+  transform: none;
 }
 
 button:disabled { opacity: .6; cursor: not-allowed; }

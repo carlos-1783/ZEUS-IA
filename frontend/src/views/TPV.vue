@@ -2642,7 +2642,7 @@ onUnmounted(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: var(--zeus-bg, linear-gradient(180deg, #fbfbfd 0%, #eef0f3 55%, #e3e6eb 100%));
+  background-image: var(--zeus-bg);
   color: var(--zeus-text, #0f172a);
   font-family: var(--zeus-font-sans, 'Inter', sans-serif);
   padding: 12px;
@@ -2658,27 +2658,24 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   padding: 12px 24px;
-  background: var(--zeus-accent, #4f46e5);
-  border: none;
+  background: #ffffff;
+  border: 1px solid #D1D5DB;
   border-radius: 10px;
-  color: var(--zeus-text-on-accent, #fff);
+  color: var(--zeus-text, #0f172a);
   font-weight: 600;
   cursor: pointer;
-  box-shadow: var(--zeus-shadow-btn, 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(79, 70, 229, 0.2));
-  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  box-shadow: none;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .back-to-dashboard-btn:hover {
-  background: var(--zeus-accent-hover, #4338ca);
+  border-color: #9aa2af;
   transform: translateY(-1px);
-  box-shadow: var(--zeus-shadow-btn-hover, 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(79, 70, 229, 0.28));
 }
 
 .back-to-dashboard-btn:active {
   transform: translateY(0);
-  box-shadow: var(--zeus-shadow-btn-active, 0 1px 1px rgba(15, 23, 42, 0.08));
 }
 
 .tpv-header {
@@ -2786,13 +2783,14 @@ onUnmounted(() => {
   color: var(--zeus-accent, #4f46e5);
 }
 
-/* Categoría activa: acento gradiente del sistema — indicador visual claro
-   de "filtro seleccionado" (uso puntual, ver zeus-accent-gradient). */
+/* Categoría activa: solo negrita + borde — el gradiente vibrante queda
+   reservado para "Cobrar", la única acción primaria de esta vista. */
 .category-btn.active {
-  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
-  border-color: transparent;
-  color: #fff;
-  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 10px rgba(139, 92, 246, 0.35));
+  background: #ffffff;
+  border-color: #9aa2af;
+  color: var(--zeus-text, #0f172a);
+  font-weight: 700;
+  box-shadow: none;
 }
 
 .products-grid {
@@ -3080,25 +3078,13 @@ onUnmounted(() => {
   border: 1px solid transparent;
 }
 
-/* Línea activa para edición con el teclado numérico: acento gradiente
-   del sistema como franja lateral — indicador puntual de "seleccionado"
-   (uso deliberadamente restringido, ver token zeus-accent-gradient). */
+/* Línea activa para edición con el teclado numérico: solo borde — el
+   gradiente queda reservado para "Cobrar", la única acción primaria. */
 .cart-item--active {
-  background: var(--zeus-accent-soft, #eef1ff);
-  border-color: var(--zeus-accent-2, #6366f1);
-  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 10px rgba(139, 92, 246, 0.35));
+  background: #ffffff;
+  border-color: #9aa2af;
+  box-shadow: none;
   padding-left: 12px;
-}
-
-.cart-item--active::before {
-  content: '';
-  position: absolute;
-  top: 6px;
-  bottom: 6px;
-  left: 4px;
-  width: 3px;
-  border-radius: 999px;
-  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
 }
 
 .cart-item-info {
@@ -3173,8 +3159,6 @@ onUnmounted(() => {
 }
 
 .qty-btn:hover:not(:disabled) {
-  background: var(--zeus-accent, #4f46e5);
-  color: #fff;
   transform: scale(1.1);
 }
 
@@ -3333,9 +3317,9 @@ onUnmounted(() => {
 }
 
 .keyboard-key:active {
-  background: var(--zeus-accent, #4f46e5);
-  color: #fff;
-  box-shadow: var(--zeus-shadow-btn-active, 0 1px 1px rgba(15, 23, 42, 0.08));
+  background: var(--zeus-bg-subtle, #eef1f6);
+  color: var(--zeus-text, #0f172a);
+  box-shadow: none;
 }
 
 .key-action {
@@ -3379,35 +3363,34 @@ onUnmounted(() => {
 }
 
 /* ZEUS_TPV_CART_ULTRA_MINIMAL_003: principal 38px, 14px */
-/* Botón "Cobrar": CTA primaria — índigo de marca plano (no el gradiente
-   vibrante, reservado para indicadores de selección puntual). */
+/* Botón "Cobrar": el ÚNICO botón con el acento gradiente de esta vista —
+   es la acción de mayor jerarquía real (cerrar la venta). */
 .pay-btn {
   height: 38px;
-  background: var(--zeus-accent, #4f46e5);
-  color: var(--zeus-text-on-accent, #fff);
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%));
+  color: #fff;
   font-size: 14px;
   font-weight: 600;
-  box-shadow: var(--zeus-shadow-btn, 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(79, 70, 229, 0.2));
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 8px rgba(0, 0, 0, 0.15));
 }
 
 .pay-btn:hover:not(:disabled) {
-  background: var(--zeus-accent-hover, #4338ca);
-  box-shadow: var(--zeus-shadow-btn-hover, 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(79, 70, 229, 0.28));
+  box-shadow: var(--zeus-accent-gradient-shadow-hover, 0 4px 14px rgba(0, 0, 0, 0.22));
   transform: translateY(-1px);
 }
 
 .pay-btn:active:not(:disabled) {
-  box-shadow: var(--zeus-shadow-btn-active, 0 1px 1px rgba(15, 23, 42, 0.08));
-  transform: translateY(0);
+  transform: translateY(0) scale(0.97);
+  transition-duration: var(--zeus-dur-press, 100ms);
 }
 
 .secondary-btn {
   height: 30px;
-  background: var(--zeus-surface, #fff);
-  border: 1px solid var(--zeus-border, #e1e5eb);
+  background: #ffffff;
+  border: 1px solid #D1D5DB;
   color: var(--zeus-text, #0f172a);
   font-size: 12px;
-  box-shadow: var(--zeus-shadow-btn-ghost, 0 1px 2px rgba(15, 23, 42, 0.05));
+  box-shadow: none;
 }
 
 .secondary-btn:hover:not(:disabled) {
@@ -3559,15 +3542,15 @@ onUnmounted(() => {
 .reservations-load-btn {
   padding: 6px 12px;
   border-radius: 6px;
-  background: var(--zeus-accent, #4f46e5);
-  color: var(--zeus-text-on-accent, #fff);
-  border: none;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  border: 1px solid #D1D5DB;
   cursor: pointer;
-  box-shadow: var(--zeus-shadow-btn, 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(79, 70, 229, 0.2));
-  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  box-shadow: none;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 .reservations-load-btn:hover:not(:disabled) {
-  background: var(--zeus-accent-hover, #4338ca);
+  border-color: #9aa2af;
 }
 .reservations-load-btn:disabled {
   opacity: 0.6;
@@ -3597,8 +3580,8 @@ onUnmounted(() => {
 .reservation-seat-btn {
   padding: 4px 10px;
   border-radius: 6px;
-  background: var(--zeus-accent, #4f46e5);
-  color: var(--zeus-text-on-accent, #fff);
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
   border: none;
   cursor: pointer;
   font-size: 0.85rem;
@@ -3660,23 +3643,12 @@ onUnmounted(() => {
   background: var(--zeus-success-soft, #e9faf3);
 }
 
-/* Mesa seleccionada: acento gradiente del sistema — indicador puntual de
-   "seleccionado" (uso deliberadamente restringido). */
+/* Mesa seleccionada: solo borde — el gradiente queda reservado para
+   "Cobrar", la única acción primaria de esta vista. */
 .table-card.selected {
-  border-color: transparent;
-  background: var(--zeus-accent-soft, #eef1ff);
-  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 10px rgba(139, 92, 246, 0.35));
-}
-
-.table-card.selected::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 16px;
-  right: 16px;
-  height: 3px;
-  border-radius: 0 0 999px 999px;
-  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
+  border-color: #9aa2af;
+  background: #ffffff;
+  box-shadow: none;
 }
 
 .table-number {
@@ -3743,13 +3715,13 @@ onUnmounted(() => {
 }
 
 .add-product-card:hover:not(.disabled) {
-  background: var(--zeus-accent, #4f46e5);
+  background: #ffffff;
   border-color: var(--zeus-accent-hover, #4338ca);
   transform: scale(1.02);
 }
 
 .add-product-card:hover:not(.disabled) .add-product-label {
-  color: #fff;
+  color: var(--zeus-accent, #4f46e5);
 }
 
 .add-product-card.disabled,
@@ -3789,21 +3761,19 @@ onUnmounted(() => {
 .add-product-btn {
   margin-top: 20px;
   padding: 12px 24px;
-  background: var(--zeus-accent, #4f46e5);
-  border: none;
+  background: #ffffff;
+  border: 1px solid #D1D5DB;
   border-radius: 8px;
-  color: var(--zeus-text-on-accent, #fff);
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   font-weight: 600;
-  box-shadow: var(--zeus-shadow-btn, 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(79, 70, 229, 0.2));
-  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+  box-shadow: none;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
     transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .add-product-btn:hover {
-  background: var(--zeus-accent-hover, #4338ca);
-  box-shadow: var(--zeus-shadow-btn-hover, 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(79, 70, 229, 0.28));
+  border-color: #9aa2af;
   transform: translateY(-1px);
 }
 
@@ -3825,18 +3795,18 @@ onUnmounted(() => {
 
 .retry-btn {
   padding: 12px 24px;
-  background: var(--zeus-accent, #4f46e5);
-  border: none;
+  background: #ffffff;
+  border: 1px solid #D1D5DB;
   border-radius: 8px;
-  color: var(--zeus-text-on-accent, #fff);
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   font-weight: 600;
-  box-shadow: var(--zeus-shadow-btn, 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(79, 70, 229, 0.2));
-  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  box-shadow: none;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .retry-btn:hover {
-  background: var(--zeus-accent-hover, #4338ca);
+  border-color: #9aa2af;
 }
 
 /* Responsive: 1366x768 y 1920x1080 sin scroll (layout base). Tablet/móvil: columna única */
@@ -4228,18 +4198,17 @@ onUnmounted(() => {
 
 .btn-secondary {
   padding: 12px 24px;
-  background: var(--zeus-accent-soft, #eef1ff);
-  border: 1px solid var(--zeus-accent, #4f46e5);
+  background: #ffffff;
+  border: 1px solid #D1D5DB;
   border-radius: 8px;
-  color: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   font-weight: 600;
-  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: var(--zeus-accent, #4f46e5);
-  color: #fff;
+  border-color: #9aa2af;
 }
 
 .btn-secondary:disabled {
@@ -4249,22 +4218,18 @@ onUnmounted(() => {
 
 .btn-save {
   padding: 12px 24px;
-  background: var(--zeus-accent, #4f46e5);
-  border: none;
+  background: #ffffff;
+  border: 1px solid #D1D5DB;
   border-radius: 8px;
-  color: var(--zeus-text-on-accent, #fff);
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   font-weight: 600;
-  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
-  box-shadow: var(--zeus-shadow-btn, 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(79, 70, 229, 0.2));
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  box-shadow: none;
 }
 
 .btn-save:hover {
-  background: var(--zeus-accent-hover, #4338ca);
-  transform: translateY(-1px);
-  box-shadow: var(--zeus-shadow-btn-hover, 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(79, 70, 229, 0.28));
+  border-color: #9aa2af;
 }
 
 @keyframes fadeIn {

@@ -76,14 +76,33 @@ onMounted(loadDrafts)
 
 <style scoped>
 .payroll-drafts {
+  position: relative;
   max-width: 800px;
   margin: 0 auto;
   padding: 2rem 1.5rem;
   min-height: 100vh;
-  background: var(--zeus-bg, linear-gradient(180deg, #fbfbfd 0%, #eef0f3 55%, #e3e6eb 100%));
+  background-image: var(--zeus-bg);
   font-family: var(--zeus-font-sans, 'Inter', sans-serif);
   color: var(--zeus-text, #0f172a);
   box-sizing: border-box;
+}
+
+.payroll-drafts::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+.payroll-header,
+.drafts-list,
+.loading,
+.error,
+.empty {
+  position: relative;
 }
 .back-link {
   display: inline-block;
@@ -151,28 +170,23 @@ onMounted(loadDrafts)
   font-size: 0.8rem;
   color: var(--zeus-text-muted, #8792a6);
 }
+/* Secundario: puede haber varios borradores en la lista, cada uno con
+   su propio boton "Descargar" — ninguno es "el" boton primario de esta
+   vista (repetido, no unico), asi que no lleva el acento gradiente. */
 .btn-download {
   padding: 0.6rem 1.1rem;
-  background: var(--zeus-accent, #4f46e5);
-  color: var(--zeus-text-on-accent, #fff);
-  border: none;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  border: 1px solid #D1D5DB;
   border-radius: var(--zeus-radius-sm, 6px);
   cursor: pointer;
   font-size: 0.9rem;
   font-weight: 600;
-  box-shadow: var(--zeus-shadow-btn);
-  transition: transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  box-shadow: none;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 .btn-download:hover:not(:disabled) {
-  background: var(--zeus-accent-hover, #4338ca);
-  box-shadow: var(--zeus-shadow-btn-hover);
-  transform: translateY(-1px);
-}
-.btn-download:active:not(:disabled) {
-  box-shadow: var(--zeus-shadow-btn-active);
-  transform: translateY(0);
+  border-color: #9aa2af;
 }
 .btn-download:disabled {
   opacity: 0.7;

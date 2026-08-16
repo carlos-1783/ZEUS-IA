@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Path, Body
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, and_
 
 from app.db.session import get_db
 from app.models.erp import Product, ProductVariant, InventoryMovement, InventoryMovementType
@@ -10,10 +10,28 @@ from app.schemas.erp import (
     ProductVariantCreate, ProductVariantUpdate, ProductVariantInDB,
     InventoryMovementCreate, InventoryMovementInDB
 )
-from app.core.security import get_current_active_user
+from app.core.auth import get_current_active_user
 from app.models.user import User
+import services.crm_office_service as crm_svc
+from services.zeus_office_mode import require_company_id
 
 router = APIRouter()
+
+def _product_tenant_scope(current_user: User, cids: List[int]):
+    """
+    Filtro de aislamiento multi-tenant para productos.
+
+    - Si el usuario pertenece a una o más empresas, solo ve productos de
+      esas empresas (o productos legacy sin company_id que él mismo creó).
+    - Si el usuario no pertenece a ninguna empresa, solo ve los productos
+      que él mismo creó, nunca los de otros.
+    """
+    if not cids:
+        return Product.created_by == current_user.id
+    return or_(
+        Product.company_id.in_(cids),
+        and_(Product.company_id.is_(None), Product.created_by == current_user.id),
+    )
 
 def get_product_or_404(
     db: Session,
@@ -21,42 +39,69 @@ def get_product_or_404(
     current_user: User
 ) -> Product:
     """
-    Obtiene un producto por ID o lanza una excepción 404 si no se encuentra.
-    
+    Obtiene un producto por ID (acotado a las empresas del usuario) o lanza
+    una excepción 404 si no se encuentra o no pertenece a su ámbito.
+
     Args:
         db: Sesión de base de datos
         product_id: ID del producto a buscar
         current_user: Usuario autenticado
-        
+
     Returns:
         Product: El objeto del producto si se encuentra
-        
+
     Raises:
-        HTTPException: 404 si el producto no existe
-        HTTPException: 403 si el usuario no tiene permisos
+        HTTPException: 404 si el producto no existe o no pertenece a la empresa del usuario
     """
     from fastapi import HTTPException, status
     from sqlalchemy.orm import joinedload
-    
+
+    cids = crm_svc.company_ids_for_user(db, current_user)
+
     # Optimizar la consulta cargando relaciones comunes
     product = db.query(Product).options(
         joinedload(Product.variants),
         joinedload(Product.inventory_movements),
     ).filter(
         Product.id == product_id
+    ).filter(
+        _product_tenant_scope(current_user, cids)
     ).first()
-    
+
     if not product:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Product with ID {product_id} not found"
         )
-    
-    # Verificar que el usuario tenga acceso al producto
-    # Aquí podrías agregar lógica de autorización adicional según tus necesidades
-    # Por ejemplo, verificar si el usuario pertenece a la misma organización
-    
+
     return product
+
+def get_variant_or_404(
+    db: Session,
+    variant_id: int,
+    current_user: User
+) -> ProductVariant:
+    """
+    Obtiene una variante de producto por ID, verificando que el producto al
+    que pertenece está en el ámbito de empresas del usuario.
+    """
+    cids = crm_svc.company_ids_for_user(db, current_user)
+
+    variant = (
+        db.query(ProductVariant)
+        .join(Product, Product.id == ProductVariant.product_id)
+        .filter(ProductVariant.id == variant_id)
+        .filter(_product_tenant_scope(current_user, cids))
+        .first()
+    )
+
+    if not variant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Variant with ID {variant_id} not found"
+        )
+
+    return variant
 
 @router.get("/", response_model=ProductListResponse)
 def list_products(
@@ -70,10 +115,11 @@ def list_products(
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    List all products with optional filtering and pagination
+    List all products with optional filtering and pagination (tenant-scoped)
     """
-    query = db.query(Product)
-    
+    cids = crm_svc.company_ids_for_user(db, current_user)
+    query = db.query(Product).filter(_product_tenant_scope(current_user, cids))
+
     # Apply filters
     if search:
         search_term = f"%{search}%"
@@ -133,16 +179,23 @@ def create_product(
     existing_product = db.query(Product).filter(
         Product.sku == product_in.sku
     ).first()
-    
+
     if existing_product:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="A product with this SKU already exists"
         )
-    
+
+    company_id = crm_svc.primary_company_id(db, current_user)
+    require_company_id(company_id, context="productos")
+
     # Create product
     product_data = product_in.dict(exclude={"variants"})
-    product = Product(**product_data)
+    product = Product(
+        **product_data,
+        company_id=company_id,
+        created_by=current_user.id,
+    )
     db.add(product)
     
     # Add variants if provided
@@ -166,9 +219,12 @@ def list_all_inventory_movements(
     limit: int = Query(100, le=500),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Lista global de movimientos ERP (alias para panel OPS)."""
+    """Lista global de movimientos ERP (alias para panel OPS), acotada a la empresa del usuario."""
+    cids = crm_svc.company_ids_for_user(db, current_user)
     rows = (
         db.query(InventoryMovement)
+        .join(Product, Product.id == InventoryMovement.product_id)
+        .filter(_product_tenant_scope(current_user, cids))
         .order_by(InventoryMovement.created_at.desc())
         .offset(skip)
         .limit(limit)
@@ -292,14 +348,9 @@ def update_product_variant(
     """
     Update a product variant
     """
-    # Get variant or 404
-    variant = db.query(ProductVariant).filter(ProductVariant.id == variant_id).first()
-    if not variant:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Variant with ID {variant_id} not found"
-        )
-    
+    # Get variant or 404 (acotado a la empresa del usuario a través del producto)
+    variant = get_variant_or_404(db, variant_id, current_user)
+
     # Check if SKU is being updated and if it already exists
     if variant_in.sku and variant_in.sku != variant.sku:
         existing_variant = db.query(ProductVariant).filter(
@@ -332,13 +383,8 @@ def delete_product_variant(
     """
     Delete a product variant
     """
-    variant = db.query(ProductVariant).filter(ProductVariant.id == variant_id).first()
-    if not variant:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Variant with ID {variant_id} not found"
-        )
-    
+    variant = get_variant_or_404(db, variant_id, current_user)
+
     db.delete(variant)
     db.commit()
     

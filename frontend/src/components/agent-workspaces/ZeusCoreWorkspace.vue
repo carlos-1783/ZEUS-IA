@@ -253,15 +253,14 @@ onMounted(loadWorkspace)
 }
 
 .btn-secondary {
-  background: var(--zeus-surface, #fff);
+  background: #ffffff;
   color: var(--zeus-text, #0f172a);
-  border: 1px solid var(--zeus-border, #e1e5eb);
-  box-shadow: var(--zeus-shadow-sm);
+  border: 1px solid #D1D5DB;
+  box-shadow: none;
 }
 
 .btn-secondary:hover:not(:disabled) {
-  border-color: var(--zeus-border-strong, #cdd3db);
-  transform: translateY(-1px);
+  border-color: #9aa2af;
 }
 
 .btn-primary:active:not(:disabled),

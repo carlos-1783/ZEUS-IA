@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Path, Body
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, and_
 from datetime import date, datetime
 
 from app.db.session import get_db
@@ -12,7 +12,7 @@ from app.schemas.erp import (
     PaymentCreate, PaymentInDB, PaymentResponse,
     InvoiceStatus, InvoiceType, PaymentStatus, PaymentMethod
 )
-from app.core.security import get_current_active_user
+from app.core.auth import get_current_active_user
 from app.models.user import User
 from services.event_bus import emit_cashflow_updated, emit_payment_registered
 import services.crm_office_service as crm_svc
@@ -24,48 +24,67 @@ from services.zeus_office_mode import (
 
 router = APIRouter()
 
+def _invoice_tenant_scope(current_user: User, cids: List[int]):
+    """
+    Filtro de aislamiento multi-tenant para facturas.
+
+    - Si el usuario pertenece a una o más empresas, solo ve facturas de esas
+      empresas (o facturas legacy sin company_id que él mismo creó).
+    - Si el usuario no pertenece a ninguna empresa, solo ve las facturas que
+      él mismo creó (created_by), nunca las de otros.
+    """
+    if not cids:
+        return Invoice.created_by == current_user.id
+    return or_(
+        Invoice.company_id.in_(cids),
+        and_(Invoice.company_id.is_(None), Invoice.created_by == current_user.id),
+    )
+
 def get_invoice_or_404(
     db: Session,
     invoice_id: int,
     current_user: User
 ) -> InvoiceInDB:
     """
-    Obtiene una factura por ID o lanza una excepción 404 si no se encuentra.
-    
+    Obtiene una factura por ID (acotada a las empresas del usuario) o lanza
+    una excepción 404 si no se encuentra o no pertenece a su ámbito.
+
     Args:
         db: Sesión de base de datos
         invoice_id: ID de la factura a buscar
         current_user: Usuario autenticado
-        
+
     Returns:
         InvoiceInDB: El objeto de la factura en formato Pydantic si se encuentra
-        
+
     Raises:
-        HTTPException: 404 si la factura no existe
-        HTTPException: 403 si el usuario no tiene permisos
+        HTTPException: 404 si la factura no existe o no pertenece a la empresa del usuario
     """
     from fastapi import HTTPException, status
     from sqlalchemy.orm import joinedload
-    
-    # Optimizar la consulta cargando relaciones comunes
+
+    cids = crm_svc.company_ids_for_user(db, current_user)
+
+    # Optimizar la consulta cargando relaciones comunes.
+    # NOTA: Invoice.customer no se carga aquí porque esa relación está
+    # comentada en app/models/erp.py (bug preexistente, no introducido por
+    # este cambio) — usarla rompía este endpoint para CUALQUIER factura,
+    # independientemente del tenant.
     invoice = db.query(Invoice).options(
-        joinedload(Invoice.customer),
         joinedload(Invoice.items),
         joinedload(Invoice.payments)
     ).filter(
         Invoice.id == invoice_id
+    ).filter(
+        _invoice_tenant_scope(current_user, cids)
     ).first()
-    
+
     if not invoice:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Invoice with ID {invoice_id} not found"
         )
-    
-    # Verificar que el usuario tenga acceso a la factura
-    # Aquí podrías agregar lógica de autorización adicional según tus necesidades
-    # Por ejemplo, verificar si el usuario pertenece a la misma organización
-    
+
     # Convertir el modelo SQLAlchemy a Pydantic
     return InvoiceInDB.model_validate(invoice)
 
@@ -109,10 +128,11 @@ def list_invoices(
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    List all invoices with optional filtering and pagination
+    List all invoices with optional filtering and pagination (tenant-scoped)
     """
-    query = db.query(Invoice)
-    
+    cids = crm_svc.company_ids_for_user(db, current_user)
+    query = db.query(Invoice).filter(_invoice_tenant_scope(current_user, cids))
+
     # Apply filters
     if customer_id:
         query = query.filter(Invoice.customer_id == customer_id)
@@ -161,16 +181,12 @@ def create_invoice(
     """
     Create a new invoice
     """
-    # Check if customer exists if specified
+    # Check if customer exists and belongs to the user's tenant scope.
+    # crm_svc.resolve_customer raises 404 if the customer isn't visible to
+    # this user (prevents referencing another company's customer by ID).
     if invoice_in.customer_id:
-        from app.models.customer import Customer
-        customer = db.query(Customer).filter(Customer.id == invoice_in.customer_id).first()
-        if not customer:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Customer with ID {invoice_in.customer_id} not found"
-            )
-    
+        crm_svc.resolve_customer(db, current_user, invoice_in.customer_id)
+
     company_id = crm_svc.primary_company_id(db, current_user)
     require_company_id(company_id, context="facturación")
 
@@ -200,8 +216,12 @@ def create_invoice(
         # If this is a product, update inventory if needed
         if item.product_id and invoice_in.status == InvoiceStatus.PAID:
             # In a real app, you'd want to check if inventory tracking is enabled
-            # and handle variants properly
-            product = db.query(Product).filter(Product.id == item.product_id).first()
+            # and handle variants properly. Scoped to the invoice's own company
+            # so a product from another tenant can't be referenced/mutated here.
+            product = db.query(Product).filter(
+                Product.id == item.product_id,
+                Product.company_id == company_id,
+            ).first()
             if product and product.track_inventory:
                 movement = InventoryMovement(
                     product_id=product.id,

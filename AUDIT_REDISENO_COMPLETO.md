@@ -195,3 +195,78 @@ No se tocó `backend/` en ningún commit de esta rama.
    cubiertos ahora; quedan fuera Admin Panel, Settings, y el resto de
    vistas menores (`ScanHub`, `SystemStatusPanel`, `Pricing`, `Checkout`,
    `AdminPanel`) no mencionadas en el encargo original.
+
+---
+
+## 6. Ronda 2 — sistema de diseño definitivo (2026-08-16, misma tarde)
+
+El usuario dio un sistema de diseño **exacto y obligatorio**, distinto
+(más estricto) del usado en la ronda 1, con instrucción explícita de no
+reinterpretarlo ni aplicar solo una parte:
+
+- **Fondo**: `repeating-linear-gradient(90deg, #E8E9EB 0px, #F5F6F7 15px,
+  #D4D6D9 35px, #F0F1F3 60px, #C9CCD0 85px, #E5E7E9 110px)` + veta
+  diagonal blanco→transparente 12% + grano SVG 3% — en TODA página y
+  modal, sin excepción. Sustituye el degradado plano de la ronda 1 y el
+  "metal cepillado" de textura fina que solo se aplicaba a modales.
+- **Botón activo/primario**: gradiente de 3 paradas teal→morado→rosa
+  (`#14B8A6→#8B5CF6→#EC4899`, sin naranja), sombra `0 2px 8px
+  rgba(0,0,0,.15)` — **solo UNO por vista, el de mayor jerarquía real**.
+- **Botón secundario**: blanco, borde `1px solid #D1D5DB`, sin
+  gradiente, sin sombra — todos los demás botones, sin excepción.
+- Motion sin cambios respecto a la ronda 1.
+
+### Proceso seguido
+
+Se reconstruyó `preview-rafael.html` (fuera del repo) con los valores
+exactos como referencia única aprobada, verificando con
+`document.fonts.check()` que Inter carga de verdad. Cada pantalla se
+comparó contra esa referencia con capturas + estilos computados
+(`getComputedStyle`, conteo de elementos con el gradiente) antes de
+darla por terminada — no se pudieron adjuntar las capturas como
+archivos en el commit/PR (limitación de herramientas: no hay forma de
+guardar una captura del navegador como archivo en disco), así que se
+compartieron directamente en la conversación en su lugar.
+
+### Decisión de diseño: "un solo botón por vista" en la práctica
+
+Muchos elementos que en la ronda 1 llevaban el gradiente (tabs, toggles,
+franjas de "seleccionado", badges repetidos por fila) no son en rigor
+"el botón primario" de su vista — son controles de navegación/selección
+entre pares. Se aplicó un criterio consistente en las ~15 pantallas:
+
+- **Selección dentro de un grupo** (tabs, toggle Texto/Voz, categoría de
+  producto, mesa, fila de lista): gradiente retirado, queda solo negrita
+  y/o cambio de borde.
+- **Acción repetida por fila** (Interactuar ×6 en Dashboard, Descargar
+  ×N en Nóminas): botón secundario — ninguna instancia es "la" única.
+- **Acción real de mayor jerarquía de la vista** (Actualizar en cada
+  workspace de agente, Cobrar en TPV, Siguiente/Finalizar en
+  Onboarding, Construir workspace en ZEUS CORE): el único botón con el
+  gradiente.
+- **Anillo de avatar de agente**: exento — no es un botón, es marca de
+  identidad, igual que en la referencia aprobada.
+
+### Hallazgo real durante la conversión masiva de TPV.vue
+
+Al convertir en bloque ~15 botones de indigo sólido a blanco, varios
+`:hover`/`:active` que solo redefinían el color de texto a blanco
+(pensado para verse sobre el indigo que ya no está) quedaron con texto
+blanco sobre fondo ya blanco — invisible. Se encontraron y corrigieron
+4 casos reales (teclado numérico, botón de cantidad, tarjeta "añadir
+producto", `.btn-secondary` del modal de producto) revisando cada
+bloque tras la conversión, no solo confiando en el patrón de búsqueda y
+reemplazo.
+
+### Verificación
+
+Dashboard, `/agents`, los 6 workspaces de agente y Onboarding: **verificados
+en vivo** con capturas y `getComputedStyle` — fondo de bandas exacto
+(`rgb(232,233,235)`, `rgb(245,246,247)`... coinciden con los hex del
+encargo), recuento de elementos con el gradiente = 1 (o 0 cuando no
+aplica) en cada vista, sin errores de consola nuevos.
+
+CRM, TPV, Control Horario, Nóminas: **no se pudieron verificar en vivo**,
+mismo hallazgo de la sección 3 (guard de rutas). Verificados por
+compilación limpia y, en el caso de TPV, revisión manual de cada bloque
+convertido para descartar regresiones de contraste.

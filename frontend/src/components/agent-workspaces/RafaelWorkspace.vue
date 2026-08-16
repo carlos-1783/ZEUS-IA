@@ -314,7 +314,6 @@ onMounted(async () => {
   flex-direction: column;
   gap: 28px;
   padding: 32px 48px 64px;
-  background: radial-gradient(circle at top left, rgba(245, 158, 11, 0.08), transparent 55%);
   min-height: calc(100vh - 96px);
   max-width: 98%;
   width: calc(100% - 24px);
@@ -340,29 +339,34 @@ onMounted(async () => {
   color: var(--zeus-text-secondary, #475569);
 }
 
+/* Único botón con gradiente de esta vista: la acción de mayor
+   jerarquía del workspace de RAFAEL. Ya no lleva el ámbar de identidad
+   del agente — el sistema definitivo reserva el gradiente vibrante
+   para un solo tratamiento en toda la app. */
 .refresh-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
   border-radius: var(--zeus-radius-full, 999px);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  background: var(--zeus-surface, #fff);
-  color: #b45309;
+  border: none;
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%));
+  color: #fff;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 3px 8px rgba(245, 158, 11, 0.18);
-  transition: transform var(--zeus-transition, 150ms), box-shadow var(--zeus-transition, 150ms);
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 8px rgba(0, 0, 0, 0.15));
+  transition: transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .refresh-btn:hover:not(:disabled) {
-  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.07), 0 6px 16px rgba(245, 158, 11, 0.25);
+  box-shadow: var(--zeus-accent-gradient-shadow-hover, 0 4px 14px rgba(0, 0, 0, 0.22));
   transform: translateY(-1px);
 }
 
 .refresh-btn:active:not(:disabled) {
-  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.08);
-  transform: translateY(0);
+  transform: translateY(0) scale(0.97);
+  transition-duration: var(--zeus-dur-press, 100ms);
 }
 
 .refresh-btn:disabled {
@@ -422,9 +426,11 @@ onMounted(async () => {
 }
 
 .deliverable-list li.active {
-  border-color: rgba(245, 158, 11, 0.45);
-  background: rgba(245, 158, 11, 0.1);
-  box-shadow: 0 6px 14px rgba(245, 158, 11, 0.15);
+  border-color: #9aa2af;
+}
+
+.deliverable-list li.active .title {
+  font-weight: 700;
 }
 
 .title {
@@ -492,37 +498,33 @@ onMounted(async () => {
   gap: 10px;
 }
 
+/* Botones secundarios: "Actualizar" (.refresh-btn) es el único botón
+   con gradiente de esta vista, así que estas acciones de descarga
+   (situadas más abajo en la jerarquía) son blancas, sin sombra. */
 .btn {
   padding: 9px 16px;
   border-radius: var(--zeus-radius-sm, 8px);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  background: var(--zeus-surface, #fff);
-  color: #b45309;
+  border: 1px solid #D1D5DB;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
   font-weight: 600;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-  transition: transform var(--zeus-transition, 150ms), box-shadow var(--zeus-transition, 150ms);
+  box-shadow: none;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 .btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
+  border-color: #9aa2af;
 }
 .btn.primary {
-  background: #d97706;
-  border-color: #b45309;
-  color: #fff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(217, 119, 6, 0.3);
-}
-.btn.primary:hover {
-  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(217, 119, 6, 0.38);
+  font-weight: 700;
 }
 .workspace-fiscal-card {
-  border: 1px solid rgba(245, 158, 11, 0.35);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 16px;
   padding: 20px;
-  background: #fffbeb;
+  background: #ffffff;
 }
 .fiscal-summary {
   color: #475569;

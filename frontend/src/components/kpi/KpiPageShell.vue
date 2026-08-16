@@ -22,12 +22,27 @@ defineProps({
 
 <style scoped>
 .kpi-page-shell {
+  position: relative;
   min-height: 100vh;
   padding: 32px;
-  background: var(--zeus-bg, #f7f8fb);
+  background-image: var(--zeus-bg);
   color: var(--zeus-text, #0f172a);
   font-family: var(--zeus-font-sans, 'Inter', sans-serif);
   box-sizing: border-box;
+}
+
+.kpi-page-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+.kpi-page-shell > * {
+  position: relative;
 }
 
 .kpi-page-header {
@@ -35,7 +50,7 @@ defineProps({
 }
 
 .kpi-back {
-  color: var(--zeus-accent, #3b82f6);
+  color: var(--zeus-accent, #4f46e5);
   text-decoration: none;
   font-size: 14px;
   font-weight: 500;

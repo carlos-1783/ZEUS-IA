@@ -57,9 +57,12 @@ const agents = [
   color: var(--zeus-text, #0f172a);
 }
 
+/* Plano, no gradiente: hay 6 filas de agentes en esta vista y el
+   acento vibrante debe aparecer como mucho una vez por vista, no
+   repetido en cada fila. */
 .pill.online {
-  color: #ffffff;
-  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
+  color: #0d9668;
+  background: var(--zeus-success-soft, #e9faf3);
   padding: 4px 10px;
   border-radius: var(--zeus-radius-full, 999px);
   font-size: 12px;

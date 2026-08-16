@@ -288,7 +288,6 @@ onMounted(async () => {
   flex-direction: column;
   gap: 28px;
   padding: 32px 48px 64px;
-  background: radial-gradient(circle at top right, rgba(129, 140, 248, 0.12), transparent 55%);
   min-height: calc(100vh - 96px);
   max-width: 98%;
   width: calc(100% - 24px);
@@ -315,32 +314,31 @@ onMounted(async () => {
   margin-top: 4px;
 }
 
+/* Único botón con gradiente de esta vista. */
 .refresh-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
   border-radius: var(--zeus-radius-full, 999px);
-  border: 1px solid rgba(67, 56, 202, 0.35);
-  background: var(--zeus-surface, #fff);
-  color: var(--zeus-accent-hover, #4338ca);
+  border: none;
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%));
+  color: #fff;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 3px 8px rgba(67, 56, 202, 0.18);
-  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 8px rgba(0, 0, 0, 0.15));
+  transition: transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .refresh-btn:hover:not(:disabled) {
-  background: rgba(67, 56, 202, 0.06);
-  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.07), 0 6px 16px rgba(67, 56, 202, 0.25);
+  box-shadow: var(--zeus-accent-gradient-shadow-hover, 0 4px 14px rgba(0, 0, 0, 0.22));
   transform: translateY(-1px);
 }
 
 .refresh-btn:active:not(:disabled) {
-  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.08);
-  transform: translateY(0);
+  transform: translateY(0) scale(0.97);
+  transition-duration: var(--zeus-dur-press, 100ms);
 }
 
 .refresh-btn:disabled {
@@ -414,28 +412,16 @@ onMounted(async () => {
 }
 
 .deliverable-list li.active {
-  border-color: rgba(129, 140, 248, 0.45);
-  background: rgba(129, 140, 248, 0.12);
-  box-shadow: 0 6px 14px rgba(129, 140, 248, 0.2);
-}
-
-/* Indicador de "seleccionado" - acento gradiente puntual (franja lateral),
-   mismo tratamiento que en RAFAEL y PERSEO, sin tapar el indigo propio
-   de JUSTICIA que ya marca el estado activo en fondo/borde. */
-.deliverable-list li.active::before {
-  content: '';
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 6px;
-  width: 3px;
-  border-radius: 999px;
-  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
+  border-color: #9aa2af;
 }
 
 .deliverable-list .title {
   font-weight: 600;
   color: var(--zeus-text, #1e293b);
+}
+
+.deliverable-list li.active .title {
+  font-weight: 700;
 }
 
 .deliverable-list .meta {
@@ -525,20 +511,23 @@ onMounted(async () => {
   gap: 6px;
   padding: 10px 16px;
   border-radius: 10px;
-  border: none;
+  border: 1px solid #D1D5DB;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  box-shadow: none;
   cursor: pointer;
   font-weight: 600;
-  transition: transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn.ghost {
-  border: 1px solid rgba(67, 56, 202, 0.35);
-  background: rgba(67, 56, 202, 0.08);
-  color: var(--zeus-accent-hover, #4338ca);
+  border: 1px solid #D1D5DB;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
 }
 
 .btn:hover {
-  transform: translateY(-1px);
+  border-color: #9aa2af;
 }
 
 .details-grid {

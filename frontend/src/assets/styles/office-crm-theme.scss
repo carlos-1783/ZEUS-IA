@@ -7,9 +7,9 @@
   padding: 1.5rem 1.25rem 2.5rem;
   max-width: 1200px;
   margin: 0 auto;
-  background: linear-gradient(135deg, #e8eef5 0%, #f8fafc 100%);
-  color: #0f172a;
-  font-family: var(--font-sans, 'Inter', system-ui, sans-serif);
+  background: var(--zeus-bg, linear-gradient(135deg, #e8eef5 0%, #f8fafc 100%));
+  color: var(--zeus-text, #0f172a);
+  font-family: var(--zeus-font-sans, 'Inter', system-ui, sans-serif);
 }
 
 .office-crm .crm-header {
@@ -17,7 +17,7 @@
 }
 
 .office-crm .back-link {
-  color: #2563eb;
+  color: var(--zeus-accent, #2563eb);
   text-decoration: none;
   font-size: 0.9rem;
   font-weight: 500;
@@ -31,12 +31,12 @@
   margin: 0.5rem 0 0.25rem;
   font-size: 1.5rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
 }
 
 .office-crm .subtitle {
   margin: 0;
-  color: rgba(15, 23, 42, 0.65);
+  color: var(--zeus-text-secondary, rgba(15, 23, 42, 0.65));
   font-size: 0.95rem;
 }
 
@@ -49,14 +49,18 @@
 }
 
 .office-crm .global-error {
-  background: rgba(239, 68, 68, 0.1);
+  background: var(--zeus-danger-soft, rgba(239, 68, 68, 0.1));
   border: 1px solid rgba(239, 68, 68, 0.35);
+  /* texto en tono oscuro legible a proposito: el token base zeus-danger es
+     un rojo mas saturado pensado para iconos/badges, no para parrafos de
+     texto largo, así que se deja el tono oscuro fijo para mantener contraste. */
   color: #b91c1c;
 }
 
 .office-crm .access-denied {
-  background: rgba(245, 158, 11, 0.12);
+  background: var(--zeus-warning-soft, rgba(245, 158, 11, 0.12));
   border: 1px solid rgba(245, 158, 11, 0.4);
+  /* mismo motivo que arriba: se deja el ambar oscuro fijo por legibilidad */
   color: #92400e;
 }
 
@@ -74,17 +78,17 @@
 }
 
 .office-crm .panel {
-  background: #ffffff;
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  border-radius: 12px;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border, rgba(15, 23, 42, 0.1));
+  border-radius: var(--zeus-radius, 12px);
   padding: 1rem 1.1rem;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--zeus-shadow, 0 1px 3px rgba(15, 23, 42, 0.06));
 }
 
 .office-crm .panel h2 {
   margin: 0 0 0.75rem;
   font-size: 1.05rem;
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
 }
 
 .office-crm .client-dock {
@@ -93,8 +97,8 @@
   gap: 0.5rem;
   margin-bottom: 1rem;
   padding: 0.65rem 0.75rem;
-  background: #f1f5f9;
-  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: var(--zeus-bg-subtle, #f1f5f9);
+  border: 1px solid var(--zeus-border, rgba(15, 23, 42, 0.1));
   border-radius: 10px;
   position: sticky;
   top: 0.5rem;
@@ -105,20 +109,39 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  border: 1px solid #cbd5e1;
-  background: #fff;
-  color: #0f172a;
+  border: 1px solid var(--zeus-border-strong, #cbd5e1);
+  background: var(--zeus-surface, #fff);
+  color: var(--zeus-text, #0f172a);
   border-radius: 8px;
   padding: 0.35rem 0.55rem 0.35rem 0.75rem;
   font-size: 0.85rem;
   cursor: pointer;
   max-width: 220px;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
+/* Unica marca "seleccionado" restringida de la pantalla: pestaña de cliente
+   activa en el dock. Borde/fondo en indigo solido + una fina franja inferior
+   con el degradado de acento (teal/morado/rosa/naranja) como detalle puntual,
+   igual que en el resto del sistema (nunca como fondo general). */
 .office-crm .dock-tab--active {
-  border-color: #2563eb;
-  background: #eff6ff;
-  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.25);
+  position: relative;
+  border-color: var(--zeus-accent, #2563eb);
+  background: var(--zeus-accent-soft, #eff6ff);
+  box-shadow: 0 0 0 1px var(--zeus-accent, rgba(37, 99, 235, 0.25));
+}
+
+.office-crm .dock-tab--active::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: var(--zeus-radius-full, 999px);
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
 }
 
 .office-crm .dock-tab--minimized {
@@ -136,8 +159,8 @@
   font-size: 0.65rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: #64748b;
-  background: #e2e8f0;
+  color: var(--zeus-text-muted, #64748b);
+  background: var(--zeus-bg-flat, #e2e8f0);
   border-radius: 4px;
   padding: 0.1rem 0.35rem;
 }
@@ -145,17 +168,19 @@
 .office-crm .dock-tab-close {
   border: none;
   background: transparent;
-  color: #64748b;
+  color: var(--zeus-text-muted, #64748b);
   font-size: 1.1rem;
   line-height: 1;
   padding: 0 0.15rem;
   cursor: pointer;
   border-radius: 4px;
+  transition: color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .office-crm .dock-tab-close:hover {
-  color: #b91c1c;
-  background: rgba(239, 68, 68, 0.12);
+  color: var(--zeus-danger, #b91c1c);
+  background: var(--zeus-danger-soft, rgba(239, 68, 68, 0.12));
 }
 
 .office-crm .toolbar--customer {
@@ -166,8 +191,9 @@
   margin: 0 0 1rem;
   padding: 0.65rem 0.85rem;
   border-radius: 8px;
-  background: #fef3c7;
+  background: var(--zeus-warning-soft, #fef3c7);
   border: 1px solid #fcd34d;
+  /* texto oscuro fijo por legibilidad, ver nota en .access-denied arriba */
   color: #92400e;
   font-size: 0.875rem;
 }
@@ -176,7 +202,7 @@
 .office-crm .panel h4 {
   margin: 1rem 0 0.5rem;
   font-size: 0.95rem;
-  color: #334155;
+  color: var(--zeus-text-secondary, #334155);
 }
 
 .office-crm .btn-primary,
@@ -189,16 +215,27 @@
   font-weight: 500;
   border: none;
   margin: 0.25rem 0.35rem 0.25rem 0;
-  transition: var(--transition-fast, all 0.15s ease);
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .office-crm .btn-primary {
-  background: var(--color-primary, #4f46e5);
-  color: #fff;
+  background: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-text-on-accent, #fff);
+  box-shadow: var(--zeus-shadow-btn, 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(79, 70, 229, 0.2));
 }
 
 .office-crm .btn-primary:hover:not(:disabled) {
-  background: var(--color-primary-dark, #4338ca);
+  background: var(--zeus-accent-hover, #4338ca);
+  box-shadow: var(--zeus-shadow-btn-hover, 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(79, 70, 229, 0.28));
+  transform: translateY(-1px);
+}
+
+.office-crm .btn-primary:active:not(:disabled) {
+  box-shadow: var(--zeus-shadow-btn-active, 0 1px 1px rgba(15, 23, 42, 0.08));
+  transform: translateY(0);
 }
 
 .office-crm .btn-primary:disabled {
@@ -207,20 +244,40 @@
 }
 
 .office-crm .btn-secondary {
-  background: #f1f5f9;
-  color: #334155;
-  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: var(--zeus-bg-subtle, #f1f5f9);
+  color: var(--zeus-text-secondary, #334155);
+  border: 1px solid var(--zeus-border, rgba(15, 23, 42, 0.12));
 }
 
 .office-crm .btn-secondary:hover {
-  background: #e2e8f0;
+  background: var(--zeus-bg-flat, #e2e8f0);
+  transform: translateY(-1px);
+}
+
+.office-crm .btn-secondary:active {
+  transform: translateY(0);
 }
 
 .office-crm .btn-small {
-  background: #e0e7ff;
-  color: #3730a3;
+  background: var(--zeus-accent-soft, #e0e7ff);
+  color: var(--zeus-accent-hover, #3730a3);
   padding: 0.3rem 0.55rem;
   font-size: 0.8rem;
+}
+
+.office-crm .btn-small:hover {
+  background: var(--zeus-accent-2-soft, #c7d2fe);
+  transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .office-crm .btn-primary:hover:not(:disabled),
+  .office-crm .btn-primary:active:not(:disabled),
+  .office-crm .btn-secondary:hover,
+  .office-crm .btn-secondary:active,
+  .office-crm .btn-small:hover {
+    transform: none;
+  }
 }
 
 .office-crm .form-card {
@@ -229,15 +286,15 @@
   gap: 0.35rem;
   margin: 0.75rem 0;
   padding: 0.85rem;
-  background: #f8fafc;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: var(--zeus-bg-subtle, #f8fafc);
+  border: 1px solid var(--zeus-border, rgba(15, 23, 42, 0.08));
   border-radius: 8px;
 }
 
 .office-crm .form-card label {
   font-size: 0.8rem;
   font-weight: 500;
-  color: #475569;
+  color: var(--zeus-text-secondary, #475569);
   margin-top: 0.25rem;
 }
 
@@ -246,17 +303,17 @@
 .office-crm .form-card textarea {
   padding: 0.45rem 0.55rem;
   border-radius: 6px;
-  border: 1px solid #cbd5e1;
-  background: #fff;
-  color: #0f172a;
+  border: 1px solid var(--zeus-border-strong, #cbd5e1);
+  background: var(--zeus-surface, #fff);
+  color: var(--zeus-text, #0f172a);
   font-size: 0.9rem;
 }
 
 .office-crm .form-card input:focus,
 .office-crm .form-card select:focus,
 .office-crm .form-card textarea:focus {
-  outline: 2px solid rgba(79, 70, 229, 0.35);
-  border-color: var(--color-primary, #4f46e5);
+  outline: 2px solid var(--zeus-shadow-focus, rgba(79, 70, 229, 0.35));
+  border-color: var(--zeus-accent, #4f46e5);
 }
 
 .office-crm .checkbox {
@@ -278,31 +335,32 @@
   border-radius: 8px;
   cursor: pointer;
   border: 1px solid transparent;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .office-crm .customer-list li:hover {
-  background: #f1f5f9;
+  background: var(--zeus-bg-subtle, #f1f5f9);
 }
 
 .office-crm .customer-list li.active {
-  border-color: var(--color-primary, #4f46e5);
-  background: rgba(79, 70, 229, 0.08);
+  border-color: var(--zeus-accent, #4f46e5);
+  background: var(--zeus-accent-soft, rgba(79, 70, 229, 0.08));
 }
 
 .office-crm .cust-name {
   display: block;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
 }
 
 .office-crm .cust-meta {
   font-size: 0.8rem;
-  color: #64748b;
+  color: var(--zeus-text-muted, #64748b);
 }
 
 .office-crm .meta-line {
   font-size: 0.9rem;
-  color: #64748b;
+  color: var(--zeus-text-muted, #64748b);
   margin: 0 0 1rem;
 }
 
@@ -316,11 +374,11 @@
 .office-crm .records-table td {
   text-align: left;
   padding: 0.5rem 0.35rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--zeus-border, #e2e8f0);
 }
 
 .office-crm .records-table th {
-  color: #64748b;
+  color: var(--zeus-text-muted, #64748b);
   font-weight: 600;
   font-size: 0.8rem;
 }
@@ -329,9 +387,12 @@
 .office-crm .toolbar h2 {
   margin: 0;
   font-size: 1.05rem;
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
 }
 
+// Nota: los !important de este bloque son deliberados (fix de contraste,
+// no solo estetico) — evitan que el input herede texto blanco ilegible
+// sobre fondo blanco en ciertos contextos. Se mantienen al tokenizar.
 .office-crm .toolbar input,
 .office-crm .data-table input,
 .office-crm .data-table select,
@@ -339,24 +400,24 @@
 .office-crm .inline-form select,
 .office-crm .charge-box input,
 .office-crm .charge-box select {
-  color: #0f172a !important;
-  background-color: #ffffff !important;
-  caret-color: #0f172a;
+  color: var(--zeus-text, #0f172a) !important;
+  background-color: var(--zeus-surface, #ffffff) !important;
+  caret-color: var(--zeus-text, #0f172a);
   -webkit-text-fill-color: #0f172a;
 }
 
 .office-crm .toolbar input::placeholder,
 .office-crm .inline-form input::placeholder,
 .office-crm .charge-box input::placeholder {
-  color: #64748b !important;
+  color: var(--zeus-text-muted, #64748b) !important;
   opacity: 1 !important;
 }
 
 .office-crm .data-table select option,
 .office-crm .inline-form select option,
 .office-crm .charge-box select option {
-  color: #0f172a;
-  background-color: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  background-color: var(--zeus-surface, #ffffff);
 }
 
 .office-crm .data-table {
@@ -369,26 +430,26 @@
 .office-crm .data-table td {
   text-align: left;
   padding: 0.5rem 0.35rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--zeus-border, #e2e8f0);
 }
 
 .office-crm .data-table th {
-  color: #334155 !important;
+  color: var(--zeus-text-secondary, #334155) !important;
   font-weight: 600;
   font-size: 0.8rem;
-  background: #f8fafc !important;
+  background: var(--zeus-bg-subtle, #f8fafc) !important;
   cursor: pointer;
 }
 
 .office-crm .data-table td {
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
 }
 
 .office-crm .charge-box label {
   display: block;
   font-size: 0.85rem;
   font-weight: 500;
-  color: #475569;
+  color: var(--zeus-text-secondary, #475569);
   margin-top: 0.35rem;
 }
 
@@ -403,8 +464,8 @@
 .office-crm .charge-box {
   margin-top: 1rem;
   padding: 0.85rem;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--zeus-bg-subtle, #f8fafc);
+  border: 1px solid var(--zeus-border, #e2e8f0);
   border-radius: 8px;
 }
 
@@ -418,29 +479,29 @@
 
 .office-crm .activity-item {
   padding: 0.6rem 0;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--zeus-border, #e2e8f0);
 }
 
 .office-crm .activity-time {
   display: block;
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: var(--zeus-text-muted, #94a3b8);
 }
 
 .office-crm .activity-action {
   font-weight: 600;
   font-size: 0.85rem;
-  color: #334155;
+  color: var(--zeus-text-secondary, #334155);
 }
 
 .office-crm .activity-summary {
   margin: 0.25rem 0 0;
   font-size: 0.85rem;
-  color: #64748b;
+  color: var(--zeus-text-muted, #64748b);
 }
 
 .office-crm .muted {
-  color: #94a3b8;
+  color: var(--zeus-text-muted, #94a3b8);
   font-size: 0.9rem;
 }
 
@@ -571,10 +632,10 @@
   width: min(640px, 100%);
   max-height: 90vh;
   overflow-y: auto;
-  background: #fff;
-  border-radius: 12px;
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2);
+  background: var(--zeus-surface, #fff);
+  border-radius: var(--zeus-radius, 12px);
+  border: 1px solid var(--zeus-border, rgba(15, 23, 42, 0.12));
+  box-shadow: var(--zeus-shadow-lg, 0 20px 50px rgba(15, 23, 42, 0.2));
   padding: 1.25rem 1.35rem 1.5rem;
 }
 
@@ -589,6 +650,7 @@
 .office-crm .import-header h2 {
   margin: 0;
   font-size: 1.2rem;
+  color: var(--zeus-text, #0f172a);
 }
 
 .office-crm .import-close {
@@ -597,44 +659,51 @@
   font-size: 1.5rem;
   line-height: 1;
   cursor: pointer;
-  color: #64748b;
+  color: var(--zeus-text-muted, #64748b);
+  transition: color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.office-crm .import-close:hover {
+  color: var(--zeus-text, #0f172a);
 }
 
 .office-crm .import-error {
   padding: 0.65rem 0.85rem;
   margin-bottom: 0.75rem;
   border-radius: 8px;
-  background: rgba(239, 68, 68, 0.1);
+  background: var(--zeus-danger-soft, rgba(239, 68, 68, 0.1));
   border: 1px solid rgba(239, 68, 68, 0.35);
+  /* texto oscuro fijo por legibilidad, ver nota en .access-denied arriba */
   color: #b91c1c;
   font-size: 0.9rem;
 }
 
 .office-crm .import-hint,
 .office-crm .import-meta {
-  color: #64748b;
+  color: var(--zeus-text-muted, #64748b);
   font-size: 0.9rem;
   margin: 0 0 1rem;
 }
 
 .office-crm .import-dropzone {
-  border: 2px dashed #cbd5e1;
+  border: 2px dashed var(--zeus-border-strong, #cbd5e1);
   border-radius: 10px;
   padding: 1.25rem 1rem;
   margin-bottom: 1rem;
   text-align: center;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .office-crm .import-dropzone--active {
-  border-color: #2563eb;
-  background: rgba(37, 99, 235, 0.06);
+  border-color: var(--zeus-accent, #2563eb);
+  background: var(--zeus-accent-soft, rgba(37, 99, 235, 0.06));
 }
 
 .office-crm .import-dropzone-text {
   margin: 0 0 0.75rem;
   font-size: 0.9rem;
-  color: #64748b;
+  color: var(--zeus-text-muted, #64748b);
 }
 
 .office-crm .import-file-label {
@@ -654,13 +723,14 @@
 
 .office-crm .import-filename {
   font-size: 0.85rem;
-  color: #475569;
+  color: var(--zeus-text-secondary, #475569);
 }
 
 .office-crm .import-mapping h3,
 .office-crm .import-preview h3 {
   font-size: 0.95rem;
   margin: 0 0 0.5rem;
+  color: var(--zeus-text, #0f172a);
 }
 
 .office-crm .mapping-row {
@@ -674,7 +744,7 @@
 .office-crm .mapping-row select {
   padding: 0.4rem 0.5rem;
   border-radius: 6px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--zeus-border-strong, #cbd5e1);
 }
 
 .office-crm .preview-table-wrap {
@@ -690,7 +760,7 @@
 
 .office-crm .preview-table th,
 .office-crm .preview-table td {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--zeus-border, #e2e8f0);
   padding: 0.35rem 0.5rem;
   text-align: left;
 }
@@ -703,6 +773,7 @@
 }
 
 .office-crm .import-success {
+  /* texto verde oscuro fijo por legibilidad, ver nota en .access-denied arriba */
   color: #047857;
   font-weight: 600;
 }
@@ -715,6 +786,7 @@
 }
 
 .office-crm .import-warnings {
+  /* texto ambar oscuro fijo por legibilidad, ver nota en .access-denied arriba */
   color: #b45309;
 }
 

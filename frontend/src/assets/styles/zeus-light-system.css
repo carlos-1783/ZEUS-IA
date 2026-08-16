@@ -110,6 +110,57 @@
   /* ---- Transición (sutil, nunca > 200ms para no sentirse lenta) ---- */
   --zeus-transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --zeus-transition-slow: 220ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ---- Motion system (validado en preview-rafael.html, ahora sistema
+     compartido para toda la app): easing distinto para entrada/salida/
+     microinteracción, y duraciones fijas por tipo de movimiento. Los
+     componentes con <Transition> propio consumen estas variables en sus
+     propias clases *-enter-active/-leave-active en vez de reinventar
+     timings sueltos. ---- */
+  --zeus-ease-enter: cubic-bezier(0.22, 1, 0.36, 1); /* desaceleración natural — entradas */
+  --zeus-ease-exit: cubic-bezier(0.4, 0, 1, 1);       /* aceleración — salidas */
+  --zeus-ease-micro: cubic-bezier(0.4, 0, 0.2, 1);    /* estándar — hover/press */
+  --zeus-dur-modal: 240ms;  /* entrada/salida de modales: dentro de 200-300ms */
+  --zeus-dur-hover: 180ms;  /* microinteracción hover: dentro de 150-200ms */
+  --zeus-dur-press: 100ms;  /* feedback de click: rápido, perceptible */
+
+  /* ---- Acento vibrante — teal→morado→rosa→naranja. Uso deliberadamente
+     restringido: SOLO botón/estado activo, anillo de avatar y badges
+     "online"/seleccionado. Nunca como fondo de página ni de texto — es
+     el detalle que atrae la atención, no la base de la pantalla. ---- */
+  --zeus-accent-gradient: linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%);
+  --zeus-accent-gradient-shadow: 0 2px 10px rgba(139, 92, 246, 0.35);
+  --zeus-accent-gradient-shadow-hover: 0 4px 18px rgba(139, 92, 246, 0.45);
+
+  /* ---- Superficie "metal cepillado" — para modales/paneles destacados.
+     Base platino + veta fina (repeating-linear-gradient) + barrido de luz
+     diagonal (linear-gradient) + brillo de fuente de luz y sombra de
+     esquina (radial-gradient), más grano SVG vía .zeus-metal-surface::before.
+     Validado en preview-rafael.html antes de aplicarse a componentes reales. ---- */
+  --zeus-metal-top: #f8f9fa;
+  --zeus-metal-bottom: #c8cdd3;
+  --zeus-metal-bg:
+    repeating-linear-gradient(
+      100deg,
+      rgba(255, 255, 255, 0.09) 0px,
+      rgba(255, 255, 255, 0.09) 1px,
+      rgba(15, 23, 42, 0.025) 1px,
+      rgba(15, 23, 42, 0.025) 2px,
+      rgba(255, 255, 255, 0.04) 2px,
+      rgba(255, 255, 255, 0.04) 3px
+    ),
+    linear-gradient(
+      118deg,
+      rgba(255, 255, 255, 0) 22%,
+      rgba(255, 255, 255, 0.32) 41%,
+      rgba(255, 255, 255, 0.58) 47%,
+      rgba(255, 255, 255, 0.30) 53%,
+      rgba(255, 255, 255, 0) 72%
+    ),
+    radial-gradient(ellipse 90% 60% at 15% -5%, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0) 55%),
+    radial-gradient(ellipse 70% 50% at 105% 115%, rgba(0, 0, 0, 0.06) 0%, rgba(0, 0, 0, 0) 60%),
+    linear-gradient(180deg, var(--zeus-metal-top) 0%, var(--zeus-metal-bottom) 100%);
+  --zeus-noise-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 /* ------------------------------------------------------------------ */
@@ -181,6 +232,71 @@
   .zeus-btn-ghost:hover:not(:disabled),
   .zeus-btn-primary:active:not(:disabled),
   .zeus-btn-ghost:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Acento gradiente — botón activo/primario, anillo de avatar y badges.
+   Uso puntual: ver comentario del token --zeus-accent-gradient arriba. */
+/* ------------------------------------------------------------------ */
+.zeus-btn-accent {
+  background: var(--zeus-accent-gradient);
+  color: #ffffff;
+  box-shadow: var(--zeus-accent-gradient-shadow);
+  transition: box-shadow var(--zeus-dur-hover) var(--zeus-ease-micro),
+    transform var(--zeus-dur-hover) var(--zeus-ease-micro);
+}
+
+.zeus-btn-accent:hover:not(:disabled) {
+  box-shadow: var(--zeus-accent-gradient-shadow-hover);
+  transform: translateY(-1px);
+}
+
+.zeus-btn-accent:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+  transition-duration: var(--zeus-dur-press);
+}
+
+.zeus-avatar-ring-accent {
+  background: var(--zeus-accent-gradient);
+  box-shadow: var(--zeus-accent-gradient-shadow);
+  padding: 3px;
+  border-radius: 50%;
+}
+
+.zeus-badge-accent {
+  background: var(--zeus-accent-gradient);
+  color: #ffffff;
+}
+
+/* ------------------------------------------------------------------ */
+/* Superficie "metal cepillado" — modales y paneles destacados.
+   Requiere position:relative en el elemento (ya suele tenerlo un modal/
+   panel). El grano SVG va en ::before, por encima del contenido de
+   fondo pero por debajo del contenido real (que necesita z-index/
+   position:relative en sus hijos directos si el propio elemento no es
+   ya un contenedor de stacking context aislado). */
+/* ------------------------------------------------------------------ */
+.zeus-metal-surface {
+  position: relative;
+  overflow: hidden;
+  background-image: var(--zeus-metal-bg);
+}
+
+.zeus-metal-surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zeus-btn-accent:hover:not(:disabled),
+  .zeus-btn-accent:active:not(:disabled) {
     transform: none;
   }
 }

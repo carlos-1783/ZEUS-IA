@@ -1858,13 +1858,15 @@ onUnmounted(() => {
 
 .btn-interact {
   padding: 8px 16px;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
   border: none;
   border-radius: var(--zeus-radius-sm);
   color: #fff;
   font-weight: 600;
   cursor: pointer;
-  transition: transform var(--zeus-transition), box-shadow var(--zeus-transition);
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 10px rgba(139, 92, 246, 0.35));
+  transition: transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   font-size: 12px;
   display: inline-flex;
   align-items: center;
@@ -1876,7 +1878,19 @@ onUnmounted(() => {
 
 .btn-interact:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3);
+  box-shadow: var(--zeus-accent-gradient-shadow-hover, 0 4px 18px rgba(139, 92, 246, 0.45));
+}
+
+.btn-interact:active {
+  transform: translateY(0) scale(0.97);
+  transition-duration: var(--zeus-dur-press, 100ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-interact:hover,
+  .btn-interact:active {
+    transform: none;
+  }
 }
 
 /* AGENT ACTIVITY PANEL OVERLAY */
@@ -1896,18 +1910,28 @@ onUnmounted(() => {
   overflow-y: auto;
 }
 
-/* Modal animado — entrada/salida suave (~220ms), backdrop en fade,
-   panel con fade + escala + desplazamiento sutil. Ver .agent-modal-*
-   más abajo para las clases que genera <Transition name="agent-modal">. */
-.agent-modal-enter-active,
-.agent-modal-leave-active {
-  transition: background-color 220ms cubic-bezier(0.4, 0, 0.2, 1);
+/* Modal animado — entrada/salida (240ms), backdrop en fade, panel con
+   fade + escala + desplazamiento sutil. Easing distinto para entrada
+   (desaceleración natural) y salida (aceleración) — sistema de motion
+   compartido, ver tokens zeus-ease y zeus-dur en zeus-light-system.css.
+   Ver .agent-modal-* más abajo para las clases que genera
+   <Transition name="agent-modal">. */
+.agent-modal-enter-active {
+  transition: background-color var(--zeus-dur-modal, 240ms) var(--zeus-ease-enter, ease-out);
 }
 
-.agent-modal-enter-active .agent-panel-container,
+.agent-modal-leave-active {
+  transition: background-color var(--zeus-dur-modal, 240ms) var(--zeus-ease-exit, ease-in);
+}
+
+.agent-modal-enter-active .agent-panel-container {
+  transition: opacity var(--zeus-dur-modal, 240ms) var(--zeus-ease-enter, ease-out),
+    transform var(--zeus-dur-modal, 240ms) var(--zeus-ease-enter, ease-out);
+}
+
 .agent-modal-leave-active .agent-panel-container {
-  transition: opacity 220ms cubic-bezier(0.4, 0, 0.2, 1),
-    transform 220ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity var(--zeus-dur-modal, 240ms) var(--zeus-ease-exit, ease-in),
+    transform var(--zeus-dur-modal, 240ms) var(--zeus-ease-exit, ease-in);
 }
 
 .agent-modal-enter-from,

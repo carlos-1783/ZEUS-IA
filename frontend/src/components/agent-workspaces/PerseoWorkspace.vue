@@ -851,21 +851,36 @@ onMounted(async () => {
   gap: 8px;
   padding: 10px 16px;
   border-radius: 999px;
-  border: 1px solid rgba(59, 130, 246, 0.4);
-  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  background: var(--zeus-surface, #fff);
   color: #1d4ed8;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 3px 8px rgba(59, 130, 246, 0.18);
+  transition: transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .refresh-btn:hover:not(:disabled) {
-  background: rgba(59, 130, 246, 0.15);
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.07), 0 6px 16px rgba(59, 130, 246, 0.25);
+  transform: translateY(-1px);
+}
+
+.refresh-btn:active:not(:disabled) {
+  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.08);
+  transform: translateY(0);
 }
 
 .refresh-btn:disabled {
   opacity: 0.6;
   cursor: wait;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .refresh-btn:hover:not(:disabled),
+  .refresh-btn:active:not(:disabled) {
+    transform: none;
+  }
 }
 
 .workspace-body {
@@ -907,21 +922,37 @@ onMounted(async () => {
 }
 
 .deliverable-list li {
+  position: relative;
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 14px;
-  padding: 14px 16px;
+  padding: 14px 16px 14px 20px;
   background: rgba(248, 250, 252, 0.8);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
+/* Indicador de "seleccionado" — acento gradiente puntual (franja lateral),
+   no todo el fondo, para no competir con la identidad azul de PERSEO. */
 .deliverable-list li.active {
   border-color: rgba(59, 130, 246, 0.45);
   background: rgba(59, 130, 246, 0.08);
   box-shadow: 0 6px 14px rgba(59, 130, 246, 0.1);
+}
+
+.deliverable-list li.active::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 6px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
 }
 
 .deliverable-list .title {

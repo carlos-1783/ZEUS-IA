@@ -305,6 +305,7 @@ onMounted(async () => {
   max-width: 98%;
   width: calc(100% - 24px);
   margin: 0 auto 24px;
+  font-family: var(--zeus-font-sans, 'Inter', sans-serif);
 }
 
 .workspace-header {
@@ -317,12 +318,12 @@ onMounted(async () => {
 .workspace-header h3 {
   font-size: 28px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
 }
 
 .workspace-header .subtitle {
   font-size: 15px;
-  color: #475569;
+  color: var(--zeus-text-secondary, #475569);
   margin-top: 4px;
 }
 
@@ -335,22 +336,37 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  border-radius: 999px;
-  border: 1px solid rgba(14, 165, 233, 0.4);
-  background: rgba(14, 165, 233, 0.12);
+  border-radius: var(--zeus-radius-full, 999px);
+  border: 1px solid rgba(14, 165, 233, 0.35);
+  background: var(--zeus-surface, #fff);
   color: #0369a1;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 3px 8px rgba(14, 165, 233, 0.2);
+  transition: transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .refresh-btn:hover:not(:disabled) {
-  background: rgba(14, 165, 233, 0.18);
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.07), 0 6px 16px rgba(14, 165, 233, 0.28);
+  transform: translateY(-1px);
+}
+
+.refresh-btn:active:not(:disabled) {
+  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.08);
+  transform: translateY(0);
 }
 
 .refresh-btn:disabled {
   opacity: 0.6;
   cursor: wait;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .refresh-btn:hover:not(:disabled),
+  .refresh-btn:active:not(:disabled) {
+    transform: none;
+  }
 }
 
 .error-banner {
@@ -376,9 +392,9 @@ onMounted(async () => {
 }
 
 .deliverable-list {
-  background: #ffffff;
-  border-radius: 20px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: var(--zeus-surface, #ffffff);
+  border-radius: var(--zeus-radius-lg, 20px);
+  border: 1px solid var(--zeus-border, rgba(148, 163, 184, 0.25));
   padding: 28px;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
   display: flex;
@@ -391,7 +407,7 @@ onMounted(async () => {
 .deliverable-list h4 {
   font-size: 16px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
 }
 
 .deliverable-list ul {
@@ -404,12 +420,15 @@ onMounted(async () => {
 }
 
 .deliverable-list li {
+  position: relative;
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 14px;
-  padding: 14px 16px;
+  padding: 14px 16px 14px 20px;
   background: rgba(248, 250, 252, 0.9);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -421,16 +440,29 @@ onMounted(async () => {
   box-shadow: 0 6px 14px rgba(14, 165, 233, 0.18);
 }
 
+/* Indicador de "seleccionado" - acento gradiente puntual en franja lateral,
+   sin competir con el azul cielo de identidad de THALOS. */
+.deliverable-list li.active::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 6px;
+  width: 3px;
+  border-radius: var(--zeus-radius-full, 999px);
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
+}
+
 .deliverable-list .title {
   font-weight: 600;
-  color: #1e293b;
+  color: var(--zeus-text, #1e293b);
 }
 
 .deliverable-list .meta {
   display: flex;
   gap: 8px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--zeus-text-muted, #64748b);
 }
 
 .deliverable-list .tags {
@@ -462,11 +494,11 @@ onMounted(async () => {
 }
 
 .deliverable-details {
-  background: #ffffff;
-  border-radius: 24px;
-  border: 1px solid rgba(15, 23, 42, 0.05);
+  background: var(--zeus-surface, #ffffff);
+  border-radius: var(--zeus-radius-lg, 24px);
+  border: 1px solid var(--zeus-border, rgba(15, 23, 42, 0.05));
   padding: 32px;
-  box-shadow: 0 18px 35px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--zeus-shadow-md, 0 18px 35px rgba(15, 23, 42, 0.08));
   display: flex;
   flex-direction: column;
   gap: 28px;
@@ -485,14 +517,14 @@ onMounted(async () => {
 .details-header h4 {
   font-size: 22px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
 }
 
 .details-meta {
   display: inline-block;
   margin-top: 4px;
   font-size: 13px;
-  color: #64748b;
+  color: var(--zeus-text-muted, #64748b);
 }
 
 .details-summary {
@@ -536,7 +568,7 @@ onMounted(async () => {
 }
 
 .card {
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  border: 1px solid var(--zeus-border, rgba(148, 163, 184, 0.25));
   border-radius: 18px;
   padding: 22px;
   background: linear-gradient(180deg, #f8fafc 0%, #ffffff 55%);
@@ -553,7 +585,7 @@ onMounted(async () => {
 
 .card h5 {
   font-size: 18px;
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
   font-weight: 700;
 }
 
@@ -589,13 +621,13 @@ onMounted(async () => {
 
 .checks-table th,
 .checks-table td {
-  border: 1px solid rgba(148, 163, 184, 0.3);
+  border: 1px solid var(--zeus-border, rgba(148, 163, 184, 0.3));
   padding: 10px;
   text-align: left;
 }
 
 .checks-table th {
-  background: rgba(248, 250, 252, 0.9);
+  background: var(--zeus-bg-subtle, rgba(248, 250, 252, 0.9));
   font-weight: 600;
 }
 
@@ -640,13 +672,13 @@ onMounted(async () => {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
   font-size: 14px;
-  color: #475569;
+  color: var(--zeus-text-secondary, #475569);
 }
 
 .actions ul {
   margin: 0;
   padding-left: 18px;
-  color: #475569;
+  color: var(--zeus-text-secondary, #475569);
   font-size: 14px;
 }
 
@@ -660,18 +692,18 @@ onMounted(async () => {
 .backup-details {
   margin: 0;
   padding-left: 18px;
-  color: #475569;
+  color: var(--zeus-text-secondary, #475569);
   font-size: 14px;
   list-style: disc;
 }
 
 .empty-container {
-  background: rgba(248, 250, 252, 0.7);
-  border: 2px dashed rgba(148, 163, 184, 0.5);
-  border-radius: 20px;
+  background: var(--zeus-bg-subtle, rgba(248, 250, 252, 0.7));
+  border: 2px dashed var(--zeus-border-strong, rgba(148, 163, 184, 0.5));
+  border-radius: var(--zeus-radius-lg, 20px);
   padding: 60px 30px;
   text-align: center;
-  color: #475569;
+  color: var(--zeus-text-secondary, #475569);
 }
 
 .empty-state {
@@ -696,7 +728,7 @@ onMounted(async () => {
 
 .workspace-footer {
   font-size: 13px;
-  color: #64748b;
+  color: var(--zeus-text-muted, #64748b);
   text-align: center;
 }
 

@@ -159,7 +159,6 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 20px;
   padding: 32px 48px 64px;
-  background: radial-gradient(circle at top left, rgba(16, 185, 129, 0.1), transparent 55%);
   min-height: calc(100vh - 96px);
   max-width: 98%;
   width: calc(100% - 24px);

@@ -717,7 +717,8 @@ onUnmounted(() => {
 <style scoped>
 .control-horario-container {
   min-height: 100vh;
-  background: #f5f5f5;
+  background: var(--zeus-bg, #f5f5f5);
+  font-family: var(--zeus-font-sans, 'Inter', sans-serif);
   padding: 20px;
   position: relative;
 }
@@ -727,16 +728,31 @@ onUnmounted(() => {
   top: 20px;
   left: 20px;
   padding: 12px 20px;
-  background: #3b82f6;
-  color: white;
+  background: var(--zeus-accent, #3b82f6);
+  color: var(--zeus-text-on-accent, white);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--zeus-radius-sm, 8px);
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 8px;
   z-index: 100;
   font-weight: 600;
+  box-shadow: var(--zeus-shadow-btn, 0 2px 4px rgba(0, 0, 0, 0.15));
+  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.back-to-dashboard-btn:hover {
+  background: var(--zeus-accent-hover, #2563eb);
+  box-shadow: var(--zeus-shadow-btn-hover, 0 4px 10px rgba(0, 0, 0, 0.2));
+  transform: translateY(-1px);
+}
+
+.back-to-dashboard-btn:active {
+  box-shadow: var(--zeus-shadow-btn-active, 0 1px 1px rgba(0, 0, 0, 0.1));
+  transform: translateY(0);
 }
 
 .control-horario-header {
@@ -745,20 +761,21 @@ onUnmounted(() => {
   align-items: center;
   margin-bottom: 30px;
   padding: 20px;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  background: var(--zeus-surface, white);
+  border: 1px solid var(--zeus-border, transparent);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 2px 4px rgba(0,0,0,0.1));
 }
 
 .control-horario-title {
   margin: 0;
   font-size: 32px;
-  color: #1f2937;
+  color: var(--zeus-text, #1f2937);
 }
 
 .control-horario-subtitle {
   margin: 8px 0 0;
-  color: #6b7280;
+  color: var(--zeus-text-secondary, #6b7280);
 }
 
 .header-actions {
@@ -769,20 +786,33 @@ onUnmounted(() => {
 
 .header-btn {
   padding: 10px 20px;
-  background: #10b981;
-  color: white;
+  background: var(--zeus-success, #10b981);
+  color: var(--zeus-text-on-accent, white);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--zeus-radius-sm, 8px);
   cursor: pointer;
   font-weight: 600;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(16, 185, 129, 0.2);
+  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.header-btn:hover {
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(16, 185, 129, 0.28);
+  transform: translateY(-1px);
+}
+
+.header-btn:active {
+  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.08);
+  transform: translateY(0);
 }
 
 .business-profile-badge {
   padding: 10px 20px;
-  background: #f3f4f6;
-  border-radius: 8px;
+  background: var(--zeus-bg-subtle, #f3f4f6);
+  border-radius: var(--zeus-radius-sm, 8px);
   font-weight: 600;
-  color: #374151;
+  color: var(--zeus-text-secondary, #374151);
 }
 
 .control-horario-main-interface {
@@ -792,16 +822,17 @@ onUnmounted(() => {
 }
 
 .check-in-out-panel {
-  background: white;
+  background: var(--zeus-surface, white);
   padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border: 1px solid var(--zeus-border, transparent);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 2px 4px rgba(0,0,0,0.1));
   grid-column: 1 / -1;
 }
 
 .method-selector h3 {
   margin: 0 0 16px;
-  color: #1f2937;
+  color: var(--zeus-text, #1f2937);
 }
 
 .methods-grid {
@@ -812,26 +843,44 @@ onUnmounted(() => {
 }
 
 .method-btn {
+  position: relative;
   padding: 16px;
-  background: #f9fafb;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
+  background: var(--zeus-bg-flat, #f9fafb);
+  border: 2px solid var(--zeus-border, #e5e7eb);
+  border-radius: var(--zeus-radius-sm, 8px);
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  transition: all 0.2s;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .method-btn:hover:not(:disabled) {
-  border-color: #3b82f6;
-  background: #eff6ff;
+  border-color: var(--zeus-accent, #3b82f6);
+  background: var(--zeus-accent-soft, #eff6ff);
 }
 
+/* Selector de metodo de fichaje: unico punto de acento gradiente de la
+   pantalla, marcando el metodo actualmente elegido (equivalente a una
+   pestana/filtro activo). Patron copiado de AfroditaWorkspace
+   domain-tabs button.active::after (barra fina en gradiente). */
 .method-btn.active {
-  border-color: #3b82f6;
-  background: #dbeafe;
+  border-color: var(--zeus-accent, #3b82f6);
+  background: var(--zeus-accent-soft, #dbeafe);
+}
+
+.method-btn.active::after {
+  content: '';
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 6px;
+  height: 3px;
+  border-radius: var(--zeus-radius-full, 999px);
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 10px rgba(139, 92, 246, 0.35));
 }
 
 .method-btn:disabled {
@@ -851,7 +900,7 @@ onUnmounted(() => {
 
 .employee-selector label {
   font-weight: 600;
-  color: #374151;
+  color: var(--zeus-text-secondary, #374151);
   margin-bottom: 8px;
   display: block;
 }
@@ -859,9 +908,18 @@ onUnmounted(() => {
 .employee-select {
   width: 100%;
   padding: 12px;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
+  border: 2px solid var(--zeus-border, #e5e7eb);
+  border-radius: var(--zeus-radius-sm, 8px);
   font-size: 16px;
+  font-family: var(--zeus-font-sans, 'Inter', sans-serif);
+  color: var(--zeus-text, #0f172a);
+  background: var(--zeus-surface, #fff);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .method-btn {
+    transition-duration: 1ms;
+  }
 }
 
 .check-buttons {
@@ -881,47 +939,58 @@ onUnmounted(() => {
 .btn-break-end {
   padding: 16px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--zeus-radius-sm, 8px);
   font-size: 18px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  color: var(--zeus-text-on-accent, white);
+  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn-check-in {
-  background: #10b981;
-  color: white;
+  background: var(--zeus-success, #10b981);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(16, 185, 129, 0.2);
 }
 
 .btn-check-in:hover:not(:disabled) {
   background: #059669;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(16, 185, 129, 0.28);
+  transform: translateY(-1px);
 }
 
 .btn-check-out {
-  background: #ef4444;
-  color: white;
+  background: var(--zeus-danger, #ef4444);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(239, 68, 68, 0.2);
 }
 
 .btn-check-out:hover:not(:disabled) {
   background: #dc2626;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(239, 68, 68, 0.28);
+  transform: translateY(-1px);
 }
 
 .btn-break-start {
-  background: #f59e0b;
-  color: white;
+  background: var(--zeus-warning, #f59e0b);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(245, 158, 11, 0.2);
 }
 
 .btn-break-start:hover:not(:disabled) {
   background: #d97706;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(245, 158, 11, 0.28);
+  transform: translateY(-1px);
 }
 
 .btn-break-end {
-  background: #6366f1;
-  color: white;
+  background: var(--zeus-accent-2, #6366f1);
+  box-shadow: var(--zeus-shadow-btn, 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(79, 70, 229, 0.2));
 }
 
 .btn-break-end:hover:not(:disabled) {
-  background: #4f46e5;
+  background: var(--zeus-accent, #4f46e5);
+  box-shadow: var(--zeus-shadow-btn-hover, 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(79, 70, 229, 0.28));
+  transform: translateY(-1px);
 }
 
 .btn-check-in:disabled,
@@ -932,19 +1001,29 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .btn-check-in:hover:not(:disabled),
+  .btn-check-out:hover:not(:disabled),
+  .btn-break-start:hover:not(:disabled),
+  .btn-break-end:hover:not(:disabled) {
+    transform: none;
+  }
+}
+
 .alerts-panel,
 .tpv-hint-panel {
   grid-column: 1 / -1;
-  background: white;
+  background: var(--zeus-surface, white);
   padding: 20px 24px;
-  border-radius: 12px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--zeus-border, transparent);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 2px 4px rgba(0, 0, 0, 0.08));
 }
 
 .alerts-panel h3,
 .tpv-hint-panel h3 {
   margin: 0 0 12px;
-  color: #1f2937;
+  color: var(--zeus-text, #1f2937);
 }
 
 .alerts-list {
@@ -955,53 +1034,54 @@ onUnmounted(() => {
 
 .alerts-list li {
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--zeus-radius-sm, 8px);
   margin-bottom: 8px;
   font-size: 14px;
-  color: #374151;
+  color: var(--zeus-text-secondary, #374151);
 }
 
 .alerts-list li.sev-critical {
-  background: #fef2f2;
-  border-left: 4px solid #dc2626;
+  background: var(--zeus-danger-soft, #fef2f2);
+  border-left: 4px solid var(--zeus-danger, #dc2626);
 }
 
 .alerts-list li.sev-warning {
-  background: #fffbeb;
-  border-left: 4px solid #f59e0b;
+  background: var(--zeus-warning-soft, #fffbeb);
+  border-left: 4px solid var(--zeus-warning, #f59e0b);
 }
 
 .alerts-list li.sev-info {
-  background: #eff6ff;
-  border-left: 4px solid #3b82f6;
+  background: var(--zeus-info-soft, #eff6ff);
+  border-left: 4px solid var(--zeus-info, #3b82f6);
 }
 
 .alert-kind {
   display: inline-block;
   font-size: 11px;
   text-transform: uppercase;
-  color: #6b7280;
+  color: var(--zeus-text-muted, #6b7280);
   margin-right: 8px;
 }
 
 .tpv-hint-text {
   margin: 0;
-  color: #4b5563;
+  color: var(--zeus-text-secondary, #4b5563);
   font-size: 15px;
 }
 
 .status-panel,
 .history-panel {
-  background: white;
+  background: var(--zeus-surface, white);
   padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border: 1px solid var(--zeus-border, transparent);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 2px 4px rgba(0,0,0,0.1));
 }
 
 .status-panel h3,
 .history-panel h3 {
   margin: 0 0 16px;
-  color: #1f2937;
+  color: var(--zeus-text, #1f2937);
 }
 
 .employees-status-list {
@@ -1015,37 +1095,38 @@ onUnmounted(() => {
   align-items: center;
   gap: 16px;
   padding: 16px;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
-  transition: all 0.2s;
+  border: 2px solid var(--zeus-border, #e5e7eb);
+  border-radius: var(--zeus-radius-sm, 8px);
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .employee-status-card.status-inside {
-  border-color: #10b981;
-  background: #f0fdf4;
+  border-color: var(--zeus-success, #10b981);
+  background: var(--zeus-success-soft, #f0fdf4);
 }
 
 .employee-status-card.status-outside {
-  border-color: #e5e7eb;
+  border-color: var(--zeus-border, #e5e7eb);
 }
 
 .employee-status-card.status-break {
-  border-color: #f59e0b;
-  background: #fffbeb;
+  border-color: var(--zeus-warning, #f59e0b);
+  background: var(--zeus-warning-soft, #fffbeb);
 }
 
 .today-hours {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--zeus-text-secondary, #6b7280);
 }
 
 .employee-avatar {
   width: 48px;
   height: 48px;
-  border-radius: 50%;
-  background: #3b82f6;
-  color: white;
+  border-radius: var(--zeus-radius-full, 50%);
+  background: var(--zeus-accent, #3b82f6);
+  color: var(--zeus-text-on-accent, white);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1058,40 +1139,40 @@ onUnmounted(() => {
 
 .employee-info h4 {
   margin: 0;
-  color: #1f2937;
+  color: var(--zeus-text, #1f2937);
 }
 
 .employee-id {
   margin: 4px 0 0;
-  color: #6b7280;
+  color: var(--zeus-text-secondary, #6b7280);
   font-size: 14px;
 }
 
 .status-badge {
   padding: 6px 12px;
-  border-radius: 20px;
+  border-radius: var(--zeus-radius-full, 20px);
   font-size: 14px;
   font-weight: 600;
 }
 
 .status-badge.inside {
-  background: #d1fae5;
+  background: var(--zeus-success-soft, #d1fae5);
   color: #065f46;
 }
 
 .status-badge.outside {
-  background: #fee2e2;
+  background: var(--zeus-danger-soft, #fee2e2);
   color: #991b1b;
 }
 
 .status-badge.break {
-  background: #fef3c7;
+  background: var(--zeus-warning-soft, #fef3c7);
   color: #92400e;
 }
 
 .check-in-time {
   margin: 4px 0 0;
-  color: #6b7280;
+  color: var(--zeus-text-secondary, #6b7280);
   font-size: 12px;
 }
 
@@ -1108,8 +1189,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 12px;
   padding: 12px;
-  background: #f9fafb;
-  border-radius: 8px;
+  background: var(--zeus-bg-flat, #f9fafb);
+  border-radius: var(--zeus-radius-sm, 8px);
 }
 
 .history-icon {
@@ -1123,13 +1204,13 @@ onUnmounted(() => {
 .history-employee {
   margin: 0;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--zeus-text, #1f2937);
 }
 
 .history-type,
 .history-time {
   margin: 4px 0 0;
-  color: #6b7280;
+  color: var(--zeus-text-secondary, #6b7280);
   font-size: 14px;
 }
 
@@ -1142,15 +1223,16 @@ onUnmounted(() => {
 
 .cost-engine-panel {
   grid-column: 1 / -1;
-  background: white;
+  background: var(--zeus-surface, white);
   padding: 20px 24px;
-  border-radius: 12px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border: 1px solid var(--zeus-border, transparent);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 2px 4px rgba(0,0,0,0.1));
 }
 
 .cost-engine-panel h3 {
   margin: 0 0 16px;
-  color: #1f2937;
+  color: var(--zeus-text, #1f2937);
 }
 
 .cost-metrics-inline {
@@ -1166,21 +1248,22 @@ onUnmounted(() => {
 
 .active-sessions-list li {
   padding: 8px 0;
-  border-top: 1px solid #e5e7eb;
-  color: #374151;
+  border-top: 1px solid var(--zeus-border, #e5e7eb);
+  color: var(--zeus-text-secondary, #374151);
 }
 
 .no-active-sessions {
   margin: 0;
-  color: #6b7280;
+  color: var(--zeus-text-secondary, #6b7280);
   font-size: 14px;
 }
 
 .metric-card {
-  background: white;
+  background: var(--zeus-surface, white);
   padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border: 1px solid var(--zeus-border, transparent);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 2px 4px rgba(0,0,0,0.1));
   display: flex;
   align-items: center;
   gap: 16px;
@@ -1193,7 +1276,7 @@ onUnmounted(() => {
 .metric-value {
   font-size: 32px;
   font-weight: 700;
-  color: #3b82f6;
+  color: var(--zeus-accent, #3b82f6);
   margin: 8px 0 0;
 }
 
@@ -1206,11 +1289,17 @@ onUnmounted(() => {
 .spinner {
   width: 48px;
   height: 48px;
-  border: 4px solid #e5e7eb;
-  border-top-color: #3b82f6;
+  border: 4px solid var(--zeus-border, #e5e7eb);
+  border-top-color: var(--zeus-accent, #3b82f6);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 1.5s;
+  }
 }
 
 @keyframes spin {
@@ -1235,16 +1324,17 @@ onUnmounted(() => {
 }
 
 .jornada-employee-panel {
-  background: #fff;
-  border-radius: 12px;
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, transparent);
+  border-radius: var(--zeus-radius, 12px);
   padding: 16px 20px;
   margin-bottom: 16px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--zeus-shadow, 0 2px 4px rgba(0, 0, 0, 0.08));
 }
 
 .jornada-intro {
   margin: 0 0 12px;
-  color: #475569;
+  color: var(--zeus-text-secondary, #475569);
   font-size: 0.95rem;
 }
 
@@ -1256,32 +1346,41 @@ onUnmounted(() => {
   margin-bottom: 12px;
 }
 
+/* Estado "en turno" del propio empleado: usa el color semantico de
+   estado (verde = presente), coherente con el resto de indicadores de
+   presencia de la pantalla (status-badge.inside, employee-status-card). */
 .jornada-status.active .jornada-dot {
-  background: #10b981;
+  background: var(--zeus-success, #10b981);
+  box-shadow: 0 0 0 3px var(--zeus-success-soft, #e9faf3);
 }
 
 .jornada-dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #94a3b8;
+  background: var(--zeus-text-muted, #94a3b8);
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .jornada-time {
   font-size: 0.9rem;
-  color: #64748b;
+  color: var(--zeus-text-secondary, #64748b);
 }
 
 .btn-close-shift {
   padding: 10px 18px;
-  border-radius: 8px;
-  border: 1px solid #cbd5e1;
-  background: #f8fafc;
+  border-radius: var(--zeus-radius-sm, 8px);
+  border: 1px solid var(--zeus-border-strong, #cbd5e1);
+  background: var(--zeus-bg-flat, #f8fafc);
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   font-weight: 600;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn-close-shift:hover {
-  background: #e2e8f0;
+  background: var(--zeus-border, #e2e8f0);
+  box-shadow: var(--zeus-shadow-btn-ghost-hover, 0 3px 8px rgba(15, 23, 42, 0.08));
 }
 </style>

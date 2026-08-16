@@ -832,26 +832,21 @@ onMounted(bootstrapPage)
   color: var(--zeus-text-muted, #64748b);
   font-size: 14px;
 }
+/* Secundario: "Nuevo cliente", el toggle de "nuevo caso" y "Registrar
+   cobro" pueden coexistir en la misma vista — ninguno es EL unico boton
+   primario, asi que ninguno lleva el acento gradiente. */
 .btn-primary {
-  border: none;
-  background: var(--zeus-accent, #1d4ed8);
-  color: var(--zeus-text-on-accent, #fff);
+  border: 1px solid #D1D5DB;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
   border-radius: 6px;
   padding: 8px 12px;
   cursor: pointer;
-  box-shadow: var(--zeus-shadow-btn, 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(29, 78, 216, 0.2));
-  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  box-shadow: none;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 .btn-primary:hover:not(:disabled) {
-  background: var(--zeus-accent-hover, #1e40af);
-  box-shadow: var(--zeus-shadow-btn-hover, 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(29, 78, 216, 0.28));
-  transform: translateY(-1px);
-}
-.btn-primary:active:not(:disabled) {
-  box-shadow: var(--zeus-shadow-btn-active, 0 1px 1px rgba(15, 23, 42, 0.08));
-  transform: translateY(0);
+  border-color: #9aa2af;
 }
 .btn-primary:disabled {
   opacity: 0.6;

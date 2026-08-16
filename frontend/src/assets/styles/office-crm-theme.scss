@@ -3,13 +3,28 @@
  */
 
 .office-crm {
+  position: relative;
   min-height: 100%;
   padding: 1.5rem 1.25rem 2.5rem;
   max-width: 1200px;
   margin: 0 auto;
-  background: var(--zeus-bg, linear-gradient(135deg, #e8eef5 0%, #f8fafc 100%));
+  background-image: var(--zeus-bg);
   color: var(--zeus-text, #0f172a);
   font-family: var(--zeus-font-sans, 'Inter', system-ui, sans-serif);
+}
+
+.office-crm::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+.office-crm > * {
+  position: relative;
 }
 
 .office-crm .crm-header {
@@ -126,22 +141,13 @@
    activa en el dock. Borde/fondo en indigo solido + una fina franja inferior
    con el degradado de acento (teal/morado/rosa/naranja) como detalle puntual,
    igual que en el resto del sistema (nunca como fondo general). */
+/* Solo negrita para la pestana activa — el acento gradiente queda
+   reservado para el unico boton primario real de la vista. */
 .office-crm .dock-tab--active {
   position: relative;
-  border-color: var(--zeus-accent, #2563eb);
-  background: var(--zeus-accent-soft, #eff6ff);
-  box-shadow: 0 0 0 1px var(--zeus-accent, rgba(37, 99, 235, 0.25));
-}
-
-.office-crm .dock-tab--active::after {
-  content: '';
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: -1px;
-  height: 2px;
-  border-radius: var(--zeus-radius-full, 999px);
-  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
+  border-color: #9aa2af;
+  background: #ffffff;
+  font-weight: 700;
 }
 
 .office-crm .dock-tab--minimized {
@@ -222,20 +228,14 @@
 }
 
 .office-crm .btn-primary {
-  background: var(--zeus-accent, #4f46e5);
-  color: var(--zeus-text-on-accent, #fff);
-  box-shadow: var(--zeus-shadow-btn, 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(79, 70, 229, 0.2));
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  border: 1px solid #D1D5DB;
+  box-shadow: none;
 }
 
 .office-crm .btn-primary:hover:not(:disabled) {
-  background: var(--zeus-accent-hover, #4338ca);
-  box-shadow: var(--zeus-shadow-btn-hover, 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(79, 70, 229, 0.28));
-  transform: translateY(-1px);
-}
-
-.office-crm .btn-primary:active:not(:disabled) {
-  box-shadow: var(--zeus-shadow-btn-active, 0 1px 1px rgba(15, 23, 42, 0.08));
-  transform: translateY(0);
+  border-color: #9aa2af;
 }
 
 .office-crm .btn-primary:disabled {
@@ -244,14 +244,13 @@
 }
 
 .office-crm .btn-secondary {
-  background: var(--zeus-bg-subtle, #f1f5f9);
-  color: var(--zeus-text-secondary, #334155);
-  border: 1px solid var(--zeus-border, rgba(15, 23, 42, 0.12));
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  border: 1px solid #D1D5DB;
 }
 
 .office-crm .btn-secondary:hover {
-  background: var(--zeus-bg-flat, #e2e8f0);
-  transform: translateY(-1px);
+  border-color: #9aa2af;
 }
 
 .office-crm .btn-secondary:active {

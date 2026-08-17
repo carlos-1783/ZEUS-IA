@@ -5,7 +5,11 @@ from sqlalchemy import func, or_, and_
 from datetime import date, datetime
 
 from app.db.session import get_db
-from app.models.erp import Invoice, InvoiceItem, Payment, Product, InventoryMovement, InventoryMovementType
+from app.models.erp import (
+    Invoice, InvoiceItem, Payment, Product, InventoryMovement, InventoryMovementType,
+    InvoiceType as ModelInvoiceType, InvoiceStatus as ModelInvoiceStatus,
+    PaymentMethod as ModelPaymentMethod, PaymentStatus as ModelPaymentStatus,
+)
 from app.schemas.erp import (
     InvoiceCreate, InvoiceUpdate, InvoiceInDB, InvoiceResponse, InvoiceListResponse,
     InvoiceItemCreate, InvoiceItemInDB,
@@ -195,13 +199,23 @@ def create_invoice(
     
     # Create invoice
     invoice_data = invoice_in.dict(exclude={"items"}, exclude_unset=True)
+    # Mismo bug de serializacion de Enum que en create_product (ver
+    # app/api/v1/endpoints/products.py): app.schemas.erp.InvoiceType/
+    # InvoiceStatus son Enum(str, Enum) cuyo .dict() emite el .value en
+    # minuscula ("invoice"/"draft"), pero la columna Column(Enum(...)) del
+    # modelo ERP espera el NOMBRE en mayuscula ("INVOICE"/"DRAFT"). Se
+    # convierte explicitamente aqui, usando siempre el valor real del
+    # atributo (no el resultado de .dict(), que puede faltar si el campo
+    # no fue enviado explicitamente por el cliente y exclude_unset lo omitio).
+    invoice_data["invoice_type"] = ModelInvoiceType[invoice_in.invoice_type.name]
+    invoice_data["status"] = ModelInvoiceStatus[invoice_in.status.name]
     invoice = Invoice(
         **invoice_data,
         invoice_number=invoice_number,
         company_id=company_id,
         created_by=current_user.id
     )
-    
+
     db.add(invoice)
     db.flush()  # Get the invoice ID for items
     
@@ -249,10 +263,20 @@ def create_invoice(
         total=float(totals["total"]),
         status_value=str(invoice.status.value if hasattr(invoice.status, "value") else invoice.status),
     )
-    
+
+    # Verificamos que la fila resultante es legible ANTES de confirmar la
+    # transaccion (mismo motivo que en create_product): si algo en el
+    # insert fuese invalido, hacemos rollback en vez de dejar una factura
+    # corrupta persistida mientras el cliente recibe un 500.
+    try:
+        db.flush()
+        db.refresh(invoice)
+    except Exception:
+        db.rollback()
+        raise
     db.commit()
     db.refresh(invoice)
-    
+
     return {"success": True, "data": invoice}
 
 @router.get("/{invoice_id}", response_model=InvoiceResponse)
@@ -319,33 +343,55 @@ def create_payment(
     validate_payment_logical(
         invoice_id=invoice_id,
         amount=float(payment_in.amount),
-        method=str(payment_in.method.value if hasattr(payment_in.method, "value") else payment_in.method),
+        # BUG PREEXISTENTE (no relacionado con el Enum, hallazgo de esta
+        # auditoria): el schema PaymentBase declara el campo como
+        # `payment_method`, no `method` -- `payment_in.method` no existe y
+        # esto hacia que create_payment lanzara AttributeError en el 100%
+        # de las llamadas, antes de llegar siquiera a construir el Payment.
+        # Se corrige aqui porque bloqueaba por completo la verificacion en
+        # vivo del bug de Enum pedido para este endpoint.
+        method=str(payment_in.payment_method.value if hasattr(payment_in.payment_method, "value") else payment_in.payment_method),
         payment_date=payment_in.payment_date or datetime.utcnow().date(),
     )
-    
+
     # Create payment
+    payment_data = payment_in.dict()
+    # Mismo bug de serializacion de Enum que en create_product/create_invoice:
+    # PaymentMethod/PaymentStatus del schema emiten su .value en minuscula,
+    # pero la columna del modelo espera el NOMBRE en mayuscula.
+    payment_data["payment_method"] = ModelPaymentMethod[payment_in.payment_method.name]
+    payment_data["status"] = ModelPaymentStatus[payment_in.status.name]
     payment = Payment(
-        **payment_in.dict(),
+        **payment_data,
         invoice_id=invoice_id,
         created_by=current_user.id
     )
-    
+
     db.add(payment)
     db.flush()
 
     # Update invoice status based on payment (payment now visible in totals)
     totals = calculate_invoice_totals(invoice, db)
-    
-    if payment.status == PaymentStatus.COMPLETED:
+
+    # `payment.status` es ahora el Enum del MODELO (ver conversion arriba),
+    # no el de schemas.erp -- se compara contra ModelPaymentStatus para que
+    # esta comprobacion siga funcionando tras el fix del bug de Enum.
+    if payment.status == ModelPaymentStatus.COMPLETED:
         if totals["amount_due"] <= 0:
             invoice.status = InvoiceStatus.PAID
         elif totals["amount_paid"] > 0:
             invoice.status = InvoiceStatus.PARTIALLY_PAID
-    
+
     # Update invoice amounts
     for key, value in totals.items():
         setattr(invoice, key, value)
-    
+
+    try:
+        db.flush()
+        db.refresh(payment)
+    except Exception:
+        db.rollback()
+        raise
     db.commit()
     db.refresh(payment)
     try:

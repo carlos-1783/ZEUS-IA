@@ -4,7 +4,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_
 
 from app.db.session import get_db
-from app.models.erp import Product, ProductVariant, InventoryMovement, InventoryMovementType
+from app.models.erp import (
+    Product, ProductVariant, InventoryMovement, InventoryMovementType,
+    ProductCategory as ModelProductCategory, ProductStatus as ModelProductStatus,
+)
 from app.schemas.erp import (
     ProductCreate, ProductUpdate, ProductInDB, ProductResponse, ProductListResponse,
     ProductVariantCreate, ProductVariantUpdate, ProductVariantInDB,
@@ -191,13 +194,25 @@ def create_product(
 
     # Create product
     product_data = product_in.dict(exclude={"variants"})
+    # app.schemas.erp.ProductCategory/ProductStatus son Enum(str, Enum) cuyo
+    # .dict() emite el .value en minuscula (p.ej. "goods"), pero la columna
+    # Column(Enum(...)) del modelo ERP (app/models/erp.py) es un Enum de
+    # Python distinto (incompatible con str) que SQLAlchemy valida/lee por
+    # NOMBRE en mayuscula ("GOODS"). Sin esta conversion, el INSERT escribia
+    # "goods" sin validar (SQLAlchemy no valida bind de strings sueltos por
+    # defecto) y CUALQUIER SELECT posterior de esa fila (incluido el
+    # refresh() de abajo, o un GET /products/ que la liste) reventaba con
+    # LookupError. Los nombres de los miembros coinciden 1:1 entre ambos
+    # Enums, así que el mapeo por nombre es seguro. Ver auditoria Ciclo 2.
+    product_data["category"] = ModelProductCategory[product_in.category.name]
+    product_data["status"] = ModelProductStatus[product_in.status.name]
     product = Product(
         **product_data,
         company_id=company_id,
         created_by=current_user.id,
     )
     db.add(product)
-    
+
     # Add variants if provided
     if product_in.variants:
         for variant_data in product_in.variants:
@@ -206,10 +221,22 @@ def create_product(
                 **variant_data.dict()
             )
             db.add(variant)
-    
+
+    # Verificamos que la fila resultante es legible ANTES de confirmar la
+    # transaccion: si el insert fuese invalido por cualquier motivo, hacemos
+    # rollback en vez de dejar una fila corrupta persistida en BD mientras
+    # el cliente recibe un 500 (bug detectado en auditoria Ciclo 2: antes,
+    # el commit() ocurria antes del refresh(), por lo que un fallo en la
+    # lectura posterior dejaba la fila corrupta ya guardada).
+    try:
+        db.flush()
+        db.refresh(product)
+    except Exception:
+        db.rollback()
+        raise
     db.commit()
     db.refresh(product)
-    
+
     return {"success": True, "data": product}
 
 @router.get("/movements", response_model=List[InventoryMovementInDB])
@@ -421,19 +448,31 @@ def create_inventory_movement(
     
     # Create inventory movement
     movement_data = movement_in.dict()
+    # Mismo bug de serializacion de Enum que en create_product (ver
+    # comentario ahi): app.schemas.erp.InventoryMovementType.dict() emite el
+    # .value en minuscula, pero la columna del modelo espera el NOMBRE en
+    # mayuscula. `InventoryMovementType` aqui es la clase del MODELO
+    # (importada arriba de app.models.erp).
+    movement_data["movement_type"] = InventoryMovementType[movement_in.movement_type.name]
     movement_data["created_by"] = current_user.id
     movement = InventoryMovement(**movement_data)
-    
+
     # Update stock levels
     if variant:
         variant.quantity_on_hand += movement.quantity
     else:
         product.quantity_on_hand += movement.quantity
-    
+
     db.add(movement)
+    try:
+        db.flush()
+        db.refresh(movement)
+    except Exception:
+        db.rollback()
+        raise
     db.commit()
     db.refresh(movement)
-    
+
     return movement
 
 @router.get("/{product_id}/inventory/movements", response_model=List[InventoryMovementInDB])

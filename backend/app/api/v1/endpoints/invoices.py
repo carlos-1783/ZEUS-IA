@@ -2,7 +2,7 @@ from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Path, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from app.db.session import get_db
 from app.models.erp import (
@@ -209,6 +209,24 @@ def create_invoice(
     # no fue enviado explicitamente por el cliente y exclude_unset lo omitio).
     invoice_data["invoice_type"] = ModelInvoiceType[invoice_in.invoice_type.name]
     invoice_data["status"] = ModelInvoiceStatus[invoice_in.status.name]
+    # Invoice.issue_date/due_date son columnas DateTime (Column(DateTime)),
+    # pero el schema las expone como `date` (medianoche exacta, sin hora).
+    # Si no se normalizan aqui, dos vias distintas pueden colar una hora
+    # "sucia" en la columna: (a) si el cliente no envia issue_date,
+    # exclude_unset lo omite de invoice_data y entra en juego el default
+    # del MODELO (datetime.utcnow(), que SI lleva hora); (b) si el cliente
+    # envia due_date, Pydantic ya lo valida como `date`, pero conviene
+    # forzar el mismo tipo exacto que espera la columna en vez de confiar
+    # en la coercion implicita de SQLAlchemy/SQLite. En ambos casos, la
+    # fila queda persistida con hora antes de que FastAPI intente
+    # serializar la respuesta con InvoiceInDB.issue_date: date -- y esa
+    # ResponseValidationError ocurre DESPUES del commit, fuera del alcance
+    # del try/except+rollback de abajo (que solo protege el flush/refresh
+    # previo al commit). Por eso se corrige en el origen, no "atajando" el
+    # fallo de serializacion despues del hecho.
+    invoice_data["issue_date"] = datetime.combine(invoice_in.issue_date, time.min)
+    if invoice_in.due_date is not None:
+        invoice_data["due_date"] = datetime.combine(invoice_in.due_date, time.min)
     invoice = Invoice(
         **invoice_data,
         invoice_number=invoice_number,

@@ -247,15 +247,17 @@ def collect_metrics_snapshot(db: Session, user: User) -> Dict[str, Any]:
     if not any_ads:
         return {"enabled": False, "reason": "Sin plataformas de ads conectadas"}
 
-    # Placeholder estructurado — listo para APIs reales Meta/Google
+    # No existe integración real con las Insights API de Meta/Google Ads (no hay
+    # cliente configurado que consulte métricas reales de gasto/leads/engagement).
+    # Devolver enabled=True con métricas en cero sería un falso-éxito: el
+    # frontend las pintaría como si fueran datos reales recogidos. Se declara
+    # honestamente que la recolección automática aún no está implementada.
     return {
-        "enabled": True,
+        "enabled": False,
+        "reason": (
+            "Recolección automática de métricas no implementada — falta "
+            "integración real con Meta Ads / Google Ads Insights API"
+        ),
         "period": "last_30_days",
-        "metrics": {
-            "ad_spend": 0.0,
-            "leads_generated": 0,
-            "cost_per_lead": 0.0,
-            "engagement": 0.0,
-        },
         "source": "marketing_integrations_v1",
     }

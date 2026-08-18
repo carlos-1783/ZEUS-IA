@@ -280,17 +280,19 @@ const processPayment = async () => {
 
   try {
     // 1. Crear Payment Intent en el backend
-    const response = await fetch(`${API_URL}/integrations/stripe/payment-intent`, {
+    // Endpoint público (sin Authorization -- este visitante todavía no
+    // tiene cuenta). El importe NO se manda desde aquí: el backend lo
+    // calcula a partir de `plan` para que no se pueda manipular.
+    const response = await fetch(`${API_URL}/integrations/stripe/checkout/payment-intent`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        amount: totalToday.value,
+        plan: selectedPlan,
         customer_email: customerData.value.email,
         description: `${planDetails.value.name} - Setup + Primera mensualidad`,
         metadata: {
-          plan: selectedPlan,
           company_name: customerData.value.companyName,
           full_name: customerData.value.fullName,
           sector: customerData.value.sector,

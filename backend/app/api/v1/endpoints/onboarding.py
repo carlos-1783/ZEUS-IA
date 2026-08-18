@@ -115,10 +115,21 @@ def get_db():
         db.close()
 
 
-def _verify_stripe_payment_intent(payment_intent_id: str):
+def _verify_stripe_payment_intent(payment_intent_id: str, plan: str):
     """
     Verifica CONTRA LA API REAL DE STRIPE que el payment_intent_id recibido
-    corresponde a un pago real y completado (status == 'succeeded').
+    corresponde a un pago real y completado (status == 'succeeded'), Y que
+    el importe realmente cobrado corresponde al `plan` que se está
+    declarando en esta llamada.
+
+    Sin esta segunda comprobación, un PaymentIntent público (creado sin
+    sesión, ver /integrations/stripe/checkout/payment-intent) para el plan
+    más barato podría reutilizarse aquí declarando un plan más caro -- el
+    pago se verificaría como "succeeded" igualmente, pero por un importe
+    que no corresponde al plan activado. Comparamos contra la misma
+    PRICING_PLANS que ya usa validate_plan_vs_employees, así que ambos
+    puntos de entrada (creación del PaymentIntent y creación de la cuenta)
+    comparten una única fuente de verdad de precios.
 
     No hay ningún bypass de entorno de desarrollo: si STRIPE_API_KEY no está
     configurado (ninguna clave, ni sk_test_ ni sk_live_), no existe forma
@@ -130,8 +141,9 @@ def _verify_stripe_payment_intent(payment_intent_id: str):
     (Stripe test mode) y genera un PaymentIntent real vía
     stripe_service.create_payment_intent / /integrations/stripe/payment-intent.
 
-    Lanza HTTPException si el pago no se puede verificar o no está
-    completado. La cuenta NO debe crearse si esta función lanza.
+    Lanza HTTPException si el pago no se puede verificar, no está
+    completado, o no corresponde en importe al plan declarado. La cuenta
+    NO debe crearse si esta función lanza.
     """
     from services.stripe_service import stripe_service
 
@@ -183,9 +195,38 @@ def _verify_stripe_payment_intent(payment_intent_id: str):
             ),
         )
 
+    # El pago está completado -- ahora verificar que el importe realmente
+    # cobrado corresponde al plan que se está declarando en esta llamada.
+    # `plan` ya fue validado como existente en PRICING_PLANS por el
+    # llamante (validate_plan_vs_employees se ejecuta antes de llegar
+    # aquí), así que el lookup es seguro.
+    plan_config = PRICING_PLANS[plan]
+    expected_amount_cents = round(
+        (plan_config["setup_price"] + plan_config["monthly_price"]) * 100
+    )
+    paid_amount_cents = getattr(payment_intent, "amount", None)
+
+    if paid_amount_cents != expected_amount_cents:
+        logger.warning(
+            "Onboarding: intento de crear cuenta con plan distinto al pagado. "
+            "payment_intent_id=%s plan_declarado=%s importe_esperado_centimos=%s "
+            "importe_pagado_centimos=%s",
+            payment_intent_id, plan, expected_amount_cents, paid_amount_cents,
+        )
+        raise HTTPException(
+            status_code=402,
+            detail=(
+                f"El pago verificado ({(paid_amount_cents or 0) / 100:.2f}€) no "
+                f"corresponde al importe del plan '{plan}' "
+                f"({expected_amount_cents / 100:.2f}€). No se puede crear la "
+                "cuenta con un plan distinto al que se pagó."
+            ),
+        )
+
     logger.info(
-        "Onboarding: pago verificado con Stripe. payment_intent_id=%s amount=%s currency=%s",
-        payment_intent_id, payment_intent.amount, payment_intent.currency,
+        "Onboarding: pago verificado con Stripe. payment_intent_id=%s amount=%s "
+        "currency=%s plan=%s",
+        payment_intent_id, payment_intent.amount, payment_intent.currency, plan,
     )
     return payment_intent
 
@@ -236,7 +277,9 @@ async def create_account_after_payment(
                     "sin verificar un pago real completado."
                 ),
             )
-        verified_payment_intent = _verify_stripe_payment_intent(request.payment_intent_id)
+        verified_payment_intent = _verify_stripe_payment_intent(
+            request.payment_intent_id, request.plan
+        )
 
         # 3. Verificar que el email no exista
         existing_user = db.query(User).filter(User.email == request.email).first()

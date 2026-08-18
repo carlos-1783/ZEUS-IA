@@ -14,6 +14,7 @@ router = APIRouter()
 @router.get("/dashboard")
 async def get_dashboard_metrics(
     days: int = Query(30, ge=1, le=365),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
@@ -22,43 +23,50 @@ async def get_dashboard_metrics(
     """
     try:
         from app.models.agent_activity import AgentActivity
-        
+
         # Calcular rango de fechas
         end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=days)
-        
-        # Consultar actividades
-        activities = db.query(AgentActivity).filter(
+
+        # Consultar actividades (aislamiento multi-tenant: solo el usuario autenticado,
+        # salvo superusuario, igual que /performance y /summary en este mismo archivo)
+        activities_query = db.query(AgentActivity).filter(
             AgentActivity.created_at >= start_date,
             AgentActivity.created_at <= end_date
-        ).all()
-        
+        )
+        if not getattr(current_user, "is_superuser", False):
+            activities_query = activities_query.filter(AgentActivity.user_email == current_user.email)
+        activities = activities_query.all()
+
         # Calcular métricas
         total_interactions = len(activities)
         completed = len([a for a in activities if a.status == 'completed'])
         failed = len([a for a in activities if a.status == 'failed'])
-        
+
         success_rate = (completed / total_interactions * 100) if total_interactions > 0 else 0
-        
+
         # Calcular tiempo promedio de respuesta
         response_times = []
         for activity in activities:
             if activity.completed_at and activity.created_at:
                 delta = (activity.completed_at - activity.created_at).total_seconds()
                 response_times.append(delta)
-        
+
         avg_response = sum(response_times) / len(response_times) if response_times else 0
-        
+
         # Calcular ahorro de costos (estimado)
         # Cada interacción exitosa ahorra ~€50 en trabajo manual
         cost_savings = completed * 50
-        
+
         # Calcular tendencias (comparar con período anterior)
         prev_start = start_date - timedelta(days=days)
-        prev_activities = db.query(AgentActivity).filter(
+        prev_activities_query = db.query(AgentActivity).filter(
             AgentActivity.created_at >= prev_start,
             AgentActivity.created_at < start_date
-        ).count()
+        )
+        if not getattr(current_user, "is_superuser", False):
+            prev_activities_query = prev_activities_query.filter(AgentActivity.user_email == current_user.email)
+        prev_activities = prev_activities_query.count()
         
         interactions_change = ((total_interactions - prev_activities) / prev_activities * 100) if prev_activities > 0 else 0
         

@@ -114,6 +114,81 @@ def get_db():
     finally:
         db.close()
 
+
+def _verify_stripe_payment_intent(payment_intent_id: str):
+    """
+    Verifica CONTRA LA API REAL DE STRIPE que el payment_intent_id recibido
+    corresponde a un pago real y completado (status == 'succeeded').
+
+    No hay ningún bypass de entorno de desarrollo: si STRIPE_API_KEY no está
+    configurado (ninguna clave, ni sk_test_ ni sk_live_), no existe forma
+    legítima de verificar el pago y la creación de cuenta falla cerrada
+    (503) en vez de aceptar el payment_intent_id sin comprobarlo. Esto es
+    intencional -- añadir un bypass "solo para desarrollo" aquí sería el
+    mismo tipo de simulación que se está eliminando. Para probar el flujo
+    de verdad en local, configura STRIPE_API_KEY con una clave sk_test_ real
+    (Stripe test mode) y genera un PaymentIntent real vía
+    stripe_service.create_payment_intent / /integrations/stripe/payment-intent.
+
+    Lanza HTTPException si el pago no se puede verificar o no está
+    completado. La cuenta NO debe crearse si esta función lanza.
+    """
+    from services.stripe_service import stripe_service
+
+    if not stripe_service.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "No se puede verificar el pago: Stripe no está configurado "
+                "en este entorno (falta STRIPE_API_KEY). La cuenta no se "
+                "puede crear sin verificar un pago real."
+            ),
+        )
+
+    import stripe
+
+    try:
+        payment_intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+    except stripe.error.InvalidRequestError as e:
+        logger.warning(
+            "Onboarding: payment_intent_id inválido o inexistente en Stripe (%s): %s",
+            payment_intent_id, e,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail="payment_intent_id inválido o inexistente en Stripe.",
+        )
+    except stripe.error.StripeError as e:
+        logger.error(
+            "Onboarding: error consultando Stripe para payment_intent_id=%s: %s",
+            payment_intent_id, e,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=f"No se pudo verificar el pago con Stripe: {str(e)}",
+        )
+
+    if payment_intent.status != "succeeded":
+        logger.warning(
+            "Onboarding: intento de crear cuenta con pago no completado. "
+            "payment_intent_id=%s status=%s",
+            payment_intent_id, payment_intent.status,
+        )
+        raise HTTPException(
+            status_code=402,
+            detail=(
+                f"El pago no se ha completado (estado en Stripe: "
+                f"'{payment_intent.status}'). No se puede crear la cuenta "
+                "sin un pago confirmado."
+            ),
+        )
+
+    logger.info(
+        "Onboarding: pago verificado con Stripe. payment_intent_id=%s amount=%s currency=%s",
+        payment_intent_id, payment_intent.amount, payment_intent.currency,
+    )
+    return payment_intent
+
 # ============================================================================
 # ENDPOINTS
 # ============================================================================
@@ -149,8 +224,21 @@ async def create_account_after_payment(
                 status_code=400,
                 detail=error_msg
             )
-        
-        # 2. Verificar que el email no exista
+
+        # 2. Verificar el pago REAL contra Stripe antes de crear nada.
+        #    Sin payment_intent_id verificado (status 'succeeded'), no se
+        #    crea ninguna cuenta -- ver _verify_stripe_payment_intent.
+        if not request.payment_intent_id:
+            raise HTTPException(
+                status_code=402,
+                detail=(
+                    "Falta payment_intent_id: no se puede crear una cuenta "
+                    "sin verificar un pago real completado."
+                ),
+            )
+        verified_payment_intent = _verify_stripe_payment_intent(request.payment_intent_id)
+
+        # 3. Verificar que el email no exista
         existing_user = db.query(User).filter(User.email == request.email).first()
         if existing_user:
             raise HTTPException(
@@ -158,10 +246,12 @@ async def create_account_after_payment(
                 detail="Ya existe una cuenta con este email"
             )
         
-        # 3. Generar contraseña temporal
+        # 4. Generar contraseña temporal
         temp_password = generate_random_password()
-        
-        # 4. Crear usuario
+
+        # 5. Crear usuario (persistimos el stripe_customer_id real que Stripe
+        #    asocia al PaymentIntent verificado, con fallback al del payload)
+        verified_customer_id = getattr(verified_payment_intent, "customer", None)
         new_user = User(
             email=request.email,
             full_name=request.full_name,
@@ -173,7 +263,9 @@ async def create_account_after_payment(
             plan=request.plan,
             email_gestor_fiscal=request.email_gestor_fiscal,
             email_asesor_legal=request.email_asesor_legal,
-            autoriza_envio_documentos_a_asesores=request.autoriza_envio_documentos_a_asesores or False
+            autoriza_envio_documentos_a_asesores=request.autoriza_envio_documentos_a_asesores or False,
+            stripe_customer_id=verified_customer_id or request.stripe_customer_id,
+            stripe_subscription_id=request.stripe_subscription_id,
         )
         
         db.add(new_user)
@@ -203,7 +295,7 @@ async def create_account_after_payment(
                 bootstrap_err,
             )
         
-        # 5. Guardar metadata del plan (podríamos crear tabla separada después)
+        # 6. Guardar metadata del plan (podríamos crear tabla separada después)
         # Por ahora lo guardamos en logs
         plan_config = PRICING_PLANS[request.plan]
         account_metadata = {
@@ -214,16 +306,17 @@ async def create_account_after_payment(
             "plan_name": plan_config["name"],
             "setup_price": plan_config["setup_price"],
             "monthly_price": plan_config["monthly_price"],
-            "stripe_customer_id": request.stripe_customer_id,
+            "stripe_customer_id": verified_customer_id or request.stripe_customer_id,
             "stripe_subscription_id": request.stripe_subscription_id,
             "payment_intent_id": request.payment_intent_id,
+            "payment_verified_status": getattr(verified_payment_intent, "status", None),
             "created_at": datetime.utcnow().isoformat(),
             "status": "active"
         }
-        
+
         print(f"[ONBOARDING] Nueva cuenta creada: {account_metadata}")
-        
-        # 6. Enviar email de bienvenida
+
+        # 7. Enviar email de bienvenida
         email_sent = await send_welcome_email(
             email=request.email,
             company_name=request.company_name,

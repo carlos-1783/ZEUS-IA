@@ -6,6 +6,8 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
+from fastapi import HTTPException
+
 from app.db.session import SessionLocal
 from app.models.agent_activity import AgentActivity
 from app.models.document_approval import DocumentApproval
@@ -251,30 +253,67 @@ def handle_ads_campaign_builder(activity: AgentActivity) -> Dict[str, Any]:
         name = data.get("campaign_name") or data.get("name") or f"Campaign-{activity.id}"
         budget = float(data.get("budget") or 50)
 
+        # NOTA: DocumentApproval (app/models/document_approval.py) no tiene columnas
+        # `title`/`content` — solo `document_payload_json` (via el setter
+        # `document_payload`). Usar esos kwargs inexistentes rompía la creación del
+        # borrador con TypeError en TODAS las invocaciones (para cualquier
+        # plataforma), antes incluso de llegar a create_ad_campaign. Se corrige
+        # aquí siguiendo el mismo patrón ya usado en workspace_deliverables.py /
+        # legal_fiscal_firewall.py.
         doc = DocumentApproval(
             user_id=user.id,
             agent_name="PERSEO",
             document_type="marketing_campaign",
-            title=str(name)[:255],
-            content=json.dumps(
-                {"platform": platform, "budget": budget, "plan": data, "real_execution": True},
-                ensure_ascii=False,
-                default=str,
-            ),
+            document_payload={
+                "title": str(name)[:255],
+                "platform": platform,
+                "budget": budget,
+                "plan": data,
+                "real_execution": True,
+            },
             status="draft",
         )
         session.add(doc)
         session.flush()
 
         ads_result: Dict[str, Any] = {"persisted_local": True, "document_approval_id": doc.id}
+        campaign_created = False
+        campaign_error: Optional[str] = None
         try:
             from services.perseo_ads_engine_v2 import create_ad_campaign
 
             ads_result = create_ad_campaign(session, user, platform=str(platform), name=str(name), budget=budget)
+            campaign_created = bool(ads_result.get("success"))
+        except HTTPException as api_exc:
+            # Fallo real y explícito de create_ad_campaign (no configurado, cliente
+            # de la API no implementado, writes deshabilitados, plataforma
+            # desconocida, o error devuelto por la API externa real). NO es un
+            # error tolerable: la campaña NO se ha creado en la plataforma de ads.
+            detail = api_exc.detail
+            campaign_error = detail if isinstance(detail, str) else json.dumps(detail, ensure_ascii=False, default=str)
+            ads_result["external_api"] = {
+                "skipped": True,
+                "reason": campaign_error,
+                "http_status": api_exc.status_code,
+            }
         except Exception as api_exc:
-            ads_result["external_api"] = {"skipped": True, "reason": str(api_exc)}
+            # Error inesperado no relacionado con la validación de negocio de ads
+            # (p.ej. fallo de red al llamar a la API externa real). Tampoco se
+            # puede dar la campaña por creada — se reporta igual como fallo real,
+            # pero se distingue el motivo para diagnóstico.
+            campaign_error = f"Error inesperado creando campaña: {api_exc}"
+            ads_result["external_api"] = {"skipped": True, "reason": campaign_error}
 
         session.commit()
+
+        if not campaign_created:
+            return _fail(
+                f"Campaña NO creada en la plataforma de ads ({platform}): "
+                f"{campaign_error or 'la API no confirmó éxito'}. Borrador guardado "
+                f"como document_approval_id={doc.id} para revisión manual — "
+                f"NO se ha publicado ninguna campaña real."
+            )
+
         return _ok(
             {"message": "Campaña ads persistida", **ads_result},
             handler="perseo_service.create_campaign",

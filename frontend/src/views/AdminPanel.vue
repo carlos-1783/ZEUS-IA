@@ -1605,11 +1605,15 @@ td {
   text-align: center;
 }
 
-/* Settings */
+/* Settings — última sección. "Verificar E2E" es un diagnóstico gratuito
+   y repetible (no muta nada) -> secundario. "Guardar configuración" es
+   la única acción real de escritura de esta vista -> el único botón
+   con el acento gradiente. */
 .settings-section {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 1px 3px rgba(15, 23, 42, 0.06));
   padding: 24px;
   margin-bottom: 24px;
 }
@@ -1625,15 +1629,16 @@ td {
   justify-content: space-between;
   align-items: center;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 8px;
+  background: var(--zeus-bg-flat, #eef0f3);
+  border-radius: var(--zeus-radius-sm, 8px);
+  color: var(--zeus-text, #0f172a);
 }
 
 .status-dot {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: rgba(239, 68, 68, 0.5);
+  background: #d1d5db;
 }
 
 .status-dot.active {
@@ -1644,19 +1649,24 @@ td {
 .integration-hint {
   margin: 12px 0;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--zeus-text-muted, #8792a6);
   line-height: 1.4;
 }
 
 .btn-e2e {
   margin-top: 8px;
   padding: 12px 20px;
-  border: 1px solid rgba(59, 130, 246, 0.5);
-  border-radius: 8px;
-  background: rgba(59, 130, 246, 0.15);
-  color: #93c5fd;
+  border: 1px solid #D1D5DB;
+  border-radius: var(--zeus-radius-sm, 8px);
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
   font-weight: 600;
   cursor: pointer;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.btn-e2e:hover:not(:disabled) {
+  border-color: #9aa2af;
 }
 
 .btn-e2e:disabled {
@@ -1667,28 +1677,29 @@ td {
 .e2e-results {
   margin-top: 16px;
   padding: 16px;
-  border-radius: 8px;
+  border-radius: var(--zeus-radius-sm, 8px);
   font-size: 13px;
 }
 
 .e2e-results.ok {
-  background: rgba(16, 185, 129, 0.1);
+  background: var(--zeus-success-soft, #e9faf3);
   border: 1px solid rgba(16, 185, 129, 0.35);
 }
 
 .e2e-results.warn {
-  background: rgba(245, 158, 11, 0.1);
+  background: var(--zeus-warning-soft, #fef6e7);
   border: 1px solid rgba(245, 158, 11, 0.35);
 }
 
 .e2e-summary {
   margin: 0 0 8px;
   font-weight: 700;
+  color: var(--zeus-text, #0f172a);
 }
 
 .e2e-recommendation {
   margin: 0 0 12px;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .e2e-checks {
@@ -1705,31 +1716,32 @@ td {
   grid-template-columns: 1fr auto;
   gap: 4px 12px;
   padding: 8px 10px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--zeus-radius-sm, 6px);
+  background: #ffffff;
+  border: 1px solid var(--zeus-border, #e1e5eb);
 }
 
 .e2e-checks li.pass strong {
-  color: #6ee7b7;
+  color: #0d9668;
 }
 
 .e2e-checks li.fail strong {
-  color: #fca5a5;
+  color: #b91c1c;
 }
 
 .e2e-checks li small {
   grid-column: 1 / -1;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .e2e-error {
-  color: #f87171 !important;
+  color: #b91c1c !important;
 }
 
 .e2e-disclaimer {
   margin: 12px 0 0;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .checkbox-label {
@@ -1738,6 +1750,7 @@ td {
   gap: 12px;
   padding: 12px;
   cursor: pointer;
+  color: var(--zeus-text, #0f172a);
 }
 
 .checkbox-label input {
@@ -1748,17 +1761,21 @@ td {
 
 .btn-save {
   padding: 14px 32px;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%));
   border: none;
-  border-radius: 8px;
-  color: white;
+  border-radius: var(--zeus-radius-sm, 8px);
+  color: #ffffff;
   font-weight: 600;
   cursor: pointer;
   margin-top: 24px;
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 8px rgba(0, 0, 0, 0.15));
+  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn-save:hover {
-  transform: scale(1.02);
+  box-shadow: var(--zeus-accent-gradient-shadow-hover, 0 4px 14px rgba(0, 0, 0, 0.22));
+  transform: translateY(-1px);
 }
 
 /* Modales Ver/Editar Cliente — cada modal es su propia vista según la

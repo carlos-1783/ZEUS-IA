@@ -1188,18 +1188,38 @@ const goToDashboard = () => {
 </script>
 
 <style scoped>
+/* Sistema de diseño Ronda 2 (zeus-light-system.css): bandas metálicas
+   obligatorias en toda la vista. La navegación del sidebar es selección
+   dentro de un grupo (Overview/Clientes/Ingresos/Configuración) — sin
+   gradiente, solo tinte + negrita en el activo. "Volver al Dashboard"
+   es secundario. El logo usa el índigo de marca sólido, no texto con
+   gradiente (el acento vibrante se reserva a botones/badges/anillos). */
 .admin-panel {
   display: flex;
+  position: relative;
+  overflow: hidden;
   min-height: 100vh;
-  background: #0a0e1a;
-  color: #fff;
+  background-image: var(--zeus-bg);
+  color: var(--zeus-text, #0f172a);
+  font-family: var(--zeus-font-sans, 'Inter', sans-serif);
+}
+
+.admin-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
 }
 
 /* Sidebar */
 .admin-sidebar {
+  position: relative;
   width: 280px;
-  background: linear-gradient(180deg, #0f1419 0%, #1a1f2e 100%);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-surface, #ffffff);
+  border-right: 1px solid var(--zeus-border, #e1e5eb);
   padding: 32px 24px;
   display: flex;
   flex-direction: column;
@@ -1208,14 +1228,11 @@ const goToDashboard = () => {
 .logo h1 {
   font-size: 24px;
   margin: 0 0 4px;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--zeus-accent, #4f46e5);
 }
 
 .logo p {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
   font-size: 12px;
   margin: 0 0 40px;
 }
@@ -1231,36 +1248,44 @@ const goToDashboard = () => {
   padding: 12px 16px;
   background: transparent;
   border: none;
-  border-radius: 8px;
-  color: rgba(255, 255, 255, 0.7);
+  border-radius: var(--zeus-radius-sm, 8px);
+  color: var(--zeus-text-secondary, #52607a);
   text-align: left;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   font-size: 14px;
 }
 
 .admin-nav button:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+  background: var(--zeus-bg-flat, #eef0f3);
+  color: var(--zeus-text, #0f172a);
 }
 
 .admin-nav button.active {
-  background: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
+  background: var(--zeus-accent-soft, #eef1ff);
+  color: var(--zeus-accent, #4f46e5);
+  font-weight: 600;
 }
 
 .btn-back {
   padding: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  color: #fff;
+  background: #ffffff;
+  border: 1px solid #D1D5DB;
+  border-radius: var(--zeus-radius-sm, 8px);
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   margin-top: 20px;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.btn-back:hover {
+  border-color: #9aa2af;
 }
 
 /* Main Content */
 .admin-content {
+  position: relative;
   flex: 1;
   padding: 40px;
   overflow-y: auto;
@@ -1276,11 +1301,13 @@ const goToDashboard = () => {
 .admin-content h2 {
   font-size: 32px;
   margin: 0 0 32px;
+  color: var(--zeus-text, #0f172a);
 }
 
 .admin-content h3 {
   font-size: 20px;
   margin: 32px 0 16px;
+  color: var(--zeus-text, #0f172a);
 }
 
 /* Stats Grid */
@@ -1866,8 +1893,8 @@ td {
     right: 0;
     height: 56px;
     padding: 0 16px;
-    background: linear-gradient(180deg, #0f1419 0%, #1a1f2e 100%);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--zeus-surface, #ffffff);
+    border-bottom: 1px solid var(--zeus-border, #e1e5eb);
     z-index: 1001;
   }
 
@@ -1879,7 +1906,7 @@ td {
     background: transparent;
     border: none;
     cursor: pointer;
-    color: #fff;
+    color: var(--zeus-text, #0f172a);
   }
   .admin-mobile-menu-btn span {
     display: block;
@@ -1893,18 +1920,15 @@ td {
     margin: 0;
     font-size: 18px;
     font-weight: 700;
-    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--zeus-accent, #4f46e5);
   }
 
   .admin-mobile-back {
     padding: 8px 12px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
-    color: #fff;
+    background: #ffffff;
+    border: 1px solid #D1D5DB;
+    border-radius: var(--zeus-radius-sm, 8px);
+    color: var(--zeus-text, #0f172a);
     font-size: 14px;
     cursor: pointer;
   }

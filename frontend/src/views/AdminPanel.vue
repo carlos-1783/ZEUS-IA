@@ -1310,7 +1310,9 @@ const goToDashboard = () => {
   color: var(--zeus-text, #0f172a);
 }
 
-/* Stats Grid */
+/* Stats Grid — Overview: sin acción real (solo lectura), sin botón por
+   tanto sin gradiente en esta vista. La cifra destacada usa el índigo
+   de marca sólido, no texto con gradiente. */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -1319,9 +1321,10 @@ const goToDashboard = () => {
 }
 
 .stat-card {
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius-lg, 16px);
+  box-shadow: var(--zeus-shadow, 0 1px 3px rgba(15, 23, 42, 0.06));
   padding: 24px;
   text-align: center;
 }
@@ -1334,15 +1337,12 @@ const goToDashboard = () => {
 .stat-value {
   font-size: 36px;
   font-weight: 700;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--zeus-accent, #4f46e5);
   margin-bottom: 8px;
 }
 
 .stat-label {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-secondary, #52607a);
   font-size: 14px;
 }
 
@@ -1532,20 +1532,23 @@ td {
   color: #3b82f6;
 }
 
-/* Chart */
+/* Chart — el archivo original definía .chart-container/.chart-loading/
+   .chart-error DOS VECES (la segunda ganaba por cascada); consolidado
+   en una sola definición limpia al migrar a los tokens del sistema. */
 .chart-section {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 1px 3px rgba(15, 23, 42, 0.06));
   padding: 32px;
 }
 
 .chart-container {
   height: 400px;
-  position: relative;
-  padding: 20px;
   min-height: 400px;
   width: 100%;
+  position: relative;
+  padding: 20px;
 }
 
 .chart-container canvas {
@@ -1556,47 +1559,14 @@ td {
 
 .chart-loading {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 16px;
-  z-index: 10;
-  pointer-events: none;
-}
-
-.chart-error {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: #ef4444;
-  font-size: 14px;
-  z-index: 10;
-  pointer-events: none;
-  text-align: center;
-  padding: 20px;
-  background: rgba(239, 68, 68, 0.1);
-  border-radius: 8px;
-  max-width: 80%;
-}
-
-.chart-container {
-  height: 400px;
-  position: relative;
-  padding: 20px;
-}
-
-.chart-loading {
-  position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
   font-size: 16px;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 12px;
+  background: var(--zeus-bg-flat, #eef0f3);
+  border-radius: var(--zeus-radius, 12px);
 }
 
 .chart-error {
@@ -1605,10 +1575,10 @@ td {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #ef4444;
+  color: #b91c1c;
   font-size: 14px;
-  background: rgba(239, 68, 68, 0.1);
-  border-radius: 12px;
+  background: var(--zeus-danger-soft, #fdecec);
+  border-radius: var(--zeus-radius, 12px);
   padding: 20px;
   text-align: center;
 }

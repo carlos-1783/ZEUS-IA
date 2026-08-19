@@ -402,28 +402,51 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* Sistema de diseño Ronda 2 (ver zeus-light-system.css): bandas metálicas
+   obligatorias en toda la vista, un único botón con acento gradiente por
+   pantalla (Nueva póliza / Abrir siniestro — el resto queda en
+   .btn-secondary blanco/borde, incluidas las acciones repetidas por fila
+   como "Ver"/"Guardar"). */
 .insurance-view {
+  position: relative;
+  overflow: hidden;
+  min-height: 100vh;
   max-width: 1100px;
   margin: 0 auto;
   padding: 24px;
-  font-family: system-ui, -apple-system, sans-serif;
-  color: #1a1a1a;
+  font-family: var(--zeus-font-sans, system-ui, -apple-system, sans-serif);
+  color: var(--zeus-text, #0f172a);
+  background-image: var(--zeus-bg);
+  box-sizing: border-box;
 }
+.insurance-view::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+.insurance-view > * { position: relative; }
 .ins-header { margin-bottom: 20px; }
-.back-link { color: #555; text-decoration: none; font-size: 14px; }
-.ins-header h1 { margin: 8px 0 4px; font-size: 24px; }
-.subtitle { color: #666; margin: 0; }
+.back-link { color: var(--zeus-accent, #4f46e5); text-decoration: none; font-size: 14px; font-weight: 500; }
+.back-link:hover { text-decoration: underline; }
+.ins-header h1 { margin: 8px 0 4px; font-size: var(--zeus-text-xl, 24px); color: var(--zeus-text, #0f172a); }
+.subtitle { color: var(--zeus-text-secondary, #52607a); margin: 0; }
 .global-error {
-  background: #fdecea;
+  background: var(--zeus-danger-soft, #fdecea);
   color: #b71c1c;
   padding: 10px 14px;
-  border-radius: 4px;
+  border-radius: var(--zeus-radius-sm, 4px);
   margin-bottom: 16px;
+  border: 1px solid rgba(239, 68, 68, 0.25);
 }
 .panel {
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 6px;
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 1px 3px rgba(15, 23, 42, 0.06));
   padding: 16px;
   margin-bottom: 20px;
 }
@@ -434,41 +457,66 @@ onMounted(async () => {
   margin-bottom: 12px;
   flex-wrap: wrap;
 }
-.toolbar h2, .toolbar h3 { margin: 0; flex: 1; }
-.btn-primary, .btn-secondary, .btn-small {
+.toolbar h2, .toolbar h3 { margin: 0; flex: 1; color: var(--zeus-text, #0f172a); }
+
+/* Único botón vibrante de la vista: alterna la pantalla de creación
+   (Nueva póliza / Abrir siniestro). */
+.btn-primary {
   cursor: pointer;
-  border: 1px solid #333;
-  background: #222;
-  color: #fff;
-  padding: 8px 14px;
-  border-radius: 4px;
+  border: none;
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%));
+  color: #ffffff;
+  padding: 10px 18px;
+  border-radius: var(--zeus-radius-sm, 8px);
   font-size: 14px;
+  font-weight: 600;
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 8px rgba(0, 0, 0, 0.15));
+  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
-.btn-secondary { background: #fff; color: #222; }
+.btn-primary:hover { box-shadow: var(--zeus-accent-gradient-shadow-hover, 0 4px 14px rgba(0, 0, 0, 0.22)); transform: translateY(-1px); }
+.btn-primary:active { transform: translateY(0) scale(0.97); }
+
+/* Todos los demás botones: secundario blanco/borde, sin gradiente. */
+.btn-secondary, .btn-small {
+  cursor: pointer;
+  border: 1px solid #D1D5DB;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  padding: 8px 14px;
+  border-radius: var(--zeus-radius-sm, 8px);
+  font-size: 14px;
+  box-shadow: none;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+.btn-secondary:hover, .btn-small:hover { border-color: #9aa2af; }
 .btn-small { padding: 5px 10px; font-size: 13px; }
 .data-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
 .data-table th, .data-table td {
   text-align: left;
   padding: 8px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--zeus-border, #eee);
   font-size: 14px;
+  color: var(--zeus-text, #0f172a);
 }
+.data-table th { color: var(--zeus-text-secondary, #52607a); font-weight: 600; }
 .status-pill {
   padding: 2px 8px;
-  border-radius: 10px;
+  border-radius: var(--zeus-radius-full, 10px);
   font-size: 12px;
-  background: #eee;
+  background: var(--zeus-bg-flat, #eee);
 }
-.status-active, .claim-status-resolved { background: #d4edda; color: #155724; }
-.status-draft, .claim-status-open { background: #fff3cd; color: #856404; }
-.status-cancelled, .claim-status-rejected { background: #f8d7da; color: #721c24; }
+.status-active, .claim-status-resolved { background: var(--zeus-success-soft, #d4edda); color: #155724; }
+.status-draft, .claim-status-open { background: var(--zeus-warning-soft, #fff3cd); color: #856404; }
+.status-cancelled, .claim-status-rejected { background: var(--zeus-danger-soft, #f8d7da); color: #721c24; }
 .status-expired { background: #e2e3e5; color: #383d41; }
-.claim-status-investigating { background: #d1ecf1; color: #0c5460; }
+.claim-status-investigating { background: var(--zeus-info-soft, #d1ecf1); color: #0c5460; }
 .tag {
   display: inline-block;
-  background: #eef;
+  background: var(--zeus-accent-soft, #eef1ff);
+  color: var(--zeus-accent, #4f46e5);
   padding: 2px 8px;
-  border-radius: 10px;
+  border-radius: var(--zeus-radius-full, 10px);
   font-size: 12px;
   margin-right: 4px;
 }
@@ -477,9 +525,9 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 12px;
   padding: 12px;
-  background: #fafafa;
-  border: 1px solid #eee;
-  border-radius: 4px;
+  background: var(--zeus-bg-subtle, #fafafa);
+  border: 1px solid var(--zeus-border, #eee);
+  border-radius: var(--zeus-radius-sm, 8px);
   margin-bottom: 12px;
   align-items: flex-end;
 }
@@ -488,17 +536,21 @@ onMounted(async () => {
   flex-direction: column;
   font-size: 13px;
   gap: 4px;
+  color: var(--zeus-text-secondary, #52607a);
 }
 .inline-form input, .inline-form select, .inline-form textarea {
   padding: 6px 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+  border: 1px solid var(--zeus-border-strong, #ccc);
+  border-radius: var(--zeus-radius-sm, 4px);
   font-size: 14px;
+  color: var(--zeus-text, #0f172a);
+  background: #ffffff;
+  font-family: inherit;
 }
 .full-width { width: 100%; }
 .coverages-fieldset {
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  border: 1px solid var(--zeus-border, #ddd);
+  border-radius: var(--zeus-radius-sm, 4px);
   padding: 8px 12px;
   display: flex;
   gap: 12px;
@@ -506,9 +558,9 @@ onMounted(async () => {
   align-items: center;
 }
 .checkbox-label { flex-direction: row !important; align-items: center; gap: 6px !important; }
-.muted { color: #888; font-size: 14px; }
+.muted { color: var(--zeus-text-muted, #8792a6); font-size: 14px; }
 .policy-detail p { margin: 4px 0; }
 .actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.status-select { padding: 4px 6px; font-size: 13px; }
-.resolved-input { width: 110px; padding: 4px 6px; font-size: 13px; }
+.status-select { padding: 4px 6px; font-size: 13px; border: 1px solid var(--zeus-border-strong, #ccc); border-radius: var(--zeus-radius-sm, 4px); }
+.resolved-input { width: 110px; padding: 4px 6px; font-size: 13px; border: 1px solid var(--zeus-border-strong, #ccc); border-radius: var(--zeus-radius-sm, 4px); }
 </style>

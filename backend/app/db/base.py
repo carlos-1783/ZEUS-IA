@@ -114,6 +114,7 @@ def create_tables():
             from app.models.teamflow_event import TeamFlowEvent
             from app.models.zeus_domain_event import ZeusDomainEvent
             from app.models.tpv_operator_session import TPVOperatorSession
+            from app.models.insurance import InsurancePolicy, InsuranceClaim
             from app.models.time_tracking import (
                 TimeTrackingRecord,
                 EmployeeSchedule,

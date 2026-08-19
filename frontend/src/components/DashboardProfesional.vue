@@ -67,8 +67,18 @@
           <span class="icon">📁</span>
           <span>{{ t('dashboardPro.nav.officeCrm') }}</span>
         </button>
+        <!-- Seguros: sin gating por company_type (vertical nueva, ver AUDIT_VERTICAL_SEGUROS.md) -->
+        <button
+          v-if="!isEmployee"
+          type="button"
+          class="nav-item"
+          @click="closeSidebarOnMobile(); goToInsurance()"
+        >
+          <span class="icon">🛡️</span>
+          <span>{{ t('dashboardPro.nav.insurance') }}</span>
+        </button>
         <!-- Nóminas: solo dueño de empresa (empleado no ve) -->
-        <button 
+        <button
           v-if="showModule('payroll')"
           class="nav-item"
           @click="closeSidebarOnMobile(); goToPayroll()"
@@ -427,6 +437,10 @@ const goToControlHorario = () => {
 
 const goToOfficeCrm = () => {
   router.push('/office-crm')
+}
+
+const goToInsurance = () => {
+  router.push('/insurance')
 }
 
 // Navegar a Nóminas

@@ -40,6 +40,7 @@ const AdminPanel = () => import('../views/AdminPanel.vue')
 const TPV = () => import('../views/TPV.vue')
 const PayrollDrafts = () => import('../views/PayrollDrafts.vue')
 const OfficeCrm = () => import('../views/OfficeCrm.vue')
+const InsuranceView = () => import('../views/InsuranceView.vue')
 const Terminos = () => import('../views/legal/Terminos.vue')
 const Privacidad = () => import('../views/legal/Privacidad.vue')
 const LandingPage = () => import('../views/LandingPage.vue')
@@ -343,7 +344,19 @@ const router = createRouter({
         requiresAuth: true
       }
     },
-    
+
+    // Vertical Seguros — Multirriesgo (pólizas + siniestros). Sin gating por
+    // company_type: ver AUDIT_VERTICAL_SEGUROS.md para la decisión de diseño.
+    {
+      path: '/insurance',
+      name: 'Insurance',
+      component: InsuranceView,
+      meta: {
+        title: 'Seguros - ZEUS-IA',
+        requiresAuth: true
+      }
+    },
+
     // Direct login route (redirect to auth/login)
     {
       path: '/login',

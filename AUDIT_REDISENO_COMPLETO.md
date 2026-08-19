@@ -540,3 +540,186 @@ Verificación 100% independiente, sin reutilizar nada del ejecutor: confirmó pr
 Hallazgos cosméticos pendientes (botón verde en Control Horario, franjas oscuras en bordes) evaluados como no bloqueantes — no violan ninguna regla no negociable. `main` confirmado sin tocar, nada empujado a remoto.
 
 **Estado: Ronda 3 CERRADA — APROBADA.** Pendiente para una ronda siguiente: Admin Panel (no tocado), los dos hallazgos cosméticos, y el bug preexistente de `create_tables()` (fuera de alcance, ya señalado).
+
+---
+
+## 9. Ronda 4 (2026-08-19/20) — Admin Panel
+
+Rama: `feature/rediseno-completo` (misma de siempre). Objetivo:
+`frontend/src/views/AdminPanel.vue`, el componente más grande que
+quedaba del alcance original (1971 líneas).
+
+### 9.1 Mapeo antes de tocar nada
+
+Se leyó el archivo completo (template + script + estilos) antes de
+escribir ningún CSS. No es una sola pantalla: es una SPA interna con
+navegación por sidebar (`currentView`), sin rutas propias, con 4 vistas
++ 2 modales:
+
+1. **Shell/chrome** — sidebar (logo, nav Overview/Clientes/Ingresos/
+   Configuración, "Volver al Dashboard") + cabecera móvil (hamburguesa,
+   título, "Volver") + fondo del panel. No es una "vista" de contenido,
+   pero es una sección natural propia (se repite en las 4 vistas).
+2. **Overview** — 4 tarjetas KPI + gráfico de ingresos por mes
+   (Chart.js). Solo lectura.
+3. **Clientes** — tabla de clientes reales + modal "Ver cliente" +
+   modal "Editar cliente" (con zona de superadmin: desactivar/reactivar/
+   eliminar cuenta, irreversible).
+4. **Ingresos** — resumen de facturación + desglose por plan. Solo
+   lectura.
+5. **Configuración** — estado de integraciones (Stripe/WhatsApp/
+   SendGrid) + botón de verificación E2E real + notificaciones +
+   guardar configuración.
+
+Un commit por sección, en ese orden: `0b16359` (shell), `ab339d2`
+(Overview), `93d519b` (Clientes+modales), `52d3c33` (Ingresos),
+`c76ec9e` (Configuración) — más un commit de fix aparte, `2ed1369`
+(ver 9.4).
+
+### 9.2 Entorno — mismo bug de la Ronda 3, mitigado de forma más robusta
+
+Al retomar la tarea los servidores de la Ronda 3 ya no existían
+(reinicio de sesión). Al reconstruirlos se repitió el problema conocido
+del junction de `node_modules` apuntando al checkout compartido: otro
+proceso había reinstalado ese `node_modules` entre sesiones y el
+junction quedó roto (`Cannot find package '...vite/index.js'`).
+Esta vez, en lugar de repetir el parche frágil, se resolvió de raíz:
+`npm install` genuinamente dentro del worktree aislado (901 paquetes,
+~8 min), sin depender en absoluto del checkout compartido. Confirmado
+de nuevo con `curl http://localhost:5173/src/router/index.js | grep
+<marcador>` antes de fiarse de ninguna captura.
+
+### 9.3 Cuenta de superusuario — el bug conocido NO se reprodujo
+
+Se creó `admin.test@example.com` vía el flujo real de dos pasos: (1)
+`POST /api/v1/auth/register` (crea usuario + empresa transaccionalmente,
+igual que `test.gestoria@example.com` en rondas anteriores), (2)
+`UPDATE users SET is_superuser=1` directo en SQLite (no existe endpoint
+público para crear superusuarios, por diseño de seguridad correcto; el
+script `create_user.py` del repo falló por el mismo problema de import
+order de modelos ya documentado en la sección 7.4, se evitó en vez de
+depurarlo por no ser parte del alcance).
+
+Se decidió **deliberadamente** que la cuenta tuviera una `Company`
+asociada real (paso 1) precisamente para evitar el bug conocido
+descrito en `CICLO_PRODUCCION.md` (superusuario sin `Company` atrapado
+en el wizard de onboarding). Verificado en vivo: login con esta cuenta
+aterriza directo en `/dashboard`, sin pasar por `/onboarding-setup` —
+**el bug no se reprodujo** con esta cuenta. No se puede afirmar que el
+bug esté arreglado (no se tocó `Login.vue` ni el guard del router para
+esto), solo que la mitigación elegida (cuenta con `Company`) fue
+suficiente para completar la verificación de Admin Panel sin bloqueos,
+tal como preveía la instrucción del encargo. El bug de fondo
+(`Login.vue` no comprueba `isAdmin` antes de llamar a
+`resolvePostAuthPath()`) sigue sin arreglar y sigue fuera de alcance de
+esta ronda.
+
+### 9.4 Regla del botón vibrante aplicada vista por vista
+
+- **Shell**: nav del sidebar = selección dentro de un grupo → sin
+  gradiente, tinte índigo suave + negrita en el activo (mismo patrón
+  que tabs en rondas anteriores). "Volver al Dashboard"/"Volver" →
+  secundario.
+- **Overview**: sin acción real (solo lectura) → 0 botones con
+  gradiente, válido según la regla ya documentada en la Ronda 2.
+- **Clientes** (vista lista): "Actualizar" (utilidad repetible) y
+  Ver/Editar/Pausar (repetidas por fila) → todo secundario, 0 gradiente
+  en la lista. El gradiente vive en los dos modales, cada uno su propia
+  vista: "Editar / Gestionar" en el modal Ver, "Guardar" en el modal
+  Editar (mutuamente excluyentes, nunca los dos gradientes a la vez).
+  La zona de superadmin (Desactivar/Eliminar cuenta) se mantiene en rojo
+  secundario, deliberadamente sin el gradiente festivo — una acción
+  destructiva irreversible no debe compartir el acento de una acción de
+  guardado.
+- **Ingresos**: solo lectura → 0 gradiente.
+- **Configuración**: "Verificar E2E" es diagnóstico gratuito y
+  repetible (no muta nada) → secundario. "Guardar configuración" es la
+  única escritura real de la vista → el único gradiente.
+
+### 9.5 Hallazgo real encontrado y corregido en el camino
+
+Al migrar `.chart-section` de tarjeta oscura a superficie blanca
+(commit `ab339d2`), la configuración **JavaScript** de Chart.js
+(leyenda, ticks de los ejes, mensaje de "sin datos" dibujado
+directamente en el canvas) seguía usando `rgba(255,255,255,*)` —
+pensada para el fondo oscuro anterior. Resultado: texto blanco sobre
+tarjeta blanca, invisible. No es un descuido de CSS (el CSS scoped no
+alcanza al contenido dibujado en un `<canvas>`), había que tocar el
+JS. Encontrado por spot-check visual real (no habría aparecido en
+ningún grep de CSS) y corregido en un commit de fix aparte (`2ed1369`),
+igual que se hizo con el bug de `routeAllowed()` en la Ronda 3.
+Verificado en vivo: el mensaje "No hay datos para mostrar" pasó de
+(previsiblemente) invisible a legible en gris sobre blanco.
+
+### 9.6 Verificación funcional real (no solo visual)
+
+Con la cuenta superusuario, además de la comparación visual en cada
+sección:
+
+- **Clientes**: clic en "Ver" abrió el modal con datos reales de un
+  cliente real (registro de prueba creado vía el flujo real de Stripe
+  checkout, no un mock — visible el email sintético
+  `zeus-tx-...@test.local` típico de esos tests). Clic en "Editar /
+  Gestionar" navegó correctamente al modal de edición. Clic en
+  "Cancelar" cerró el modal (confirmado leyendo el árbol de
+  accesibilidad antes/después — el botón desapareció de la lista de
+  controles interactivos). El cambio de CSS no rompió ningún
+  manejador de eventos.
+- **Configuración**: clic en "Verificar E2E (sin cargo)" disparó un
+  `POST /api/v1/test/integrations-e2e` real (200 OK, confirmado en
+  `read_network_requests`) y el resultado real de la verificación
+  (`5/9 OK · Externas listas`, checks reales contra Stripe/Twilio/
+  SendGrid) se renderizó correctamente con los nuevos estilos — no se
+  probó solo que el botón "se viera bien", se confirmó que sigue
+  ejecutando la acción real contra el backend.
+- **Overview**: `stats.totalCustomers` mostró cifras reales (50 y luego
+  97, cambiando entre sesiones según el estado real de la base de
+  datos — no un valor fijo).
+
+No se probó explícitamente el flujo de "Guardar configuración" ni las
+acciones irreversibles de la zona de superadmin (Desactivar/Eliminar
+cuenta) para no mutar datos de prueba de forma destructiva sin
+necesidad — se verificó que los botones existen, tienen el estilo
+correcto y no están rotos (clicables, `:disabled` respetado), pero no
+se ejecutó su acción final. Se señala explícitamente como límite de
+esta verificación.
+
+### 9.7 Suite de tests
+
+Ejecutada dos veces durante esta ronda (no se dejó para el final):
+tras la sección 3 (Clientes) y de nuevo al terminar. Ambas veces
+idéntica al baseline conocido: `7 failed, 214 passed, 2 skipped, 3
+errors`. Sin regresión — coherente con que ningún archivo de `backend/`
+se tocó en esta ronda.
+
+### 9.8 Limpieza de entorno
+
+El `npm install` local generó un cambio trivial en
+`frontend/package-lock.json` (una entrada `"dev": true` →
+`"devOptional": true` de un paquete, normalización propia de npm, no un
+cambio de versión real). Revertido con `git checkout --
+frontend/package-lock.json` antes de cerrar la ronda — no formaba parte
+del encargo y no debía quedar en el commit.
+
+### 9.9 Pendiente — honesto
+
+1. **Botones "Desactivar cuenta"/"Eliminar cuenta y empresa"**: estilo
+   verificado, acción real no ejecutada (ver 9.6) — quien revise puede
+   querer confirmarlo explícitamente con una cuenta de prueba
+   desechable.
+2. **"Guardar configuración"**: estilo verificado, acción de guardado
+   no confirmada end-to-end (no se leyó de vuelta el valor persistido).
+3. Los hallazgos cosméticos de la Ronda 3 (botón verde en Control
+   Horario, franjas oscuras en bordes de Nóminas/Seguros) siguen sin
+   tocar — no eran parte del encargo de esta ronda.
+4. El bug de `Login.vue`/`resolvePostAuthPath()` para superusuarios sin
+   `Company` (CICLO_PRODUCCION.md, Ciclo 4) sigue sin arreglar — se
+   confirmó que no bloquea con la cuenta de prueba usada aquí, pero
+   sigue afectando potencialmente a superusuarios reales sin empresa
+   asociada en producción.
+5. Con esto se completan las 7 categorías del alcance original del
+   encargo de rediseño: Dashboard, `/agents`, los 6 workspaces, Seguros,
+   CRM/TPV/Control Horario/Nóminas, Onboarding, y Admin Panel/Ajustes.
+
+**Estado: Ronda 4 (Admin Panel) — completada, pendiente de revisión
+independiente.**

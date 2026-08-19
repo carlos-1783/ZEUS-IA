@@ -1479,7 +1479,8 @@ td {
   color: var(--zeus-text-muted, #8792a6);
 }
 
-/* Revenue */
+/* Revenue — vista de solo lectura (cifras y desglose por plan), sin
+   acción real -> sin botón, sin gradiente en esta vista. */
 .revenue-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -1488,15 +1489,16 @@ td {
 }
 
 .revenue-card {
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 1px 3px rgba(15, 23, 42, 0.06));
   padding: 24px;
 }
 
 .revenue-card h3 {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-secondary, #52607a);
   margin: 0 0 12px;
   font-weight: 500;
 }
@@ -1504,13 +1506,13 @@ td {
 .revenue-card .amount {
   font-size: 32px;
   font-weight: 700;
-  color: #10b981;
+  color: #0d9668;
   margin: 0 0 8px;
 }
 
 .revenue-card .detail {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
   margin: 0;
 }
 
@@ -1525,9 +1527,9 @@ td {
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius-sm, 8px);
 }
 
 .plan-info {
@@ -1538,17 +1540,18 @@ td {
 
 .plan-name {
   font-weight: 600;
+  color: var(--zeus-text, #0f172a);
 }
 
 .plan-count {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .plan-amount {
   font-size: 24px;
   font-weight: 700;
-  color: #3b82f6;
+  color: var(--zeus-accent, #4f46e5);
 }
 
 /* Chart — el archivo original definía .chart-container/.chart-loading/

@@ -1346,11 +1346,15 @@ const goToDashboard = () => {
   font-size: 14px;
 }
 
-/* Customers Table */
+/* Customers Table — sin CTA de creación (los clientes se dan de alta
+   solos vía registro público), "Actualizar" es utilidad repetible y
+   Ver/Editar/Pausar son acciones repetidas por fila: todo secundario,
+   sin gradiente en esta vista (0 es válido). El gradiente de esta
+   sección vive en los dos modales de abajo, cada uno su propia vista. */
 .customers-table {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius, 12px);
   overflow: hidden;
 }
 
@@ -1360,14 +1364,14 @@ table {
 }
 
 thead {
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--zeus-accent-soft, #eef1ff);
 }
 
 th {
   padding: 16px;
   text-align: left;
   font-weight: 600;
-  color: #3b82f6;
+  color: var(--zeus-accent, #4f46e5);
   font-size: 14px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1375,89 +1379,104 @@ th {
 
 td {
   padding: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--zeus-border, #e1e5eb);
+  color: var(--zeus-text, #0f172a);
 }
 
 .plan-badge {
   display: inline-block;
   padding: 4px 12px;
-  border-radius: 12px;
+  border-radius: var(--zeus-radius-full, 12px);
   font-size: 12px;
   font-weight: 600;
 }
 
 .plan-badge.startup {
-  background: rgba(16, 185, 129, 0.2);
-  color: #10b981;
+  background: var(--zeus-success-soft, #e9faf3);
+  color: #0d9668;
 }
 
 .plan-badge.growth {
-  background: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
+  background: var(--zeus-info-soft, #eaf2ff);
+  color: #2563eb;
 }
 
 .plan-badge.business {
-  background: rgba(139, 92, 246, 0.2);
-  color: #8b5cf6;
+  background: var(--zeus-accent-soft, #eef1ff);
+  color: var(--zeus-accent, #4f46e5);
 }
 
 .plan-badge.enterprise {
-  background: rgba(234, 179, 8, 0.2);
-  color: #eab308;
+  background: var(--zeus-warning-soft, #fef6e7);
+  color: #b45309;
 }
 
 .status-badge {
   display: inline-block;
   padding: 4px 12px;
-  border-radius: 12px;
+  border-radius: var(--zeus-radius-full, 12px);
   font-size: 12px;
   font-weight: 600;
 }
 
 .status-badge.active {
-  background: rgba(16, 185, 129, 0.2);
-  color: #10b981;
+  background: var(--zeus-success-soft, #e9faf3);
+  color: #0d9668;
 }
 
 .status-badge.inactive {
-  background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
+  background: var(--zeus-danger-soft, #fdecec);
+  color: #b91c1c;
 }
 
 .btn-action {
   padding: 6px 12px;
-  background: rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  border-radius: 6px;
-  color: #3b82f6;
+  background: #ffffff;
+  border: 1px solid #D1D5DB;
+  border-radius: var(--zeus-radius-sm, 6px);
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   margin-right: 8px;
   font-size: 12px;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn-action:hover {
-  background: rgba(59, 130, 246, 0.3);
+  border-color: #9aa2af;
 }
 
+/* Acción de pausar/activar cuenta o eliminar: semánticamente peligrosa,
+   se mantiene como secundario con tinte rojo (no gradiente, no un
+   tercer color arbitrario) para que siga siendo distinguible de las
+   acciones neutras. */
 .btn-action.danger {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.3);
-  color: #ef4444;
+  background: #ffffff;
+  border-color: #f3b6b6;
+  color: #b91c1c;
+}
+
+.btn-action.danger:hover {
+  border-color: #ef4444;
 }
 
 .btn-refresh {
   padding: 10px 20px;
-  background: rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  border-radius: 8px;
-  color: #3b82f6;
+  background: #ffffff;
+  border: 1px solid #D1D5DB;
+  border-radius: var(--zeus-radius-sm, 8px);
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.btn-refresh:hover {
+  border-color: #9aa2af;
 }
 
 .empty-state {
   padding: 60px;
   text-align: center;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 /* Revenue */
@@ -1739,7 +1758,12 @@ td {
   transform: scale(1.02);
 }
 
-/* Modal Editar Cliente */
+/* Modales Ver/Editar Cliente — cada modal es su propia vista según la
+   regla "un botón por vista": el único acento gradiente vive en
+   .admin-modal-actions .btn-action.primary ("Editar / Gestionar" en el
+   modal Ver, "Guardar" en el modal Editar — nunca ambos a la vez,
+   v-if mutuamente excluyentes). El fondo de bandas metálicas es
+   obligatorio también dentro del modal, sin excepción. */
 .admin-modal-overlay {
   position: fixed;
   inset: 0;
@@ -1750,21 +1774,35 @@ td {
   z-index: 2000;
 }
 .admin-modal {
-  background: #1a1f2e;
-  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  background-image: var(--zeus-bg);
+  border-radius: var(--zeus-radius, 12px);
   padding: 24px;
   min-width: 320px;
   max-width: 90vw;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
 }
+.admin-modal::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+.admin-modal > * {
+  position: relative;
+}
 .admin-modal h3 {
   margin: 0 0 8px 0;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   font-size: 1.25rem;
 }
 .admin-modal-email {
   margin: 0 0 16px 0;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-secondary, #52607a);
   font-size: 0.9rem;
 }
 .admin-modal-form {
@@ -1774,22 +1812,22 @@ td {
   margin-bottom: 20px;
 }
 .admin-modal-form label {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--zeus-text-secondary, #52607a);
   font-size: 0.875rem;
 }
 .admin-modal-form input,
 .admin-modal-form select {
   padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+  border-radius: var(--zeus-radius-sm, 8px);
+  border: 1px solid var(--zeus-border-strong, #cdd3db);
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
   font-size: 1rem;
 }
 .admin-modal-web-public { margin-top: 12px; }
 .admin-modal-web-public .checkbox-label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .admin-modal-web-public .slug-input { margin-top: 6px; }
-.admin-modal-hint { margin: 4px 0 0 0; font-size: 0.8rem; color: rgba(255, 255, 255, 0.5); }
+.admin-modal-hint { margin: 4px 0 0 0; font-size: 0.8rem; color: var(--zeus-text-muted, #8792a6); }
 .admin-modal-actions {
   display: flex;
   gap: 12px;
@@ -1807,7 +1845,7 @@ td {
 }
 .admin-danger-zone h4 {
   margin: 0 0 8px;
-  color: #f87171;
+  color: #b91c1c;
   font-size: 0.95rem;
 }
 .admin-danger-zone .inline-actions {
@@ -1828,18 +1866,25 @@ td {
   cursor: not-allowed;
 }
 .admin-modal-hint.warn {
-  color: #fbbf24;
+  color: #b45309;
 }
 .admin-companies-list ul {
   margin: 8px 0 0;
   padding-left: 18px;
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--zeus-text-secondary, #52607a);
 }
+/* Único botón con acento gradiente del modal (mayor jerarquía real:
+   "Editar / Gestionar" en Ver Cliente, "Guardar" en Editar Cliente). */
 .admin-modal-actions .btn-action.primary {
-  background: #3b82f6;
-  color: #fff;
-  border-color: #3b82f6;
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%));
+  color: #ffffff;
+  border: none;
+  font-weight: 600;
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 8px rgba(0, 0, 0, 0.15));
+}
+.admin-modal-actions .btn-action.primary:hover {
+  box-shadow: var(--zeus-accent-gradient-shadow-hover, 0 4px 14px rgba(0, 0, 0, 0.22));
 }
 
 /* Cabecera móvil (solo en viewport pequeño) */

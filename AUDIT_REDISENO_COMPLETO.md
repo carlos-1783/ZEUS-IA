@@ -270,3 +270,255 @@ CRM, TPV, Control Horario, Nóminas: **no se pudieron verificar en vivo**,
 mismo hallazgo de la sección 3 (guard de rutas). Verificados por
 compilación limpia y, en el caso de TPV, revisión manual de cada bloque
 convertido para descartar regresiones de contraste.
+
+---
+
+## 7. Ronda 3 (2026-08-19) — merge de Seguros, fix del guard de rutas,
+##    verificación real de CRM/TPV/Control Horario/Nóminas
+
+Rama: `feature/rediseno-completo`, creada desde `feature/rediseno-frontend-fase1`
+(32 commits, confirmado `main...feature/rediseno-frontend-fase1` = `0 32`).
+Mergeada `feature/vertical-seguros` (4 commits, desde `main`) sin
+conflictos (commit `4161056`).
+
+### 7.1 Confirmación de los tokens — nada que reinterpretar
+
+Antes de tocar nada se releyó `frontend/src/assets/styles/zeus-light-system.css`
+en esta rama: **ya tenía exactamente** los valores de la Ronda 2 exigidos
+en el encargo — `--zeus-bg-bands` con los 6 stops hex literales,
+`--zeus-accent-gradient` en **3 paradas sin naranja**
+(`linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%)`), y el
+motion system (`--zeus-ease-enter/exit/micro`, `--zeus-dur-modal/hover/press`)
+intacto desde la Ronda 1. La "alerta" del encargo (posible regresión a
+4 paradas con naranja) **no aplicaba** — el archivo ya estaba correcto,
+confirmado leyendo el valor real, no asumido.
+
+**Decisión sobre archivo de tokens**: se confirmó que `zeus-light-system.css`
+es la única fuente de verdad — se importa una sola vez, globalmente, en
+`frontend/src/assets/styles/main.scss` (línea 5), que a su vez se importa
+en el entrypoint real de la app (`frontend/src/main.ts`, no `main.js`,
+que es legacy y no se usa — confirmado vía `frontend/index.html`). No se
+creó ningún `design-tokens.scss` paralelo.
+
+### 7.2 Hallazgo crítico de entorno — el preview servía el checkout equivocado
+
+Gran parte de esta sesión se perdió persiguiendo un fantasma: el bug de
+`routeAllowed()` parecía "no arreglarse nunca" pese a que el código del
+fix era correcto y estaba en disco. La causa real: la herramienta de
+preview (`preview_start` con `name`) arrancó `npm run dev` sobre el
+**checkout compartido** `C:\Users\Acer\ZEUS-IA\frontend` (rama
+`feature/vertical-seguros`, sin ninguno de los cambios de esta rama),
+no sobre el worktree aislado de este agente. Confirmado con
+`curl http://localhost:5173/src/router/index.js | grep <marcador>`:
+el marcador nunca aparecía pese a estar en el archivo real del worktree.
+
+**Corrección**: se creó un junction de `node_modules` hacia el checkout
+compartido (solo lectura, sin tocar sus archivos de código) y se
+arrancó un servidor Vite propio (`npx vite --port 5173 --strictPort`,
+tras liberar el puerto) directamente desde
+`.claude/worktrees/agent-a8873985b2803de19/frontend`, confirmando con el
+mismo `curl` que el contenido servido correspondía al del worktree. A
+partir de ahí toda verificación de esta sección es fiable.
+
+**Consecuencia importante**: los hallazgos "Dashboard y /agents se ven
+oscuros, sin bandas" registrados a mitad de esta sesión eran **falsos
+positivos** causados por este bug de entorno (se estaba mirando la rama
+`feature/vertical-seguros`, que nunca tuvo el rediseño). Repetida la
+verificación contra el servidor correcto, Dashboard y `/agents` **ya
+estaban correctos** tal y como documenta la sección 6 — no hizo falta
+ningún cambio en ninguno de los dos. Se deja constancia explícita para
+que quien revise no repita la misma persecución.
+
+### 7.3 Bug de `routeAllowed()` — diagnóstico y fix real
+
+Diagnóstico exacto (no solo "puede estar desincronizado" como especulaba
+la sección 3): `authStore.modules` sólo se rellena dentro de
+`login()`/`initialize()` cuando alguna de esas dos funciones se ejecuta
+con éxito. `frontend/src/main.ts` (entrypoint real) **nunca llama a
+`authStore.initialize()`** al arrancar la app — sólo restaura el token
+desde `localStorage`. Por tanto, en cualquier navegación con sesión ya
+guardada que no pase por `login()` (refresco de página, pegar una URL,
+abrir una pestaña nueva), `authStore.modules` queda en `{}` durante toda
+la sesión del tab, y `routeAllowed()` evalúa siempre en falso para
+TPV/Control Horario/CRM/Nóminas aunque `/auth/me` real confirme el
+módulo activo.
+
+Existía además una función `authStore.initialize()` ya completa y
+correcta (decodifica el token, refresca si expiró, llama a `/auth/me`,
+rellena `modules` vía `applyProfileModules`) pero **sólo se invocaba
+desde código de componente** (`TPV.vue`, `OfficeCrm.vue`,
+`OnboardingSetup.vue`, `DashboardProfesional.vue`), es decir, después de
+que el guard de rutas ya hubiera decidido bloquear y redirigir — nunca
+llegaba a ejecutarse a tiempo.
+
+**Fix** (`frontend/src/router/index.js`, dentro del único
+`router.beforeEach` real — el otro, `setupNavigationGuards`, es código
+muerto que nunca se invoca, confirmado por grep): antes de evaluar
+`routeAllowed`, si `authStore.isAuthenticated` es verdadero se espera
+`await authStore.initialize()`. Es idempotente (flag interno
+`hasInitialized`) y no repite la llamada de red en navegaciones
+posteriores dentro del mismo tab.
+
+Commit: `d98cb50 fix(router): hidratar authStore.modules en cada
+navegación (bug, no cambio de diseño)` — commit separado y marcado
+explícitamente como fix, no como cambio de diseño, tal como pedía el
+encargo.
+
+**No se tocó nada más** de `routeAllowed`/`companyModules.ts`: la lógica
+en sí ya era correcta, el problema era exclusivamente de hidratación.
+
+### 7.4 Cuenta de prueba
+
+`test.gestoria@example.com` no existía en ningún entorno accesible
+desde este agente (sin credenciales de Railway/producción, sin base de
+datos local previa). Se creó **de verdad** vía el endpoint real
+`POST /api/v1/auth/register` (no un mock, no un insert directo en BD)
+contra un backend FastAPI corriendo en local con SQLite
+(`DATABASE_URL=sqlite:///./zeus_test.db`, tablas creadas con la función
+real `create_tables()` de `app/db/base.py`), `business_type=restaurant`
+→ `company_type=bar_restaurant`. `GET /auth/me` confirmó
+`modules: {tpv: true, control_horario: true, payroll: true, crm: false, ...}`
+— igual que describía la sección 3 del audit original.
+
+No se pudo levantar la base de datos con `alembic upgrade head` desde
+cero (la cadena de migraciones asume una BD legacy preexistente antes
+de Alembic e intenta `ALTER TABLE` sobre tablas que create_all aún no
+había creado); se usó en su lugar `create_tables()`, la función de
+bootstrap real que ya usa la app en producción como fallback. Se
+encontró y sorteó (sin modificar código de producción) un bug menor no
+relacionado: `app/db/base.py::create_tables()` no importa
+`app.models.company_employee` antes de `Base.metadata.create_all()`,
+lo que rompe la resolución de FK de `time_cost_checkins` en una BD
+totalmente nueva — se referencia aquí como hallazgo nuevo, no se
+corrigió (fuera de alcance de esta tarea de diseño).
+
+### 7.5 Verificación real de TPV / Control Horario / Nóminas (bug ya resuelto)
+
+Con el fix del punto 7.3 y el servidor correcto del punto 7.2, se
+verificó en vivo con Playwright, navegación **dura** (recarga completa
+de documento, no `router.push` interno) a cada ruta con la sesión ya
+guardada en `localStorage` — el escenario exacto que fallaba:
+
+- `/tpv` → antes del fix: redirigía a `/dashboard`. Después del fix:
+  título `TPV Universal Enterprise - ZEUS-IA`, contenido real (operador
+  `Gestoria Test · U2-OWNER`), fondo de bandas metálicas visible.
+- `/control-horario` → título `Control Horario Universal - ZEUS-IA`,
+  métodos de fichaje reales (QR/Manual/Geolocalización/Facial), fondo de
+  bandas correcto, subrayado con el gradiente en el método seleccionado
+  (Código QR). **Hallazgo nuevo**: el botón "Actualizar" es verde sólido
+  plano, no el gradiente de 3 paradas ni el blanco/borde del sistema —
+  una tercera variante de botón no contemplada por el encargo
+  ("solo DOS estados: acento o secundario"). No corregido en esta sesión
+  por límite de tiempo — documentado como pendiente.
+- `/payroll` (Nóminas) → título `Nóminas - ZEUS-IA`, estado vacío real
+  ("No hay borradores de nómina", sin datos simulados), fondo de bandas
+  correcto. Franjas oscuras finas en los bordes izquierdo/derecho del
+  viewport (el `body` de fondo oscuro asomando alrededor del contenedor
+  centrado) — cosmético, no bloqueante, mismo patrón visto en Seguros;
+  pendiente de revisión si se decide que el fondo debe llegar
+  literalmente a los bordes del viewport en vez de al contenedor
+  centrado.
+- `/office-crm` (CRM): **no se probó** — la cuenta de prueba es
+  `business_type=restaurant` (`bar_restaurant`), que no tiene el módulo
+  `crm` activo (`modules.crm=false` en `/auth/me`, consistente con
+  `MODULES_BY_TYPE` en `companyModules.ts`); probarla habría requerido
+  una segunda cuenta `office`. Con el fix aplicado, la lógica de
+  `routeAllowed` para CRM es idéntica a la de TPV/Control
+  Horario/Nóminas (mismo `ROUTE_MODULE_MAP`), así que hay alta confianza
+  de que también funciona, pero **no se confirmó visualmente** — pendiente.
+
+No se ejecutó código real de negocio simulado en ningún punto: los datos
+de TPV/Control Horario/Nóminas vistos son los que devuelve el backend
+real para una empresa recién creada (mesas/borradores vacíos, no
+placeholders con datos inventados).
+
+### 7.6 Seguros (InsuranceView.vue) — sistema aplicado desde cero
+
+Pantalla completamente nueva (traída por el merge), sin ningún token
+`--zeus-*` aplicado: fondo oscuro genérico, botón negro plano sin
+distinción primario/secundario. Migrada por completo: fondo de bandas +
+grano en toda la vista, tarjeta blanca, único botón con el gradiente de
+3 paradas en la acción de mayor jerarquía de cada pantalla interna
+(listado → "Nueva póliza"; detalle de póliza → "Abrir siniestro"), resto
+de botones (Ver, Guardar, Cancelar, Volver al listado) en secundario
+blanco/borde. Verificado en vivo: `Pólizas (0)` cargado desde
+`GET /api/v1/insurance/policies` real (no mock), fondo y botón
+correctos por captura. Commit `78ac502`.
+
+### 7.7 Ajustes (SettingsView.vue + UserAppSettings.vue) — sistema aplicado desde cero
+
+Pantalla completamente nueva según el encargo. `SettingsView.vue` tenía
+un fondo oscuro hardcoded (`linear-gradient(135deg, #1a1f2e, #0f1419)`);
+su sub-componente `UserAppSettings.vue` (donde vive la mayoría del
+contenido real: Apariencia, RAFAEL — Gestor fiscal, Seguridad) usaba
+tarjetas translúcidas blancas al 5% sobre ese fondo oscuro, inputs
+oscuros. Migrados ambos a los tokens `--zeus-*`: fondo de bandas +
+grano, tarjetas blancas sólidas, único botón con gradiente en "Guardar
+gestor fiscal" (la única acción de escritura real de esta vista — los
+selects de tema/idioma/2FA/timeout guardan solos al cambiar, no son
+botones). Verificado en vivo: fondo de bandas correcto, tarjetas
+"Apariencia"/"RAFAEL — Gestor fiscal"/"Seguridad" en blanco, valores
+reales de `GET /api/v1/settings` (`theme: dark, language: es,
+two_factor_enabled: false`). Commit `fe16405`.
+
+**Nota**: el selector "Tema: Oscuro/Claro/Auto" visible en Apariencia
+es una funcionalidad real y preexistente (no de esta sesión) que
+persiste en BD (`user_settings.theme`, por defecto `"dark"` para toda
+cuenta nueva). El shell de bandas metálicas de Ronda 2 se aplicó **de
+forma fija**, independiente de ese valor — no se investigó si ese
+selector todavía controla algo visible en el resto de la app tras el
+rediseño, o si ha quedado huérfano. Se señala como pregunta abierta para
+el usuario: ¿el selector de tema debe eliminarse (ya que Ronda 2 exige
+un único sistema "sin excepción"), o debe pasar a controlar alguna otra
+cosa?
+
+### 7.8 Spot-checks de pantallas ya hechas (Ronda 1/2, no tocadas)
+
+Con el servidor correcto: **Dashboard principal** y **`/agents`**
+confirmados correctos sin cambios (ver hallazgo 7.2 — el problema era el
+entorno, no el código). **RAFAEL workspace** confirmado por captura:
+fondo de bandas dentro del modal, anillo de avatar con gradiente
+(marca de identidad, excepción documentada), botón "Actualizar" con el
+gradiente de 3 paradas como único acento de la vista, tabs
+Chat/Actividad/Métricas planas sin gradiente. No se repitió el
+spot-check exhaustivo de los otros 5 workspaces (PERSEO, THALOS,
+JUSTICIA, AFRODITA, ZEUS CORE) ni de Onboarding por límite de tiempo de
+esta sesión — la sección 6 ya los documenta como verificados en la
+ronda anterior y no hay motivo para sospechar regresión (no se tocó
+ningún archivo suyo en esta rama).
+
+### 7.9 Pendiente — honesto, no completado en esta sesión
+
+1. **Admin Panel** (`frontend/src/views/AdminPanel.vue`, 1971 líneas,
+   ~780 de CSS): **no se tocó**. Pantalla nueva según el encargo, pero
+   de tamaño considerable — aplicar el sistema completo con la misma
+   disciplina que el resto (captura, comparación, corrección antes de
+   avanzar) no cupo en el tiempo disponible de esta sesión. Prioridad
+   alta para una sesión siguiente.
+2. **CRM** (`OfficeCrm.vue`): código ya convertido en la Ronda 2 (según
+   sección 6), pero **no verificado en vivo en esta sesión** — requiere
+   una cuenta `company_type=office` (la cuenta de prueba usada aquí es
+   `bar_restaurant`). Alta confianza de que el fix del guard también lo
+   desbloquea (mismo mecanismo que TPV/Control Horario/Nóminas), pero
+   no confirmado visualmente.
+3. **Botón verde plano en Control Horario** ("Actualizar") — tercera
+   variante de botón fuera de las dos permitidas por el sistema
+   definitivo. No corregido.
+4. **Franjas oscuras en los bordes** de Nóminas y Seguros (el fondo
+   oscuro del `body` asoma unos px alrededor del contenedor centrado
+   `max-width`) — cosmético, no investigado a fondo por límite de
+   tiempo.
+5. **Suite de tests**: no se re-ejecutó la suite completa de backend
+   (baseline conocido `7 failed, 214 passed, 2 skipped, 3 errors`) por
+   límite de tiempo de la sesión. Los cambios de esta sesión son
+   exclusivamente frontend (`router/index.js`, `InsuranceView.vue`,
+   `SettingsView.vue`, `UserAppSettings.vue`) — no se tocó ningún
+   archivo de `backend/`, por lo que el riesgo de regresión en esa
+   suite es bajo, pero no está confirmado con una ejecución real.
+6. **Bug de entorno de la sección 7.2** (preview sirviendo el checkout
+   compartido en vez del worktree aislado): mitigado manualmente para
+   esta sesión (junction de `node_modules` + servidor Vite propio en el
+   puerto 5173), pero no es una solución permanente — quien retome este
+   trabajo en un worktree distinto puede toparse con el mismo problema
+   y debería confirmar con el mismo `curl <url>/src/<archivo> | grep
+   <marcador>` antes de fiarse de ninguna captura del preview.

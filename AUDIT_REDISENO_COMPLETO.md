@@ -522,3 +522,21 @@ ningún archivo suyo en esta rama).
    trabajo en un worktree distinto puede toparse con el mismo problema
    y debería confirmar con el mismo `curl <url>/src/<archivo> | grep
    <marcador>` antes de fiarse de ninguna captura del preview.
+
+---
+
+## 8. Revisión independiente de la Ronda 3 (2026-08-19)
+
+**Veredicto: ✅ APROBADO.**
+
+Verificación 100% independiente, sin reutilizar nada del ejecutor: confirmó primero (con `curl` sobre un fragmento único del código) que su propio preview servía su worktree real, no el checkout compartido — evitando el mismo problema de entorno documentado en la sección 7.2. Diff de alcance confirmado exacto. Fix del router verificado línea a línea (`setupNavigationGuards` confirmado código muerto por grep, `initialize()` confirmado genuinamente idempotente vía su guard `hasInitialized`).
+
+**Reproducción end-to-end con cuentas propias, no reutilizadas:** registró dos cuentas nuevas vía `/auth/register` — una `business_type=restaurant` (igual que la del ejecutor) y **una segunda `business_type=services` → `company_type=office`**, cerrando exactamente el hueco de verificación de CRM que el ejecutor había dejado pendiente. Confirmó `/tpv`, `/control-horario`, `/payroll` con la cuenta restaurant, y `/office-crm` con la cuenta office — todas renderizando contenido real tras navegación dura, sin redirect. Control adicional: confirmó que la cuenta restaurant sigue correctamente bloqueada de `/office-crm` — el gating por módulo no se rompió, solo se desbloqueó lo que debía.
+
+**Seguros y Ajustes**: confirmados en vivo — stops exactos del fondo de bandas, gradiente de 3 paradas sin naranja, un único botón con acento por vista.
+
+**Suite de tests de backend — cerrada por el revisor, el ejecutor no lo había hecho**: `7 failed, 214 passed, 2 skipped, 3 errors`, idéntico al baseline. Sin regresión.
+
+Hallazgos cosméticos pendientes (botón verde en Control Horario, franjas oscuras en bordes) evaluados como no bloqueantes — no violan ninguna regla no negociable. `main` confirmado sin tocar, nada empujado a remoto.
+
+**Estado: Ronda 3 CERRADA — APROBADA.** Pendiente para una ronda siguiente: Admin Panel (no tocado), los dos hallazgos cosméticos, y el bug preexistente de `create_tables()` (fuera de alcance, ya señalado).

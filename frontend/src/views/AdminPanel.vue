@@ -714,7 +714,7 @@ const renderEmptyChart = (message = 'No hay datos disponibles') => {
   
   // Dibujar mensaje directamente
   ctx.save()
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
+  ctx.fillStyle = '#8792a6'
   ctx.font = 'bold 18px sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -816,7 +816,7 @@ const renderChart = (chartData) => {
           display: true,
           position: 'top',
           labels: {
-            color: 'rgba(255, 255, 255, 0.8)',
+            color: '#52607a',
             font: {
               size: 12,
               family: "'Inter', sans-serif"
@@ -826,10 +826,12 @@ const renderChart = (chartData) => {
           }
         },
         tooltip: {
+          // Tooltip flotante: se mantiene oscuro a propósito (independiente
+          // del fondo claro de la tarjeta), texto blanco ya correcto sobre él.
           backgroundColor: 'rgba(10, 14, 25, 0.95)',
           titleColor: '#fff',
           bodyColor: 'rgba(255, 255, 255, 0.9)',
-          borderColor: 'rgba(59, 130, 246, 0.5)',
+          borderColor: 'rgba(79, 70, 229, 0.5)',
           borderWidth: 1,
           padding: 12,
           displayColors: true,
@@ -844,20 +846,20 @@ const renderChart = (chartData) => {
       scales: {
         x: {
           ticks: {
-            color: 'rgba(255, 255, 255, 0.6)',
+            color: '#52607a',
             font: {
               size: 11
             }
           },
           grid: {
-            color: 'rgba(255, 255, 255, 0.05)',
+            color: 'rgba(15, 23, 42, 0.08)',
             drawBorder: false
           }
         },
         y: {
           beginAtZero: true,
           ticks: {
-            color: 'rgba(255, 255, 255, 0.6)',
+            color: '#52607a',
             font: {
               size: 11
             },
@@ -866,7 +868,7 @@ const renderChart = (chartData) => {
             }
           },
           grid: {
-            color: 'rgba(255, 255, 255, 0.05)',
+            color: 'rgba(15, 23, 42, 0.08)',
             drawBorder: false
           }
         }

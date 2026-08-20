@@ -121,7 +121,7 @@
                   aria-hidden="true"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path v-for="(d, i) in getIconPaths(product.icon, product.category)" :key="i" :d="d" />
+                    <path v-for="(d, i) in getIconPaths(product.name, product.icon, product.category)" :key="i" :d="d" />
                   </svg>
                 </span>
                 <span
@@ -130,7 +130,7 @@
                   aria-hidden="true"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path v-for="(d, i) in getProductIconPaths(product.category)" :key="i" :d="d" />
+                    <path v-for="(d, i) in getProductIconPaths(product.name, product.category)" :key="i" :d="d" />
                   </svg>
                 </span>
               </div>
@@ -1277,36 +1277,47 @@ const PRODUCT_ICON_PATHS = {
   pill: ['M4.9 4.9a5 5 0 0 1 7.07 0l7.07 7.07a5 5 0 1 1-7.07 7.07L4.9 11.97a5 5 0 0 1 0-7.07Z', 'M9 9l6 6'],
   house: ['M4 11 12 4l8 7', 'M6 10v9a1 1 0 0 0 1 1h4v-6h2v6h4a1 1 0 0 0 1-1v-9'],
   package: ['M21 8 12 3 3 8v8l9 5 9-5V8Z', 'M3 8l9 5 9-5', 'M12 13v8'],
+  // Jarra de cerveza (mango + cuerpo rectangular + espuma), deliberadamente
+  // distinta de "alcohol" (copa de vino/licor) para que Cerveza no comparta
+  // icono con Vino/Cóctel.
+  beer: ['M5 7h10v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7Z', 'M15 9h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-2', 'M6.5 7c0-1.5 1-2 1-3.5M10.5 7c0-1.5 1-2 1-3.5'],
 }
 
-const getProductIconKey = (category) => {
-  const key = normalizeCategory(category)
-  if (!key) return 'package'
+// Reglas de deteccion por palabra clave, compartidas entre nombre de
+// producto y categoria (misma logica, dos campos distintos a los que
+// aplicarla). "cerveza" tiene su propia regla ANTES que el resto de
+// alcoholes para no compartir icono con vino/licor/cocktail.
+const ICON_KEYWORD_RULES = [
+  { terms: ['cerveza'], icon: 'beer' },
+  { terms: ['bebida', 'refresco', 'zumo', 'agua'], icon: 'drink' },
+  { terms: ['alcohol', 'vino', 'licor', 'cocktail', 'coctel'], icon: 'alcohol' },
+  { terms: ['cafe', 'infusion', 'te'], icon: 'coffee' },
+  { terms: ['bocadillo', 'bocadillos', 'sandwich', 'hamburguesa'], icon: 'sandwich' },
+  { terms: ['pizza'], icon: 'pizza' },
+  // Tapas / pintxos: icono tipo pincho (brocheta), antes de la regla genérica de comida
+  { terms: ['tapa', 'tapas', 'pintxo', 'pintxos', 'pincho', 'pinchos'], icon: 'skewer' },
+  { terms: ['plato', 'comida', 'menu', 'especialidad', 'sugerencia', 'tostada', 'tosta', 'pan'], icon: 'plate' },
+  { terms: ['postre', 'dulce'], icon: 'dessert' },
+  { terms: ['entrante', 'ensalada'], icon: 'salad' },
+  { terms: ['servicio'], icon: 'briefcase' },
+  { terms: ['consulta'], icon: 'medical' },
+  { terms: ['tratamiento'], icon: 'sparkle' },
+  { terms: ['corte'], icon: 'scissors' },
+  { terms: ['repuesto'], icon: 'wrench' },
+  { terms: ['entrada', 'ticket'], icon: 'ticket' },
+  { terms: ['medicamento'], icon: 'pill' },
+  { terms: ['envio'], icon: 'package' },
+]
+
+// Busca coincidencia de palabra clave en un texto (nombre o categoria).
+// Devuelve la clave de icono o null si no hay match — null, no 'package',
+// para poder distinguir "no hay match aqui, prueba el siguiente campo" de
+// "es explicitamente generico/envio".
+const matchIconKeyword = (text) => {
+  const key = normalizeCategory(text)
+  if (!key) return null
   const words = new Set(key.split(/[^a-z0-9]+/).filter(Boolean))
-
-  // Detección por palabras clave para evitar depender de mayúsculas/acentos exactos.
-  const rules = [
-    { terms: ['bebida', 'refresco', 'zumo', 'agua'], icon: 'drink' },
-    { terms: ['alcohol', 'cerveza', 'vino', 'licor', 'cocktail', 'coctel'], icon: 'alcohol' },
-    { terms: ['cafe', 'infusion', 'te'], icon: 'coffee' },
-    { terms: ['bocadillo', 'bocadillos', 'sandwich', 'hamburguesa'], icon: 'sandwich' },
-    { terms: ['pizza'], icon: 'pizza' },
-    // Tapas / pintxos: icono tipo pincho (brocheta), antes de la regla genérica de comida
-    { terms: ['tapa', 'tapas', 'pintxo', 'pintxos', 'pincho', 'pinchos'], icon: 'skewer' },
-    { terms: ['plato', 'comida', 'menu', 'especialidad', 'sugerencia'], icon: 'plate' },
-    { terms: ['postre', 'dulce'], icon: 'dessert' },
-    { terms: ['entrante', 'ensalada'], icon: 'salad' },
-    { terms: ['servicio'], icon: 'briefcase' },
-    { terms: ['consulta'], icon: 'medical' },
-    { terms: ['tratamiento'], icon: 'sparkle' },
-    { terms: ['corte'], icon: 'scissors' },
-    { terms: ['repuesto'], icon: 'wrench' },
-    { terms: ['entrada', 'ticket'], icon: 'ticket' },
-    { terms: ['medicamento'], icon: 'pill' },
-    { terms: ['envio'], icon: 'package' },
-  ]
-
-  const matched = rules.find((rule) =>
+  const matched = ICON_KEYWORD_RULES.find((rule) =>
     rule.terms.some((term) => {
       const t = normalizeCategory(term)
       if (!t) return false
@@ -1315,30 +1326,48 @@ const getProductIconKey = (category) => {
       return key.includes(t)
     })
   )
-  return matched?.icon || 'package'
+  return matched ? matched.icon : null
 }
 
-// Icono según campo icon predefinido del producto (fallback si no hay categoría reconocida)
-const getIconKey = (icon, category) => {
-  const categoryIcon = getProductIconKey(category)
-  // Si la categoría ya tiene icono específico, priorizarla sobre iconos heredados del producto.
-  if (categoryIcon !== 'package') return categoryIcon
-
-  const key = normalizeCategory(icon)
-  const iconMap = {
-    'coffee': 'coffee',
-    'food': 'plate',
-    'service': 'briefcase',
-    'house': 'house',
-    'default': 'package'
-  }
-  const mapped = iconMap[key]
-  if (mapped && mapped !== 'package') return mapped
-  return 'package'
+// Icono predefinido del producto (campo product.icon: coffee/food/service/
+// house/default) -> clave de PRODUCT_ICON_PATHS. Es el campo MENOS
+// especifico (solo 5 valores posibles para cualquier tipo de negocio), por
+// eso es la ultima prioridad, no la primera — ver resolveProductIconKey.
+const GENERIC_ICON_FIELD_MAP = {
+  coffee: 'coffee',
+  food: 'plate',
+  service: 'briefcase',
+  house: 'house',
+  default: 'package',
 }
 
-const getProductIconPaths = (category) => PRODUCT_ICON_PATHS[getProductIconKey(category)] || PRODUCT_ICON_PATHS.package
-const getIconPaths = (icon, category) => PRODUCT_ICON_PATHS[getIconKey(icon, category)] || PRODUCT_ICON_PATHS.package
+// Resuelve la clave de icono real de un producto con prioridad de mas a
+// menos especifico:
+//   1. Nombre del producto ("Café", "Cerveza", "Refresco" ya distinguen
+//      entre si por si solos — es el campo mas fiable para diferenciar
+//      productos de la MISMA categoria).
+//   2. Categoria ("Tapas", "Postres"...) — mas generica que el nombre pero
+//      mas especifica que el campo `icon`.
+//   3. Campo `icon` predefinido del producto (coffee/food/service/house) —
+//      bucket generico, ultimo recurso.
+//   4. Genérico/caja (sin match en ninguno de los anteriores).
+// ANTES: la categoria tenia prioridad absoluta sobre el nombre, asi que
+// Café/Cerveza/Refresco (los 3 con categoria "Bebidas") colapsaban todos
+// en el mismo icono generico de vaso — bug real reportado por el usuario
+// con captura, corregido aqui.
+const resolveProductIconKey = (name, icon, category) => {
+  return (
+    matchIconKeyword(name) ||
+    matchIconKeyword(category) ||
+    GENERIC_ICON_FIELD_MAP[normalizeCategory(icon)] ||
+    'package'
+  )
+}
+
+const getProductIconPaths = (name, category) =>
+  PRODUCT_ICON_PATHS[resolveProductIconKey(name, null, category)] || PRODUCT_ICON_PATHS.package
+const getIconPaths = (name, icon, category) =>
+  PRODUCT_ICON_PATHS[resolveProductIconKey(name, icon, category)] || PRODUCT_ICON_PATHS.package
 
 // Manejar error al cargar imagen
 const handleImageError = (event) => {
@@ -2955,18 +2984,37 @@ onUnmounted(() => {
   transform: scale(1.1);
 }
 
-.product-icon {
-  font-size: 2rem; /* tamaño lógico similar a iconos del carrito */
-  display: block;
+/* Caja fija para la imagen/icono del producto: mismo alto tenga la tarjeta
+   una foto real o un icono de categoria, icono siempre centrado dentro
+   -- antes no existia esta regla base (solo un override de 80px en
+   móvil), así que el SVG del icono no tenía caja de referencia y crecía
+   sin límite/desalineado dentro de la tarjeta. */
+.product-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100px;
   margin-bottom: 8px;
+}
+
+.product-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--zeus-accent, #4f46e5);
+  opacity: 0.85;
+}
+
+.product-icon svg {
+  width: 38px;
+  height: 38px;
 }
 
 .product-image-file {
   width: 100%;
-  height: 110px;
+  height: 100%;
   object-fit: cover;
   border-radius: 8px;
-  margin-bottom: 8px;
 }
 
 .image-preview {

@@ -299,3 +299,23 @@ ningún endpoint, ninguna query — el fix es 100% a nivel de proceso/arranque.
    (contenedores mínimos con locale `C`/`POSIX` en vez de UTF-8) se basa en
    el comportamiento documentado de `TextIOWrapper.reconfigure()`, no en una
    prueba end-to-end contra ese Dockerfile.
+
+---
+
+## 6. Revisión independiente (2026-08-20)
+
+**Veredicto: ✅ APROBADO.**
+
+Verificación 100% independiente, con reproducción real del crash: el revisor alternó el estado de `app/main.py`/`gunicorn.conf.py` entre pre-fix y post-fix dentro de su propio proceso Python (sin `PYTHONIOENCODING`, confirmando `sys.stdout.encoding == cp1252` de partida), y reprodujo el `UnicodeEncodeError` idéntico en `agents/base_agent.py:41` — 3/3 fallos con `get_rafael_agent()`, confirmando el fallo permanente (el singleton nunca se asigna). Tras aplicar el fix en el mismo proceso, `sys.stdout.encoding` pasó a `utf-8` y los 6 agentes (ZEUS CORE, PERSEO, RAFAEL, THALOS, JUSTICIA, AFRODITA) se inicializaron correctamente vía `ensure_agent_stack()`, con emojis reales renderizando bien en el log — 3/3 éxitos.
+
+**Hallazgo adicional del revisor, no crítico**: el propio manejador de excepción de `ensure_agent_stack()` en `chat.py:143` también hace `print()` con emoji — coherente con el diagnóstico general, no cambia el veredicto (el fix cubre el proceso completo antes de que ese código se ejecute).
+
+**Cobertura real del fix — punto más crítico, verificado a fondo**: revisó los entrypoints reales de producción (`Dockerfile`, `railway.toml`). Los scripts de arranque previos a `gunicorn` (`alembic_conditional_stamp.py`, `ensure_schema_patches.py`) no pasan por `app.main`/`gunicorn.conf.py`, pero el revisor confirmó empíricamente que solo usan `print()` ASCII puro y `logger.info()` con emoji — nunca `print()` con emoji — y verificó en vivo que `logger.info()` con carácter no-ASCII sobre `cp1252` NO crashea el proceso (solo mojibake), validando la premisa central del fix. **No es un hueco real.** Scripts sueltos (`create_user.py`, etc.) confirmados fuera de los entrypoints de producción reales.
+
+Escaneo independiente propio del revisor: 356 líneas en 44 archivos con el patrón de riesgo (vs. 360/47 del ejecutor) — sin discrepancia significativa.
+
+Suite de tests idéntica al baseline, corrida de forma independiente. Docker/Railway real sin verificar declarado no bloqueante (`sys.stdout.reconfigure()` es API estándar de Python 3.7+, no dependiente de plataforma, y el revisor la ejercitó con éxito en vivo). Sin cambio de riesgo en THALOS/multi-tenant (fix puramente de codificación de proceso, no toca rutas ni queries).
+
+## CERRADO
+
+**Rama final:** `feature/rediseno-completo`, commits `a5897a7` (fix) + `4382832` (docs) sobre `fa9b70f`. Sin merge ni push a `main`.

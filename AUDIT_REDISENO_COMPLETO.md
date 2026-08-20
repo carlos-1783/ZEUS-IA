@@ -723,3 +723,34 @@ del encargo y no debía quedar en el commit.
 
 **Estado: Ronda 4 (Admin Panel) — completada, pendiente de revisión
 independiente.**
+
+---
+
+## 10. Revisión independiente de la Ronda 4 — CIERRE DEL ENCARGO COMPLETO (2026-08-20)
+
+**Veredicto: ✅ APROBADO.**
+
+Verificación 100% independiente, worktree y servidor propios (confirmó con `curl` sobre un fragmento único del fix de Chart.js que su preview servía el commit real antes de fiarse de nada visual). Diff exacto confirmado (solo `AdminPanel.vue` + el doc, `package-lock.json` ausente). Mapeo de secciones confirmado real leyendo los 6 diffs completos — y confirmó además, por grep, que ninguno de los 6 commits toca lógica de `<script>`, solo clases/estilos (el riesgo de romper funcionalidad con estos cambios es estructuralmente bajo).
+
+**Bug de fondo reproducido en vivo, no solo citado:** el revisor fue más allá de lo pedido — además de confirmar que su cuenta de superusuario con `Company` aterriza en `/dashboard` (rastreó la causa exacta: `GET /auth/onboarding/status` infiere `setup_completed` de la presencia de `company_employees`/`tpv_products` sembrados en el registro), creó una SEGUNDA cuenta, le quitó el vínculo `user_companies`, la promovió a superusuario, y confirmó por API que `setup_completed:false, company_linked:false` — es decir, **el bug de `CICLO_PRODUCCION.md` (Ciclo 4) sigue vivo, confirmado de primera mano**, no arreglado (correctamente fuera de alcance de esta ronda de diseño).
+
+**Verificación visual y funcional**: las 5 secciones confirmadas contra la referencia (conteo exacto de botones-con-gradiente por sección, tal como describía el ejecutor). Única limitación declarada: no pudo completar el click-through visual de "Configuración" por un límite de viewport de su propio navegador de revisión (629×275px, sin relación con el código) — lo compensó leyendo el diff línea a línea y disparando directamente el mismo endpoint que llama el botón, confirmando 200 real con checks reales de Stripe/Twilio/SendGrid/OpenAI/Postgres. Fix de Chart.js confirmado legible en vivo. Modal "Ver"/"Editar" con datos reales, guard de superadmin genuino confirmado ("No se puede modificar ni eliminar un superusuario desde aquí"). Suite de tests idéntica al baseline, corrida de forma independiente.
+
+## Ronda 4 — CERRADA
+
+**Rama final:** `feature/rediseno-completo`, commits `0b16359`→`ea425ab` (sobre `81e03db`, Rondas 1-3). Sin merge ni push a `main`.
+
+---
+
+## CIERRE DEL ENCARGO COMPLETO — valoración final (revisor-independiente, Ronda 4)
+
+Con esta ronda se cierran las 7 categorías del alcance original: Dashboard, `/agents`, los 6 workspaces de agente, Seguros, CRM/TPV/Control Horario/Nóminas, Onboarding, y Admin Panel/Ajustes — ~19 pantallas en total, a lo largo de 4 rondas de trabajo, cada una con al menos una vuelta de devolución real y corrección antes de aprobarse (excepto la Ronda 4, aprobada a la primera).
+
+**Lo sólido**: un sistema de diseño único, consistente, y verificado en código real en las ~19 pantallas — bandas metálicas exactas, gradiente de 3 paradas teal→morado→rosa, regla de "un solo botón vibrante por vista" aplicada con criterio documentado y defendible en cada caso, no una pasada superficial. Cada ronda encontró y corrigió al menos un bug real en el camino, no solo cambios cosméticos: `css_system_enforcer_v1.css` forzando botones negros (Ronda 1-2), `authStore.modules` sin hidratar bloqueando CRM/TPV/Control Horario/Nóminas para toda la app (Ronda 3, bug de infraestructura real, no solo de diseño), y el texto invisible de Chart.js (Ronda 4).
+
+**Pendientes conocidos, ninguno bloqueante, para decisión del usuario:**
+1. Botón verde plano en "Actualizar" de Control Horario — tercera variante fuera de la regla de dos estados (acento/secundario).
+2. Franjas oscuras cosméticas en los bordes de Nóminas y Seguros (el fondo del `body` asoma alrededor del contenedor centrado).
+3. El selector "Tema: Oscuro/Claro/Auto" en Ajustes quedó con propósito huérfano tras fijar un único sistema visual "sin excepción" — decidir si eliminarlo o si debe controlar otra cosa.
+4. **El bug estructural de superusuario sin `Company`** (`Login.vue`/`resolvePostAuthPath()`, `CICLO_PRODUCCION.md` Ciclo 4) — confirmado vivo de primera mano en esta ronda, ajeno al rediseño, afecta potencialmente a cualquier superusuario real sin empresa asociada en producción.
+5. Acciones irreversibles de Admin Panel (Desactivar/Eliminar cuenta) y "Guardar configuración" — estilo verificado, acción final no ejecutada en ninguna ronda por no mutar datos destructivamente sin necesidad; bajo riesgo dado que ningún commit de diseño tocó lógica de `<script>`, pero sigue sin confirmación end-to-end explícita.

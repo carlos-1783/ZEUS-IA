@@ -1,7 +1,12 @@
 <template>
   <div class="control-horario-container">
-    <!-- Botón de vuelta al Dashboard -->
-    <button @click="goToDashboard" class="back-to-dashboard-btn fixed-top-left">
+    <!-- Botón de vuelta al Dashboard: en flujo normal (antes position:fixed
+         en la esquina superior izquierda, exactamente sobre el título
+         "Control Horario Universal" -> se solapaban en todos los anchos
+         de pantalla, no solo móvil). Mismo patrón que el resto de vistas
+         (Seguros, Ajustes, /agents): un enlace/botón "volver" en flujo,
+         antes de la cabecera. -->
+    <button @click="goToDashboard" class="back-to-dashboard-btn">
       <span class="btn-icon">📊</span>
       <span class="btn-label">{{ $t('controlHorario.backToDashboard') }}</span>
     </button>
@@ -49,7 +54,13 @@
               :class="{ active: selectedMethod === method.id }"
               :disabled="!isMethodEnabled(method.id)"
             >
-              <span class="method-icon">{{ method.icon }}</span>
+              <span class="method-icon" aria-hidden="true">
+                <svg v-if="method.id === 'face'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+                <svg v-else-if="method.id === 'qr'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="6" height="6" rx="1"/><rect x="14.5" y="3.5" width="6" height="6" rx="1"/><rect x="3.5" y="14.5" width="6" height="6" rx="1"/><path d="M14.5 14.5h2.5v2.5h-2.5zM19.5 19.5h1v1h-1zM14.5 19.5v2M19.5 14.5h2"/></svg>
+                <svg v-else-if="method.id === 'code'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 7 20M17 4l-2 16M4 9h16M3 15h16"/></svg>
+                <svg v-else-if="method.id === 'location'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.5 7-11.5A7 7 0 0 0 5 9.5C5 14.5 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+                <svg v-else-if="method.id === 'remote'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="11" rx="1.5"/><path d="M2 19h20M9 19l1-3h4l1 3"/></svg>
+              </span>
               <span class="method-label">{{ method.label }}</span>
             </button>
           </div>
@@ -738,19 +749,19 @@ onUnmounted(() => {
 }
 
 .back-to-dashboard-btn {
-  position: fixed;
-  top: 20px;
-  left: 20px;
+  /* En flujo normal (bug: antes position:fixed en (20,20), exactamente
+     donde arranca el título del header -> se solapaban en TODOS los
+     anchos, no solo móvil). margin-bottom la separa del header. */
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
   padding: 12px 20px;
   background: #ffffff;
   color: var(--zeus-text, #0f172a);
   border: 1px solid #D1D5DB;
   border-radius: var(--zeus-radius-sm, 8px);
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  z-index: 100;
   font-weight: 600;
   box-shadow: var(--zeus-shadow-btn, 0 2px 4px rgba(0, 0, 0, 0.15));
   transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
@@ -797,27 +808,23 @@ onUnmounted(() => {
   align-items: center;
 }
 
+/* Pendiente señalado en la Ronda 3 ("botón verde plano, tercera
+   variante fuera de la regla de dos estados") — "Actualizar" es una
+   utilidad repetible, no la acción de mayor jerarquía de esta vista
+   (esa es fichar entrada/salida) -> secundario blanco/borde. */
 .header-btn {
   padding: 10px 20px;
-  background: var(--zeus-success, #10b981);
-  color: var(--zeus-text-on-accent, white);
-  border: none;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  border: 1px solid #D1D5DB;
   border-radius: var(--zeus-radius-sm, 8px);
   cursor: pointer;
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(16, 185, 129, 0.2);
-  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .header-btn:hover {
-  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(16, 185, 129, 0.28);
-  transform: translateY(-1px);
-}
-
-.header-btn:active {
-  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.08);
-  transform: translateY(0);
+  border-color: #9aa2af;
 }
 
 .business-profile-badge {
@@ -832,6 +839,14 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
+  /* Bug real: .status-panel y .history-panel comparten fila (sin
+     grid-column propio) y CSS Grid las estira por defecto (align-items:
+     stretch) a la altura de la más alta de las dos -> cuando una lista
+     es mucho más corta que la otra (p.ej. pocos/ningún empleado dentro
+     vs historial con varios registros), la tarjeta corta queda con un
+     hueco en blanco al final, del tamaño de la diferencia. align-items:
+     start hace que cada tarjeta ocupe solo su altura de contenido real. */
+  align-items: start;
 }
 
 .check-in-out-panel {
@@ -875,25 +890,18 @@ onUnmounted(() => {
   background: var(--zeus-accent-soft, #eff6ff);
 }
 
-/* Selector de metodo de fichaje: unico punto de acento gradiente de la
-   pantalla, marcando el metodo actualmente elegido (equivalente a una
-   pestana/filtro activo). Patron copiado de AfroditaWorkspace
-   domain-tabs button.active::after (barra fina en gradiente). */
+/* Selector de metodo de fichaje: es seleccion DENTRO de un grupo (5
+   metodos), no la accion principal de la vista -> sin gradiente, solo
+   borde+fondo con tinte, segun la regla ya establecida en rondas
+   anteriores ("seleccion dentro de un grupo: gradiente retirado, solo
+   negrita y/o cambio de borde"). Antes llevaba una barra ::after con el
+   gradiente de 4 paradas CON naranja (valor obsoleto de Ronda 1, ni
+   siquiera coincidia con el --zeus-accent-gradient de 3 paradas actual)
+   — corregido al pasar por este bloque para los iconos SVG. */
 .method-btn.active {
   border-color: var(--zeus-accent, #3b82f6);
   background: var(--zeus-accent-soft, #dbeafe);
-}
-
-.method-btn.active::after {
-  content: '';
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 6px;
-  height: 3px;
-  border-radius: var(--zeus-radius-full, 999px);
-  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
-  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 10px rgba(139, 92, 246, 0.35));
+  font-weight: 600;
 }
 
 .method-btn:disabled {
@@ -902,7 +910,17 @@ onUnmounted(() => {
 }
 
 .method-icon {
-  font-size: 32px;
+  display: inline-flex;
+  color: var(--zeus-text-secondary, #52607a);
+}
+
+.method-btn.active .method-icon {
+  color: var(--zeus-accent, #4f46e5);
+}
+
+.method-icon svg {
+  width: 28px;
+  height: 28px;
 }
 
 .check-form {

@@ -2,8 +2,35 @@
 # ZEUS-IA MAIN APPLICATION
 # ========================================
 
-import logging
+# --- ZEUS_ENCODING_GUARD -------------------------------------------------
+# Fuerza stdout/stderr a UTF-8 antes de importar nada mas. En Windows (y en
+# cualquier entorno cuya consola/proceso no use UTF-8 por defecto) un simple
+# print()/logging con un caracter no-ASCII -- como los emojis que imprimen
+# los 6 agentes al instanciarse (agents/base_agent.py y subclases) -- revienta
+# con UnicodeEncodeError y aborta lo que sea que lo dispare. Con RAFAEL esto
+# era ademas PERMANENTE, no solo "la primera vez": el singleton
+# `_rafael_instance` de services/rafael_service.py nunca llegaba a asignarse
+# porque la excepcion saltaba dentro del propio constructor (antes de que la
+# asignacion se completara), asi que TODA venta de TPV fallaba con 502, no
+# solo la primera. Detalle completo de la investigacion y la verificacion en
+# AUDIT_ENCODING_TPV.md. Se hace aqui, en el entrypoint real de la app
+# (app.main:app, el que arrancan tanto uvicorn como gunicorn en produccion),
+# antes de importar cualquier otra cosa, porque cualquier modulo importado
+# despues podria imprimir en su propio import o en su primera instanciacion.
+# No depende de que nadie recuerde poner PYTHONIOENCODING=utf-8 a mano en su
+# maquina o en Railway -- protege por defecto a los 6 agentes de una vez.
 import sys
+
+for _stream_name in ("stdout", "stderr"):
+    _stream = getattr(sys, _stream_name, None)
+    if _stream is not None and hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+# ---------------------------------------------------------------------------
+
+import logging
 import os
 from pathlib import Path
 

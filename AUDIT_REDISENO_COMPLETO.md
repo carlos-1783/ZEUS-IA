@@ -997,3 +997,27 @@ tarea nueva para el flujo de auditoría de producción.
 **Pendiente menor, no bloqueante**: `border-color: #9aa2af` en TPV (9
 apariciones, estado hover/focus de campos de formulario) sin token
 `--zeus-*` equivalente — ver 11.2.
+
+---
+
+## 12. Revisión independiente de los Bloques 1+2 — Control Horario y TPV (2026-08-20)
+
+**Veredicto: ✅ APROBADO.**
+
+Verificación 100% independiente, con tenants propios distintos a los del ejecutor en cada prueba. Diff confirmado exacto (`ControlHorario.vue`, `TPV.vue`, doc). Fix del solapamiento confirmado estructural (no depende de breakpoint). Fix del hueco vacío confirmado por código/semántica CSS (`align-items:start` es la corrección estándar e inequívoca); no se pudo capturar visualmente el grid de 2 columnas por una limitación de viewport del propio navegador de revisión (629px, por debajo del breakpoint de 768px) — limitación del entorno de revisión, no del fix.
+
+**Punto más importante — honestidad de los 5 métodos de fichaje, verificado de forma independiente y multi-ángulo:** confirmado por código (`face === remote` en `V1_METHOD_MAP`, sin ningún `getUserMedia` en todo el archivo), por backend (`qr_token` sin validar contenido real, `pin` sí verificado con bcrypt), y **por prueba propia con curl** contra un tenant nuevo: `POST /checkin` con un `qr_token` inventado → `200 OK`, confirmando sin ambigüedad que el backend acepta cualquier string. PIN incorrecto correctamente rechazado (`422`). De paso, probó también aislamiento multi-tenant en este endpoint (no pedido explícitamente) — confirmado correcto en ambas direcciones.
+
+**Venta TPV verificada de extremo a extremo con tenant propio**: `POST /tpv/sale` real, ticket real, `accounting_sent:true`, `fiscal_document_persisted:true`, actividad real de RAFAEL/JUSTICIA en logs.
+
+**Bug de codificación `cp1252` — severidad AGRAVADA respecto al informe original**: reproducido de forma independiente (backend reiniciado sin `PYTHONIOENCODING=utf-8`, mismo 502 con el mismo traceback exacto). El revisor fue más allá y repitió la venta una segunda vez: **volvió a fallar** — el bug no es "solo la primera vez", es **permanente**, porque el singleton `_rafael_instance` nunca llega a asignarse (la excepción salta dentro del propio constructor). **El 100% de las ventas TPV quedan bloqueadas en cualquier entorno Windows sin UTF-8 forzado**, no solo el intento inicial. Confirmado que la venta se revierte limpiamente sin dejar estado corrupto.
+
+Suite de tests idéntica al baseline. `border-color:#9aa2af` sin token (9 apariciones, hover) confirmado como pendiente menor no bloqueante.
+
+## Bloques 1+2 — CERRADOS
+
+**Rama final:** `feature/rediseno-completo`, commits `e113132` (Control Horario) + `0081145` (TPV) + `447995d` (docs) sobre `4b50ae3` (cierre de las 4 rondas). Sin merge ni push a `main`.
+
+### 🔴 Recomendación de prioridad alta del revisor, no bloqueante para este cierre pero urgente para producción
+
+`backend/agents/base_agent.py:41` — un `print()` con emoji revienta la consola en Windows (cp1252) al instanciar RAFAEL, bloqueando el 100% de las ventas TPV de forma permanente en cualquier despliegue Windows sin `PYTHONIOENCODING=utf-8` explícito. Afecta a RAFAEL, agente compartido por más de una vertical (Facturación, TPV, y potencialmente Seguros al reutilizar el mismo motor fiscal). Candidato a tarea de máxima prioridad en el flujo de producción del núcleo, fuera del alcance de esta rama de diseño frontend.

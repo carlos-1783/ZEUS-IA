@@ -2,35 +2,41 @@
   <div class="tpv-container">
     <!-- Botón de vuelta al Dashboard -->
     <button @click="goToDashboard" class="back-to-dashboard-btn fixed-top-left">
-      <span class="btn-icon">📊</span>
+      <span class="btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M4 20h16"/></svg></span>
       <span class="btn-label">{{ $t('tpv.backToDashboard') }}</span>
     </button>
 
     <!-- Header del TPV -->
     <div class="tpv-header">
       <div class="tpv-title-section">
-        <h1 class="tpv-title">💳 {{ $t('tpv.title') }}</h1>
+        <h1 class="tpv-title">
+          <span class="tpv-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg></span>
+          {{ $t('tpv.title') }}
+        </h1>
         <p class="tpv-subtitle">{{ $t('tpv.subtitle') }}</p>
       </div>
       <div class="header-actions">
-        <button 
+        <button
           v-if="tpvConfig.tables_enabled"
-          @click="toggleTablesMode" 
-          class="header-btn" 
+          @click="toggleTablesMode"
+          class="header-btn"
           :class="{ active: tablesMode }"
         >
-          🪑 {{ tablesMode ? $t('tpv.viewProducts') : $t('tpv.tablesMode') }}
+          <span class="header-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="4" rx="1"/><path d="M6 10v8M18 10v8"/></svg></span>
+          {{ tablesMode ? $t('tpv.viewProducts') : $t('tpv.tablesMode') }}
         </button>
-        <button 
+        <button
           v-if="canEditProducts"
-          @click="copyComanderoLink" 
+          @click="copyComanderoLink"
           class="header-btn"
           title="Copiar enlace del TPV con la comanda actual para compartir con empleados"
         >
-          🔗 {{ $t('tpv.shareComandero') || 'Compartir comandero' }}
+          <span class="header-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg></span>
+          {{ $t('tpv.shareComandero') || 'Compartir comandero' }}
         </button>
         <button @click="checkStatus" class="header-btn">
-          🔄 {{ $t('tpv.refresh') }}
+          <span class="header-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-5h5"/></svg></span>
+          {{ $t('tpv.refresh') }}
         </button>
         <div v-if="authStore.isEmployee && tpvJornada" class="tpv-jornada-badge" :class="{ on: tpvJornada.in_turno }">
           {{ tpvJornada.in_turno ? $t('controlHorario.enTurno') : $t('controlHorario.fueraTurno') }}
@@ -43,7 +49,8 @@
           {{ $t('tpv.changeOperator') }}
         </button>
         <div v-if="businessProfile" class="business-profile-badge">
-          🏢 {{ getBusinessProfileLabel(businessProfile) }}
+          <span class="header-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1M10 21v-4h4v4"/></svg></span>
+          {{ getBusinessProfileLabel(businessProfile) }}
         </div>
       </div>
     </div>
@@ -55,7 +62,7 @@
         <!-- Con mesa seleccionada: barra "Mesa X" + volver a mesas -->
         <div v-if="tablesMode && tpvConfig.tables_enabled && selectedTable" class="tables-selected-bar">
           <button type="button" @click="backToTablesList" class="back-to-tables-btn" title="Volver a mesas">
-            ← {{ $t('tpv.tablesMode') || 'Mesas' }}
+            <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg></span> {{ $t('tpv.tablesMode') || 'Mesas' }}
           </button>
           <span class="tables-selected-label">Añadir productos a Mesa {{ selectedTable?.number }}</span>
         </div>
@@ -88,7 +95,7 @@
             type="button"
           >
             <div class="add-product-content">
-              <span class="add-product-icon">➕</span>
+              <span class="add-product-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span class="add-product-label">{{ $t('tpv.products.add') || 'Añadir Producto' }}</span>
             </div>
           </button>
@@ -108,14 +115,24 @@
                   class="product-image-file"
                   @error="handleImageError"
                 />
-                <span 
-                  v-else-if="product.icon" 
+                <span
+                  v-else-if="product.icon"
                   class="product-icon"
-                >{{ getIconEmoji(product.icon, product.category) }}</span>
-                <span 
-                  v-else 
+                  aria-hidden="true"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path v-for="(d, i) in getIconPaths(product.icon, product.category)" :key="i" :d="d" />
+                  </svg>
+                </span>
+                <span
+                  v-else
                   class="product-icon"
-                >{{ getProductIcon(product.category) }}</span>
+                  aria-hidden="true"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path v-for="(d, i) in getProductIconPaths(product.category)" :key="i" :d="d" />
+                  </svg>
+                </span>
               </div>
               <div class="product-info">
                 <h3 class="product-name">{{ product.name }}</h3>
@@ -131,33 +148,33 @@
             </div>
             <!-- Botones CRUD (solo para ADMIN y SUPERUSER) -->
             <div class="product-actions" v-if="canEditProducts">
-              <button 
-                @click.stop="editProduct(product)" 
+              <button
+                @click.stop="editProduct(product)"
                 class="product-action-btn edit-btn"
                 title="Editar producto"
               >
-                ✏️
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
               </button>
-              <button 
+              <button
                 v-if="isSuperuser"
-                @click.stop="deleteProduct(product)" 
+                @click.stop="deleteProduct(product)"
                 class="product-action-btn delete-btn"
                 title="Eliminar producto"
               >
-                🗑️
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M9.5 7l.7 12a1 1 0 0 0 1 1h5.6a1 1 0 0 0 1-1l.7-12"/></svg>
               </button>
             </div>
           </div>
           
           <!-- Mensaje si no hay productos -->
           <div v-if="filteredProducts.length === 0" class="no-products">
-            <p>📦 {{ $t('tpv.products.empty') }}</p>
+            <p><span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg></span> {{ $t('tpv.products.empty') }}</p>
             <p v-if="businessProfileLoading" class="loading-message">{{ $t('tpv.products.loading') }}</p>
             <p v-else-if="!businessProfile" class="error-message">
-              ⚠️ {{ $t('tpv.products.configureBusinessProfile') }}
+              <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.5 17a1.7 1.7 0 0 0 1.5 2.6h16a1.7 1.7 0 0 0 1.5-2.6L13.7 3.9a1.7 1.7 0 0 0-3.4 0Z"/></svg></span> {{ $t('tpv.products.configureBusinessProfile') }}
             </p>
             <p v-else-if="!canEditProducts" class="error-message">
-              ⚠️ No tienes permisos para crear productos. Contacta con un administrador.
+              <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.5 17a1.7 1.7 0 0 0 1.5 2.6h16a1.7 1.7 0 0 0 1.5-2.6L13.7 3.9a1.7 1.7 0 0 0-3.4 0Z"/></svg></span> No tienes permisos para crear productos. Contacta con un administrador.
             </p>
           </div>
         </div>
@@ -165,7 +182,7 @@
         <!-- Reservas del día (cuando modo mesas, para abrir como mesa) -->
         <div v-if="tablesMode && tpvConfig.tables_enabled && !selectedTable" class="reservations-day-block">
           <div class="reservations-day-header">
-            <span>📅 Reservas del día</span>
+            <span><span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span> Reservas del día</span>
             <input v-model="reservationsDate" type="date" @focus="openReservationsDate" class="reservations-date-input">
             <button type="button" class="reservations-load-btn" :disabled="loadingReservations" @click="fetchReservations">
               {{ loadingReservations ? 'Cargando…' : 'Cargar' }}
@@ -205,7 +222,8 @@
           >
             <div class="table-number">Mesa {{ table.number }}</div>
             <div class="table-status" :class="getTableOrderTotal(table.id) > 0 ? 'occupied' : 'free'">
-              {{ getTableOrderTotal(table.id) > 0 ? '🟢 Ocupada' : '⚪ Libre' }}
+              <span class="table-status-dot" aria-hidden="true"></span>
+              {{ getTableOrderTotal(table.id) > 0 ? 'Ocupada' : 'Libre' }}
             </div>
             <div v-if="getTableOrderTotal(table.id) > 0" class="table-total">
               €{{ formatPrice(getTableOrderTotal(table.id)) }}
@@ -213,7 +231,7 @@
           </div>
           
           <button @click="addTable" class="add-table-btn">
-            ➕ Añadir Mesa
+            <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span> Añadir Mesa
           </button>
         </div>
       </div>
@@ -223,17 +241,20 @@
         <!-- Resumen del Carrito -->
         <div class="cart-panel">
           <div class="cart-header">
-            <h2><span class="tpv-icon tpv-icon-ui">🛒</span> Carrito <span v-if="cart.length > 0" class="cart-count-badge">({{ cart.length }})</span></h2>
+            <h2><span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="17" cy="20" r="1"/><path d="M2 4h2l2.6 12.4a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.6L21 8H6"/></svg></span> Carrito <span v-if="cart.length > 0" class="cart-count-badge">({{ cart.length }})</span></h2>
             <button @click="clearCart" class="clear-cart-btn" v-if="cart.length > 0">
-              <span class="tpv-icon tpv-icon-ui">🗑️</span> Limpiar
+              <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M9.5 7l.7 12a1 1 0 0 0 1 1h5.6a1 1 0 0 0 1-1l.7-12"/></svg></span> Limpiar
             </button>
           </div>
 
           <!-- Feedback visual del carrito -->
           <transition name="fade-slide">
             <div v-if="cartFeedback" class="cart-feedback" :class="cartFeedback.type">
-              <span class="feedback-icon">
-                {{ cartFeedback.type === 'added' ? '✅' : cartFeedback.type === 'removed' ? '🗑️' : cartFeedback.type === 'cleared' ? '🧹' : '🔄' }}
+              <span class="feedback-icon" aria-hidden="true">
+                <svg v-if="cartFeedback.type === 'added'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                <svg v-else-if="cartFeedback.type === 'removed'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M9.5 7l.7 12a1 1 0 0 0 1 1h5.6a1 1 0 0 0 1-1l.7-12"/></svg>
+                <svg v-else-if="cartFeedback.type === 'cleared'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h6M17 15l3 3m0-3-3 3"/></svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-5h5"/></svg>
               </span>
               <span class="feedback-message">{{ cartFeedback.message }}</span>
             </div>
@@ -258,28 +279,28 @@
               </div>
               <!-- Controles de edición (solo en estado CART) -->
               <div class="cart-item-controls" v-if="tpvState === TPV_STATES.CART">
-                <button 
-                  @click="decreaseQuantity(index)" 
+                <button
+                  @click="decreaseQuantity(index)"
                   class="qty-btn decrement-btn"
                   :title="$t('tpv.cart.decreaseQuantity')"
                 >
-                  ➖
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg>
                 </button>
                 <span class="cart-item-qty">{{ item.quantity }}</span>
-                <button 
-                  @click="increaseQuantity(index)" 
+                <button
+                  @click="increaseQuantity(index)"
                   class="qty-btn increment-btn"
                   :title="$t('tpv.cart.increaseQuantity')"
                   :disabled="item.quantity >= 999"
                 >
-                  ➕
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
                 </button>
-                <button 
-                  @click="removeFromCart(index)" 
+                <button
+                  @click="removeFromCart(index)"
                   class="remove-btn"
                   :title="$t('tpv.cart.removeItem')"
                 >
-                  🗑
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M9.5 7l.7 12a1 1 0 0 0 1 1h5.6a1 1 0 0 0 1-1l.7-12"/></svg>
                 </button>
               </div>
               <!-- Vista de solo lectura (PRE_PAYMENT, PAYMENT, CLOSED) -->
@@ -289,9 +310,9 @@
             </div>
             
             <div v-if="cart.length === 0" class="empty-cart">
-              <div class="empty-cart-icon">🛒</div>
+              <div class="empty-cart-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="17" cy="20" r="1"/><path d="M2 4h2l2.6 12.4a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.6L21 8H6"/></svg></div>
               <p class="empty-cart-message">{{ $t('tpv.cart.emptyMessage') || 'Añade productos o servicios para comenzar' }}</p>
-              <p class="empty-cart-hint">💡 Haz clic en cualquier producto para añadirlo al carrito</p>
+              <p class="empty-cart-hint"><span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a6 6 0 0 0-4 10.5c.6.5 1 1.3 1 2.1V15h6v-.4c0-.8.4-1.6 1-2.1A6 6 0 0 0 12 2Z"/></svg></span> Haz clic en cualquier producto para añadirlo al carrito</p>
             </div>
           </div>
           </div>
@@ -342,68 +363,68 @@
               :disabled="cart.length === 0"
               :title="cart.length === 0 ? 'Añade productos al carrito para generar comanda' : 'Enviar comanda a cocina/barra'"
             >
-              <span class="tpv-icon tpv-icon-ui">🖨️</span> Imprimir Comanda
+              <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2M6 14h12v7H6z"/></svg></span> Imprimir Comanda
             </button>
             <!-- Estado CART: Mostrar botón para revisar y pagar -->
             <template v-if="tpvState === TPV_STATES.CART">
-              <button 
-                @click="goToPrePayment" 
-                class="action-btn pay-btn" 
+              <button
+                @click="goToPrePayment"
+                class="action-btn pay-btn"
                 :disabled="!Array.isArray(cart) || cart.length === 0"
                 :title="(!Array.isArray(cart) || cart.length === 0) ? 'Añade productos al carrito para continuar' : 'Revisar y proceder al pago'"
               >
-                <span class="tpv-icon tpv-icon-primary">💳</span> REVISAR Y PAGAR €{{ formatPrice(total) }}
+                <span class="tpv-icon tpv-icon-primary" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg></span> REVISAR Y PAGAR €{{ formatPrice(total) }}
               </button>
-              <button 
-                @click="openDiscount" 
-                class="action-btn secondary-btn" 
+              <button
+                @click="openDiscount"
+                class="action-btn secondary-btn"
                 :disabled="cart.length === 0"
                 :title="cart.length === 0 ? 'Añade productos al carrito para aplicar descuento' : 'Aplicar descuento al carrito'"
               >
-                <span class="tpv-icon tpv-icon-ui">🏷️</span> Descuento
+                <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12.5 12.8 20.2a2 2 0 0 1-2.83 0l-6.17-6.17a2 2 0 0 1 0-2.83L11.5 3.5H19a1.5 1.5 0 0 1 1.5 1.5v7.5Z"/><circle cx="15.5" cy="7.5" r="1.25"/></svg></span> Descuento
               </button>
             </template>
-            
+
             <!-- Estado PRE_PAYMENT: Mostrar botones para volver o confirmar pago -->
             <template v-else-if="tpvState === TPV_STATES.PRE_PAYMENT">
-              <button 
-                @click="startPayment" 
+              <button
+                @click="startPayment"
                 class="action-btn pay-btn"
                 :title="'Confirmar y proceder al pago de €' + formatPrice(total)"
               >
-                <span class="tpv-icon tpv-icon-primary">💳</span> CONFIRMAR PAGO €{{ formatPrice(total) }}
+                <span class="tpv-icon tpv-icon-primary" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg></span> CONFIRMAR PAGO €{{ formatPrice(total) }}
               </button>
-              <button 
-                @click="backToCart" 
+              <button
+                @click="backToCart"
                 class="action-btn secondary-btn"
                 title="Volver al carrito para editar productos (no se pierde el estado)"
               >
-                <span class="tpv-icon tpv-icon-ui">←</span> Volver al Carrito
+                <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg></span> Volver al Carrito
               </button>
-              <button 
-                @click="openDiscount" 
+              <button
+                @click="openDiscount"
                 class="action-btn secondary-btn"
                 title="Aplicar descuento al carrito"
               >
-                <span class="tpv-icon tpv-icon-ui">🏷️</span> Descuento
+                <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12.5 12.8 20.2a2 2 0 0 1-2.83 0l-6.17-6.17a2 2 0 0 1 0-2.83L11.5 3.5H19a1.5 1.5 0 0 1 1.5 1.5v7.5Z"/><circle cx="15.5" cy="7.5" r="1.25"/></svg></span> Descuento
               </button>
             </template>
-            
+
             <!-- Estado PAYMENT: Mostrar botones de pago o cancelar -->
             <template v-else-if="tpvState === TPV_STATES.PAYMENT">
-              <button 
-                @click="processPayment" 
+              <button
+                @click="processPayment"
                 class="action-btn pay-btn"
                 :title="'Finalizar pago de €' + formatPrice(total) + ' - La venta se registrará automáticamente'"
               >
-                <span class="tpv-icon tpv-icon-primary">✅</span> FINALIZAR PAGO €{{ formatPrice(total) }}
+                <span class="tpv-icon tpv-icon-primary" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span> FINALIZAR PAGO €{{ formatPrice(total) }}
               </button>
               <button 
                 @click="cancelPayment" 
                 class="action-btn secondary-btn"
                 title="Cancelar pago y volver a revisión (no se pierde el carrito)"
               >
-                <span class="tpv-icon tpv-icon-ui">←</span> Cancelar
+                <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg></span> Cancelar
               </button>
             </template>
             
@@ -414,7 +435,7 @@
                 class="action-btn pay-btn"
                 title="Iniciar una nueva venta (se limpiará el carrito)"
               >
-                <span class="tpv-icon tpv-icon-primary">🆕</span> NUEVA VENTA
+                <span class="tpv-icon tpv-icon-primary" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span> NUEVA VENTA
               </button>
               <button 
                 v-if="tpvConfig.supports_invoices"
@@ -422,7 +443,7 @@
                 class="action-btn secondary-btn"
                 :title="lastSaleTicketId ? 'Generar factura para el ticket #' + lastSaleTicketId : 'Generar factura para el último ticket'"
               >
-                <span class="tpv-icon tpv-icon-ui">🧾</span> Generar Factura
+                <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l3 3v15H6z"/><path d="M15 3v3h3M9 12h6M9 16h6M9 8h2"/></svg></span> Generar Factura
               </button>
             </template>
           </div>
@@ -449,7 +470,7 @@
       <p>Cargando TPV...</p>
     </div>
     <div v-if="errorMessage" class="error-overlay">
-      <p>❌ {{ errorMessage }}</p>
+      <p><span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg></span> {{ errorMessage }}</p>
       <button @click="checkStatus" class="retry-btn">Reintentar</button>
     </div>
     
@@ -457,8 +478,16 @@
     <div v-if="showProductModal" class="modal-overlay" @click.self="showProductModal = false">
       <div class="modal-content">
         <div class="modal-header">
-          <h2>{{ editingProduct ? '✏️ Editar Producto' : '➕ Crear Producto' }}</h2>
-          <button @click="showProductModal = false" class="modal-close">✕</button>
+          <h2>
+            <span class="tpv-icon tpv-icon-ui" aria-hidden="true">
+              <svg v-if="editingProduct" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            </span>
+            {{ editingProduct ? 'Editar Producto' : 'Crear Producto' }}
+          </h2>
+          <button @click="showProductModal = false" class="modal-close" aria-label="Cerrar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
         </div>
         <div class="modal-body">
           <div class="form-group">
@@ -536,7 +565,9 @@
       <div class="modal-content operator-switch-modal" role="dialog" aria-modal="true" aria-labelledby="operator-switch-title">
         <div class="modal-header">
           <h3 id="operator-switch-title">{{ $t('tpv.changeOperatorTitle') }}</h3>
-          <button type="button" class="modal-close" @click="showOperatorSwitchModal = false">✕</button>
+          <button type="button" class="modal-close" @click="showOperatorSwitchModal = false" aria-label="Cerrar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
         </div>
         <p class="modal-hint operator-switch-hint">{{ $t('tpv.changeOperatorHint') }}</p>
         <p v-if="!tpvOperatorCandidates.length" class="modal-hint operator-switch-warning">
@@ -1225,31 +1256,54 @@ const normalizeCategory = (value) => {
     .toLowerCase()
 }
 
-const getProductIcon = (category) => {
+// Icono de categoría/producto en formato SVG (line-icon, mismo patrón que el
+// resto del TPV). Cada clave mapea a uno o varios <path> del icono heroicons-style.
+const PRODUCT_ICON_PATHS = {
+  drink: ['M7 3h10l-1.3 14.5A2 2 0 0 1 13.7 19h-3.4a2 2 0 0 1-2-1.5L7 3Z', 'M9 8h6'],
+  alcohol: ['M8 3h8a4 4 0 0 1-4 8 4 4 0 0 1-4-8Z', 'M12 11v6', 'M9 21h6'],
+  coffee: ['M4 8h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8Z', 'M17 9h1.5a2.5 2.5 0 0 1 0 5H17', 'M8 3c0 1-1 1-1 2s1 1 1 2', 'M12 3c0 1-1 1-1 2s1 1 1 2'],
+  sandwich: ['M3 12h18', 'M4 12l1.5 6a1 1 0 0 0 1 .8h11a1 1 0 0 0 1-.8L20 12', 'M6 12 12 6l6 6'],
+  pizza: ['M12 3 3 20h18L12 3Z', 'M9 15h.01M12 12h.01M15 15h.01'],
+  skewer: ['M4 20 20 4', 'M8 8a2 2 0 1 0 3-3 2 2 0 0 0-3 3Z', 'M13 13a2 2 0 1 0 3-3 2 2 0 0 0-3 3Z'],
+  plate: ['M12 4a8 8 0 1 0 .01 0Z', 'M12 8a4 4 0 1 0 .01 0Z'],
+  dessert: ['M6 11h12l-1.2 8.2a2 2 0 0 1-2 1.8H9.2a2 2 0 0 1-2-1.8L6 11Z', 'M5 11a7 4 0 0 1 14 0', 'M12 3v3'],
+  salad: ['M3 12a9 5 0 0 0 18 0Z', 'M3 12h18', 'M12 12c0-3 2-6 5-7'],
+  briefcase: ['M3 8h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8Z', 'M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'],
+  medical: ['M12 3a9 9 0 1 0 .01 0Z', 'M12 8v8M8 12h8'],
+  sparkle: ['M12 3v4M12 17v4M3 12h4M17 12h4', 'M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18'],
+  scissors: ['M6 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z', 'M6 20a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z', 'M20 4 7.5 12M20 20 7.5 12'],
+  wrench: ['M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 0 5.4-5.4l-2.8 2.8-2-2Z'],
+  ticket: ['M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1.5a1.5 1.5 0 0 0 0 3V15a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1.5a1.5 1.5 0 0 0 0-3Z', 'M9 7v10'],
+  pill: ['M4.9 4.9a5 5 0 0 1 7.07 0l7.07 7.07a5 5 0 1 1-7.07 7.07L4.9 11.97a5 5 0 0 1 0-7.07Z', 'M9 9l6 6'],
+  house: ['M4 11 12 4l8 7', 'M6 10v9a1 1 0 0 0 1 1h4v-6h2v6h4a1 1 0 0 0 1-1v-9'],
+  package: ['M21 8 12 3 3 8v8l9 5 9-5V8Z', 'M3 8l9 5 9-5', 'M12 13v8'],
+}
+
+const getProductIconKey = (category) => {
   const key = normalizeCategory(category)
-  if (!key) return '📦'
+  if (!key) return 'package'
   const words = new Set(key.split(/[^a-z0-9]+/).filter(Boolean))
 
   // Detección por palabras clave para evitar depender de mayúsculas/acentos exactos.
   const rules = [
-    { terms: ['bebida', 'refresco', 'zumo', 'agua'], icon: '🥤' },
-    { terms: ['alcohol', 'cerveza', 'vino', 'licor', 'cocktail', 'coctel'], icon: '🍷' },
-    { terms: ['cafe', 'infusion', 'te'], icon: '☕' },
-    { terms: ['bocadillo', 'bocadillos', 'sandwich', 'hamburguesa'], icon: '🥪' },
-    { terms: ['pizza'], icon: '🍕' },
+    { terms: ['bebida', 'refresco', 'zumo', 'agua'], icon: 'drink' },
+    { terms: ['alcohol', 'cerveza', 'vino', 'licor', 'cocktail', 'coctel'], icon: 'alcohol' },
+    { terms: ['cafe', 'infusion', 'te'], icon: 'coffee' },
+    { terms: ['bocadillo', 'bocadillos', 'sandwich', 'hamburguesa'], icon: 'sandwich' },
+    { terms: ['pizza'], icon: 'pizza' },
     // Tapas / pintxos: icono tipo pincho (brocheta), antes de la regla genérica de comida
-    { terms: ['tapa', 'tapas', 'pintxo', 'pintxos', 'pincho', 'pinchos'], icon: '🍢' },
-    { terms: ['plato', 'comida', 'menu', 'especialidad', 'sugerencia'], icon: '🍽️' },
-    { terms: ['postre', 'dulce'], icon: '🍰' },
-    { terms: ['entrante', 'ensalada'], icon: '🥗' },
-    { terms: ['servicio'], icon: '💼' },
-    { terms: ['consulta'], icon: '🏥' },
-    { terms: ['tratamiento'], icon: '✨' },
-    { terms: ['corte'], icon: '✂️' },
-    { terms: ['repuesto'], icon: '🔧' },
-    { terms: ['entrada', 'ticket'], icon: '🎫' },
-    { terms: ['medicamento'], icon: '💊' },
-    { terms: ['envio'], icon: '📦' },
+    { terms: ['tapa', 'tapas', 'pintxo', 'pintxos', 'pincho', 'pinchos'], icon: 'skewer' },
+    { terms: ['plato', 'comida', 'menu', 'especialidad', 'sugerencia'], icon: 'plate' },
+    { terms: ['postre', 'dulce'], icon: 'dessert' },
+    { terms: ['entrante', 'ensalada'], icon: 'salad' },
+    { terms: ['servicio'], icon: 'briefcase' },
+    { terms: ['consulta'], icon: 'medical' },
+    { terms: ['tratamiento'], icon: 'sparkle' },
+    { terms: ['corte'], icon: 'scissors' },
+    { terms: ['repuesto'], icon: 'wrench' },
+    { terms: ['entrada', 'ticket'], icon: 'ticket' },
+    { terms: ['medicamento'], icon: 'pill' },
+    { terms: ['envio'], icon: 'package' },
   ]
 
   const matched = rules.find((rule) =>
@@ -1261,27 +1315,30 @@ const getProductIcon = (category) => {
       return key.includes(t)
     })
   )
-  return matched?.icon || '📦'
+  return matched?.icon || 'package'
 }
 
-// Obtener emoji según icono predefinido
-const getIconEmoji = (icon, category) => {
-  const categoryIcon = getProductIcon(category)
+// Icono según campo icon predefinido del producto (fallback si no hay categoría reconocida)
+const getIconKey = (icon, category) => {
+  const categoryIcon = getProductIconKey(category)
   // Si la categoría ya tiene icono específico, priorizarla sobre iconos heredados del producto.
-  if (categoryIcon !== '📦') return categoryIcon
+  if (categoryIcon !== 'package') return categoryIcon
 
   const key = normalizeCategory(icon)
   const iconMap = {
-    'coffee': '☕',
-    'food': '🍽️',
-    'service': '💼',
-    'house': '🏠',
-    'default': '📦'
+    'coffee': 'coffee',
+    'food': 'plate',
+    'service': 'briefcase',
+    'house': 'house',
+    'default': 'package'
   }
   const mapped = iconMap[key]
-  if (mapped && mapped !== '📦') return mapped
-  return '📦'
+  if (mapped && mapped !== 'package') return mapped
+  return 'package'
 }
+
+const getProductIconPaths = (category) => PRODUCT_ICON_PATHS[getProductIconKey(category)] || PRODUCT_ICON_PATHS.package
+const getIconPaths = (icon, category) => PRODUCT_ICON_PATHS[getIconKey(icon, category)] || PRODUCT_ICON_PATHS.package
 
 // Manejar error al cargar imagen
 const handleImageError = (event) => {
@@ -2658,8 +2715,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   padding: 12px 24px;
-  background: #ffffff;
-  border: 1px solid #D1D5DB;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border-strong, #D1D5DB);
   border-radius: 10px;
   color: var(--zeus-text, #0f172a);
   font-weight: 600;
@@ -2691,14 +2748,43 @@ onUnmounted(() => {
   box-shadow: var(--zeus-shadow-md, 0 4px 16px rgba(15, 23, 42, 0.06));
 }
 
+/* Título con texto en gradiente clip -> índigo sólido: el acento
+   vibrante se reserva a botones/badges/anillos, nunca a texto (mismo
+   ajuste ya aplicado al logo de Admin Panel). */
 .tpv-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: 2rem;
   font-weight: 700;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--zeus-accent, #4f46e5);
   margin: 0;
+}
+
+.tpv-title-icon {
+  display: inline-flex;
+  color: var(--zeus-accent, #4f46e5);
+}
+
+.tpv-title-icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.header-btn-icon {
+  display: inline-flex;
+  vertical-align: -4px;
+  margin-right: 4px;
+}
+
+.header-btn-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.btn-icon svg {
+  width: 16px;
+  height: 16px;
 }
 
 .tpv-subtitle {
@@ -2786,7 +2872,7 @@ onUnmounted(() => {
 /* Categoría activa: solo negrita + borde — el gradiente vibrante queda
    reservado para "Cobrar", la única acción primaria de esta vista. */
 .category-btn.active {
-  background: #ffffff;
+  background: var(--zeus-surface, #ffffff);
   border-color: #9aa2af;
   color: var(--zeus-text, #0f172a);
   font-weight: 700;
@@ -2843,10 +2929,18 @@ onUnmounted(() => {
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
     transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   background: var(--zeus-bg-subtle, #eef1f6);
   color: var(--zeus-text, #0f172a);
+}
+
+.product-action-btn svg {
+  width: 15px;
+  height: 15px;
 }
 
 .product-action-btn.edit-btn:hover {
@@ -2902,7 +2996,7 @@ onUnmounted(() => {
 
 .btn-remove-image:hover {
   background: var(--zeus-danger, #ef4444);
-  color: #fff;
+  color: var(--zeus-text-on-accent, #fff);
   transform: scale(1.05);
 }
 
@@ -2985,11 +3079,19 @@ onUnmounted(() => {
 .tpv-icon-primary {
   font-size: 16px;
 }
+.tpv-icon svg {
+  width: 16px;
+  height: 16px;
+}
 .secondary-btn .tpv-icon {
   opacity: 0.9;
 }
 .action-btn .tpv-icon {
   font-size: 14px;
+}
+.action-btn .tpv-icon svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* Bloques del carrito: ultra compactos, márgenes ≤8px */
@@ -3051,7 +3153,7 @@ onUnmounted(() => {
 
 .clear-cart-btn:hover {
   background: var(--zeus-danger, #ef4444);
-  color: #fff;
+  color: var(--zeus-text-on-accent, #fff);
 }
 
 .cart-items {
@@ -3081,7 +3183,7 @@ onUnmounted(() => {
 /* Línea activa para edición con el teclado numérico: solo borde — el
    gradiente queda reservado para "Cobrar", la única acción primaria. */
 .cart-item--active {
-  background: #ffffff;
+  background: var(--zeus-surface, #ffffff);
   border-color: #9aa2af;
   box-shadow: none;
   padding-left: 12px;
@@ -3162,6 +3264,12 @@ onUnmounted(() => {
   transform: scale(1.1);
 }
 
+.qty-btn svg,
+.remove-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
 .qty-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -3174,7 +3282,7 @@ onUnmounted(() => {
 
 .increment-btn:hover:not(:disabled) {
   background: var(--zeus-success, #10b981);
-  color: #fff;
+  color: var(--zeus-text-on-accent, #fff);
 }
 
 .decrement-btn {
@@ -3184,7 +3292,7 @@ onUnmounted(() => {
 
 .decrement-btn:hover:not(:disabled) {
   background: var(--zeus-warning, #f59e0b);
-  color: #fff;
+  color: var(--zeus-text-on-accent, #fff);
 }
 
 .cart-item-qty {
@@ -3211,7 +3319,7 @@ onUnmounted(() => {
 
 .remove-btn:hover {
   background: var(--zeus-danger, #ef4444);
-  color: #fff;
+  color: var(--zeus-text-on-accent, #fff);
   transform: scale(1.1);
 }
 
@@ -3226,9 +3334,15 @@ onUnmounted(() => {
 }
 
 .empty-cart-icon {
-  font-size: 1.75rem;
+  display: flex;
+  justify-content: center;
   margin-bottom: 6px;
   opacity: 0.6;
+}
+
+.empty-cart-icon svg {
+  width: 28px;
+  height: 28px;
 }
 
 .empty-cart-message {
@@ -3368,7 +3482,7 @@ onUnmounted(() => {
 .pay-btn {
   height: 38px;
   background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%));
-  color: #fff;
+  color: var(--zeus-text-on-accent, #fff);
   font-size: 14px;
   font-weight: 600;
   box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 8px rgba(0, 0, 0, 0.15));
@@ -3386,8 +3500,8 @@ onUnmounted(() => {
 
 .secondary-btn {
   height: 30px;
-  background: #ffffff;
-  border: 1px solid #D1D5DB;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border-strong, #D1D5DB);
   color: var(--zeus-text, #0f172a);
   font-size: 12px;
   box-shadow: none;
@@ -3542,9 +3656,9 @@ onUnmounted(() => {
 .reservations-load-btn {
   padding: 6px 12px;
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--zeus-surface, #ffffff);
   color: var(--zeus-text, #0f172a);
-  border: 1px solid #D1D5DB;
+  border: 1px solid var(--zeus-border-strong, #D1D5DB);
   cursor: pointer;
   box-shadow: none;
   transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
@@ -3580,7 +3694,7 @@ onUnmounted(() => {
 .reservation-seat-btn {
   padding: 4px 10px;
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--zeus-surface, #ffffff);
   color: var(--zeus-text, #0f172a);
   border: none;
   cursor: pointer;
@@ -3600,7 +3714,7 @@ onUnmounted(() => {
   cursor: pointer;
   font-size: 0.85rem;
 }
-.table-pick-btn { background: var(--zeus-success, #10b981); color: #fff; }
+.table-pick-btn { background: var(--zeus-success, #10b981); color: var(--zeus-text-on-accent, #fff); }
 .table-pick-cancel { background: var(--zeus-bg-subtle, #eef1f6); color: var(--zeus-text, #0f172a); }
 .reservations-empty {
   margin: 0;
@@ -3647,7 +3761,7 @@ onUnmounted(() => {
    "Cobrar", la única acción primaria de esta vista. */
 .table-card.selected {
   border-color: #9aa2af;
-  background: #ffffff;
+  background: var(--zeus-surface, #ffffff);
   box-shadow: none;
 }
 
@@ -3662,6 +3776,25 @@ onUnmounted(() => {
   font-size: 0.85rem;
   margin-bottom: 5px;
   color: var(--zeus-text-secondary, #52607a);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.table-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--zeus-border-strong, #cbd5e1);
+  flex-shrink: 0;
+}
+
+.table-status.occupied .table-status-dot {
+  background: var(--zeus-success, #10b981);
+}
+
+.table-status.free .table-status-dot {
+  background: var(--zeus-border-strong, #cbd5e1);
 }
 
 .table-total {
@@ -3715,7 +3848,7 @@ onUnmounted(() => {
 }
 
 .add-product-card:hover:not(.disabled) {
-  background: #ffffff;
+  background: var(--zeus-surface, #ffffff);
   border-color: var(--zeus-accent-hover, #4338ca);
   transform: scale(1.02);
 }
@@ -3747,8 +3880,13 @@ onUnmounted(() => {
 }
 
 .add-product-icon {
-  font-size: 2.2rem;
+  display: inline-flex;
   opacity: 0.85;
+}
+
+.add-product-icon svg {
+  width: 36px;
+  height: 36px;
 }
 
 .add-product-label {
@@ -3761,8 +3899,8 @@ onUnmounted(() => {
 .add-product-btn {
   margin-top: 20px;
   padding: 12px 24px;
-  background: #ffffff;
-  border: 1px solid #D1D5DB;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border-strong, #D1D5DB);
   border-radius: 8px;
   color: var(--zeus-text, #0f172a);
   cursor: pointer;
@@ -3795,8 +3933,8 @@ onUnmounted(() => {
 
 .retry-btn {
   padding: 12px 24px;
-  background: #ffffff;
-  border: 1px solid #D1D5DB;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border-strong, #D1D5DB);
   border-radius: 8px;
   color: var(--zeus-text, #0f172a);
   cursor: pointer;
@@ -4121,8 +4259,13 @@ onUnmounted(() => {
 
 .modal-close:hover {
   background: var(--zeus-danger, #ef4444);
-  color: #fff;
+  color: var(--zeus-text-on-accent, #fff);
   transform: scale(1.1);
+}
+
+.modal-close svg {
+  width: 14px;
+  height: 14px;
 }
 
 .modal-body {
@@ -4198,8 +4341,8 @@ onUnmounted(() => {
 
 .btn-secondary {
   padding: 12px 24px;
-  background: #ffffff;
-  border: 1px solid #D1D5DB;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border-strong, #D1D5DB);
   border-radius: 8px;
   color: var(--zeus-text, #0f172a);
   cursor: pointer;
@@ -4218,8 +4361,8 @@ onUnmounted(() => {
 
 .btn-save {
   padding: 12px 24px;
-  background: #ffffff;
-  border: 1px solid #D1D5DB;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border-strong, #D1D5DB);
   border-radius: 8px;
   color: var(--zeus-text, #0f172a);
   cursor: pointer;
@@ -4282,8 +4425,13 @@ onUnmounted(() => {
 }
 
 .feedback-icon {
-  font-size: 18px;
+  display: inline-flex;
   vertical-align: middle;
+}
+
+.feedback-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
 .feedback-message {

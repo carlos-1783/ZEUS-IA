@@ -754,3 +754,246 @@ Con esta ronda se cierran las 7 categorías del alcance original: Dashboard, `/a
 3. El selector "Tema: Oscuro/Claro/Auto" en Ajustes quedó con propósito huérfano tras fijar un único sistema visual "sin excepción" — decidir si eliminarlo o si debe controlar otra cosa.
 4. **El bug estructural de superusuario sin `Company`** (`Login.vue`/`resolvePostAuthPath()`, `CICLO_PRODUCCION.md` Ciclo 4) — confirmado vivo de primera mano en esta ronda, ajeno al rediseño, afecta potencialmente a cualquier superusuario real sin empresa asociada en producción.
 5. Acciones irreversibles de Admin Panel (Desactivar/Eliminar cuenta) y "Guardar configuración" — estilo verificado, acción final no ejecutada en ninguna ronda por no mutar datos destructivamente sin necesidad; bajo riesgo dado que ningún commit de diseño tocó lógica de `<script>`, pero sigue sin confirmación end-to-end explícita.
+
+---
+
+## 11. Encargo de seguimiento (2026-08-20) — Bloque 1 Control Horario + Bloque 2 TPV
+
+El encargo cerrado en la sección 10 dejó dos bugs reales anotados (no solo
+estéticos) para una vuelta adicional: el solapamiento/hueco vacío de Control
+Horario, y el TPV sin terminar de pasar por la limpieza de iconos y jerarquía
+visual del resto de la app. Esta sección documenta esa vuelta, ejecutada en
+dos bloques atómicos separados.
+
+### 11.1 Bloque 1 — Control Horario (commit `e113132`)
+
+Bugs reales reportados por el usuario, no solo estética:
+
+1. **Solapamiento en todos los anchos de pantalla, no solo móvil**: el botón
+   "Volver al Dashboard" era `position:fixed` en `(20,20)`, exactamente donde
+   arranca el título "Control Horario Universal" → se solapaban
+   estructuralmente en cualquier ancho de viewport (el bug no era de
+   breakpoint). Corregido pasándolo a flujo normal (mismo patrón que
+   Seguros/Ajustes/agents: botón "volver" antes de la cabecera, con
+   `margin-bottom`) — elimina la clase entera de solapamiento, no un parche
+   puntual para móvil.
+
+2. **Hueco vacío tras el scroll**: `.status-panel` y `.history-panel`
+   comparten fila en un grid de 2 columnas sin `grid-column` propio → CSS
+   Grid las estira por defecto (`align-items:stretch`) a la altura de la más
+   alta de las dos. Cuando una lista es mucho más corta que la otra (pocos o
+   ningún empleado dentro vs. varios registros de historial), la tarjeta
+   corta quedaba con un hueco en blanco al final. Corregido con
+   `align-items:start` en `.control-horario-main-interface`.
+
+3. **Emojis → iconos SVG de línea limpia** en "Selecciona método de fichaje"
+   (los 5: Facial/QR/Manual/Geolocalización/Remoto, no solo los 4
+   mencionados literalmente en el encargo original). Criterio de icono:
+   SVG inline (heroicons-style, sin dependencia nueva) en vez de instalar
+   `lucide-vue-next` — FontAwesome ya está en `package.json` pero solo
+   registrado en `main.js`, el entrypoint legacy que NO se usa (confirmado:
+   `main.ts`, el real, no lo importa); arreglar ese registro habría
+   significado tocar un archivo compartido fuera de alcance. El SVG inline
+   además ya es el patrón establecido en el repo (`Login.vue`,
+   `Register.vue`, `LandingPage.vue`).
+
+4. **Verificación real de los 5 métodos de fichaje** (no solo que el botón
+   cambia de estado visual):
+   - **Geolocalización**: real — usa la Geolocation API real del navegador.
+   - **Código Manual (PIN)**: real — el PIN se valida de verdad contra el
+     backend; confirmado que un PIN incorrecto lo rechaza.
+   - **Reconocimiento Facial**: **COSMÉTICO**. Está mapeado internamente al
+     mismo tipo genérico `"device"` que Remoto
+     (`V1_METHOD_MAP.face === V1_METHOD_MAP.remote`), sin pedir cámara ni
+     capturar nada — confirmado con la consola del navegador: cero actividad
+     de cámara al seleccionarlo.
+   - **Código QR**: **COSMÉTICO**. Genera un token fabricado en el cliente
+     (`ui-{empleado}-{timestamp}`) sin escanear nada, y el backend solo
+     valida que el string no esté vacío — confirmado con `POST` directo a
+     `/api/v1/checkin`: acepta cualquier string como `qr_token` válido.
+   - Reportado explícitamente, no oculto, no corregido en esta vuelta
+     (arreglar biometría/scanner real es un cambio de alcance mucho mayor,
+     fuera de esta tarea de diseño). Verificado en vivo con Playwright
+     (`test.gestoria@example.com`) combinando interacción real en navegador
+     (consola sin actividad de cámara) y llamadas `POST` directas a
+     `/api/v1/checkin` con los mismos payloads exactos que construye el
+     frontend (`services/time_cost_engine_v1.py` confirma la lógica real de
+     validación/no-validación del lado del servidor).
+
+5. **De paso** (pendiente anotado en Ronda 3): botón "Actualizar" verde
+   plano → secundario blanco/borde (no es la acción de mayor jerarquía de la
+   vista). También corregido en el mismo bloque: la barra `::after` con
+   gradiente del selector de método activo usaba el valor obsoleto de 4
+   paradas con naranja de Ronda 1 (ni coincidía con `--zeus-accent-gradient`
+   actual) y violaba la regla de "selección dentro de un grupo = sin
+   gradiente" → eliminada, queda solo borde+fondo con tinte índigo.
+
+**Archivo tocado**: `frontend/src/views/ControlHorario.vue` (98 líneas, +58/-40).
+**Commit**: `e1131324b27afdc3fa8df380ad69c273d8a4e4ef`.
+
+### 11.2 Bloque 2 — TPV (este agente, commit ver 11.4)
+
+Trabajo retomado de una sesión anterior cortada por límite de API: había un
+diff parcial sin commitear (132 inserciones / 61 borrados) que ya cubría el
+grueso de la sustitución de emojis del header y del carrito. Esta vuelta lo
+completó y verificó de punta a punta.
+
+**1. Emojis → SVG, barrido completo del archivo.** Además de lo que ya traía
+el diff parcial (📊 dashboard, 💳 título, 🪑 mesas, 🔗 compartir, 🔄 refrescar,
+✏️/🗑️ CRUD de producto, ➕/➖ cantidad, 🖨️/🏷️/✅ acciones de venta), se
+localizaron y reemplazaron con un escaneo Unicode completo del archivo
+(no solo grep de emojis conocidos, un rango `>= U+2190` completo para no
+depender de una lista de memoria):
+- Botones "Mesas"/"Cancelar" con flecha `←` → SVG de flecha.
+- `📦`/`⚠️` en mensajes vacíos y de error de la grilla de productos.
+- `📅` en "Reservas del día".
+- `🟢 Ocupada` / `⚪ Libre` de las tarjetas de mesa → sustituido por un punto
+  de estado CSS (`.table-status-dot`, color por clase `.occupied`/`.free`)
+  en vez de emoji, más consistente con cómo el resto de la app comunica
+  estado (ver verificación visual en 11.3).
+- `🛒`/`💡` del carrito vacío, `🆕`/`🧾` de "Nueva venta"/"Generar factura",
+  `❌` del overlay de error, `✏️`/`➕`/`✕` del modal de producto (título y
+  botón cerrar), `✕` del modal de cambio de operador.
+- **Iconos de categoría de producto** (`getProductIcon`/`getIconEmoji`, ~17
+  categorías: bebida, alcohol, café, bocadillo, pizza, tapa, plato, postre,
+  ensalada, servicio, consulta, tratamiento, corte, repuesto, entrada,
+  medicamento, envío/genérico): antes devolvían directamente el carácter
+  emoji; ahora devuelven una *clave* (`getProductIconKey`/`getIconKey`) que
+  indexa un diccionario `PRODUCT_ICON_PATHS` de paths SVG, renderizados con
+  `v-for` sobre `<path>` en el template. La lógica de detección por palabra
+  clave (`normalizeCategory`, reglas de coincidencia) se mantuvo 100%
+  intacta — es un cambio de *representación* del icono, no de la lógica de
+  categorización, verificado en vivo (ver 11.3: "Bebidas" muestra un vaso,
+  "Tapas" muestra una brocheta con dos piezas).
+
+**No tocado deliberadamente**: los símbolos `⌫` (borrar) y `✓` (enter) del
+teclado numérico tipo calculadora (`keyboardLayout`, `handleKeyPress`) — son
+el propio texto funcional de las teclas de un teclado numérico, mismo
+patrón que cualquier calculadora, no emoji decorativo. Tampoco se tocaron
+los emojis dentro de `console.log`/`console.warn`/`console.error` (~60
+apariciones) — son prefijos de depuración interna sin salida visible para
+el usuario final, fuera del alcance de un rediseño de UI; tocarlos habría
+sido una limpieza no pedida en ~60 líneas sin relación con el encargo.
+
+**2. Jerarquía visual / flujo de venta.** Revisado explícitamente: el botón
+de cobro (`REVISAR Y PAGAR` → `CONFIRMAR PAGO` → `FINALIZAR PAGO` según el
+estado `CART`/`PRE_PAYMENT`/`PAYMENT`) ya era, de rondas anteriores, la
+única acción con `.pay-btn` (gradiente de 3 paradas teal→morado→rosa,
+`--zeus-accent-gradient`); el resto de acciones (Imprimir Comanda,
+Descuento, Volver al Carrito, Cancelar, Generar Factura) ya usaban
+`.secondary-btn`/`.header-btn` neutro blanco/borde. Es decir, la regla de
+"un solo botón vibrante por vista" que rige el resto del rediseño **ya
+estaba aplicada correctamente en TPV desde antes** — no fue necesario
+reestructurar la jerarquía, solo confirmarla en vivo (ver 11.3) y terminar
+de vestirla con iconos SVG. La agrupación de categorías (pestañas
+Bebidas/Tapas/Todos) y la tarjeta "Añadir Producto" ya existían y se
+mantienen igual.
+
+**3. Tokens `--zeus-*`.** Auditado el bloque `<style scoped>` completo
+buscando colores hexadecimales fuera de `var(--zeus-*)`: se encontraron 37
+apariciones heredadas de rondas anteriores (no introducidas por este
+diff). De ellas:
+- `background: #ffffff` (12×) → `var(--zeus-surface, #ffffff)` — sin
+  cambio visual, `--zeus-surface` ya vale `#ffffff`.
+- `color: #fff` (8×, texto sobre fondo de acento) → `var(--zeus-text-on-accent, #fff)` — sin cambio visual, mismo valor.
+- `border: 1px solid #D1D5DB` (7×, borde de campos de formulario) →
+  `var(--zeus-border-strong, #D1D5DB)` — diferencia de color imperceptible
+  (`#D1D5DB` vs. `#cdd3db`, mismo gris neutro), pero ahora sigue el token
+  compartido en vez de un valor suelto.
+- El nuevo `.table-status-dot` (introducido en este bloque) también se
+  tokenizó igual: `var(--zeus-border-strong, #cbd5e1)`.
+- **No tocado deliberadamente**: `border-color: #9aa2af` (9×, estado
+  `:hover`/`:focus` de esos mismos campos). No hay token compartido que
+  represente ese nivel de contraste — `--zeus-border-strong` (`#cdd3db`) es
+  visiblemente más claro y habría debilitado el feedback de hover existente.
+  Introducir un token nuevo para esto sería trabajo de sistema de diseño
+  fuera del alcance de esta tarea (y la instrucción explícita de no hacer
+  refactors no pedidos); se deja anotado como pendiente menor, no bloqueante.
+
+**Archivo tocado**: `frontend/src/views/TPV.vue`.
+
+### 11.3 Verificación en vivo — flujo de venta completo (Bloque 2)
+
+Bloqueo inicial real, no simulado: al confirmar el primer pago, el backend
+devolvió `502 Bad Gateway` con
+`Error de persistencia fiscal: 'charmap' codec can't encode characters in
+position 0-1: character maps to <undefined>`. Rastreado en el log del
+servidor hasta un `print()` con emoji (`🏛️ [ZEUS] Agente RAFAEL...`) en
+`backend/agents/base_agent.py:41`, disparado la primera vez que se
+instancia el agente RAFAEL (patrón singleton perezoso en
+`services/rafael_service.py:get_rafael_agent()`), que revienta porque la
+consola de Windows de este entorno no usa UTF-8 por defecto (`cp1252`).
+**Es un bug de backend preexistente y no relacionado con este diff** (el
+diff de este bloque es 100% `frontend/src/views/TPV.vue`; confirmado además
+que la venta se revirtió correctamente — `TPV venta revertida: error
+fiscal` — sin dejar estado corrupto). Para no quedar bloqueado en la
+verificación del flujo, se reinició el backend con
+`PYTHONIOENCODING=utf-8` (no es un fix del bug, solo una forma de rodearlo
+para esta sesión de pruebas) — con eso el resto del flujo se completó real
+contra el backend real:
+
+- Cuenta de prueba creada de verdad vía `POST /api/v1/auth/register`
+  (`tpv.redesign.test@example.com`, empresa `restaurant`), no un insert
+  directo en BD.
+- Login real, navegación a `/tpv`, carga real de 4 productos desde
+  `GET /api/v1/tpv/products` (log del servidor: `Listando 4 productos para
+  usuario 2`).
+- **Añadir producto → carrito**: clic en "Refresco" (categoría "Bebidas",
+  icono SVG de vaso renderizado correctamente) → aparece en el carrito con
+  cantidad 1, subtotal/IVA/total recalculados en vivo.
+- **Cobro completo**: `REVISAR Y PAGAR` → `PRE_PAYMENT` → `CONFIRMAR PAGO` →
+  `PAYMENT` → `FINALIZAR PAGO` → `POST /api/v1/tpv/sale` responde `200 OK`
+  real. Toast de éxito real: *"Pago procesado exitosamente. Ticket
+  #TICKET_20260820115515. Total: EUR 5,32. Esta venta se ha registrado
+  automáticamente con RAFAEL."* Confirmado en el log del servidor: entrada
+  real en `cashflow_ledger_service` (`entry id=1 company=1 in 5.32 source=TPV`),
+  actividad real registrada por RAFAEL y JUSTICIA (`[ACTIVITY] RAFAEL: Venta
+  TPV registrado en RAFAEL: TICKET_20260820115515`), no un mock.
+- **Modo Mesas**: seleccionada Mesa 1 (estado inicial "Libre", punto gris),
+  añadido un producto a la mesa, vuelto a la vista de mesas → Mesa 1 pasó a
+  "Ocupada" con el punto verde y el total real (`€1,65`) — confirma que el
+  nuevo `.table-status-dot` (reemplazo del emoji 🟢/⚪) refleja el estado
+  real del backend, no un valor fijo.
+- Consola del navegador revisada tras cada paso: sin warnings de Vue
+  (duplicidad de `key`, componente no resuelto, etc.) atribuibles a los
+  cambios de este bloque; los únicos errores presentes en el buffer son
+  preexistentes y ajenos (`shouldShowTPV is not defined` en
+  `DashboardProfesional.vue`, claves de i18n `tpv.shareComandero` sin
+  traducir, y el error fiscal de antes del reinicio con `PYTHONIOENCODING`).
+
+**Confirmación de que el preview servía este worktree y no el checkout
+compartido**: antes de fiarse de cualquier captura, se hizo
+`curl http://localhost:5173/src/views/TPV.vue | grep getProductIconPaths`
+(y `table-status-dot`) contra el servidor Vite ya corriendo en el puerto
+5173 — ambos marcadores únicos de esta sesión aparecieron, confirmando que
+el dev server servía el árbol de trabajo de este worktree.
+
+**Regresión — suite de tests backend**: baseline conocido
+`7 failed, 214 passed, 2 skipped, 3 errors`. Ejecutada tras el bloque 2:
+resultado idéntico, `7 failed, 214 passed, 2 skipped, 3 errors` — mismos 7
+tests fallidos, mismos 3 errores, ninguna diferencia. Sin regresión (y
+esperable: el diff de este bloque no toca ningún archivo de `backend/`).
+
+### 11.4 Estado de commits y pendientes de esta vuelta
+
+- Bloque 1 (Control Horario): commit `e1131324b27afdc3fa8df380ad69c273d8a4e4ef`, ya en la rama antes de que empezara este agente.
+- Bloque 2 (TPV): commit atómico separado, creado por este agente tras esta verificación (ver mensaje de commit para el hash exacto).
+- Rama: `feature/rediseno-completo`. Sin merge ni push a `main` en ningún momento.
+
+**Hallazgo nuevo para decisión del usuario (no corregido en esta vuelta,
+fuera de alcance de un encargo de diseño frontend)**: el bug de
+codificación `charmap`/`cp1252` en `backend/agents/base_agent.py:41`
+(`print()` con emoji sin forzar UTF-8) puede tumbar **cualquier venta real
+de TPV** la primera vez que se instancia el agente RAFAEL, en cualquier
+entorno Windows donde el proceso Python no tenga `PYTHONIOENCODING=utf-8`
+explícito — incluyendo, potencialmente, un despliegue en un contenedor o
+servicio Windows en producción con la misma configuración regional por
+defecto. Es un bug de infraestructura/backend real, no de este rediseño;
+requiere decidir si se corrige ahora (candidato sencillo: forzar
+`sys.stdout.reconfigure(encoding="utf-8")` al arrancar la app, o quitar los
+emojis de los `print()` de arranque de agentes) o se deja anotado como
+tarea nueva para el flujo de auditoría de producción.
+
+**Pendiente menor, no bloqueante**: `border-color: #9aa2af` en TPV (9
+apariciones, estado hover/focus de campos de formulario) sin token
+`--zeus-*` equivalente — ver 11.2.

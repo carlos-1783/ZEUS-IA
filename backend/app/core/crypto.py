@@ -6,11 +6,21 @@ Usa Fernet (AES-128-CBC + HMAC-SHA256, autenticado) de la librería
 base64 disfrazado de cifrado.
 
 La clave se deriva SIEMPRE de una variable de entorno real
-(`FIELD_ENCRYPTION_KEY`). En local/tests, si no está configurada, se deriva
-de `SECRET_KEY` (también variable de entorno, nunca literal en el código) y
-se registra un aviso — igual que el patrón ya existente para SECRET_KEY en
-app/core/config.py. En producción, si falta, se registra un WARNING crítico:
-configúrala en Railway antes de almacenar datos sensibles reales.
+(`FIELD_ENCRYPTION_KEY`). En local/tests (ENVIRONMENT != production), si no
+está configurada, se deriva de `SECRET_KEY` (también variable de entorno,
+nunca literal en el código) y se registra un aviso — solo para no bloquear
+el desarrollo local.
+
+En producción esto NUNCA ocurre: si `FIELD_ENCRYPTION_KEY` no está
+configurada, `_resolve_key()` falla en cerrado (`RuntimeError`), sin
+importar el estado de `SECRET_KEY`. Cifrado (JWT) y cifrado de datos
+sensibles en reposo (IBAN) son dominios de seguridad distintos y nunca deben
+compartir clave: si se permitiera el fallback silencioso a SECRET_KEY en
+producción, cualquiera con acceso al código fuente podría derivar la misma
+clave que usa SECRET_KEY por defecto (ver app/core/config.py) y descifrar
+todos los IBANes almacenados sin tocar la BD ni ninguna variable de entorno
+real — la misma clase de fallo que causó el incidente de credenciales
+hardcodeadas de esta sesión (ver INCIDENTE_SEGURIDAD_CREDENCIALES.md).
 """
 import base64
 import hashlib
@@ -24,6 +34,10 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 _dev_fallback_notice_logged = False
+
+
+class EncryptionKeyNotConfiguredError(RuntimeError):
+    """FIELD_ENCRYPTION_KEY no configurada en producción: fallo en cerrado."""
 
 
 def _key_from_secret(secret: str) -> bytes:
@@ -40,18 +54,30 @@ def _resolve_key() -> bytes:
         return _key_from_secret(raw_key)
 
     env = os.getenv("ENVIRONMENT", os.getenv("RAILWAY_ENVIRONMENT", "production")).lower()
+
     if env == "production":
-        logger.warning(
+        # Fallo en cerrado: NUNCA se deriva de SECRET_KEY (otro dominio de
+        # seguridad) en producción. Sin FIELD_ENCRYPTION_KEY no hay cifrado
+        # posible — se rechaza la operación en vez de cifrar/descifrar con
+        # una clave predecible desde el propio código fuente.
+        logger.error(
             "[SECURITY] FIELD_ENCRYPTION_KEY no configurada en producción. "
-            "Configúrala en variables de entorno de Railway antes de almacenar "
-            "datos sensibles (IBAN, etc.). Usando clave derivada de SECRET_KEY "
-            "como fallback temporal."
+            "Operación de cifrado/descifrado de datos sensibles (IBAN) rechazada. "
+            "Configura FIELD_ENCRYPTION_KEY en las variables de entorno de Railway."
         )
-    elif not _dev_fallback_notice_logged:
+        raise EncryptionKeyNotConfiguredError(
+            "FIELD_ENCRYPTION_KEY no configurada en producción. No se puede "
+            "cifrar ni descifrar datos sensibles (IBAN) sin una clave de "
+            "cifrado real e independiente de SECRET_KEY."
+        )
+
+    if not _dev_fallback_notice_logged:
         logger.warning(
             "[SECURITY] FIELD_ENCRYPTION_KEY no configurada; usando clave derivada "
-            "de SECRET_KEY, válida solo para desarrollo/tests. "
-            "Configura FIELD_ENCRYPTION_KEY en producción."
+            "de SECRET_KEY, válida solo para desarrollo/tests (ENVIRONMENT=%s). "
+            "Nunca ocurre en producción: ahí falla en cerrado. "
+            "Configura FIELD_ENCRYPTION_KEY en producción.",
+            env,
         )
         _dev_fallback_notice_logged = True
 

@@ -2,6 +2,37 @@
 
 Rama: `feature/onboarding-facturacion` (desde `main`). Ningún cambio en `main`, ningún push.
 
+## 0. Corrección post-revisión (revisor-independiente)
+
+`revisor-independiente` devolvió el trabajo original (commit `32b489a`) por un
+hallazgo real y serio en `backend/app/core/crypto.py::_resolve_key()`: si
+`FIELD_ENCRYPTION_KEY` faltaba en producción, el código solo registraba un
+`WARNING` y seguía cifrando/descifrando IBANes con una clave derivada de
+`SECRET_KEY` — que a su vez tiene un valor por defecto hardcodeado en
+`app/core/config.py:324` que tampoco bloquea el arranque. Combinado, esto
+permitía derivar la clave de cifrado del IBAN solo con acceso al código
+fuente, sin BD ni variables de entorno reales — la misma clase de fallo que
+el incidente de credenciales de esta sesión.
+
+**Corrección aplicada** (más estricta que el mínimo pedido por el revisor):
+`_resolve_key()` ahora falla en cerrado (`EncryptionKeyNotConfiguredError`,
+subclase de `RuntimeError`) **siempre** que `ENVIRONMENT`/`RAILWAY_ENVIRONMENT`
+resuelva a `production` y `FIELD_ENCRYPTION_KEY` no esté configurada — sin
+importar el estado de `SECRET_KEY`. El fallback derivado de `SECRET_KEY`
+sigue existiendo, pero exclusivamente para `ENVIRONMENT != production`
+(desarrollo/tests local), donde nunca hay IBANes reales en juego.
+
+Verificado en vivo reproduciendo exactamente el escenario del revisor
+(`ENVIRONMENT=production`, `FIELD_ENCRYPTION_KEY` y `SECRET_KEY` ausentes del
+proceso): `encrypt_sensitive_value()` lanza `EncryptionKeyNotConfiguredError`
+en vez de cifrar. Con `FIELD_ENCRYPTION_KEY` configurada en producción, el
+cifrado/descifrado funciona exactamente igual que antes (probado de nuevo
+contra el servidor real vía `GET /onboarding/status` con el IBAN de un
+tenant ya guardado, que sigue devolviéndose enmascarado correctamente).
+Suite completa repetida tras el cambio: `7 failed, 214 passed, 2 skipped, 3
+errors` — mismo baseline, sin regresión. Commit de esta corrección:
+ver `git log` en esta rama, mensaje `fix(security): ...`.
+
 ## 1. Qué se construyó
 
 ### Frontend (`frontend/src/views/OnboardingSetup.vue`)

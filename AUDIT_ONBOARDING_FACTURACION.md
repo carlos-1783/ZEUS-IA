@@ -315,3 +315,17 @@ de comitear.
 
 Rama `feature/onboarding-facturacion`, commit(s) atómico(s) — ver `git log`.
 Ningún cambio en `main`, ningún `push` a remoto.
+
+---
+
+## Revisión independiente — Vuelta 1
+
+**Veredicto: ❌ DEVUELTO.**
+
+Confirmó de forma independiente y con datos 100% propios (CIF/IBAN construidos con los algoritmos reales, no reutilizados) todo lo esencial: validadores reales (NIF mod-23, CIF, IBAN mod-97, probados contra valores de dominio público), cifrado Fernet real (AES-128-CBC+HMAC, roundtrip correcto, ciphertexts distintos para el mismo IBAN entre tenants), aislamiento multi-tenant, migración con un único head y downgrade simétrico, 0 apariciones del IBAN en claro en logs, suite de tests idéntica al baseline. Los 3 hallazgos declarados confirmados reales, incluido que `zeus_agents.py:369` tiene efectivamente un `encryption_status: "activo"` falso en un handler THALOS.SHIELD simulado.
+
+**Motivo del rechazo:** `crypto.py::_resolve_key()` no falla en cerrado. Si `FIELD_ENCRYPTION_KEY` no está configurada en producción (plausible, es una variable nueva), el sistema registra un `WARNING` y sigue cifrando/descifrando con una clave derivada de `SECRET_KEY` — y `SECRET_KEY` tiene a su vez un valor por defecto hardcodeado en `config.py:324` que tampoco bloquea el arranque, solo advierte. Verificado ejecutando el código real con ambas variables ausentes en un entorno simulado `ENVIRONMENT=production`: el cifrado se produce igual, sin error.
+
+**Por qué es grave:** si `SECRET_KEY` quedara en su valor por defecto (el propio código lo tolera), cualquiera con acceso al código fuente podría derivar la misma clave y descifrar todos los IBANes almacenados, sin necesidad de acceder a la BD ni a ninguna variable de entorno real. Es la misma clase de fallo que ya causó el incidente de seguridad de esta sesión (`44a464a`/`9004b8a`) — mezclar la clave de firma JWT como respaldo silencioso para cifrado de datos financieros en reposo.
+
+**Qué falta para aprobar:** `_resolve_key()` debe lanzar una excepción clara (fallo duro, no `WARNING`) cuando `FIELD_ENCRYPTION_KEY` no esté configurada en producción — como mínimo, la combinación "`FIELD_ENCRYPTION_KEY` ausente + `SECRET_KEY` en su valor por defecto" debe impedir guardar/leer el IBAN, nunca operar silenciosamente. El resto de la implementación (validadores, migración, endpoints, aislamiento, logging) verificado como correcto, puede mantenerse tal cual.

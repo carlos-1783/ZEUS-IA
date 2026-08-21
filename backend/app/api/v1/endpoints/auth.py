@@ -635,6 +635,19 @@ def onboarding_status(
             "fallback_mode": True,
         }
 
+    # IBAN: nunca se devuelve en claro. Se enmascara (país + últimos 4 caracteres visibles)
+    # y se descifra solo en memoria para construir la máscara, no se loguea en ningún punto.
+    iban_masked = None
+    if co and getattr(co, "iban_encrypted", None):
+        try:
+            from app.core.crypto import decrypt_sensitive_value
+            from app.core.validators_es import mask_iban
+
+            iban_masked = mask_iban(decrypt_sensitive_value(co.iban_encrypted))
+        except Exception:
+            logger.exception("onboarding_status: no se pudo enmascarar IBAN (company_id=%s)", co.id if co else None)
+            iban_masked = None
+
     return {
         "validation": v,
         "questionnaire_completed": questionnaire_completed,
@@ -654,6 +667,10 @@ def onboarding_status(
             getattr(current_user, "email_gestor_fiscal", None)
             and getattr(current_user, "autoriza_envio_documentos_a_asesores", False)
         ),
+        "tax_id": getattr(co, "tax_id", None) if co else None,
+        "legal_name": getattr(co, "legal_name", None) if co else None,
+        "iban_masked": iban_masked,
+        "has_iban_on_file": bool(co and getattr(co, "iban_encrypted", None)),
     }
 
 
@@ -814,6 +831,17 @@ def _onboarding_profile_impl(
 
     meta = company.metadata_ if isinstance(company.metadata_, dict) else {}
     op = meta.get("operational_profile") if isinstance(meta.get("operational_profile"), dict) else {}
+
+    # Datos de facturación (CIF/NIF y razón social ya validados por el schema;
+    # el IBAN se cifra antes de tocar la sesión de BD — nunca se guarda en claro).
+    if body.tax_id:
+        company.tax_id = body.tax_id
+    if body.legal_name:
+        company.legal_name = str(body.legal_name).strip()[:255]
+    if body.iban:
+        from app.core.crypto import encrypt_sensitive_value
+
+        company.iban_encrypted = encrypt_sensitive_value(body.iban)
 
     channels = body.social_channels or []
     channels_norm = []

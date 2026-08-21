@@ -360,3 +360,20 @@ Confirmó de forma independiente y con datos 100% propios (CIF/IBAN construidos 
 **Por qué es grave:** si `SECRET_KEY` quedara en su valor por defecto (el propio código lo tolera), cualquiera con acceso al código fuente podría derivar la misma clave y descifrar todos los IBANes almacenados, sin necesidad de acceder a la BD ni a ninguna variable de entorno real. Es la misma clase de fallo que ya causó el incidente de seguridad de esta sesión (`44a464a`/`9004b8a`) — mezclar la clave de firma JWT como respaldo silencioso para cifrado de datos financieros en reposo.
 
 **Qué falta para aprobar:** `_resolve_key()` debe lanzar una excepción clara (fallo duro, no `WARNING`) cuando `FIELD_ENCRYPTION_KEY` no esté configurada en producción — como mínimo, la combinación "`FIELD_ENCRYPTION_KEY` ausente + `SECRET_KEY` en su valor por defecto" debe impedir guardar/leer el IBAN, nunca operar silenciosamente. El resto de la implementación (validadores, migración, endpoints, aislamiento, logging) verificado como correcto, puede mantenerse tal cual.
+
+---
+
+## Revisión independiente — Vuelta 2 (final)
+
+**Veredicto: ✅ APROBADO.**
+
+Verificación 100% independiente: confirmó que `_resolve_key()` ya no tiene ninguna rama que caiga al fallback de `SECRET_KEY` en producción sin `FIELD_ENCRYPTION_KEY`; reprodujo el escenario exacto que motivó el primer rechazo → `EncryptionKeyNotConfiguredError` lanzado. Probó además un caso más estricto que el mínimo exigido: `SECRET_KEY` presente y válida (no el default) en producción sin `FIELD_ENCRYPTION_KEY` → también falla, confirmando que la corrección no depende en absoluto del estado de `SECRET_KEY`. Camino feliz verificado en dos niveles (llamada directa + end-to-end real con `TestClient` y BD real, dos tenants nuevos). Fallback de desarrollo local intacto. Aislamiento multi-tenant reconfirmado sin que se pidiera explícitamente. Suite de tests idéntica al baseline, corrida de forma independiente. `main` y remoto confirmados sin tocar.
+
+## CERRADO — Tarea completa CIF/IBAN en onboarding
+
+**Rama final:** `feature/onboarding-facturacion`, commits `32b489a` (feature) + `f0e597a` (fix de seguridad tras la primera devolución) + docs. Sin merge ni push a `main`.
+
+**Hallazgos declarados, no corregidos (fuera de alcance, para el auditor-priorizador):**
+1. Heurística de `setup_completed` en `/onboarding/status` marca casi cualquier empresa nueva como completada — relacionado con el bug ya conocido de superuser/onboarding de `CICLO_PRODUCCION.md`.
+2. `alembic upgrade head` desde SQLite totalmente vacía falla en la migración `0003` — preexistente, ajeno a esta rama.
+3. `app/core/zeus_agents.py:369` tiene `"encryption_status": "activo"` como string fija sin cifrado real detrás, en un handler `THALOS.SHIELD` simulado — confirmado por dos revisores independientes en esta sesión, candidato a tarea de "no simulación" aparte.

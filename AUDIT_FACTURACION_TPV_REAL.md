@@ -265,3 +265,19 @@ Sin riesgo de datos: la columna nueva es `nullable=True`, no rompe filas
 existentes. `downgrade()` de la migración 0043 elimina el índice único, la
 restricción y la columna si hiciera falta revertir. No se ha tocado ninguna
 migración ya aplicada en producción — es puramente aditivo.
+
+---
+
+## Revisión independiente (2026-08-23)
+
+**Veredicto: ✅ APROBADO.**
+
+El revisor cerró exactamente el hueco que el ejecutor había declarado no poder cubrir: resolvió el mismo problema de entorno (preview sirviendo el checkout compartido) con el mecanismo ya establecido en esta sesión (junction de `node_modules` + Vite propio en el worktree), y **completó el clic real del botón "Generar Factura" en el navegador** — login real, venta de 10€ en el carrito, pago, clic real, `POST /tpv/invoice → 200` capturado por red con `total:10.0`, factura persistida en BD. Repitió también el caso negativo (ticket inexistente → 404), el aislamiento cruzado (403 en ambas direcciones, con sus propios tenants) y la idempotencia (incluida por clic real repetido, no solo por curl) — todo con datos 100% propios.
+
+**Matiz corregido, no bloqueante**: la afirmación del informe original de que "Alembic no se ejecuta en el deploy real" era imprecisa — `Dockerfile`/`railway.toml` sí invocan `alembic upgrade head`, pero en el escenario legacy real de este proyecto el script previo hace `stamp head` (no `upgrade` real) tras `ensure_schema_patches()`, por lo que el parche de `base.py` sigue siendo, en la práctica, el mecanismo que aplica el cambio. Confirmado por el propio revisor leyendo `scripts/alembic_conditional_stamp.py` — no es un defecto funcional, solo una imprecisión narrativa.
+
+Suite de tests idéntica al baseline, corrida de forma independiente. Hallazgo preexistente de `GET /invoices/` (bug de audiencia JWT + tenant, ya trackeado en otra rama) confirmado real pero no bloqueante para este cierre.
+
+## CERRADO
+
+**Rama final:** `feature/facturacion-tpv-real`, commits `d89f8f5` + `24f4a10`, sobre `main`. Sin merge ni push.

@@ -2,21 +2,39 @@
  * CRM oficina — alineado con tema claro/oscuro global (data-theme en html).
  */
 
+/* .office-crm es a la vez el contenedor raiz Y el namespace de ~80
+   selectores descendientes (.office-crm .panel, .office-crm h1, etc.) --
+   por eso el fondo de bandas se separa a una capa `position:fixed`
+   independiente en vez de mover max-width a un wrapper interior nuevo
+   (evitaria reescribir todos esos selectores). `position:fixed` hace que
+   el fondo cubra SIEMPRE el viewport completo, sin importar el
+   max-width:1200px de este elemento ni el max-width:1280px de #app (el
+   bug real: antes el fondo estaba en este mismo selector CON max-width,
+   asi que las bandas solo llegaban a la columna centrada de 1200px y el
+   fondo oscuro del body asomaba en los margenes en viewports mas anchos). */
 .office-crm {
   position: relative;
   min-height: 100%;
   padding: 1.5rem 1.25rem 2.5rem;
   max-width: 1200px;
   margin: 0 auto;
-  background-image: var(--zeus-bg);
   color: var(--zeus-text, #0f172a);
   font-family: var(--zeus-font-sans, 'Inter', system-ui, sans-serif);
 }
 
 .office-crm::before {
   content: '';
-  position: absolute;
+  position: fixed;
   inset: 0;
+  z-index: -1;
+  background-image: var(--zeus-bg);
+}
+
+.office-crm::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
   background-image: var(--zeus-noise-svg);
   opacity: 0.03;
   mix-blend-mode: overlay;

@@ -1,5 +1,6 @@
 <template>
   <div class="insurance-view">
+   <div class="insurance-content">
     <header class="ins-header">
       <router-link to="/dashboard" class="back-link">&larr; Volver al panel</router-link>
       <h1>Seguros — Multirriesgo</h1>
@@ -189,6 +190,7 @@
       </table>
       <p v-else class="muted">Esta póliza todavía no tiene siniestros.</p>
     </section>
+   </div>
   </div>
 </template>
 
@@ -407,13 +409,30 @@ onMounted(async () => {
    pantalla (Nueva póliza / Abrir siniestro — el resto queda en
    .btn-secondary blanco/borde, incluidas las acciones repetidas por fila
    como "Ver"/"Guardar"). */
+/* El fondo de bandas metalicas (var(--zeus-bg)) va en el contenedor a
+   ANCHO COMPLETO. Dos causas del mismo sintoma ("franja oscura en los
+   bordes"), corregidas ambas aqui:
+   1) Este contenedor tenia su propio max-width/margin:0 auto (ya
+      corregido moviendolo a .insurance-content, el wrapper interior).
+   2) #app (global, src/style.css) tiene max-width:1280px + margin:0
+      auto sobre un body con fondo OSCURO (#0b0f19, src/assets/styles/
+      index.css) -- en cualquier viewport mas ancho que 1280px, ese
+      fondo oscuro asoma FUERA de #app, con independencia de lo que
+      haga este componente por dentro. TPV.vue y AdminPanel.vue lo
+      evitan con position:fixed + width:100vw (escapan del todo del
+      flujo/caja de #app); aqui, al ser una pagina de scroll normal (no
+      un "app" de pantalla completa), se usa el truco de "breakout"
+      estandar (100vw + left:50%/margin-left:-50vw) para que el fondo
+      rompa el max-width del padre sin salir del flujo del documento. */
 .insurance-view {
   position: relative;
+  left: 50%;
+  right: 50%;
+  width: 100vw;
+  margin-left: -50vw;
+  margin-right: -50vw;
   overflow: hidden;
   min-height: 100vh;
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 24px;
   font-family: var(--zeus-font-sans, system-ui, -apple-system, sans-serif);
   color: var(--zeus-text, #0f172a);
   background-image: var(--zeus-bg);
@@ -428,7 +447,13 @@ onMounted(async () => {
   mix-blend-mode: overlay;
   pointer-events: none;
 }
-.insurance-view > * { position: relative; }
+.insurance-content {
+  position: relative;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+.insurance-content > * { position: relative; }
 .ins-header { margin-bottom: 20px; }
 .back-link { color: var(--zeus-accent, #4f46e5); text-decoration: none; font-size: 14px; font-weight: 500; }
 .back-link:hover { text-decoration: underline; }

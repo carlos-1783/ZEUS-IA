@@ -216,7 +216,7 @@ class ProcessSaleRequest(BaseModel):
 
 class GenerateInvoiceRequest(BaseModel):
     ticket_id: str
-    customer_data: Dict[str, Any]
+    customer_data: Optional[Dict[str, Any]] = None
 
 
 class CloseRegisterRequest(BaseModel):
@@ -1277,11 +1277,22 @@ async def generate_invoice(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Generar factura desde ticket"""
+    """Generar factura real desde una venta TPV ya cobrada (valida existencia + tenant, persiste Invoice real)."""
     svc = _tpv_service_for_user(db, current_user)
+    company_ids = _company_ids_for_user(db, current_user)
     result = svc.generate_invoice(
+        db,
         ticket_id=request.ticket_id,
         customer_data=request.customer_data,
+        user_id=current_user.id,
+        company_ids=company_ids,
+    )
+    logger.info(
+        "TPV factura generada user_id=%s ticket_id=%s invoice_id=%s total=%s",
+        current_user.id,
+        request.ticket_id,
+        (result.get("invoice") or {}).get("id"),
+        (result.get("invoice") or {}).get("total"),
     )
     return result
 

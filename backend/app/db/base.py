@@ -49,6 +49,7 @@ def ensure_schema_patches():
         _migrate_document_approvals_columns()
         _migrate_rafael_fiscal_tables()
         _migrate_tpv_company_columns()
+        _migrate_invoice_tpv_sale_link()
         _migrate_smart_time_control_tables()
         _migrate_time_cost_engine_v1()
         _migrate_cashflow_ledger()
@@ -515,6 +516,54 @@ def _migrate_tpv_company_columns():
         print(f"[MIGRATION] [WARN] No se pudo verificar tpv company_id: {e}")
         import traceback
         traceback.print_exc()
+
+
+def _migrate_invoice_tpv_sale_link():
+    """invoices.tpv_sale_id — enlace real factura <-> venta TPV (puente TPV -> RAFAEL, 1 factura por venta)."""
+    from sqlalchemy import inspect, text
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+
+    try:
+        inspector = inspect(engine)
+        if "invoices" not in inspector.get_table_names():
+            return
+        is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
+        cols = {c["name"] for c in inspector.get_columns("invoices")}
+        if "tpv_sale_id" not in cols:
+            try:
+                with engine.begin() as conn:
+                    if is_postgres:
+                        conn.execute(
+                            text('ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "tpv_sale_id" INTEGER')
+                        )
+                    else:
+                        conn.execute(text("ALTER TABLE invoices ADD COLUMN tpv_sale_id INTEGER"))
+                print("[MIGRATION] [OK] invoices.tpv_sale_id agregada")
+            except (OperationalError, ProgrammingError) as e:
+                em = str(e).lower()
+                if "duplicate column" in em or "already exists" in em:
+                    print("[MIGRATION] [INFO] invoices.tpv_sale_id ya existe")
+                else:
+                    print(f"[MIGRATION] [WARN] No se pudo agregar invoices.tpv_sale_id: {e}")
+
+        try:
+            indexes = {ix["name"] for ix in inspector.get_indexes("invoices")}
+            idx_name = "ix_invoices_tpv_sale_id"
+            if idx_name not in indexes:
+                with engine.begin() as conn:
+                    if is_postgres:
+                        conn.execute(
+                            text(f'CREATE UNIQUE INDEX IF NOT EXISTS "{idx_name}" ON "invoices" (tpv_sale_id)')
+                        )
+                    else:
+                        conn.execute(
+                            text(f"CREATE UNIQUE INDEX IF NOT EXISTS {idx_name} ON invoices(tpv_sale_id)")
+                        )
+                print(f"[MIGRATION] [OK] Índice único {idx_name} creado (1 factura por venta TPV)")
+        except Exception as e:
+            print(f"[MIGRATION] [WARN] No se pudo crear índice único tpv_sale_id en invoices: {e}")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] No se pudo verificar invoices.tpv_sale_id: {e}")
 
 
 def _migrate_smart_time_control_tables():

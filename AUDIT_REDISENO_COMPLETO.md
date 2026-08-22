@@ -1021,3 +1021,71 @@ Suite de tests idéntica al baseline. `border-color:#9aa2af` sin token (9 aparic
 ### 🔴 Recomendación de prioridad alta del revisor, no bloqueante para este cierre pero urgente para producción
 
 `backend/agents/base_agent.py:41` — un `print()` con emoji revienta la consola en Windows (cp1252) al instanciar RAFAEL, bloqueando el 100% de las ventas TPV de forma permanente en cualquier despliegue Windows sin `PYTHONIOENCODING=utf-8` explícito. Afecta a RAFAEL, agente compartido por más de una vertical (Facturación, TPV, y potencialmente Seguros al reutilizar el mismo motor fiscal). Candidato a tarea de máxima prioridad en el flujo de producción del núcleo, fuera del alcance de esta rama de diseño frontend.
+
+**Nota de cierre real**: este hallazgo se resolvió en esta misma rama tras esta sección (ver commits `a5897a7`/`4382832`/`732b526`, `AUDIT_ENCODING_TPV.md`) — se fuerza `sys.stdout`/`sys.stderr` a UTF-8 al arrancar `app/main.py` y `gunicorn.conf.py`, protegiendo a los 6 agentes de una vez, verificado con reproducción real antes/después sin `PYTHONIOENCODING` manual, RAFAEL confirmado también fuera del flujo de venta (chat), y suite de tests idéntica al baseline.
+
+---
+
+## 12. Remate final (2026-08-23) — pendientes cosméticos + barrido completo de la app
+
+Encargo de cierre: (1) confirmar/corregir los dos pendientes cosméticos que quedaban anotados (botón "Actualizar" verde en Control Horario, franjas oscuras en Nóminas/Seguros), y (2) recorrer toda la aplicación una vez más para confirmar que ninguna pantalla se quedó sin el sistema de diseño de Ronda 2 (bandas metálicas, tipografía Inter, un solo botón vibrante por vista).
+
+### 12.1 "Botón verde plano Actualizar" — ya resuelto, con un hallazgo nuevo al lado
+
+Verificado en código (`ControlHorario.vue`, clase `.header-btn`) y en vivo con Playwright: el botón "Actualizar" **ya es blanco/secundario** desde el commit `e113132` (`background: #ffffff; border: 1px solid #D1D5DB`), no verde. El pendiente de la sección 10 estaba desactualizado — se confirma cerrado, sin necesidad de tocar código para esto.
+
+**Hallazgo nuevo, sí corregido en esta ronda**: al verificar en vivo (no solo leyendo el código) se encontraron **4 emojis sin migrar en el header de Control Horario** que el commit `e113132` no cubrió pese a reclamar "iconos SVG" — el back-button (📊), el título (⏰), el propio icono de "Actualizar" (🔄) y el badge de perfil de negocio (🏢). Los 5 iconos de método de fichaje (Facial/QR/Manual/Geolocalización/Remoto) **sí eran SVG reales** ya desde `e113132` — una lectura apresurada del array `methods` (que aún conserva campos `icon: '📷'` sin usar, código muerto) llevó a una falsa alarma inicial, descartada al confirmar que el template ya renderiza `<svg v-if="method.id === ...">`, no `{{ method.icon }}`. Corregidos los 4 emojis del header con el mismo patrón SVG ya establecido (reutilizando literalmente el mismo path del icono de dashboard usado en `TPV.vue`), y corregido un bug de layout inducido por el propio fix: con el título en `display:flex; align-items:center`, en viewports estrechos donde "Control Horario Universal" envuelve a 3 líneas, el icono quedaba flotando en el centro vertical del bloque completo en vez de pegado a la primera línea — corregido con `align-items:flex-start`.
+
+**Decisión de alcance, documentada explícitamente**: quedan ~37 emojis más en `ControlHorario.vue` sin convertir — botones semánticos de fichaje (✅ Entrada, 🚪 Salida, ☕ Pausa, ▶️ Reanudar), iconos de tarjetas de métrica, badges de tipo de actividad, y el contenido de varios `alert()` nativos del navegador. No se tocan en esta ronda porque: (a) es un trabajo de alcance distinto y mucho mayor al pedido explícitamente (verde de Actualizar + franjas oscuras + barrido estructural de bandas/tipografía/botón-único), y (b) los `alert()` nativos del navegador no son estilizables por el sistema de diseño en absoluto — convertir su texto no cambiaría nada visual. Queda anotado como candidato a una futura ronda de pulido de iconos si se decide perseguir consistencia total.
+
+### 12.2 Franjas oscuras — causa raíz real, más profunda de lo esperado
+
+Investigando "Nóminas y Seguros" se encontró que el síntoma tiene **dos causas superpuestas**, no una:
+
+1. **Causa específica de cada pantalla**: tanto `PayrollDrafts.vue` (`.payroll-drafts`) como `InsuranceView.vue` (`.insurance-view`) tenían `max-width` + `margin:0 auto` **en el mismo elemento** que llevaba `background-image: var(--zeus-bg)` — así que las bandas metálicas solo cubrían la columna centrada (800px / 1100px), no el ancho real de su contenedor padre.
+2. **Causa global, más importante y no anticipada**: `#app` (regla global en `frontend/src/style.css`) tiene `max-width: 1280px; margin: 0 auto`, mientras que `html, body` (`frontend/src/assets/styles/index.css`) tienen `background: var(--bg-main, #0b0f19)` — un **fondo oscuro por defecto**. Cualquier vista que no escape explícitamente de la caja de `#app` (vía `position:fixed` + `width:100vw`, la técnica que usan `TPV.vue` y `AdminPanel.vue`) mostrará ese fondo oscuro asomando en los márgenes en **cualquier viewport más ancho que 1280px** — con independencia de lo que la propia vista haga con su fondo interno.
+
+**Corregido con la técnica de "breakout" estándar** (`position:relative; left:50%; right:50%; width:100vw; margin-left:-50vw; margin-right:-50vw`) en los tres casos concretos encontrados con el patrón exacto (`max-width` + fondo de bandas en el mismo selector):
+- `PayrollDrafts.vue` (`.payroll-drafts`) — commit de esta ronda.
+- `InsuranceView.vue` (`.insurance-view`) — commit de esta ronda.
+- `OfficeCrm.vue` / `office-crm-theme.scss` (`.office-crm`) — **hallazgo nuevo, no pedido explícitamente pero con el mismo patrón exacto de bug** (`max-width:1200px` y `background-image:var(--zeus-bg)` en el mismo selector), encontrado durante el barrido de la sección 12.3. Al ser `.office-crm` a la vez el contenedor raíz y el namespace de ~80 selectores descendientes (`.office-crm .panel`, `.office-crm h1`, etc.), se optó por una variante sin tocar la plantilla ni renombrar selectores: separar el fondo a una capa `::before`/`::after` con `position:fixed` (cubre siempre el viewport completo, sin que le afecte ningún `max-width` ascendente), en vez de mover el `max-width` a un wrapper interior nuevo como en los otros dos casos.
+
+**No verificado visualmente a >1280px de ancho real** (el pane de este navegador de verificación está fijo en ~629px, más estrecho que los 800/1100/1200px de estas mismas vistas) — verificado en su lugar: (a) que el razonamiento CSS es sólido y sigue exactamente el mismo patrón ya usado y aprobado en `TPV.vue`/`AdminPanel.vue`; (b) que las tres vistas siguen renderizando correctamente sin errores de consola ni scroll horizontal inesperado en el viewport disponible; (c) que el SCSS de `office-crm-theme.scss` compila sin errores (confirmado vía `curl` al asset servido por Vite). `OfficeCrm.vue` no se pudo verificar visualmente en vivo porque la cuenta de prueba usada en el resto de esta sesión es de tipo `restaurant` (módulo CRM desactivado, redirige a `/dashboard`); se registró una segunda cuenta real `business_type=services` para probarlo, pero no se localizó a tiempo el control de "cerrar sesión" en la UI (existe en `MainLayout.vue`, pero esa pantalla no es la que envuelve las rutas navegadas en esta sesión) para cambiar de cuenta sin perder la sesión ya autenticada — **pendiente de verificación visual en vivo**, aunque la corrección está verificada estructuralmente (compila, mismo patrón que las otras dos, sin romper ningún selector descendiente).
+
+**Hallazgo importante para decisión del usuario, NO corregido en esta ronda (fuera del alcance explícito de "Nóminas y Seguros")**: la causa global (`#app` con `max-width:1280px` sobre un `body` oscuro) afecta potencialmente a **cualquier pantalla que no use la técnica `position:fixed`/`100vw`** — confirmado que esto incluye, además de las 3 ya corregidas: `ControlHorario.vue`, `SettingsView.vue`, `OnboardingSetup.vue`, `DashboardProfesional.vue` (el dashboard real, ver 12.3), y las 6 vistas `kpi/*View.vue` (vía `KpiPageShell.vue`, el wrapper compartido). Es decir: **prácticamente toda la app excepto `TPV.vue` y `AdminPanel.vue`** podría mostrar la misma franja oscura en monitores anchos (>1280px, un ancho de escritorio común). Arreglar esto de raíz tiene dos caminos, ninguno aplicado aquí por su alcance/riesgo mayor al pedido explícitamente:
+  - **(a) Fix global**: quitar o condicionar el `max-width:1280px` de `#app`. Bajo riesgo aparente para las páginas públicas ya revisadas (`Pricing.vue`/`Checkout.vue` tienen sus propios `max-width` internos más estrechos, así que no cambiarían visualmente), pero `LandingPage.vue` no tiene ningún `max-width` propio — no se pudo confirmar sin riesgo que quitar el límite global no la afecte, y tocar una regla verdaderamente global es el cambio de mayor radio de impacto posible en todo el frontend.
+  - **(b) Fix por pantalla**: repetir la técnica de breakout aplicada aquí (u optar por `position:fixed`) en cada una de las ~8 pantallas restantes. Más trabajo pero de riesgo acotado por archivo.
+  
+  Se deja documentado, no oculto, para que el usuario decida si se aborda ahora como tarea nueva o se prioriza de otra forma.
+
+### 12.3 Barrido completo de la aplicación — inventario y veredicto por pantalla
+
+Metodología: grep de `var(--zeus-bg)` / `zeus-font-sans` / `zeus-accent-gradient` en cada vista, seguido de verificación manual del árbol de imports para las que dieron 0 coincidencias (varias delegan el fondo/tipografía a un componente "shell" compartido en vez de declararlo en su propio archivo — un grep ciego habría dado falsos positivos de "pantalla sin sistema de diseño").
+
+| Pantalla | Bandas | Inter | Botón único | Veredicto |
+|---|---|---|---|---|
+| `AdminPanel.vue` (`/admin`) | ✅ | ✅ | ✅ | Aprobada (Ronda 4) |
+| `DashboardProfesional.vue`, real `/dashboard` (vía `OlymposDashboard.vue`) | ✅ | ✅ | ✅ | Conforme. Comparte la causa global de 12.2 (sin `position:fixed`) — no verificado a >1280px |
+| `OnboardingSetup.vue` (`/onboarding-setup`) | ✅ | ✅ | ✅ | Conforme. Misma exposición a la causa global de 12.2, no verificada a >1280px |
+| `TPV.vue` (`/tpv`) | ✅ | ✅ | ✅ | Aprobada, ya escapa de `#app` con `position:fixed` |
+| `ControlHorario.vue` (`/control-horario`) | ✅ | ✅ | ✅ | Corregidos 4 emojis de header en esta ronda (12.1). Misma exposición a la causa global de 12.2 |
+| `SettingsView.vue` / Ajustes (`/settings`) | ✅ | ✅ | ✅ | Aprobada (referencia). Misma exposición a la causa global de 12.2 |
+| `PayrollDrafts.vue` / Nóminas (`/payroll`) | ✅ | ✅ | n/a (sin CTA único, botones repetidos por fila, correcto) | Franja oscura corregida en esta ronda (12.2) |
+| `InsuranceView.vue` / Seguros (`/insurance`) | ✅ | ✅ | ✅ (Nueva póliza) | Franja oscura corregida en esta ronda (12.2) |
+| `OfficeCrm.vue` / CRM (`/office-crm`) | ✅ | ✅ | no verificado en vivo | Franja oscura corregida en esta ronda (12.2, ver limitación de verificación arriba) |
+| `KpiAgentsView.vue` (`/agents`) y las otras 5 vistas `kpi/*` (`/analytics/tasks`, `/analytics/efficiency`, `/alerts`, `/automations`, `/automations/audit`) | ✅ (vía `KpiPageShell.vue`) | ✅ (vía shell) | ✅ (sin gradiente en listas repetidas, correcto) | Conformes. Misma exposición a la causa global de 12.2 |
+| `ScanHub.vue` (`/scan`) | ❌ | ❌ | n/a | **No migrada** — tema oscuro propio (`color:#f1f5f9` sobre fondo oscuro), coherente en sí mismo pero de una generación de diseño anterior a Ronda 2. Ver criterio abajo |
+| `SystemStatusPanel.vue` (`/system/status`) | ❌ | no verificado | n/a | **No migrada** — `max-width:960px; margin:0 auto` sin ningún fondo propio, hereda el fondo oscuro de `body` directamente. Ver criterio abajo |
+| `Dashboard.vue` (registrado en el router en `/dashboard` como `DashboardProtected`, pero **inalcanzable en la práctica**: `OlymposDashboard` está registrado antes para la misma ruta `/dashboard` y gana la resolución) | ❌ | ❌ | n/a | **Código muerto**, no lo ve ningún usuario real (confirmado navegando a `/dashboard`: se renderiza `DashboardProfesional.vue`, no este archivo). Candidato a limpieza, no a rediseño |
+
+**Criterio para `ScanHub.vue` y `SystemStatusPanel.vue` — documentado, no ignorado en silencio**: ambas son pantallas de utilidad técnica/secundaria (escaneo de QR/NFC/DNI la primera, estado de salud del sistema la segunda), no flujos de negocio primarios como TPV/CRM/Nóminas/Seguros que sí estaban en las "7 categorías del alcance original". Se documentan como gap real y concreto, pero se juzgan **razonablemente fuera del alcance de este remate final** (que pedía explícitamente 2 pantallas + un barrido de confirmación, no un rediseño completo de pantallas nuevas) — quedan anotadas para que el usuario decida si merecen su propia ronda de rediseño o si su naturaleza de herramienta técnica justifica un tratamiento visual distinto permanente.
+
+### 12.4 Verificación y cierre de esta ronda
+
+- Suite de tests backend: `7 failed, 214 passed, 2 skipped, 3 errors` — idéntica al baseline conocido (esperable: todos los cambios de esta ronda son frontend puro, ningún archivo de `backend/` tocado en esta sección 12).
+- Verificado en vivo con Playwright (mismo backend real, mismo worktree confirmado por `curl` contra el marcador único de cada archivo antes de fiarse de cualquier captura — este entorno reincidió en el problema conocido de servir el checkout compartido en el puerto 5173 en vez de este worktree; se detectó, se mató el proceso equivocado, y se relanzó un Vite propio de este worktree antes de continuar): Control Horario (header sin emojis, Actualizar confirmado blanco/secundario), Nóminas y Seguros (fondo de bandas a ancho completo en el viewport disponible, sin franja visible).
+- Commits atómicos de esta ronda: uno para `ControlHorario.vue` (12.1), uno para `PayrollDrafts.vue` + `InsuranceView.vue` + `office-crm-theme.scss` (12.2, mismo bug/mismo fix en los tres), uno para este documento.
+
+## Remate final — CERRADO, pendiente de revisión independiente
+
+**Rama:** `feature/rediseno-completo`. Sin merge ni push a `main` en ningún momento de esta sesión.

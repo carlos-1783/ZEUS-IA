@@ -7,22 +7,27 @@
          (Seguros, Ajustes, /agents): un enlace/botón "volver" en flujo,
          antes de la cabecera. -->
     <button @click="goToDashboard" class="back-to-dashboard-btn">
-      <span class="btn-icon">📊</span>
+      <span class="btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M4 20h16"/></svg></span>
       <span class="btn-label">{{ $t('controlHorario.backToDashboard') }}</span>
     </button>
 
     <!-- Header del Control Horario -->
     <div class="control-horario-header">
       <div class="control-horario-title-section">
-        <h1 class="control-horario-title">⏰ {{ $t('controlHorario.title') }}</h1>
+        <h1 class="control-horario-title">
+          <span class="title-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></span>
+          {{ $t('controlHorario.title') }}
+        </h1>
         <p class="control-horario-subtitle">{{ $t('controlHorario.subtitle') }}</p>
       </div>
       <div class="header-actions">
         <button @click="checkStatus" class="header-btn">
-          🔄 {{ $t('controlHorario.refresh') }}
+          <span class="header-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-5h5"/></svg></span>
+          {{ $t('controlHorario.refresh') }}
         </button>
         <div v-if="businessProfile" class="business-profile-badge">
-          🏢 {{ getBusinessProfileLabel(businessProfile) }}
+          <span class="header-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1M10 21v-4h4v4"/></svg></span>
+          {{ getBusinessProfileLabel(businessProfile) }}
         </div>
       </div>
     </div>
@@ -793,8 +798,39 @@ onUnmounted(() => {
 
 .control-horario-title {
   margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   font-size: 32px;
   color: var(--zeus-text, #1f2937);
+}
+
+.title-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 4px;
+  color: var(--zeus-accent, #4f46e5);
+}
+
+.title-icon svg {
+  width: 30px;
+  height: 30px;
+}
+
+.btn-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.header-btn-icon {
+  display: inline-flex;
+  vertical-align: -4px;
+  margin-right: 4px;
+}
+
+.header-btn-icon svg {
+  width: 16px;
+  height: 16px;
 }
 
 .control-horario-subtitle {

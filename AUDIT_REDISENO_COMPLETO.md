@@ -1108,3 +1108,18 @@ Verificación 100% independiente: confirmó el preview correcto con un marcador 
 1. Causa global de las franjas oscuras (`#app` max-width + `body` fondo oscuro) — mitigada puntualmente en las pantallas señaladas, no resuelta de raíz por su alcance/riesgo mayor.
 2. `ScanHub.vue`/`SystemStatusPanel.vue` sin migrar — confirmados como utilidades técnicas secundarias, criterio razonable de exclusión.
 3. `ReferenceError: shouldShowTPV` en `DashboardProfesional.vue` — bug preexistente, no relacionado con el rediseño.
+
+## 14. Regresión de tests post-fusión de las 3 ramas — investigada y descartada como falso positivo (2026-08-24)
+
+Tras fusionar en este worktree, sobre `feature/rediseno-completo`, las otras dos ramas ya aprobadas (`feature/facturacion-tpv-real` y `feature/onboarding-facturacion` — resolviendo un conflicto real en `OnboardingSetup.vue` y una colisión de 3 migraciones Alembic con el mismo número `0043`, renumeradas a `0044`/`0045`), una primera ejecución de la suite completa dio `11 failed, 210 passed, 2 skipped, 3 errors` — 4 fallos nuevos frente al baseline, todos en `tests/test_afrodita_real_execution_v1.py` (alta de empleado y fichaje QR).
+
+**Investigación realizada, no una aceptación superficial:**
+- El test que falla en solitario (`test_create_employee_e2e`) pasa perfectamente aislado, y el fichero completo pasa sus 5 tests aislado.
+- Se comprobó el orden real de colección de pytest (`--collect-only`): `test_afrodita_real_execution_v1.py` es el 7º fichero, precedido únicamente por otros 6 ficheros AFRODITA — se ejecutaron esos 7 juntos explícitamente y los 30 tests pasaron.
+- Se descartó como causa un plugin de orden aleatorio de tests (`pytest-randomly`/`random-order`/`pytest-order`): no está en `requirements.txt` ni instalado en el venv, y no hay `addopts` relevante en ninguna config de pytest.
+- Se revisó `ensure_schema_patches()` (`app/db/base.py`) como hipótesis (un único `try/except` envolviendo ~11 parches secuenciales podría, en teoría, tragarse una excepción y bloquear parches posteriores de fichaje/tiempo) — se leyó íntegra la nueva `_migrate_invoice_tpv_sale_link()` y está bien blindada (try/except anidado en cada paso DDL), por lo que no es la causa directa.
+- **Se repitió la suite completa dos veces más, sin tocar código**: ambas dieron exactamente `7 failed, 214 passed, 2 skipped, 3 errors` — el baseline exacto, sin ningún fallo de AFRODITA.
+
+**Conclusión**: la regresión de `11 failed` fue un falso positivo intermitente, probablemente por contención transitoria sobre el fichero sqlite de test compartido (`zeus_test.db`) por otro proceso concurrente en este entorno de varios agentes/worktrees, no un bug real introducido por la fusión de las 3 ramas. Confirmado con 2 ejecuciones limpias consecutivas tras la que falló. **No se aplicó ningún cambio de código para "arreglar" esto** — no había nada que arreglar en la lógica de AFRODITA ni en los parches de esquema nuevos.
+
+**Estado de la fusión de las 3 ramas**: verificado, baseline de tests estable, lista para continuar con la auditoría final completa de toda la app.

@@ -55,6 +55,7 @@ def ensure_schema_patches():
         _migrate_cashflow_ledger()
         _migrate_zeus_domain_events()
         _migrate_zeus_analytics_tables()
+        _migrate_company_billing_fields()
         print("[SCHEMA] Parches de esquema completados")
     except Exception as e:
         logger.warning("ensure_schema_patches: %s", e)
@@ -714,6 +715,60 @@ def _migrate_zeus_analytics_tables():
                 print(f"[MIGRATION] [OK] {model.__tablename__} creada")
     except Exception as e:
         print(f"[MIGRATION] [WARN] zeus_analytics tables migrate: {e}")
+
+
+def _migrate_company_billing_fields():
+    """Columnas tax_id/legal_name/iban_encrypted en companies (migration 0043)."""
+    from sqlalchemy import inspect, text
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+
+    try:
+        inspector = inspect(engine)
+        if "companies" not in inspector.get_table_names():
+            return
+        is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
+        cols = {c["name"] for c in inspector.get_columns("companies")}
+
+        additions = [
+            ("tax_id", "VARCHAR(20)"),
+            ("legal_name", "VARCHAR(255)"),
+            ("iban_encrypted", "TEXT"),
+        ]
+        for col_name, col_type in additions:
+            if col_name in cols:
+                continue
+            try:
+                with engine.begin() as conn:
+                    if is_postgres:
+                        conn.execute(
+                            text(f'ALTER TABLE "companies" ADD COLUMN IF NOT EXISTS "{col_name}" {col_type}')
+                        )
+                    else:
+                        conn.execute(text(f"ALTER TABLE companies ADD COLUMN {col_name} {col_type}"))
+                print(f"[MIGRATION] [OK] companies.{col_name} agregada")
+            except (OperationalError, ProgrammingError) as e:
+                em = str(e).lower()
+                if "duplicate column" in em or "already exists" in em:
+                    print(f"[MIGRATION] [INFO] companies.{col_name} ya existe")
+                else:
+                    print(f"[MIGRATION] [WARN] No se pudo agregar companies.{col_name}: {e}")
+
+        try:
+            indexes = {ix["name"] for ix in inspector.get_indexes("companies")}
+            if "ix_companies_tax_id" not in indexes:
+                with engine.begin() as conn:
+                    if is_postgres:
+                        conn.execute(
+                            text('CREATE INDEX IF NOT EXISTS "ix_companies_tax_id" ON "companies" (tax_id)')
+                        )
+                    else:
+                        conn.execute(
+                            text("CREATE INDEX IF NOT EXISTS ix_companies_tax_id ON companies(tax_id)")
+                        )
+        except Exception as e:
+            print(f"[MIGRATION] [WARN] No se pudo crear índice tax_id en companies: {e}")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] No se pudo verificar company billing fields: {e}")
 
 
 def _migrate_firewall_columns_legacy():

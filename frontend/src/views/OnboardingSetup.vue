@@ -86,6 +86,40 @@
           placeholder="Ej: fichaje en local y remoto con geolocalización para comerciales"
           rows="3"
         />
+
+        <h3 class="section-title">Datos de facturación</h3>
+
+        <label>Nombre completo / razón social *</label>
+        <input
+          v-model.trim="form.legal_name"
+          type="text"
+          placeholder="Ej: Restauración Zeus S.L."
+        >
+
+        <label>CIF/NIF de la empresa *</label>
+        <input
+          v-model.trim="form.tax_id"
+          type="text"
+          placeholder="Ej: B12345674 o 12345678Z"
+          @blur="form.tax_id = form.tax_id.toUpperCase()"
+        >
+        <p v-if="form.tax_id && !taxIdValid" class="field-error">
+          CIF/NIF con formato inválido (revisa dígitos y letra de control).
+        </p>
+
+        <label>Cuenta bancaria (IBAN) para cobros *</label>
+        <input
+          v-model.trim="form.iban"
+          type="text"
+          placeholder="Ej: ES91 2100 0418 4502 0005 1332"
+          @blur="form.iban = form.iban.toUpperCase()"
+        >
+        <p v-if="form.iban && !ibanValid" class="field-error">
+          IBAN con formato inválido (revisa el dígito de control).
+        </p>
+        <p v-if="existingIbanMasked" class="hint">
+          IBAN ya guardado: {{ existingIbanMasked }}. Déjalo en blanco para mantenerlo, o introduce uno nuevo para sustituirlo.
+        </p>
       </section>
 
       <section v-if="step === 3" class="section">
@@ -98,6 +132,9 @@
           <li><strong>Enlaces redes:</strong> {{ socialLinksSummary || '—' }}</li>
           <li><strong>WhatsApp:</strong> {{ form.whatsapp_number || '—' }}</li>
           <li><strong>Gestor fiscal:</strong> {{ form.email_gestor_fiscal || '—' }}</li>
+          <li><strong>Razón social:</strong> {{ form.legal_name || '—' }}</li>
+          <li><strong>CIF/NIF:</strong> {{ form.tax_id || '—' }}</li>
+          <li><strong>IBAN:</strong> {{ form.iban ? maskIban(form.iban) : (existingIbanMasked || '—') }}</li>
         </ul>
       </section>
 
@@ -118,6 +155,7 @@ import { useRouter } from 'vue-router'
 import api from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { markOnboardingSetupDone } from '@/utils/postAuthRedirect'
+import { validarNifCif, validarIban, maskIban } from '@/utils/validatorsEs'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -147,7 +185,15 @@ const form = reactive({
   autoriza_envio_documentos_a_asesores: true,
   control_horario_policy: '',
   employees: [{ full_name: '', phone: '', role_title: 'camarero' }] as EmployeeRow[],
+  tax_id: '',
+  legal_name: '',
+  iban: '',
 })
+
+const existingIbanMasked = ref('')
+
+const taxIdValid = computed(() => !!form.tax_id && validarNifCif(form.tax_id))
+const ibanValid = computed(() => !!form.iban && validarIban(form.iban))
 
 const socialLinksSummary = computed(() => {
   const entries = form.social_channels
@@ -209,6 +255,15 @@ onMounted(async () => {
     }
     if (status?.autoriza_envio_documentos_a_asesores != null) {
       form.autoriza_envio_documentos_a_asesores = !!status.autoriza_envio_documentos_a_asesores
+    }
+    if (typeof status?.tax_id === 'string' && status.tax_id.trim()) {
+      form.tax_id = status.tax_id.trim()
+    }
+    if (typeof status?.legal_name === 'string' && status.legal_name.trim()) {
+      form.legal_name = status.legal_name.trim()
+    }
+    if (typeof status?.iban_masked === 'string' && status.iban_masked.trim()) {
+      existingIbanMasked.value = status.iban_masked.trim()
     }
     const q = status?.existing_questionnaire
     if (q && typeof q === 'object') {
@@ -289,6 +344,22 @@ const nextStep = (): void => {
       error.value = 'Debes autorizar el envío al gestor para activar RAFAEL'
       return
     }
+    if (!String(form.legal_name || '').trim()) {
+      error.value = 'Indica el nombre completo / razón social de la empresa'
+      return
+    }
+    if (!String(form.tax_id || '').trim() || !taxIdValid.value) {
+      error.value = 'Indica un CIF/NIF válido de la empresa'
+      return
+    }
+    if (!existingIbanMasked.value && !String(form.iban || '').trim()) {
+      error.value = 'Indica el IBAN de cobro de la empresa'
+      return
+    }
+    if (form.iban && !ibanValid.value) {
+      error.value = 'El IBAN introducido no es válido (revisa el dígito de control)'
+      return
+    }
   }
   step.value += 1
 }
@@ -324,6 +395,9 @@ const finishSetup = async () => {
       business_hours: String(form.business_hours || '').trim(),
       email_gestor_fiscal: gestorEmail || null,
       autoriza_envio_documentos_a_asesores: !!form.autoriza_envio_documentos_a_asesores,
+      legal_name: String(form.legal_name || '').trim() || null,
+      tax_id: String(form.tax_id || '').trim() || null,
+      iban: String(form.iban || '').trim() || null,
     }, token)
     if (result && result.success === false) {
       throw new Error(result.message || 'No se pudo guardar la configuración')
@@ -513,6 +587,19 @@ button:disabled { opacity: .6; cursor: not-allowed; }
   padding: 10px 14px;
   border-radius: var(--zeus-radius-sm, 8px);
   margin-bottom: 10px;
+}
+
+.section-title {
+  margin: 10px 0 2px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--zeus-text-secondary, #52607a);
+}
+
+.field-error {
+  font-size: 0.85rem;
+  color: #b91c1c;
+  margin: -4px 0 8px;
 }
 
 @media (prefers-reduced-motion: reduce) {

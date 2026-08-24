@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Literal, Union, Dict
 from pydantic import BaseModel, Field, ConfigDict, field_validator, EmailStr, validator
 
+from app.core.validators_es import validar_nif_cif, validar_iban
+
 class TokenPayload(BaseModel):
     """
     Modelo para el payload de los tokens JWT.
@@ -170,6 +172,60 @@ class OnboardingProfileRequest(BaseModel):
         default=True,
         description="Autoriza envío de borradores fiscales al gestor tras aprobación",
     )
+    tax_id: Optional[str] = Field(
+        default=None,
+        max_length=20,
+        description="CIF/NIF de la empresa para facturación",
+    )
+    legal_name: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+        description="Nombre completo / razón social",
+    )
+    iban: Optional[str] = Field(
+        default=None,
+        max_length=42,
+        description="IBAN para cobros (se cifra en reposo; nunca se devuelve en claro)",
+    )
+
+    @validator("tax_id", pre=True)
+    def empty_tax_id_to_none(cls, v):
+        if v is None or (isinstance(v, str) and not str(v).strip()):
+            return None
+        return v
+
+    @validator("tax_id")
+    def tax_id_checksum(cls, v):
+        if v is None:
+            return v
+        cleaned = re.sub(r"[\s-]", "", str(v)).upper()
+        if not validar_nif_cif(cleaned):
+            raise ValueError(
+                "CIF/NIF inválido: revisa el formato y la letra/dígito de control"
+            )
+        return cleaned
+
+    @validator("legal_name", pre=True)
+    def empty_legal_name_to_none(cls, v):
+        if v is None or (isinstance(v, str) and not str(v).strip()):
+            return None
+        return v
+
+    @validator("iban", pre=True)
+    def empty_iban_to_none(cls, v):
+        if v is None or (isinstance(v, str) and not str(v).strip()):
+            return None
+        return v
+
+    @validator("iban")
+    def iban_checksum(cls, v):
+        if v is None:
+            return v
+        cleaned = re.sub(r"[\s-]", "", str(v)).upper()
+        if not validar_iban(cleaned):
+            raise ValueError("IBAN inválido: revisa el formato y el dígito de control (mod-97)")
+        return cleaned
 
 
 class ResetPasswordRequest(BaseModel):

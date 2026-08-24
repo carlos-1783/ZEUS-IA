@@ -1089,3 +1089,22 @@ Metodología: grep de `var(--zeus-bg)` / `zeus-font-sans` / `zeus-accent-gradien
 ## Remate final — CERRADO, pendiente de revisión independiente
 
 **Rama:** `feature/rediseno-completo`. Sin merge ni push a `main` en ningún momento de esta sesión.
+
+---
+
+## 13. Revisión independiente del remate final — CIERRE DEL ENCARGO COMPLETO DE REDISEÑO (2026-08-24)
+
+**Veredicto: ✅ APROBADO.**
+
+Verificación 100% independiente: confirmó el preview correcto con un marcador único e inequívoco del commit; reprodujo en vivo, con cuenta propia, el escenario exacto del bug de layout de Control Horario (título a 3 líneas) confirmando el fix; verificó estructuralmente el CSS de `#app`/`body` para confirmar que la caracterización del hallazgo global (max-width + fondo oscuro) es correcta y no exagerada; muestreó varias de las 13 pantallas del barrido con dos tenants propios distintos confirmando el gating por vertical; **resolvió el hueco que había dejado el ejecutor** (verificó `OfficeCrm.vue` en vivo, esquivando la limitación de CORS que había bloqueado al ejecutor); suite de tests idéntica al baseline; `main` y remoto confirmados sin tocar.
+
+**Hallazgo incidental encontrado por el revisor, no bloqueante**: `ReferenceError: shouldShowTPV is not defined` en `DashboardProfesional.vue:590/602/614`, reproducible en cada carga para tenants sin TPV — confirmado preexistente, no introducido en esta ronda.
+
+## CIERRE DEL ENCARGO COMPLETO DE REDISEÑO
+
+4 rondas + Control Horario/TPV + fix de codificación + este remate final — todos aprobados por revisión independiente, ninguna aprobación de cortesía (varias devoluciones reales con motivo concreto a lo largo del proceso).
+
+**Pendiente real para decisión del usuario, no bloqueante:**
+1. Causa global de las franjas oscuras (`#app` max-width + `body` fondo oscuro) — mitigada puntualmente en las pantallas señaladas, no resuelta de raíz por su alcance/riesgo mayor.
+2. `ScanHub.vue`/`SystemStatusPanel.vue` sin migrar — confirmados como utilidades técnicas secundarias, criterio razonable de exclusión.
+3. `ReferenceError: shouldShowTPV` en `DashboardProfesional.vue` — bug preexistente, no relacionado con el rediseño.

@@ -1,13 +1,13 @@
 """invoices.tpv_sale_id — enlace real factura <-> venta TPV (puente RAFAEL/TPV)
 
-Revision ID: 0043
-Revises: 0042
+Revision ID: 0044
+Revises: 0043
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0043"
-down_revision = "0042"
+revision = "0044"
+down_revision = "0043"
 branch_labels = None
 depends_on = None
 

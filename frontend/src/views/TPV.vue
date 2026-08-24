@@ -657,6 +657,8 @@ const paymentNote = ref('') // Nota adicional para el pago
 const cartFeedback = ref(null) // Feedback visual del carrito
 const cartFeedbackTimeout = ref(null) // Timeout para ocultar feedback
 const lastSaleTicketId = ref(null) // ID del último ticket vendido
+const lastSaleCustomerData = ref(null) // Datos de cliente de la última venta (para facturación real)
+const invoiceGenerationInProgress = ref(false)
 /** Operador según sesión + RRHH (GET /api/v1/tpv → tpv_operator) */
 const tpvOperator = ref(null)
 /** Jornada (empleado); mismo payload que /auth/me → jornada */
@@ -2175,9 +2177,10 @@ const processPayment = async () => {
     const api = (await import('@/services/api')).default
     const result = await api.post('/api/v1/tpv/sale', saleData, token)
     
-    // Guardar ticket_id para facturación posterior
+    // Guardar ticket_id + datos de cliente para facturación real posterior
     const ticketId = result.ticket_id || result.ticket?.id || null
     lastSaleTicketId.value = ticketId
+    lastSaleCustomerData.value = customerData
     
     // Cambiar estado a CLOSED después del pago exitoso
     tpvState.value = TPV_STATES.CLOSED
@@ -2207,8 +2210,44 @@ const processPayment = async () => {
 }
 
 const generateInvoice = async () => {
-  // En una implementación completa, esto generaría la factura
-  info('Generando factura... (Funcionalidad en desarrollo)')
+  if (!lastSaleTicketId.value) {
+    warning('No hay ninguna venta cobrada todavía para facturar')
+    return
+  }
+  if (invoiceGenerationInProgress.value) {
+    return
+  }
+  invoiceGenerationInProgress.value = true
+  try {
+    const token = await getAuthToken()
+    if (!token) {
+      warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
+      router.push(loginRedirectPath())
+      return
+    }
+    const api = (await import('@/services/api')).default
+    const result = await api.post('/api/v1/tpv/invoice', {
+      ticket_id: lastSaleTicketId.value,
+      customer_data: lastSaleCustomerData.value || null
+    }, token)
+
+    const invoice = result?.invoice
+    if (!invoice) {
+      error('El backend no devolvió una factura válida')
+      return
+    }
+    if (result.already_existed) {
+      info(`Ya existía una factura para este ticket: ${invoice.invoice_number} (Total: EUR ${formatPrice(invoice.total)})`)
+    } else {
+      success(`Factura ${invoice.invoice_number} generada. Total: EUR ${formatPrice(invoice.total)}`)
+    }
+  } catch (err) {
+    console.error('Error generando factura:', err)
+    const detail = err?.detail || err.message
+    error('No se pudo generar la factura: ' + detail)
+  } finally {
+    invoiceGenerationInProgress.value = false
+  }
 }
 
 const printTicket = async () => {

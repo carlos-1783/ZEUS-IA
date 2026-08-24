@@ -146,7 +146,9 @@ class Invoice(Base):
     # References
     company_id = Column(Integer, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
-    
+    # Origen real: venta TPV que generó esta factura (puente TPV -> RAFAEL). Único: 1 factura por venta.
+    tpv_sale_id = Column(Integer, ForeignKey("tpv_sales.id", ondelete="SET NULL"), nullable=True, unique=True, index=True)
+
     # Invoice details
     invoice_type = Column(Enum(InvoiceType), default=InvoiceType.INVOICE)
     status = Column(Enum(InvoiceStatus), default=InvoiceStatus.DRAFT)
@@ -172,6 +174,7 @@ class Invoice(Base):
     items = relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="invoice", cascade="all, delete-orphan")
     inventory_movements = relationship("InventoryMovement", back_populates="invoice")
+    tpv_sale = relationship("TPVSale", foreign_keys=[tpv_sale_id])
     
     # Metadata
     created_at = Column(DateTime, default=datetime.utcnow)

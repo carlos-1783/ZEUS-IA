@@ -1019,31 +1019,157 @@ class TPVService:
                 "error": str(e)
             }
     
-    def generate_invoice(self, ticket_id: str, customer_data: Dict[str, Any]) -> Dict[str, Any]:
+    def generate_invoice(
+        self,
+        db: Any,
+        *,
+        ticket_id: str,
+        customer_data: Optional[Dict[str, Any]],
+        user_id: int,
+        company_ids: Optional[List[int]] = None,
+    ) -> Dict[str, Any]:
         """
-        Generar factura completa desde un ticket
-        
-        Args:
-            ticket_id: ID del ticket original
-            customer_data: Datos del cliente (NIF, nombre, dirección)
-        
-        Returns:
-            Dict con factura generada
+        Generar factura REAL desde una venta TPV ya cobrada (tabla `tpv_sales`).
+
+        No recalcula IVA: reutiliza `subtotal`/`tax_amount`/`total` ya
+        persistidos por `fiscal_engine.persist_fiscal_sale` en el momento del
+        cobro (verificado como correcto en auditoría previa: base imponible +
+        IVA calculado una sola vez). Aislamiento por tenant obligatorio: la
+        venta debe pertenecer al usuario o a una de sus empresas, si no,
+        404/403 real (nunca éxito falso). Persiste `Invoice`/`InvoiceItem`
+        reales (tabla `invoices`, ya usada por el resto del ERP) enlazadas a
+        la venta vía `Invoice.tpv_sale_id` (único: 1 factura por venta).
         """
-        # En una implementación completa, esto recuperaría el ticket y generaría factura
-        # Por ahora retornamos estructura
-        
-        invoice = {
-            "id": f"FAC_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
-            "type": TPVDocumentType.FACTURA.value,
-            "ticket_id": ticket_id,
-            "customer_data": customer_data,
-            "generated_at": datetime.utcnow().isoformat()
-        }
-        
+        from fastapi import HTTPException
+        from sqlalchemy.orm import joinedload
+        from app.models.erp import TPVSale, Invoice, InvoiceItem, InvoiceStatus, InvoiceType
+        from app.models.customer import Customer
+
+        if not ticket_id:
+            raise HTTPException(status_code=400, detail="ticket_id es obligatorio")
+
+        sale = (
+            db.query(TPVSale)
+            .options(joinedload(TPVSale.items))
+            .filter(TPVSale.ticket_id == ticket_id)
+            .first()
+        )
+        if not sale:
+            logger.warning("tpv_invoice_ticket_no_encontrado ticket_id=%s user_id=%s", ticket_id, user_id)
+            raise HTTPException(status_code=404, detail=f"Venta no encontrada para ticket_id={ticket_id}")
+
+        owns_by_user = sale.user_id == user_id
+        owns_by_company = bool(sale.company_id) and bool(company_ids) and sale.company_id in company_ids
+        if not (owns_by_user or owns_by_company):
+            logger.warning(
+                "tpv_invoice_denegada_tenant ticket_id=%s sale_user=%s sale_company=%s solicitante_user=%s solicitante_companies=%s",
+                ticket_id, sale.user_id, sale.company_id, user_id, company_ids,
+            )
+            raise HTTPException(status_code=403, detail="La venta no pertenece a su empresa.")
+
+        if not sale.items:
+            raise HTTPException(status_code=422, detail="La venta no tiene líneas; no se puede facturar.")
+
+        # Idempotencia real: si ya existe factura para esta venta, no duplicar (no éxito falso, no duplicado silencioso)
+        existing = db.query(Invoice).filter(Invoice.tpv_sale_id == sale.id).first()
+        if existing:
+            logger.info("tpv_invoice_ya_existente ticket_id=%s invoice_id=%s", ticket_id, existing.id)
+            return self._invoice_result(existing, sale.ticket_id, already_existed=True)
+
+        merged_customer: Dict[str, Any] = dict(sale.customer_data or {})
+        if isinstance(customer_data, dict):
+            merged_customer.update({k: v for k, v in customer_data.items() if v})
+
+        customer_id = None
+        name = str(merged_customer.get("name") or merged_customer.get("nombre") or "").strip()
+        nif = str(merged_customer.get("nif") or merged_customer.get("tax_id") or "").strip() or None
+        if name:
+            cq = db.query(Customer).filter(Customer.company_id == sale.company_id)
+            cq = cq.filter(Customer.tax_id == nif) if nif else cq.filter(Customer.name == name)
+            customer = cq.first()
+            if not customer:
+                customer = Customer(
+                    name=name,
+                    tax_id=nif,
+                    company_id=sale.company_id,
+                    owner_user_id=user_id,
+                    is_active=True,
+                    is_company=False,
+                )
+                db.add(customer)
+                db.flush()
+            customer_id = customer.id
+
+        subtotal = float(sale.subtotal or 0)
+        tax_amount = float(sale.tax_amount or 0)
+        total = float(sale.total or 0)
+
+        invoice = Invoice(
+            invoice_number=f"FRA-{sale.ticket_id}"[:50],
+            company_id=sale.company_id,
+            customer_id=customer_id,
+            invoice_type=InvoiceType.INVOICE,
+            status=InvoiceStatus.PAID,
+            issue_date=datetime.utcnow(),
+            subtotal=subtotal,
+            tax_amount=tax_amount,
+            discount_amount=0.0,
+            total=total,
+            amount_paid=total,
+            amount_due=0.0,
+            tpv_sale_id=sale.id,
+            created_by=user_id,
+        )
+        db.add(invoice)
+        try:
+            db.flush()
+            for item in sale.items:
+                base = float(item.base_amount or 0)
+                tax = float(item.tax_amount or 0)
+                recargo = float(item.recargo_amount or 0)
+                db.add(InvoiceItem(
+                    invoice_id=invoice.id,
+                    description=item.product_name or item.product_id,
+                    quantity=float(item.quantity or 1),
+                    unit_price=float(item.unit_price or 0),
+                    tax_rate=float(item.tax_rate_snapshot or 0) * 100,
+                    discount=0.0,
+                    subtotal=base,
+                    tax_amount=tax + recargo,
+                    total=base + tax + recargo,
+                ))
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("tpv_invoice_persist_failed ticket_id=%s", ticket_id)
+            raise HTTPException(status_code=500, detail="No se pudo persistir la factura. Inténtelo de nuevo.")
+
+        db.refresh(invoice)
+        logger.info(
+            "tpv_invoice_generada ticket_id=%s invoice_id=%s invoice_number=%s total=%s user_id=%s company_id=%s",
+            ticket_id, invoice.id, invoice.invoice_number, total, user_id, sale.company_id,
+        )
+        return self._invoice_result(invoice, sale.ticket_id, already_existed=False)
+
+    @staticmethod
+    def _invoice_result(invoice: Any, ticket_id: str, already_existed: bool) -> Dict[str, Any]:
         return {
             "success": True,
-            "invoice": invoice
+            "already_existed": already_existed,
+            "invoice": {
+                "id": invoice.id,
+                "invoice_number": invoice.invoice_number,
+                "type": TPVDocumentType.FACTURA.value,
+                "ticket_id": ticket_id,
+                "company_id": invoice.company_id,
+                "customer_id": invoice.customer_id,
+                "subtotal": float(invoice.subtotal or 0),
+                "tax_amount": float(invoice.tax_amount or 0),
+                "total": float(invoice.total or 0),
+                "status": invoice.status.value if hasattr(invoice.status, "value") else invoice.status,
+                "issue_date": invoice.issue_date.isoformat() if invoice.issue_date else None,
+                "generated_at": datetime.utcnow().isoformat(),
+            },
         }
     
     def close_register(

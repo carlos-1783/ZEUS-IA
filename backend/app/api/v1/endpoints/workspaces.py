@@ -746,6 +746,27 @@ async def workspace_thalos_threat(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
+    # Mitigación interina (AUDIT_FIX_THALOS_SHIELD.md, sección 12.2/13):
+    # detect_threat_events() delega en services/thalos_threat_engine.py::evaluate_events(db)
+    # y services/thalos_monitor_service.py::audit_from_db(db), ambas consultas
+    # GLOBALES sin ningún filtro por company_id (ThalosEvent/ThalosSecurityEvent/
+    # ThalosLoginAttempt no tienen esa columna) — fuga cross-tenant confirmada en
+    # vivo por el revisor (candidates con emails de otros tenants, más un bloque
+    # `database` con event_count/security_event_count/recent_events globales),
+    # persistida además en el workspace del propio llamante. Mismo gate ya
+    # aplicado a workspace_thalos_logs, thalos_v1_audit y
+    # detect_suspicious_activity/THALOS.SCAN.
+    if not getattr(current_user, "is_superuser", False):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "El detector de amenazas THALOS con escaneo real requiere "
+                "privilegios de superusuario (mitigación interina: el motor "
+                "subyacente audita actividad global sin filtrar por empresa "
+                "hasta que se migre el esquema)."
+            ),
+        )
+
     log_execution_attempt(
         module="text_analysis",
         action="threat_detector",
@@ -766,7 +787,18 @@ async def workspace_thalos_threat(
         event_name="thalos_threat_detected",
         chain_steps=["trigger_security_followup"],
     )
-    return thalos_wrap(response, "text_analysis", data_origin="mock", real_execution=False)
+    # `detect_threat_events` ya declara `real_execution` según si pudo consultar
+    # la BD de verdad (True) o cayó al fallback heurístico sobre el payload
+    # recibido (False) — antes se etiquetaba siempre como `data_origin="mock"`,
+    # `real_execution=False`, lo cual es engañoso cuando sí hubo datos reales
+    # de BD (regla de no-simulación: no declarar datos reales como mock).
+    real = bool(result.get("real_execution"))
+    return thalos_wrap(
+        response,
+        "text_analysis",
+        data_origin="backend" if real else "mock",
+        real_execution=real,
+    )
 
 
 @router.post("/thalos/credential-revoker")

@@ -144,15 +144,43 @@ async def get_agent_metrics(
         )
 
 @router.post("/log")
-async def log_activity(activity: ActivityCreate):
+async def log_activity(
+    activity: ActivityCreate,
+    current_user: User = Depends(get_current_active_user),
+):
     """
     Registrar una nueva actividad de agente
-    
+
     Args:
         activity: Datos de la actividad
-        
+
     Returns:
         Actividad creada
+
+    Nota de seguridad (AUDIT_FIX_THALOS_SHIELD.md, sección 13): este endpoint
+    no tenía NINGUNA autenticación y aceptaba `user_email` arbitrario del
+    cliente. `AgentAutomationExecutor` (services/automation/agent_executor.py)
+    recoge en segundo plano cualquier `AgentActivity` con `status in
+    ("pending", "in_progress")` y la ejecuta vía `resolve_handler`, incluidos
+    los handlers reales de THALOS v1
+    (`services/automation/handlers/thalos_v1.py`, que llaman a
+    `execute_action("detect_suspicious_activity"/"block_user"/...)` y a
+    `run_monitoring_cycle` — el mismo motor `scan_logs`/`run_monitor_cycle`
+    protegido en el resto de este documento). Sin autenticación ni un
+    `user_email` fiable, cualquiera (sin cuenta) podía encolar una actividad
+    `agent_name="THALOS"`, `action_type="detect_suspicious_activity"` (o
+    `"block_user"` con un `company_id`/`user_email` de otra empresa) y, en
+    cuanto `THALOS_EXECUTION_ENABLED`/`THALOS_AUTO_BLOCK` se activaran, el
+    executor en segundo plano la ejecutaría sin ningún control de tenant ni de
+    rol. Ahora requiere autenticación real y el `user_email` se deriva
+    siempre del usuario autenticado (`current_user.email`), ignorando el
+    valor que envíe el cliente — mismo patrón de "no confiar en datos de
+    autorización del cliente" ya aplicado a `body.company_id` en
+    `thalos_v1.py`. Se complementa con el gate de superusuario añadido
+    directamente en los handlers de THALOS v1 (ver
+    `services/automation/handlers/thalos_v1.py`), para que ni siquiera un
+    usuario autenticado no-superusuario pueda disparar el motor global por
+    esta vía asíncrona.
     """
     try:
         result = ActivityLogger.log_activity(
@@ -161,7 +189,7 @@ async def log_activity(activity: ActivityCreate):
             action_description=activity.action_description,
             details=activity.details,
             metrics=activity.metrics,
-            user_email=activity.user_email,
+            user_email=current_user.email,
             status=activity.status,
             priority=activity.priority
         )

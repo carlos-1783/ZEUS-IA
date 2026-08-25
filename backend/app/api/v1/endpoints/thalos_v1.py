@@ -54,6 +54,25 @@ class ThalosMonitorRequest(BaseModel):
 def thalos_v1_status(
     current_user: User = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
+    # Mitigación interina (AUDIT_FIX_THALOS_SHIELD.md, sección 13): hallazgo
+    # nuevo encontrado durante el barrido exhaustivo de la Vuelta 5 —
+    # `global_status_payload()` incrusta bajo la clave `database` el resultado
+    # de `services/thalos_monitor_service.py::audit_from_db(db)` (mismo motor
+    # GLOBAL sin `company_id` que ya motivó los gates de `thalos_v1_audit`,
+    # `workspace_thalos_logs` y `workspace_thalos_threat`), y este endpoint no
+    # tenía ningún gate — solo `get_current_active_user`. Mismo gate por
+    # consistencia; el frontend (`ThalosWorkspace.vue`/`ThalosToolsPanel.vue`)
+    # ya envuelve esta llamada en un `try/catch` silencioso, igual que hace
+    # con los otros endpoints ya restringidos a superusuario.
+    if not getattr(current_user, "is_superuser", False):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "GET /thalos/v1/status requiere privilegios de superusuario "
+                "(mitigación interina: el motor subyacente audita actividad "
+                "global sin filtrar por empresa hasta que se migre el esquema)."
+            ),
+        )
     return global_status_payload()
 
 
@@ -230,6 +249,22 @@ def thalos_v1_events(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
+    # Mitigación interina (AUDIT_FIX_THALOS_SHIELD.md, sección 12.2/13):
+    # ThalosSecurityEvent/ThalosEvent no tienen `company_id` real de filtrado
+    # aplicado aquí — se consultan de forma GLOBAL, exponiendo acciones de
+    # otras empresas (incluido `action_block_user` con el `company_id` real de
+    # la víctima) a cualquier usuario autenticado. Mismo gate ya aplicado a
+    # workspace_thalos_logs, thalos_v1_audit y detect_suspicious_activity.
+    if not getattr(current_user, "is_superuser", False):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "GET /thalos/v1/events requiere privilegios de superusuario "
+                "(mitigación interina: el motor subyacente audita actividad "
+                "global sin filtrar por empresa hasta que se migre el esquema)."
+            ),
+        )
+
     sec_rows = (
         db.query(ThalosSecurityEvent)
         .order_by(ThalosSecurityEvent.id.desc())
@@ -278,7 +313,23 @@ def thalos_v1_alerts(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    _ = current_user
+    # Mitigación interina (AUDIT_FIX_THALOS_SHIELD.md, sección 12.2/13):
+    # `list_alerts` consulta ThalosAlert de forma GLOBAL (la tabla no tiene
+    # `company_id`); la línea `_ = current_user` descartaba el usuario
+    # autenticado sin usarlo para ningún filtro ni gate, exponiendo alertas de
+    # otros tenants (p.ej. mensajes de fuerza bruta con el email de otra
+    # empresa) a cualquier usuario autenticado. Mismo gate ya aplicado a
+    # workspace_thalos_logs, thalos_v1_audit y thalos_v1_events.
+    if not getattr(current_user, "is_superuser", False):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "GET /thalos/v1/alerts requiere privilegios de superusuario "
+                "(mitigación interina: el motor subyacente audita actividad "
+                "global sin filtrar por empresa hasta que se migre el esquema)."
+            ),
+        )
+
     rows = list_alerts(db, limit=limit, unresolved_only=unresolved_only)
     alerts = [
         {

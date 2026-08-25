@@ -1824,3 +1824,378 @@ antes de este commit, salvo esta misma seccion anadida), main no tocado
 zeus.db al terminar.
 
 ---
+
+## 13. Vuelta 5 — barrido exhaustivo final
+
+Ejecutado en el mismo worktree/rama (`feature/fix-thalos-shield-real`).
+Punto de partida: un ejecutor anterior de esta misma vuelta (cortado por
+límite de sesión) había dejado sin commitear el gate de superusuario en 3
+archivos (`thalos.py` — router legacy completo, 7 endpoints; `thalos_v1.py` —
+`thalos_v1_events`/`thalos_v1_alerts`; `workspaces.py` —
+`workspace_thalos_threat`, más una corrección del `data_origin="mock"`
+engañoso). Se revisó línea a línea ese trabajo (correcto, mismo patrón que
+los 12 gates de las 4 vueltas previas) y se completó con un barrido
+exhaustivo adicional, tal como exigía el veredicto de la ronda 4.
+
+### 13.1 Verificación del trabajo dejado a medias (3 archivos con diff pendiente)
+
+Los 7 gates de `thalos.py`, los 2 de `thalos_v1.py` y el de
+`workspace_thalos_threat` (incluida la corrección de `data_origin`) se
+revisaron uno a uno contra el patrón ya validado en las rondas 1-4 (mismo
+`if not getattr(current_user, "is_superuser", False): raise
+HTTPException(403, ...)`, colocado como primera instrucción de cada función,
+antes de cualquier `try` que pudiera envolverlo en un 500). No se encontró
+ninguna discrepancia de lógica. Confirmado en vivo con dos cuentas 100%
+nuevas (`v5live_normal_1787697629@example.com` / `company_id=825`,
+`v5live_admin_1787697629@example.com` / `company_id=826`, promovida a
+superusuario con `UPDATE users SET is_superuser=1` directo en `zeus.db`,
+servidor uvicorn propio en el puerto 8501):
+
+- Los 7 endpoints de `/api/v1/thalos/*` (`status`, `events`, `alerts`,
+  `alerts/{id}/resolve`, `audit`, `monitor`, `logs/ingest`): usuario normal →
+  `403` limpio (no `500`) en los 7; sin cabecera `Authorization` → `401`
+  (`log-monitor` y `status` probados explícitamente). Superusuario → `200`
+  con datos reales (`GET /thalos/status` devolvió
+  `event_count: 373, security_event_count: 197` reales de BD).
+- `GET /thalos/v1/events` y `GET /thalos/v1/alerts`: usuario normal → `403`;
+  superusuario → `200` con eventos/alertas reales (incluido un
+  `action_detect_suspicious_activity` con `pattern_alerts` reales).
+- `POST /workspaces/thalos/threat-detector`: usuario normal → `403`;
+  superusuario → `200` con `risk_score`, `candidates` (incluido
+  `brute_force_email` real) y `document_id` persistido — confirma que la
+  corrección de `data_origin` no rompe el camino feliz.
+
+### 13.2 Método de cobertura exhaustiva y reproducible
+
+Paso 1 — inventario completo de endpoints, sin excepciones:
+
+```
+cd backend
+grep -rE "@router\.(get|post|put|delete|patch)" app/api/v1/endpoints/ | wc -l
+# => 389 decoradores, en 63 archivos (grep -rlE ... | wc -l => 63)
+```
+
+Paso 2 — identificar qué archivos tocan, directa o indirectamente, alguna de
+las 5 tablas nombradas en el encargo:
+
+```
+grep -rln -E "ThalosEvent|ThalosAlert|ThalosSecurityEvent|ThalosLoginAttempt|AgentActivity" app/api/v1/endpoints/
+# => actions.py, activities.py, admin.py, metrics.py, thalos.py, thalos_v1.py, workspaces.py
+```
+
+Paso 3 — identificar qué archivos llaman, directa o indirectamente, a alguna
+de las 9 funciones nombradas en el encargo:
+
+```
+grep -rln -E "scan_logs|evaluate_events|audit_from_db|ingest_log_lines|generate_alerts_from_engine|list_alerts|resolve_alert|run_monitor_cycle|detect_threat_events" app/api/v1/endpoints/
+# => thalos.py, thalos_v1.py, workspaces.py, zeus_core.py
+```
+
+Paso 4 — para cerrar el mapa de "quién más podría alcanzar esas 9 funciones",
+se leyeron íntegros `services/thalos_security_engine.py`,
+`services/thalos_threat_engine.py`, `services/thalos_monitor_service.py` y
+`services/thalos_alert_service.py` (las 4 fuentes de la fuga, tal como pedía
+el encargo) y se grepeó cada función una por una en TODO el backend (no solo
+`endpoints/`), para encontrar llamadores indirectos vía servicios
+intermedios:
+
+```
+for fn in scan_logs evaluate_events audit_from_db ingest_log_lines generate_alerts_from_engine list_alerts resolve_alert run_monitor_cycle detect_threat_events; do
+  grep -rn "${fn}(" --include=*.py . | grep -v __pycache__
+done
+```
+
+Esto reveló las cadenas transitivas ya conocidas
+(`zeus_agents.py::ThalosAgent._scan` → `scan_logs`, gateada por
+`zeus_core.py`; `thalos_executor.py::execute_action` → `scan_logs`, gateada
+por `thalos_v1.py`) y una **no conocida hasta esta vuelta**:
+`services/automation/handlers/thalos_v1.py::handle_thalos_v1_detect` /
+`handle_thalos_v1_monitor` → `execute_action`/`run_monitoring_cycle` →
+`scan_logs`/`run_monitor_cycle`, alcanzable de forma completamente asíncrona
+vía `services/automation/agent_executor.py` (ver 13.3).
+
+Paso 5 — para cada uno de los 8 archivos de endpoints resultantes (`actions`,
+`activities`, `admin`, `metrics`, `thalos`, `thalos_v1`, `workspaces`,
+`zeus_core`) se leyó **cada** función decorada con `@router` y se clasificó
+manualmente si toca la superficie contaminada sin gate. Resultado completo:
+
+| Archivo | Endpoint | ¿Contaminado? | Estado |
+|---|---|---|---|
+| `actions.py` | `POST /actions/execute` | Sí (llega a los handlers de THALOS v1 vía `resolve_handler`) | Ya gateado con `_require_superuser` global (preexistente) — seguro |
+| `activities.py` | `GET /{agent_name}` | Toca `AgentActivity` | Ya filtra por `user_email` propio salvo superusuario (preexistente) — no es la misma clase de fuga (aislamiento por usuario, no por tenant) |
+| `activities.py` | `GET /{agent_name}/metrics` | Toca `AgentActivity` | Igual que arriba — seguro |
+| `activities.py` | `GET /all/summary` | Toca `AgentActivity` | Igual que arriba — seguro |
+| `activities.py` | `POST /log` | **Sí, transitivo** (alimenta `AgentAutomationExecutor` → handlers de THALOS v1) | **VULNERABLE, cerrado en esta vuelta** (13.3) |
+| `admin.py` | 8 endpoints | Tocan `AgentActivity`/usuarios | Ya gateados con `get_current_active_superuser` a nivel de todo el router (preexistente) — seguro |
+| `metrics.py` | `GET /dashboard` | Toca `AgentActivity` directamente, sin filtro, **sin autenticación** | **Hallazgo nuevo, NO cerrado en esta vuelta — ver 13.5** |
+| `metrics.py` | `GET /performance`, `GET /summary` | Tocan `AgentActivity` | Ya filtran por `user_email` propio salvo superusuario (preexistente) — no es la misma clase de fuga |
+| `thalos.py` | 7 endpoints | Sí | **Cerrados en esta vuelta** (diff heredado, verificado) |
+| `thalos_v1.py` | `GET /status` | **Sí** (`global_status_payload()` → `audit_from_db`) | **VULNERABLE, hallazgo nuevo, cerrado en esta vuelta** (13.4) |
+| `thalos_v1.py` | `POST /monitor`, `POST /execute`, `GET /audit` | Sí | Ya gateados (Vueltas 3/4) — confirmado de nuevo |
+| `thalos_v1.py` | `GET /events`, `GET /alerts` | Sí | **Cerrados en esta vuelta** (diff heredado, verificado) |
+| `thalos_v1.py` | `GET /workspace/items` | Toca `ThalosWorkspaceItem` | Ya filtra por `user_id == current_user.id` — seguro |
+| `workspaces.py` | `POST /thalos/log-monitor` | Sí | Ya gateado (Vuelta 4) |
+| `workspaces.py` | `POST /thalos/threat-detector` | Sí | **Cerrado en esta vuelta** (diff heredado, verificado) |
+| `workspaces.py` | `POST /thalos/credential-revoker` | No (no toca BD, solo marca IDs recibidos como revocados) | No aplica |
+| `zeus_core.py` | `POST /execute` (`THALOS.SCAN`) | Sí | Ya gateado (Vuelta 3) — confirmado de nuevo; `THALOS.SHIELD`/`THALOS.BLOCK` ya filtran por tenant desde la Vuelta 1/2 y no llaman a las 9 funciones contaminadas |
+
+Se comprobó además, por completitud, que ningún otro endpoint del backend
+menciona "thalos" (`grep -rli thalos app/api/v1/endpoints/*.py`): además de
+los 8 anteriores aparecen `agents.py`, `chat.py`, `commands.py`,
+`system_status.py`, todos con menciones textuales (nombres de agente,
+metadatos) sin ninguna llamada a la superficie contaminada — revisados y
+descartados.
+
+### 13.3 Hallazgo nuevo — `POST /api/v1/activities/log` sin autenticación alimentaba el motor global de forma asíncrona
+
+`app/api/v1/endpoints/activities.py::log_activity` no tenía **ninguna**
+dependencia de autenticación (`async def log_activity(activity:
+ActivityCreate):`, sin `Depends`) y aceptaba `user_email` como campo libre
+del cliente. `services/automation/agent_executor.py::AgentAutomationExecutor`
+(arrancado en `app/main.py` al iniciar el proceso, `AGENT_AUTOMATION_ENABLED`
+por defecto `true`) recorre cada `AGENT_AUTOMATION_INTERVAL` segundos (600 por
+defecto) **cualquier** `AgentActivity` con `status in ("pending",
+"in_progress")`, sin importar quién ni cómo se creó, y la ejecuta vía
+`resolve_handler(agent_name, action_type)` + `run_workspace_task`. Para
+`agent_name="THALOS"`, esa tabla de handlers
+(`services/automation/handlers/__init__.py::HANDLER_MAP["THALOS"]`) incluye
+`"detect_suspicious_activity": handle_thalos_v1_detect`,
+`"security_monitor": handle_thalos_v1_monitor` y
+`"block_user": handle_thalos_v1_block`
+(`services/automation/handlers/thalos_v1.py`), que llaman directamente a
+`services/thalos_executor.py::execute_action`/
+`services/thalos_monitoring_service.py::run_monitoring_cycle` — el mismo
+motor `scan_logs`/`run_monitor_cycle` protegido en el resto de este
+documento, **sin ningún gate de superusuario ni de tenant**, porque esos
+handlers no pasan por ningún endpoint HTTP.
+
+Combinado, esto significaba que, en teoría, **cualquiera sin ninguna cuenta**
+podía hacer:
+
+```
+POST /api/v1/activities/log
+{"agent_name":"THALOS","action_type":"detect_suspicious_activity", ...}
+```
+
+y, en cuanto `THALOS_EXECUTION_ENABLED` se activara (hoy `false` por
+defecto, pero es el objetivo final del sistema), el executor en segundo plano
+dispararía el escaneo global sin ninguna autenticación. Peor aún, con
+`action_type="block_user"` y un `details.user_email`/`details.company_id` de
+una víctima real, y `THALOS_AUTO_BLOCK=true`, el mismo camino podía
+desactivar la cuenta de un usuario de **cualquier** empresa sin que el
+atacante necesitara ninguna cuenta en absoluto — más grave que cualquier
+exploit de las 4 vueltas anteriores (todas requerían al menos un JWT válido).
+Se confirmó que no hay ningún llamador de `POST /activities/log` en el
+frontend ni en el resto del backend
+(`grep -rn "activities/log" frontend/src backend --include=*.py --include=*.ts --include=*.vue` sin resultados), por lo que añadir autenticación no rompe ningún flujo existente.
+
+**Corrección aplicada** (dos capas, defensa en profundidad):
+
+1. `app/api/v1/endpoints/activities.py::log_activity` ahora exige
+   `current_user: User = Depends(get_current_active_user)` y **ignora** el
+   `user_email` que envíe el cliente, forzando siempre
+   `user_email=current_user.email` — mismo patrón de "no confiar en datos de
+   autorización del cliente" ya aplicado a `body.company_id` en `thalos_v1.py`
+   (Vuelta 3).
+2. `services/automation/handlers/thalos_v1.py` — como estos handlers corren
+   fuera de una petición HTTP (no hay `current_user` de FastAPI disponible),
+   se añadió `_is_superuser_email(db, email)` que re-verifica en BD que el
+   `user_email` de la actividad pertenezca de verdad a un superusuario, y se
+   aplicó a `handle_thalos_v1_detect`, `handle_thalos_v1_monitor` y
+   `handle_thalos_v1_block` (las 3 que llaman a la superficie contaminada o
+   ejecutan una acción cross-tenant sensible). Si no lo es (incluido
+   `user_email=None`), la actividad se marca `status="blocked"`,
+   `reason="superuser_required_for_global_audit"`, sin ejecutar nada —
+   fail-closed, igual que el resto de gates de esta rama.
+
+**Verificación en vivo** (mismo servidor del puerto 8501, cuentas ya
+descritas en 13.1): `POST /activities/log` sin `Authorization` → `401`
+(`"No se pudieron validar las credenciales"`); con el JWT de
+`v5live_normal` y `"user_email":"marketingdigitalper.seo@gmail.com"`
+(spoof de un email conocido) en el body → `200` (la actividad se crea, no
+se rechaza la operación en sí, que sigue siendo legítima para un usuario
+autenticado normal), pero la fila persistida en `agent_activities` tiene
+`user_email='v5live_normal_...@example.com'` — el email spoofeado del
+cliente fue ignorado. Test de regresión:
+`tests/test_thalos_v5_exhaustive_sweep_v1.py::test_log_activity_ignores_client_supplied_user_email`.
+
+Tests de regresión para la capa 2 (handlers), con `AgentActivity` reales
+sembradas en BD (no mocks): `test_handle_thalos_v1_detect_blocks_normal_user_email`,
+`test_handle_thalos_v1_detect_blocks_missing_email`,
+`test_handle_thalos_v1_detect_passes_gate_for_real_superuser`,
+`test_handle_thalos_v1_monitor_blocks_normal_user_email`,
+`test_handle_thalos_v1_monitor_passes_gate_for_real_superuser`,
+`test_handle_thalos_v1_block_blocks_normal_user_email_even_with_real_victim`
+(reproduce exactamente el escenario más grave: atacante no-superusuario
+intenta bloquear a un usuario real de otra empresa sembrada en el propio
+test — confirma `status=="blocked"` y que la víctima sigue `is_active=True`),
+`test_handle_thalos_v1_block_passes_gate_for_real_superuser`.
+
+### 13.4 Hallazgo nuevo — `GET /api/v1/thalos/v1/status` sin gate
+
+`thalos_v1.py::thalos_v1_status` solo tenía `Depends(get_current_active_user)`
+y devolvía `global_status_payload()`
+(`services/thalos_control_layer_v1.py`), que incrusta bajo la clave
+`"database"` el resultado íntegro de `audit_from_db(db)` — el mismo
+`event_count`/`security_event_count`/`recent_events`/`recent_alerts`
+GLOBALES ya protegidos en `GET /thalos/v1/audit` (Vuelta 4) y en
+`GET /api/v1/thalos/audit`/`status` (esta vuelta, 13.1) — pero esta ruta
+concreta no tenía ningún gate. Confirmado en vivo (13.1): usuario normal
+recién registrado, sin actividad propia, obtenía `event_count: 373,
+security_event_count: 197` reales de otras empresas con solo autenticarse.
+Se comprobó que el frontend (`frontend/src/components/agent-workspaces/ThalosWorkspace.vue:289`
+y `ThalosToolsPanel.vue:196`) ya envuelve esta llamada
+(`fetchThalosStatus()`) en un `try { ... } catch { }` silencioso, igual que
+hace con las demás llamadas ya restringidas a superusuario en vueltas
+anteriores — gatear esta ruta no introduce una regresión de UX distinta a la
+ya aceptada en rondas previas.
+
+**Corrección**: mismo gate de superusuario, aplicado como primera instrucción
+de `thalos_v1_status`. Tests:
+`test_thalos_v1_status_rejects_normal_user_hallazgo_nuevo`,
+`test_thalos_v1_status_allows_superuser`
+(`tests/test_thalos_v5_exhaustive_sweep_v1.py`). Verificado en vivo en 13.1
+(`403` para usuario normal, `200` con datos reales para superusuario, `401`
+sin token).
+
+### 13.5 Hallazgo nuevo, NO corregido en esta vuelta — `GET /api/v1/metrics/dashboard` sin autenticación
+
+Encontrado durante el barrido del paso 5 de 13.2. `app/api/v1/endpoints/metrics.py::get_dashboard_metrics`
+(`GET /api/v1/metrics/dashboard`) no tiene **ninguna** dependencia de
+autenticación y calcula métricas agregadas
+(`total_interactions`, `success_rate`, `cost_savings`) sobre **todas** las
+filas de `AgentActivity` de **todas** las empresas, sin ningún filtro. A
+diferencia de `GET /metrics/performance` y `GET /metrics/summary` (mismo
+archivo), que sí restringen a `AgentActivity.user_email ==
+current_user.email` para usuarios no-superusuario, este endpoint concreto no
+filtra en absoluto y ni siquiera exige estar autenticado.
+
+**No se corrige en esta vuelta** porque:
+
+1. No llama a ninguna de las 9 funciones contaminadas del motor de auditoría
+   de seguridad de THALOS (`scan_logs`/`evaluate_events`/`audit_from_db`/...)
+   ni a `ThalosEvent`/`ThalosAlert`/`ThalosSecurityEvent`/`ThalosLoginAttempt`
+   — solo toca `AgentActivity`, y únicamente para contar/agregar (no expone
+   filas individuales, emails, ni contenido de otras empresas, solo números
+   agregados de negocio: interacciones, ahorro estimado, % de éxito).
+2. Es un endpoint de un dominio distinto (dashboard general de negocio, no el
+   subsistema de logs de seguridad de THALOS que motivó las 5 vueltas de esta
+   rama) — corregirlo aquí mezclaría el arreglo de un módulo distinto en el
+   mismo commit, contra la regla de "un cambio, una rama, un commit atómico"
+   de la skill `zeus-produccion`.
+3. La corrección correcta (exigir autenticación y decidir si se agregan
+   métricas por tenant, por usuario, o se mantiene como panel global
+   solo-superusuario) es una decisión de producto sobre un endpoint de
+   negocio, no una mitigación interina de una hora como los 15 gates ya
+   aplicados en esta rama.
+
+Se reporta aquí con la misma severidad honesta que exige la regla no
+negociable 4 de la skill (`zeus-produccion`): es una fuga de datos agregados
+entre tenants, alcanzable sin ninguna autenticación, y debería cerrarse en un
+step aparte — se recomienda, como mínimo, exigir autenticación real
+(`Depends(get_current_active_user)`) y decidir si se filtra por usuario
+(mismo patrón que `/metrics/performance`) o por empresa.
+
+### 13.6 Confirmación de cobertura 100%
+
+Con los hallazgos de 13.3 y 13.4 cerrados, el 100% de las rutas que tocan,
+directa o transitivamente, `ThalosEvent`/`ThalosAlert`/`ThalosSecurityEvent`/
+`ThalosLoginAttempt`, o llaman a `scan_logs`/`evaluate_events`/
+`audit_from_db`/`ingest_log_lines`/`generate_alerts_from_engine`/
+`list_alerts`/`resolve_alert`/`run_monitor_cycle`/`detect_threat_events`,
+tienen ya un gate de superusuario (síncrono en el endpoint, o re-verificado
+en BD para las rutas asíncronas sin `current_user` de FastAPI). Lista
+completa de las 18 rutas/funciones protegidas por esta clase de mitigación a
+lo largo de las 5 vueltas de esta rama (reproducible repitiendo el método de
+13.2):
+
+1. `POST /api/v1/zeus/execute` `THALOS.SCAN` (Vuelta 3)
+2. `POST /api/v1/thalos/v1/execute` `action=detect_suspicious_activity` (Vuelta 3)
+3. `POST /api/v1/workspaces/thalos/log-monitor` (Vuelta 4)
+4. `GET /api/v1/thalos/v1/audit` (Vuelta 4)
+5. `POST /api/v1/thalos/v1/monitor` (Vuelta 4)
+6. `POST /api/v1/workspaces/thalos/threat-detector` (Vuelta 5, diff heredado)
+7. `GET /api/v1/thalos/v1/events` (Vuelta 5, diff heredado)
+8. `GET /api/v1/thalos/v1/alerts` (Vuelta 5, diff heredado)
+9. `GET /api/v1/thalos/status` (Vuelta 5, diff heredado)
+10. `GET /api/v1/thalos/events` (Vuelta 5, diff heredado)
+11. `GET /api/v1/thalos/alerts` (Vuelta 5, diff heredado)
+12. `POST /api/v1/thalos/alerts/{alert_id}/resolve` (Vuelta 5, diff heredado)
+13. `GET /api/v1/thalos/audit` (Vuelta 5, diff heredado)
+14. `POST /api/v1/thalos/monitor` (Vuelta 5, diff heredado)
+15. `POST /api/v1/thalos/logs/ingest` (Vuelta 5, diff heredado)
+16. `GET /api/v1/thalos/v1/status` (Vuelta 5, hallazgo nuevo — 13.4)
+17. `handle_thalos_v1_detect`/`handle_thalos_v1_monitor`/`handle_thalos_v1_block`
+    vía `POST /api/v1/activities/log` + `AgentAutomationExecutor` (Vuelta 5,
+    hallazgo nuevo — 13.3, defensa en 2 capas)
+
+Pendiente para decisión (no bloqueante, documentado con severidad honesta):
+`GET /api/v1/metrics/dashboard` (13.5, distinto dominio, distinta clase de
+fuga — agregados de negocio, no logs de seguridad).
+
+### 13.7 Tests nuevos y regresión
+
+`backend/tests/test_thalos_v5_exhaustive_sweep_v1.py` (nuevo, 31 tests):
+cubre los 7 endpoints de `thalos.py`, `thalos_v1_events`/`thalos_v1_alerts`/
+`thalos_v1_status`, `workspace_thalos_threat`, los 3 handlers asíncronos de
+`services/automation/handlers/thalos_v1.py`, y la autenticación/anti-spoof de
+`POST /activities/log` — cada uno con caso negativo (usuario normal → 403 o
+bloqueo) y positivo (superusuario → 200/datos reales, camino feliz no roto).
+Ejecutados de forma aislada: `31 passed` (ver salida completa en el reporte
+del ejecutor).
+
+Suite completa tras todos los cambios de esta vuelta:
+`7 failed, 270 passed, 2 skipped, 35 warnings, 3 errors in 157.01s` — mismos
+7 nombres de test fallando y mismos 3 errores que el baseline de la Vuelta 4
+(`7 failed, 239 passed, 2 skipped, 3 errors`); **+31 tests nuevos, todos en
+verde. Sin regresión.**
+
+### 13.8 Resumen de archivos tocados en esta vuelta
+
+- `backend/app/api/v1/endpoints/thalos.py`: 7 gates de superusuario (diff
+  heredado del ejecutor de la sesión anterior, revisado y verificado).
+- `backend/app/api/v1/endpoints/thalos_v1.py`: gates en `thalos_v1_events` y
+  `thalos_v1_alerts` (diff heredado, verificado); gate nuevo en
+  `thalos_v1_status` (hallazgo 13.4).
+- `backend/app/api/v1/endpoints/workspaces.py`: gate en
+  `workspace_thalos_threat` + corrección de `data_origin="mock"` engañoso
+  (diff heredado, verificado).
+- `backend/app/api/v1/endpoints/activities.py`: `log_activity` exige
+  autenticación real y fuerza `user_email=current_user.email` (hallazgo 13.3).
+- `backend/services/automation/handlers/thalos_v1.py`: gate de superusuario
+  re-verificado en BD para `handle_thalos_v1_detect`,
+  `handle_thalos_v1_monitor` y `handle_thalos_v1_block` (hallazgo 13.3).
+- `backend/tests/test_thalos_v5_exhaustive_sweep_v1.py` (nuevo): 31 tests.
+- No se tocó ninguna migración Alembic (no aplica: no se añadieron/
+  modificaron columnas ni tablas — todas las mitigaciones de esta rama son
+  interinas, a la espera de la migración de esquema de raíz señalada desde
+  la sección 7.3).
+
+### 13.9 Qué queda pendiente (para decisión del usuario o del auditor)
+
+1. `GET /api/v1/metrics/dashboard` sin autenticación (13.5) — mismo tipo de
+   problema (falta de auth) pero de un dominio distinto (métricas de
+   negocio, no logs de seguridad de THALOS); se recomienda cerrarlo en un
+   step aparte.
+2. La migración de esquema de raíz (`company_id` en `AgentActivity`/
+   `ThalosLoginAttempt`) sigue sin implementarse — las 17 mitigaciones de
+   gate de superusuario de esta rama son interinas, tal como se ha declarado
+   en cada vuelta desde la 3.
+3. El resto de hallazgos ya declarados como pendientes en 7.6/9.8/11.7 (el
+   `except Exception: pass` de `workspace_thalos_logs`, la decisión de
+   producto sobre `can_run_active_execution`/`block_user` clasificado
+   `REAL_SAFE`) no se revisaron de nuevo en esta vuelta.
+4. Esta vuelta no es autoaprobación: corresponde a `revisor-independiente`
+   confirmarla con su propia verificación en vivo, incluyendo repetir el
+   método de cobertura de 13.2 de forma independiente y un nuevo intento de
+   explotar `POST /activities/log` sin autenticación contra el código
+   corregido.
+
+Repo verificado limpio tras esta vuelta salvo los cambios descritos aquí
+(`git status --short`), main no tocado, sin push, sin rama nueva. Cuentas y
+empresas de prueba de la verificación en vivo
+(`v5live_normal_1787697629`/`company_id=825`,
+`v5live_admin_1787697629`/`company_id=826`, y la actividad `id=861` de la
+prueba de anti-spoof) borradas de `zeus.db` al terminar.
+
+---

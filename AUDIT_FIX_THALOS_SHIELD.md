@@ -692,3 +692,204 @@ verde. Sin regresión.
    restringir el endpoint a administradores mientras tanto (7.3).
 3. Esta vuelta no es autoaprobación: corresponde a `revisor-independiente`
    confirmarla con su propia verificación en vivo.
+
+---
+
+## 8. Revision independiente (revisor, ronda 2) - DEVUELTO AL EJECUTOR
+
+Verificacion realizada de forma 100% independiente sobre el commit 3a05469
+(rama feature/fix-thalos-shield-real, worktree
+C:\Users\Acer\ZEUS-IA\.claude\worktrees\agent-a9f8f12f24d0bc95c), con datos
+propios nuevos (no reutilice ninguna cuenta, script ni servidor del
+ejecutor). No use Edit/Write en ningun momento: todo lo que sigue es lectura
+de codigo + ejecucion directa contra el sistema real via scripts propios en
+el scratchpad.
+
+### 8.1 Lo que SI se confirmo correcto (coincide con el informe)
+
+- Kill-switch (motivo 1, critico): releido integro
+  backend/app/core/zeus_agents.py::ThalosAgent._block (lineas 535-660).
+  El bloque nuevo (if not _settings.THALOS_EXECUTION_ENABLED: return {...})
+  esta antes del try que llama a services/thalos_executor.py::block_user,
+  replica exactamente el gate de thalos_v1.py:104, y no altera el camino
+  feliz cuando el flag esta en true. grep -n confirma que no queda ninguna
+  rama viva que ignore el flag.
+- Ejecute yo mismo pytest tests/test_zeus_agents_thalos_real_v1.py
+  tests/test_thalos_v1_execute_block_tenant.py -v: 11 passed (los 9 de
+  test_zeus_agents_thalos_real_v1.py -- 6 originales + 3 nuevos -- y los 2 de
+  test_thalos_v1_execute_block_tenant.py). Lei el contenido de los 3+2
+  tests nuevos: aserciones reales sobre status/executed/reason/estado
+  en BD, no solo ausencia de excepcion.
+- Suite completa ejecutada por mi: 7 failed, 225 passed, 2 skipped, 35
+  warnings, 3 errors in 132.69s -- identico al baseline afirmado en la
+  seccion 7.5, mismos 7 nombres de test fallando
+  (test_basic.py::test_config_loading,
+  test_justicia_control_layer_v1.py::test_default_flags_simulated,
+  test_perseo_autofix_v2.py::test_audit_includes_ai_modules, 3x
+  test_thalos_control_layer_v1.py, test_thalos_safe_v1.py::test_monitoring_cycle_respects_flags)
+  y mismos 3 errores de test_app.py (NameError: TestClient). Sin
+  regresion, confirmado de forma independiente.
+- Escenario legitimo reproducido con cuentas 100% nuevas (script propio,
+  thalos_v1_execute invocado directamente con can_run_active_execution
+  monkeypatcheado a True, igual que hace el propio test del ejecutor, dado
+  que MODULE_CLASSIFICATION["auditoria_real"]="REAL_SAFE" hace inalcanzable
+  el 403 por HTTP real hoy -- confirmado tambien por mi, es una limitacion de
+  configuracion de producto preexistente, no del fix): mismo tenant bloqueando
+  a su propio usuario -> status: "completed", executed: True, el usuario
+  pasa a is_active=False en BD. Camino feliz intacto.
+- Escenario cross-tenant SIN spoof reproducido con cuentas nuevas: tenant
+  A pide bloquear a un usuario de tenant B sin enviar company_id en el
+  body (se deriva de primary_company_id_for_user(current_user)) ->
+  HTTPException 403, detail="target_user_not_in_requester_company",
+  victima permanece is_active=True. Coincide con lo reportado en 7.2.
+
+### 8.2 Hallazgo del ejecutor verificado de forma CONCLUYENTE -- es real y explotable
+
+Reproduje exactamente el ataque que el ejecutor describio pero no se atrevio
+a probar: autenticado como un usuario real de un tenant A recien creado
+(company_a), envie una peticion a thalos_v1_execute con
+action="block_user", user_email=<victima de tenant B> Y company_id=<el id
+real de company_b> explicito en el body (dato que un atacante puede
+simplemente adivinar o enumerar, ya que los company_id son enteros
+secuenciales -- se ven en la propia documentacion de este fix, p.ej.
+181/182, 224/225).
+
+Resultado real obtenido por mi (exploit_cid.py, ejecutado contra el codigo
+tal cual esta en 3a05469, con THALOS_EXECUTION_ENABLED=True/
+THALOS_AUTO_BLOCK=True, monkeypatch de can_run_active_execution -- la
+misma tecnica que usa el propio test del ejecutor para sortear la
+clasificacion REAL_SAFE):
+
+```
+attacker=exploit_attacker_2b5ed470@example.test company_a=224
+victim=exploit_victim_3f0ba1ec@example.test company_b=225
+victim.is_active BEFORE = True
+RESULT (sin excepcion HTTPException): {'status': 'completed', 'action': 'block_user',
+  'email': 'exploit_victim_3f0ba1ec@example.test', 'user_id': 342, 'executed': True, ...}
+victim.is_active AFTER = False
+EXPLOIT CONFIRMADO: tenant A bloqueo a un usuario de tenant B spoofing company_id en el body.
+```
+
+La victima quedo bloqueada de verdad (is_active paso de True a False en
+BD). El chequeo de aislamiento anadido en
+backend/services/thalos_executor.py::block_user (lineas 83-106) no valida
+que el company_id recibido pertenezca de verdad al company_id real del
+usuario autenticado que hace la peticion -- solo valida que el usuario
+objetivo pertenezca a ESE company_id, sea cual sea su origen. Y en
+backend/app/api/v1/endpoints/thalos_v1.py:130
+(cid = body.company_id or primary_company_id_for_user(db, current_user)),
+ese company_id es controlado por el cliente sin ninguna validacion contra
+las empresas reales del current_user. El resultado neto: el fix del motivo
+ALTO #2 de la ronda 1 (aislamiento tenant en BLOCK) es trivialmente
+sorteable con un solo campo del body, exactamente como advirtio -- sin
+verificarlo -- el propio ejecutor.
+
+Ademas confirme un segundo hueco relacionado, no senalado en el informe:
+cuando company_id es None (llamada directa a
+block_user(db, user_email=..., company_id=None), camino que se da de
+verdad si primary_company_id_for_user devuelve None -- usuario sin
+ninguna empresa asociada, via zeus_core.py:142), el chequeo de aislamiento
+se salta por completo (if company_id is not None: nunca entra) y el
+bloqueo procede sin ninguna restriccion de tenant, igual que antes del fix:
+
+```
+RESULT block_user(company_id=None): {'status': 'completed', 'action': 'block_user',
+  'email': 'legit_vic3_ab20bcdf@example.test', 'user_id': 346, 'executed': True, ...}
+victim2.is_active AFTER: False
+```
+
+Esto significa que la proteccion anadida en esta vuelta depende
+completamente de que el company_id recibido sea confiable -- y hoy no lo es
+en la via REST oficial (thalos_v1.py), ni cubre el caso None.
+
+### 8.3 Evaluacion de la fuga de THALOS.SCAN no corregida (motivo 3)
+
+La investigacion de la seccion 7.3 es tecnicamente solida (ambas tablas
+carecen de company_id o de una via indirecta fiable; una migracion con
+backfill retroactivo es imposible para thalos_login_attempts) y la
+reclasificacion de severidad es honesta. Pero dejar una fuga de datos
+cross-tenant confirmada y reproducida en vivo (vulnerabilities_found: 16,
+7 emails de otras empresas expuestos a un tenant sin actividad propia) como
+"documentado, no corregido" no es una decision de alcance razonable para
+un fix cuyo proposito explicito es cerrar problemas de seguridad de THALOS.
+La regla no negociable 4 de la skill (zeus-produccion) es explicita:
+"Tratalo como vulnerabilidad de seguridad, no como bug menor" -- y no
+contempla una salida de "se documenta y se deja abierta" para una fuga ya
+confirmada, activa, alcanzable por cualquier usuario autenticado sin rol
+especial. La mitigacion interina propuesta (restringir el endpoint a
+administradores) es barata, ya identificada por el propio ejecutor, y no se
+aplico. Aunque la migracion de esquema completa exceda el alcance de este
+fix puntual, la mitigacion interina no lo excede y debia aplicarse antes de
+cerrar.
+
+Aun si este punto se considerara aisladamente aceptable como "pendiente
+documentado", el hallazgo de 8.2 por si solo ya obliga a la devolucion.
+
+### 8.4 Checklist de no-simulacion (verificado por mi, no por el informe)
+
+- [x] Datos reales de BD, no valores fijos -- confirmado (SHIELD/SCAN/BLOCK
+      usan servicios reales).
+- [x] Pasa por autenticacion (get_current_active_user) -- confirmado en
+      ambas vias.
+- [ ] Filtra por tenant en cada query -- FALLA. block_user filtra por un
+      company_id que resulta ser controlable por el cliente en la via REST
+      oficial (thalos_v1.py), y no filtra en absoluto cuando company_id
+      es None. THALOS.SCAN no filtra por tenant en absoluto (fuga
+      confirmada, no mitigada).
+- [x] Manejo de errores real -- confirmado (forbidden/not_found/
+      blocked_by_safeguard con logging explicito).
+- [x] Logs verificables -- confirmado (ActivityLogger + ThalosSecurityEvent
+      en cada rama, incluida forbidden).
+- [x] Tests / ejecucion manual -- 11 tests nuevos en verde, verificados por mi.
+- [x] Migracion Alembic -- no aplica (no se anadieron columnas).
+
+El checklist falla en el punto mas critico para este fix en concreto: el
+aislamiento multi-tenant, que era precisamente el motivo ALTO de la
+devolucion de la ronda 1.
+
+### Veredicto
+
+DEVUELTO AL EJECUTOR. Hace falta una Vuelta 3.
+
+No se aprueba, ni siquiera "con reservas": el hallazgo nuevo que el propio
+ejecutor reporto sin verificar (company_id controlable por el cliente en
+ThalosExecuteRequest) es real, lo reproduje de forma concluyente, y
+demuestra que el motivo ALTO #2 de la ronda 1 (aislamiento tenant en
+BLOCK) sigue sin estar cerrado en la practica -- el parche de esta vuelta
+anade una comprobacion correcta en su logica interna pero la alimenta con un
+dato que el atacante controla, lo que la vuelve decorativa en el peor caso
+(y depende, ademas hoy, de que can_run_active_execution siga devolviendo
+False por la clasificacion REAL_SAFE -- una configuracion de producto ajena
+a este fix y que podria cambiar sin que nadie revise de nuevo este codigo).
+
+Para la Vuelta 3, como minimo:
+
+1. Critico/Alto -- cerrar el bypass de company_id: en
+   backend/app/api/v1/endpoints/thalos_v1.py::thalos_v1_execute, dejar de
+   confiar en body.company_id para autorizacion. O bien (a) ignorarlo por
+   completo y usar siempre primary_company_id_for_user(db, current_user), o
+   (b) si hay un caso de negocio real para que el cliente lo especifique
+   (p.ej. un usuario con varias empresas), validar explicitamente que
+   body.company_id este entre las empresas reales de current_user
+   (UserCompany.user_id == current_user.id) antes de usarlo para cualquier
+   accion, no solo block_user -- afecta tambien a audit_cashflow_anomaly,
+   detect_suspicious_activity y alert_admin, tal como el propio ejecutor
+   senalo.
+2. Cerrar tambien el caso company_id=None en
+   services/thalos_executor.py::block_user: decidir explicitamente si debe
+   rechazar el bloqueo (fail-closed) cuando no se puede determinar el tenant
+   del solicitante, en vez de proceder sin restriccion alguna.
+3. Anadir un test de regresion que reproduzca exactamente el bypass de 8.2
+   (company_id spoofeado en el body apuntando al tenant real de la
+   victima), no solo el caso sin spoof que ya cubre
+   test_thalos_v1_execute_block_tenant.py.
+4. Aplicar, no solo proponer, la mitigacion interina de THALOS.SCAN
+   (restringir detect_suspicious_activity/THALOS.SCAN a administradores de
+   empresa o superusuario) mientras no exista la migracion de esquema
+   completa, dado que la fuga esta confirmada y activa.
+
+No se puede aprobar sin que un revisor vuelva a intentar el mismo exploit de
+8.2 contra el codigo corregido y falle.
+
+Repo verificado limpio tras esta revision (git status sin cambios salvo
+esta misma seccion anadida), main no tocado, sin push.

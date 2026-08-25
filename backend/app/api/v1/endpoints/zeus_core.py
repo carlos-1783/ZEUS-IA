@@ -133,13 +133,26 @@ async def execute_zeus_command(
     - IA.PROCESAR: Procesamiento de IA
     """
     try:
-        logger.info(f"Ejecutando comando ZEUS: {command_data.command} para usuario: {current_user.email}")
-        
+        from services.workspace_deliverables import primary_company_id_for_user
+
+        # Aislamiento multi-tenant: se resuelve la empresa del usuario
+        # autenticado y se inyecta en el comando para que los agentes que
+        # consultan/ejecutan datos reales (hoy: THALOS) nunca mezclen ni
+        # devuelvan datos de otro tenant. Ver AUDIT_FIX_THALOS_SHIELD.md.
+        company_id = primary_company_id_for_user(db, current_user)
+
+        logger.info(
+            f"Ejecutando comando ZEUS: {command_data.command} para usuario: "
+            f"{current_user.email} (company_id={company_id})"
+        )
+
         result = zeus_manager.execute_zeus_command(
             command_data.command,
-            command_data.data or {}
+            command_data.data or {},
+            db=db,
+            company_id=company_id,
         )
-        
+
         # Log del comando
         logger.info(f"Comando ZEUS ejecutado: {command_data.command} - Resultado: {result.get('status')}")
         

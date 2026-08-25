@@ -336,8 +336,19 @@ class PerSeoAgent(ZeusAgent):
             }
 
 class ThalosAgent(ZeusAgent):
-    """Agente THALOS - Ciberdefensa Automatizada (ZEUS SHIELD)"""
-    
+    """Agente THALOS - Ciberdefensa Automatizada (ZEUS SHIELD)
+
+    NOTA DE PRODUCCIÓN (ver AUDIT_FIX_THALOS_SHIELD.md): esta clase es la capa
+    legacy stub descrita en references/agentes.md. THALOS.SHIELD/SCAN/BLOCK
+    devolvían datos 100% inventados. Ahora delegan en los mismos servicios
+    reales que usa la capa REST por dominio (`services/thalos_security_engine.py`,
+    `services/thalos_executor.py`, `app/core/crypto.py`) para no duplicar
+    lógica de seguridad. Requieren que `ZeusAgentManager.execute_zeus_command`
+    les inyecte `db`/`company_id` reales antes de despachar el comando
+    (ver `self.db`/`self.company_id` más abajo); si no se inyectan, esta clase
+    lo declara explícitamente en vez de simular un resultado.
+    """
+
     def __init__(self):
         super().__init__(
             AgentType.THALOS,
@@ -351,56 +362,267 @@ class ThalosAgent(ZeusAgent):
             "Alertas de intrusión en tiempo real"
         ]
         self.shield_status = "activo"
-    
-    def _execute_command(self, command: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Comandos específicos de THALOS"""
-        if command == "THALOS.SHIELD":
+        # Contexto de ejecución real inyectado por ZeusAgentManager justo antes
+        # de despachar un comando THALOS.* (sesión de BD + tenant del usuario
+        # autenticado). Sin esto no hay forma segura de consultar datos reales
+        # sin arriesgar una fuga entre tenants, así que se declara "no
+        # disponible" en vez de inventar una cifra.
+        self.db = None
+        self.company_id = None
+
+    def _encryption_status(self) -> Dict[str, Any]:
+        """Estado real de cifrado de datos en reposo (misma fuente que app/core/crypto.py)."""
+        import os
+
+        field_key_set = bool(os.getenv("FIELD_ENCRYPTION_KEY", "").strip())
+        env = os.getenv("ENVIRONMENT", os.getenv("RAILWAY_ENVIRONMENT", "production")).lower()
+
+        if field_key_set:
+            encryption_status = "activo"
+        elif env != "production":
+            encryption_status = "fallback_dev_no_valido_para_produccion"
+        else:
+            encryption_status = "no_configurado"
+
+        return {
+            "encryption_status": encryption_status,
+            "field_encryption_key_set": field_key_set,
+            "environment": env,
+        }
+
+    def _jwt_status(self) -> Dict[str, Any]:
+        """Estado real de la clave JWT (SECRET_KEY), sin exponer el valor."""
+        try:
+            from app.core.config import settings
+            secret = settings.SECRET_KEY or ""
+            algorithm = settings.ALGORITHM
+        except Exception as exc:  # pragma: no cover - config siempre debería cargar
+            logger.error(f"THALOS: no se pudo leer configuración JWT real: {exc}")
+            return {"jwt_oauth2": "no_disponible", "algorithm": None}
+
+        is_dev_default = "dev_default_secret" in secret
+        configured = bool(secret) and not is_dev_default
+        return {
+            "jwt_oauth2": "configurado" if configured else "clave_por_defecto_no_apta_produccion",
+            "algorithm": algorithm,
+        }
+
+    def _shield(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        encryption = self._encryption_status()
+        jwt_info = self._jwt_status()
+
+        worker_info: Dict[str, Any] = {"running": False, "enabled": False}
+        try:
+            from workers.thalos_worker import worker_status
+            worker_info = worker_status()
+        except Exception as exc:
+            logger.error(f"THALOS.SHIELD: no se pudo leer el estado real del worker: {exc}")
+
+        threats_blocked: Any = "no_disponible"
+        threats_blocked_source = "sin_sesion_bd"
+        if self.db is not None:
+            if self.company_id is not None:
+                try:
+                    from app.models.thalos_security_event import ThalosSecurityEvent
+                    threats_blocked = (
+                        self.db.query(ThalosSecurityEvent)
+                        .filter(
+                            ThalosSecurityEvent.action_taken == "block_user",
+                            ThalosSecurityEvent.company_id == self.company_id,
+                        )
+                        .count()
+                    )
+                    threats_blocked_source = "thalos_security_events(action_taken=block_user)"
+                except Exception as exc:
+                    logger.error(f"THALOS.SHIELD: fallo consultando threats_blocked reales: {exc}")
+                    threats_blocked = "error_consultando_bd"
+                    threats_blocked_source = str(exc)
+            else:
+                # Sin tenant resuelto para el usuario: no se agrega el conteo
+                # global de todas las empresas para evitar filtrar datos de
+                # otro tenant a través de esta métrica.
+                threats_blocked_source = "tenant_no_resuelto_para_el_usuario"
+
+        overall_ok = (
+            encryption["encryption_status"] == "activo"
+            and jwt_info["jwt_oauth2"] == "configurado"
+        )
+
+        return {
+            "status": "success" if overall_ok else "degraded",
+            "message": (
+                "ZEUS SHIELD: cifrado de datos y JWT verificados con configuración real"
+                if overall_ok
+                else "ZEUS SHIELD: hay configuración de seguridad real pendiente (ver data)"
+            ),
+            "agent": "THALOS",
+            "timestamp": datetime.utcnow().isoformat(),
+            "animation": "shield_activation",
+            "voice": (
+                "ZEUS SHIELD activado. Protección cibernética máxima verificada."
+                if overall_ok
+                else "ZEUS SHIELD: revisión requerida en cifrado o autenticación."
+            ),
+            "data": {
+                "shield_level": "máximo" if overall_ok else "parcial",
+                "monitoring_24_7": bool(worker_info.get("running")),
+                "worker_status": worker_info,
+                "threats_blocked": threats_blocked,
+                "threats_blocked_source": threats_blocked_source,
+                "company_id_scope": self.company_id,
+                **encryption,
+                **jwt_info,
+            },
+        }
+
+    def _scan(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        if self.db is None:
             return {
-                "status": "success",
-                "message": "ZEUS SHIELD activado - Protección máxima",
-                "agent": "THALOS",
-                "timestamp": datetime.utcnow().isoformat(),
-                "animation": "shield_activation",
-                "voice": "ZEUS SHIELD activado. Protección cibernética máxima implementada.",
-                "data": {
-                    "shield_level": "máximo",
-                    "monitoring_24_7": True,
-                    "threats_blocked": 0,
-                    "encryption_status": "activo",
-                    "jwt_oauth2": "configurado"
-                }
-            }
-        elif command == "THALOS.SCAN":
-            return {
-                "status": "success",
-                "message": "Escaneo de seguridad completado",
+                "status": "error",
+                "message": "THALOS.SCAN requiere una sesión de base de datos real; no se puede escanear sin ella",
                 "agent": "THALOS",
                 "timestamp": datetime.utcnow().isoformat(),
                 "animation": "security_scan",
-                "voice": "Escaneo de seguridad completado. Sistema protegido contra amenazas.",
-                "data": {
-                    "scan_result": "limpio",
-                    "vulnerabilities_found": 0,
-                    "ips_blocked": 0,
-                    "credentials_revoked": 0,
-                    "security_score": "100%"
-                }
+                "voice": "No se pudo completar el escaneo: falta contexto de base de datos.",
+                "data": {"scan_result": "no_disponible", "reason": "sin_sesion_bd"},
             }
-        elif command == "THALOS.BLOCK":
+
+        try:
+            from services.thalos_security_engine import scan_logs
+            hours = int((data or {}).get("hours", 24) or 24)
+            result = scan_logs(self.db, hours=hours, company_id=self.company_id)
+            self.db.commit()
+        except Exception as exc:
+            self.db.rollback()
+            logger.error(f"THALOS.SCAN: fallo ejecutando escaneo real: {exc}")
             return {
-                "status": "success",
-                "message": "IPs sospechosas bloqueadas",
+                "status": "error",
+                "message": f"Error ejecutando escaneo de seguridad real: {exc}",
+                "agent": "THALOS",
+                "timestamp": datetime.utcnow().isoformat(),
+                "animation": "security_scan",
+                "data": {"scan_result": "error"},
+            }
+
+        vulnerabilities = len(result.get("pattern_alerts", [])) + len(
+            result.get("failed_login_candidates", [])
+        )
+        return {
+            "status": "success",
+            "message": "Escaneo de seguridad completado con datos reales (agent_activities / intentos de login)",
+            "agent": "THALOS",
+            "timestamp": datetime.utcnow().isoformat(),
+            "animation": "security_scan",
+            "voice": f"Escaneo completado. Nivel de riesgo real: {result.get('risk_level')}.",
+            "data": {
+                "scan_result": result.get("risk_level"),
+                "vulnerabilities_found": vulnerabilities,
+                "activities_scanned": result.get("activities_scanned"),
+                "pattern_alerts": result.get("pattern_alerts"),
+                "failed_login_candidates": result.get("failed_login_candidates"),
+                "company_id_scope": self.company_id,
+                "source": "thalos_security_engine.scan_logs",
+                "known_limitation": (
+                    "El motor real subyacente (thalos_security_engine.scan_logs) audita "
+                    "agent_activities/login attempts globales, sin columna company_id para "
+                    "filtrar la lectura por tenant (solo la persistencia del evento queda "
+                    "asociada al tenant). Limitación preexistente de la capa REST real de "
+                    "THALOS, no introducida por este fix — ver AUDIT_FIX_THALOS_SHIELD.md."
+                ),
+            },
+        }
+
+    def _block(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        data = data or {}
+        requested_ip = data.get("ip") or data.get("ip_address")
+        user_email = data.get("user_email") or data.get("email")
+
+        if requested_ip and not user_email:
+            # El THALOS real (services/thalos_executor.py) bloquea cuentas de
+            # usuario por email, no direcciones IP. No existe bloqueo de IP
+            # real implementado en el sistema — se declara explícitamente en
+            # vez de devolver una lista de IPs inventada.
+            return {
+                "status": "not_implemented",
+                "message": "Bloqueo por IP no implementado en el sistema real; THALOS bloquea cuentas por 'user_email'",
                 "agent": "THALOS",
                 "timestamp": datetime.utcnow().isoformat(),
                 "animation": "ip_blocking",
-                "voice": "IPs sospechosas bloqueadas. Acceso no autorizado prevenido.",
+                "voice": "El bloqueo por dirección IP no está disponible en este sistema.",
                 "data": {
-                    "blocked_ips": ["192.168.1.100", "10.0.0.50"],
-                    "threat_level": "alto",
-                    "action_taken": "bloqueo_inmediato",
-                    "monitoring_active": True
-                }
+                    "executed": False,
+                    "requested_ip": requested_ip,
+                    "blocked_ips": [],
+                    "reason": "ip_blocking_not_implemented",
+                },
             }
+
+        if not user_email:
+            return {
+                "status": "error",
+                "message": "THALOS.BLOCK requiere 'user_email' en 'data' (bloqueo por IP no soportado)",
+                "agent": "THALOS",
+                "timestamp": datetime.utcnow().isoformat(),
+                "animation": "ip_blocking",
+                "data": {"executed": False, "blocked_ips": []},
+            }
+
+        if self.db is None:
+            return {
+                "status": "error",
+                "message": "THALOS.BLOCK requiere una sesión de base de datos real para ejecutar el bloqueo",
+                "agent": "THALOS",
+                "timestamp": datetime.utcnow().isoformat(),
+                "data": {"executed": False},
+            }
+
+        try:
+            from services.thalos_executor import block_user
+            result = block_user(
+                self.db,
+                user_email=str(user_email),
+                reason=data.get("reason", "thalos_shield_manual"),
+                company_id=self.company_id,
+            )
+            self.db.commit()
+        except Exception as exc:
+            self.db.rollback()
+            logger.error(f"THALOS.BLOCK: fallo ejecutando bloqueo real: {exc}")
+            return {
+                "status": "error",
+                "message": f"Error ejecutando bloqueo real: {exc}",
+                "agent": "THALOS",
+                "timestamp": datetime.utcnow().isoformat(),
+                "data": {"executed": False},
+            }
+
+        executed = bool(result.get("executed"))
+        return {
+            "status": "success" if executed else result.get("status", "skipped"),
+            "message": f"THALOS.BLOCK: {result.get('status')}"
+            + (f" ({result.get('reason')})" if result.get("reason") else ""),
+            "agent": "THALOS",
+            "timestamp": datetime.utcnow().isoformat(),
+            "animation": "ip_blocking",
+            "voice": "Cuenta bloqueada realmente." if executed else "Bloqueo no ejecutado (ver motivo real).",
+            "data": {
+                "executed": executed,
+                "user_email": result.get("email"),
+                "reason": result.get("reason"),
+                "raw_result": result,
+                "company_id_scope": self.company_id,
+                "source": "thalos_executor.block_user",
+            },
+        }
+
+    def _execute_command(self, command: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Comandos específicos de THALOS"""
+        if command == "THALOS.SHIELD":
+            return self._shield(data)
+        elif command == "THALOS.SCAN":
+            return self._scan(data)
+        elif command == "THALOS.BLOCK":
+            return self._block(data)
         else:
             return {
                 "status": "error",
@@ -699,19 +921,39 @@ class ZeusAgentManager:
             "agents": results
         }
     
-    def execute_zeus_command(self, command: str, data: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Ejecutar comando del Núcleo ZEUS"""
+    def execute_zeus_command(
+        self,
+        command: str,
+        data: Dict[str, Any] = None,
+        db: Any = None,
+        company_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Ejecutar comando del Núcleo ZEUS
+
+        `db`/`company_id` son opcionales y hoy solo los usa THALOS (ver
+        `ThalosAgent`) para consultar/ejecutar acciones de seguridad reales
+        con aislamiento por tenant. Se limpian tras cada llamada para no dejar
+        una sesión de BD ni un tenant "pegados" al agente singleton entre
+        peticiones de usuarios distintos.
+        """
         try:
             # Comandos del núcleo principal
             if command.startswith("ZEUS."):
                 return self.agents[AgentType.ZEUS].process_command(command, data or {})
-            
+
             # Comandos de agentes específicos
             elif command.startswith("PERSEO."):
                 return self.agents[AgentType.PERSEO].process_command(command, data or {})
-            
+
             elif command.startswith("THALOS."):
-                return self.agents[AgentType.THALOS].process_command(command, data or {})
+                thalos_agent = self.agents[AgentType.THALOS]
+                thalos_agent.db = db
+                thalos_agent.company_id = company_id
+                try:
+                    return thalos_agent.process_command(command, data or {})
+                finally:
+                    thalos_agent.db = None
+                    thalos_agent.company_id = None
             
             elif command.startswith("JUSTICIA."):
                 return self.agents[AgentType.JUSTICIA].process_command(command, data or {})

@@ -370,3 +370,239 @@ decida si merece arreglo.
   principal.
 - Nada de esto se cierra como aprobado por mí — corresponde a `revisor-independiente`
   confirmar de forma independiente antes de dar por bueno cualquier punto de este informe.
+
+---
+
+## 6. Revision independiente (revisor-independiente)
+
+Fecha: 2026-08-25. Rama: feature/rediseno-completo, HEAD al empezar cc725db (el commit
+de este mismo informe). Sin merge ni push a main en ningun momento.
+
+Principio aplicado: no me fio de nada de lo escrito arriba por el ejecutor. Cada
+afirmacion marcada como "confirmada" en esta seccion fue reproducida por mi, con mis
+propios comandos, contra el sistema real, con cuentas 100% nuevas (rev1.restaurant,
+rev2.office, rev3.superadmin, rev4.office2, todas @example.com, ninguna reutilizada de
+las audit.* del ejecutor).
+
+### 6.0 Entorno de verificacion propio
+
+- git status/git log -1 confirmados al empezar: rama correcta, HEAD cc725db.
+- Backend propio, aislado, en el puerto 8020 (distinto del 8010 del ejecutor y del 8000
+  de otro agente activo), mismo zeus.db de este worktree, arrancado con
+  uvicorn app.main:app --port 8020 desde backend/ con el mismo venv compartido.
+- 4 cuentas propias creadas via POST /auth/register real (no inserts): rev1.restaurant
+  (business_type=restaurant), rev2.office/rev4.office2 (business_type=services, dos
+  tenants independientes), rev3.superadmin (promovido a is_superuser=1 y desvinculado de
+  su empresa via DELETE FROM user_companies directo en zeus.db, igual que hizo el
+  ejecutor, por no existir endpoint publico para esa promocion).
+- Al terminar, mate el proceso propio del puerto 8020 y confirme git status limpio de
+  nuevo (solo .claude/ sin trackear, igual que al principio - cero diffs colgados,
+  confirmando la afirmacion del ejecutor de que no dejo cambios de CSP ni de ningun otro
+  archivo).
+
+### 6.1 Los 4 hallazgos pendientes - verificacion independiente
+
+1. Puente TPV-factura: reproducido de extremo a extremo con rev1.restaurant. POST
+/tpv/sale (con cart_items, no items - el nombre real del campo, distinto al que use en
+mi primer intento) genero el ticket TICKET_20260825065337, luego POST /tpv/invoice
+genero la factura id=10. Confirmado por SQL directo contra zeus.db: invoices id=10,
+tpv_sale_id=8, company_id=242, coincide con tpv_sales id=8 del mismo company_id. Caso
+404 real (ticket_id inexistente) confirmado con status 404. Idempotencia confirmada
+(already_existed:true, mismo invoice.id). Aislamiento multi-tenant confirmado: con el
+token de rev2.office (tenant distinto) intentando facturar el ticket de rev1, la
+respuesta fue 403 "La venta no pertenece a su empresa.". Coincide con lo reportado - OK.
+
+2. Heuristica de onboarding: confirmado el codigo exacto (onboarding_engine.py:158-170
+crea siempre el CompanyEmployee "owner"; auth.py:594-618 marca setup_completed=True en
+cuanto ce_count>=1). Reproducido por API con 2 cuentas propias nuevas de tipos de
+negocio distintos: rev1.restaurant y rev2.office (services), ambas con
+questionnaire_completed:false, operational_profile_completed:false, pero
+setup_completed:true, setup_inferred:true, company_employees_count:1. Coincide
+exactamente con lo reportado, severidad critica razonable - OK.
+
+3. Superusuario sin empresa: reproducido con rev3.superadmin (cuenta propia, promovida y
+desvinculada por mi). GET /auth/me devolvio is_superuser:true, company_id:null. GET
+/auth/onboarding/status devolvio company_linked:false, setup_completed:false. POST
+/auth/onboarding/profile devolvio el mismo mensaje exacto reportado: "Usuario sin
+empresa vinculada. Completa el registro antes de configurar el perfil." Confirmado
+tambien que OnboardingSetup.vue no tiene ningun logout/enlace de navegacion/"omitir" en
+su plantilla (grep sin resultados). Coincide exactamente - OK.
+
+4. encryption_status simulado en THALOS.SHIELD: confirmado. Sin token, 401. Con token de
+rev1.restaurant y con token de rev2.office (dos tenants distintos), respuesta
+byte-identica salvo timestamp, incluyendo "encryption_status":"activo" fijo. Coincide
+exactamente - OK.
+
+### 6.2 Repo limpio
+
+Confirmado independientemente: git status --porcelain antes y despues de toda mi sesion
+de pruebas solo muestra .claude/ sin trackear. git diff --stat vacio. Ninguna
+modificacion colgada de frontend/index.html ni de ningun otro archivo. Coincide con lo
+afirmado - OK.
+
+### 6.3 Muestreo de pantallas (elegidas por menor evidencia en el informe original)
+
+- Seguros (/insurance): GET /insurance/policies -> 200, lista vacia real. GET
+  /crm/customers (de donde realmente lee el combo de clientes, confirmado por lectura de
+  InsuranceView.vue:271, no de un endpoint /insurance/clients que no existe) -> []
+  real para rev1, consistente con "combo vacio real, no forzado". POST
+  /insurance/policies con payload incompleto -> error de validacion real (422), no un
+  200 falso. OK, coincide con lo reportado.
+- Admin Panel con superusuario SIN empresa: GET /admin/customers con el token de
+  rev3.superadmin (sin empresa) -> 200 real, datos reales. Esto confirma que el
+  hallazgo 3 es puramente de routing del frontend (el guard de Vue Router SI exime a
+  AdminPanel del skipOnboardingGate, linea 553 de router/index.js) y no un bloqueo real
+  de la API - matiza correctamente lo que ya insinuaba el informe original.
+- CRM oficina, aislamiento multi-tenant: creado cliente real en rev2.office (POST
+  /crm/customers con id:47 devuelto). Confirmado con GET /crm/customers que aparece. Con
+  un TERCER tenant nuevo (rev4.office2, jamas usado por el ejecutor ni por mi antes),
+  GET /crm/customers devuelve []. Aislamiento confirmado con un tenant nunca antes
+  usado en esta auditoria - OK.
+- Ajustes (/settings) - guardado del gestor fiscal: el informe deja esto explicitamente
+  "no probado end-to-end". Lo probe yo, y esta roto. POST
+  /api/v1/documents/update-advisor-emails?email_gestor_fiscal=... devuelve SIEMPRE 500:
+  "Error actualizando emails de asesores: Instance <User at 0x...> is not persistent
+  within this Session". Reproducido DOS veces, con DOS cuentas distintas
+  (rev1.restaurant y rev2.office), 100% de repeticion. Causa visible en
+  backend/app/api/v1/endpoints/document_approval.py:219-260: el try hace
+  current_user.email_gestor_fiscal = ...; db.commit(); db.refresh(current_user) y el
+  refresh falla porque current_user no esta en la identity map de la sesion db inyectada
+  en este endpoint (indicio de que get_current_user/get_current_active_user no comparten
+  sesion con el db: Session = Depends(get_db) del propio endpoint en este codigo en
+  particular). Esto es un hallazgo NUEVO que el informe no encontro porque no llego a
+  probarlo.
+
+### 6.4 Suite de tests backend - ejecutada por mi, no citada del informe
+
+pytest -q sin acotar falla con INTERNALERROR al recolectar TEST_SISTEMA_COMPLETO.py (un
+script en la raiz de backend/ con sys.exit(0) a nivel de modulo - no es una regresion, es
+el mismo problema de recoleccion ya investigado y descartado en el commit 622d431, que
+documenta la ejecucion de la suite acotada a tests/). Ejecute pytest tests/ -q completo y
+obtuve:
+
+7 failed, 214 passed, 2 skipped, 3 errors in 100.86s
+
+Coincide exactamente, cifra por cifra, con el baseline citado (7 failed, 214 passed, 2
+skipped, 3 errors) que el propio informe admite no haber vuelto a ejecutar. Sin
+regresion - confirmado por mi de forma exclusiva, ya que ni el ejecutor ni nadie mas lo
+habia re-confirmado en esta sesion.
+
+### 6.5 Migracion Alembic
+
+Confirmado en zeus.db: la tabla invoices tiene la columna tpv_sale_id (de
+0044_invoice_tpv_sale_link.py), consistente con el uso real observado en 6.1. Los
+ficheros 0043_insurance_policies_claims.py, 0044_invoice_tpv_sale_link.py,
+0045_company_billing_fields.py existen sin colision de numeracion. OK.
+
+### 6.6 Hallazgos nuevos del informe - verificacion independiente
+
+- ZEUS.ACTIVAR con error Pydantic: mi primer intento de reproducirlo llamando a POST
+  /zeus/execute {"command":"ZEUS.ACTIVAR"} no fallo (devolvio 200 con "agent":"ZEUS"
+  incluido) - una discrepancia aparente con el informe. Investigado a fondo: el bug real
+  vive en un endpoint DISTINTO, POST /zeus/activate (sin body), que es el que realmente
+  llama ZeusCore.vue en su initializeZeusSystem() al cargar la pantalla
+  (ZeusCore.vue:225). Ese si devuelve 500: "Error activando Nucleo ZEUS: 1 validation
+  error for ZeusResponse agent Field required" - porque zeus_manager.activate_all_agents()
+  (codigo real en zeus_agents.py:677-700) devuelve un dict con clave "agents" (plural,
+  por agente) y sin clave "agent" (singular) a nivel raiz, y ZeusResponse(**result) en
+  zeus_core.py:84 exige agent: str como campo obligatorio. Confirmado tras identificar el
+  endpoint correcto - coincide con lo reportado, sin discrepancia real.
+- GET /invoices/ con 401 pese a token valido: reproducido con token fresco de
+  rev1.restaurant -> 401 {"detail":"No se pudieron validar las credenciales"}.
+  Confirmado, coincide.
+- Ausencia de boton de "cerrar sesion" descubrible: confirmado, y reforzado con una
+  causa raiz mas precisa que la del informe original. MainLayout.vue si tiene un boton
+  de logout real (linea 74-79, llama authStore.logout()), pero el router
+  (frontend/src/router/index.js) nunca usa MainLayout como componente de ninguna ruta
+  activa - OlymposDashboard.vue (el componente real de /dashboard) no lo importa ni lo
+  referencia. El unico sitio del codigo donde MainLayout se monta de verdad es
+  frontend/src/main-ultra-minimal.js, un entry point alternativo que no es el que
+  arranca la SPA de produccion. Es decir: el boton de logout de MainLayout.vue es codigo
+  muerto, inalcanzable desde el flujo real de un usuario. Esto confirma con mas
+  precision el hallazgo del informe, no lo contradice.
+- "Enter no envia el formulario de login": no pude verificarlo de forma independiente.
+  Motivo: reproducirlo requiere un frontend en vivo con Playwright/navegador, y la CSP
+  de frontend/index.html solo permite connect-src a localhost:8000/5173 (puertos
+  ocupados por otro agente durante toda mi sesion); a diferencia del ejecutor, como
+  revisor-independiente no tengo herramientas de Edit/Write para editar la CSP
+  temporalmente ni para revertirla despues, asi que no repeti ese truco. Por lectura de
+  codigo (Login.vue:24,42-52,82-86): es un form con @submit.prevent="handleSubmit"
+  completamente estandar, con un input type="password" dentro y un button
+  type="submit" - esta es exactamente la estructura HTML que en cualquier navegador
+  real dispara el evento submit del formulario al pulsar Enter en cualquiera de sus
+  campos de texto. No hay ningun @keydown.enter.prevent ni logica que lo bloquee visible
+  en el componente. La afirmacion del informe es, por tanto, sorprendente dado el
+  codigo, y queda sin confirmar ni descartar por mi - senalado como pendiente, no como
+  hallazgo cerrado.
+
+### 6.7 Hallazgo nuevo encontrado por mi, no reportado por el ejecutor
+
+POST /api/v1/documents/update-advisor-emails (guardar email del gestor fiscal en
+Ajustes) devuelve 500 siempre, en toda circunstancia probada. Ver 6.3. Esto es relevante
+porque:
+1. Es exactamente el punto que el informe del ejecutor marco como "no probado
+   end-to-end" en Ajustes - al probarlo, resulto estar roto, no solo sin probar.
+2. Agrava el impacto real del hallazgo critico 2 (onboarding): dado que el wizard de
+   onboarding nunca se activa (hallazgo 2) y que la unica via manual alternativa para
+   fijar email_gestor_fiscal (necesaria para que RAFAEL pueda enviar facturacion real)
+   esta rota con un 500, hoy no existe ningun camino funcional, ni automatico ni
+   manual, para que un usuario real configure el email de su gestor fiscal.
+3. Archivo y lineas: backend/app/api/v1/endpoints/document_approval.py:219-260.
+   Severidad propuesta: ALTA (bloquea permanentemente una funcion de configuracion
+   basica y compuesta con el hallazgo critico 2, aunque no es en si mismo una brecha de
+   seguridad ni de aislamiento multi-tenant).
+
+### 6.8 Evaluacion de severidades asignadas por el ejecutor
+
+- Hallazgo 2 (onboarding, critico): razonable y bien fundamentado - confirmado
+  independientemente con dos tipos de negocio distintos, causa raiz exacta verificada
+  linea por linea. No exagerado.
+- Hallazgo 4 (THALOS.SHIELD simulado, critico): razonable - es middleware de seguridad
+  simulado y accesible por API real y autenticada sin diferenciacion por tenant, tal
+  como exige tratar la skill zeus-produccion (regla no negociable de THALOS obligatorio
+  y prohibicion de respuestas simuladas). No exagerado.
+- Hallazgo 3 (superusuario sin empresa, alto): razonable, alcance limitado a un caso de
+  borde (superusuarios sin empresa) pero con impacto real de UI atascada. No exagerado.
+- Hallazgo 1 (puente TPV-factura): correctamente calificado como resuelto/OK.
+- Si acaso, el informe se quedo corto: no asigno severidad al hueco de "Guardar gestor
+  fiscal" simplemente porque no llego a probarlo - no es una minimizacion consciente, es
+  una laguna de cobertura en un area que el propio informe senalo como de riesgo.
+
+### 6.9 Veredicto
+
+DEVUELTO AL EJECUTOR. No se puede cerrar esta auditoria como completa todavia.
+
+Motivos concretos:
+1. Hallazgo nuevo no cubierto: POST /documents/update-advisor-emails (guardado de
+   "gestor fiscal" en Ajustes, la propia area que el informe dejo como pendiente de
+   probar) devuelve 500 de forma reproducible y consistente
+   (backend/app/api/v1/endpoints/document_approval.py:219-260). Esto contradice la
+   conclusion general de la seccion 5 del informe ("el resto de la app... funciona con
+   datos reales, sin mocks permanentes detectados") y agrava directamente el impacto del
+   hallazgo critico 2, porque elimina tambien la unica via manual de mitigacion.
+2. Afirmacion sin poder confirmar ni descartar: "Enter no envia el formulario de login"
+   no pudo reproducirse de forma independiente en esta ronda (limitacion de
+   herramientas del rol revisor, no del sistema en si) y resulta contraintuitiva dado el
+   codigo real del formulario (form con @submit.prevent estandar y boton submit). Debe
+   confirmarse con evidencia mas solida (grabacion, estado del DOM, o log de consola en
+   el momento exacto) antes de darla por buena o descartarla.
+
+Lo que SI se confirma cerrado y no necesita repetirse: los 4 hallazgos pendientes
+(puente TPV-factura OK; heuristica de onboarding critica confirmada; superusuario sin
+empresa confirmado; THALOS.SHIELD simulado confirmado), el estado limpio del repo, el
+baseline de tests sin regresion (7 failed, 214 passed, 2 skipped, 3 errors, confirmado
+por mi de forma exclusiva), la migracion Alembic aplicada, el aislamiento multi-tenant en
+TPV/facturacion y en CRM (con un tercer tenant nunca antes usado), y el resto de
+hallazgos nuevos de la seccion 3 del informe original (ZEUS.ACTIVAR, GET /invoices/ 401,
+ausencia de logout descubrible - este ultimo reforzado con causa raiz mas precisa).
+
+Que falta para la siguiente vuelta:
+- Investigar y corregir (o, si corresponde a otro step del loop, documentar como
+  hallazgo formal con severidad) el 500 de update-advisor-emails.
+- Reproducir de forma concluyente (grabacion Playwright o inspeccion de consola en el
+  momento del intento) si Enter realmente no envia el formulario de login, o retirar esa
+  afirmacion si no se puede sostener.
+- Los hallazgos 2, 3 y 4 siguen diagnosticados pero no corregidos - igual que ya
+  indicaba el propio informe del ejecutor ("nada de esto se cierra como aprobado...
+  hasta que se corrija"); esta revision confirma el diagnostico, no sustituye el
+  arreglo.

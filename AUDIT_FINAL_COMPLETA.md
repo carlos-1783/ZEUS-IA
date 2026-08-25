@@ -606,3 +606,243 @@ Que falta para la siguiente vuelta:
   indicaba el propio informe del ejecutor ("nada de esto se cierra como aprobado...
   hasta que se corrija"); esta revision confirma el diagnostico, no sustituye el
   arreglo.
+
+---
+
+## 7. Vuelta 2 — cierre de los 2 huecos señalados por el revisor
+
+Fecha: 2026-08-25. Rama `feature/rediseno-completo` (mismo worktree
+`agent-a8873985b2803de19`), sin merge ni push a `main`. Entorno: backend propio en
+puerto 8030→8031 (el 8030 quedó ocupado tras un problema de backgrounding del propio
+entorno de pruebas, ver nota más abajo), mismo `zeus.db` de este worktree, venv
+compartido (`C:\Users\Acer\ZEUS-IA\backend\venv`). Frontend propio en puerto 5192 sólo
+para el punto 2. Cuentas de prueba 100% nuevas, ninguna reutilizada de `audit.*` ni
+`rev*.`: `ejec2.rest1@example.com`, `ejec2.off1@example.com`, `ejec2.enter@example.com`.
+
+### 7.1 Punto 1 — `POST /documents/update-advisor-emails` devuelve 500 (hallazgo del revisor, sección 6.7/6.9)
+
+**Causa raíz exacta, confirmada línea por línea, con reproducción antes y después del fix:**
+
+- `backend/app/api/v1/endpoints/document_approval.py:15` importa `get_db` desde
+  `app.db.session` (`from app.db.session import get_db`) para su propio
+  `db: Session = Depends(get_db)`.
+- `backend/app/core/auth.py:13` importa `get_db` desde **otro módulo distinto**,
+  `app.db.base` (`from app.db.base import get_db`), y es esa función la que usa
+  `get_current_user`/`get_current_active_user` (línea 235) para cargar `current_user`.
+- `backend/app/db/base.py:885-888` define su propio `get_db()` "de compatibilidad" que
+  hace `yield from get_db_with_retry()` reexportando `app.db.session.get_db` — pero al
+  ser una función **distinta como objeto** (aunque delegue al mismo código), FastAPI la
+  trata como una dependencia diferente a efectos de su caché de dependencias por
+  request (la caché de `Depends()` se indexa por identidad del *callable*, no por lo que
+  hace internamente). Resultado: en cualquier endpoint que (a) reciba `current_user` vía
+  `get_current_active_user` y (b) declare también su propio `db: Session =
+  Depends(get_db)` importado de `app.db.session`, **`current_user` queda vinculado a una
+  sesión de SQLAlchemy distinta de `db`** — dos objetos `Session` distintos, dos
+  conexiones distintas, dos identity maps distintos, para la misma petición HTTP.
+- Mientras el código solo *lee* atributos ya cargados de `current_user` (p. ej.
+  `current_user.id`, `current_user.company_id`) para filtrar consultas hechas con `db`,
+  el desajuste es inofensivo. El bug se manifiesta **solo** cuando un endpoint muta un
+  atributo de `current_user` y luego usa su propio `db` para persistir el cambio:
+  - `update-advisor-emails` (líneas 219-260, antes del fix): hacía
+    `current_user.email_gestor_fiscal = ...; db.commit(); db.refresh(current_user)`.
+    `db.refresh()` exige que el objeto esté "persistente" (en el identity map) de esa
+    sesión concreta; como `current_user` pertenece a la sesión de `app.db.base.get_db`
+    y no a la de `db`, SQLAlchemy lanza
+    `InvalidRequestError: Instance <User ...> is not persistent within this Session` —
+    exactamente el mensaje que reportó el revisor.
+  - Adicionalmente, aunque no llegara a `refresh()`: como el cambio de atributo se hizo
+    sobre un objeto que pertenece a la sesión de `get_current_user` (no a `db`), y esa
+    sesión nunca hace `commit()` (se cierra sin commit al terminar la petición, ver
+    `app/db/session.py:29-31`), el cambio se habría **perdido silenciosamente** incluso
+    si no hubiera excepción — es decir, sin este fix habría dos formas de fallar: con
+    excepción visible (500, lo que de hecho ocurre) o, en otro orden de eventos, con
+    pérdida silenciosa del dato sin ningún error. Ambas son inaceptables.
+
+**Alcance verificado — no es exclusivo de `update-advisor-emails`:**
+
+- `POST /documents/toggle-authorization` (mismo archivo, líneas 263-289) tiene el
+  **mismo patrón exacto** (`current_user.autoriza_envio_documentos_a_asesores =
+  autoriza; db.commit(); db.refresh(current_user)`) y falla con el mismo error. Confirmado
+  en vivo antes del fix:
+  `{"detail":"Error actualizando autorización: Instance '<User at 0x...>' is not persistent within this Session"}`.
+- Grep exhaustivo (`current_user\.\w+\s*=` combinado con `db.commit()` en el mismo
+  archivo) sobre todo `backend/app/api/v1/endpoints/`: solo dos archivos coinciden,
+  `document_approval.py` (los dos endpoints de arriba) y `auth.py`. En `auth.py`, la
+  función `_onboarding_profile_impl` (la que procesa el wizard real de onboarding,
+  `POST /auth/onboarding/profile`) **ya conocía y mitigaba este mismo bug**: línea
+  812-813 hace exactamente
+  `current_user = db.query(User).filter(User.id == user_id).first()` con el comentario
+  explícito *"Re-cargar el usuario desde esta sesión para evitar 'Object already
+  attached to session N'"* — es decir, alguien ya diagnosticó este problema de raíz en
+  esa función concreta, pero el mismo parche nunca se replicó a
+  `document_approval.py`. Esto confirma que la causa es sistémica (la dualidad
+  `app.db.base.get_db` / `app.db.session.get_db` usada por `auth.py` de un lado y por
+  55 archivos de endpoints del otro), aunque solo **estos dos endpoints concretos**
+  llegan a manifestarla como error 500 hoy.
+- Solo otros dos archivos (`commands.py`, `zeus_core.py`) importan `get_db` desde
+  `app.db.base` como el resto de la auth; ningún otro endpoint mezcla ambas fuentes de
+  `get_db` mutando `current_user`.
+
+**Fix aplicado** (bajo riesgo, aislado, reutiliza un patrón ya probado en el mismo
+código — `auth.py::_onboarding_profile_impl`, no una solución nueva): en los dos
+endpoints afectados de `document_approval.py`, re-obtener `current_user` a través de la
+propia sesión `db` del endpoint antes de mutarlo:
+```python
+current_user = db.query(User).filter(User.id == current_user.id).first() or current_user
+```
+No se tocó `app/core/auth.py` ni `app/db/base.py` (el fix "correcto" a nivel arquitectónico
+sería unificar `get_current_user` para que use `app.db.session.get_db`, pero eso afecta
+la cadena de autenticación de los ~55 endpoints restantes del backend — fuera de alcance
+de una auditoría, requiere su propio step de producción con pruebas dedicadas; señalado
+como pendiente más abajo, no aplicado aquí).
+
+**Verificado en vivo, antes y después del fix, con dos tenants nuevos:**
+
+- Antes del fix — reproducido 3 veces: `ejec2.rest1@example.com` →
+  `{"detail":"Error actualizando emails de asesores: Instance '<User at 0x2264e8be5c0>' is not persistent within this Session"}`;
+  `toggle-authorization` con la misma cuenta → mismo patrón de error; repetido con
+  `ejec2.off1@example.com` (segundo tenant, independiente) → mismo error exacto.
+- Después del fix (backend reiniciado para cargar el cambio, sin `--reload`):
+  - `POST /documents/update-advisor-emails?email_gestor_fiscal=gestor.fixed@example.com`
+    con `ejec2.rest1` → `200 {"success":true,"email_gestor_fiscal":"gestor.fixed@example.com",...}`.
+  - Confirmado por una llamada **independiente**, `GET /auth/onboarding/status`, que el
+    valor persiste de verdad (no es solo el eco de la respuesta):
+    `"email_gestor_fiscal":"gestor.fixed@example.com"`.
+  - Confirmado además por **SQL directo** contra `zeus.db`: `email_gestor_fiscal =
+    'gestor.fixed@example.com'` para el usuario 450 (`ejec2.rest1`), `NULL` para el
+    usuario 451 (`ejec2.off1`, no tocado todavía en ese momento).
+  - `POST /documents/toggle-authorization?autoriza=true` con `ejec2.rest1` → `200
+    {"success":true,"autoriza_envio_documentos_a_asesores":true}`.
+  - Aislamiento multi-tenant confirmado explícitamente: `POST
+    /documents/update-advisor-emails?email_gestor_fiscal=gestor2.fixed@example.com` con
+    `ejec2.off1@example.com` (segundo tenant, independiente) → `200` con su propio
+    valor; SQL directo confirma `ejec2.off1` = `gestor2.fixed@example.com` y
+    `ejec2.rest1` sigue con `gestor.fixed@example.com` — cada tenant solo modifica su
+    propio registro, ninguno pisa al otro.
+  - Caso de error controlado: la misma llamada sin token → `401` (no 500, no
+    falso-éxito) — comportamiento de autenticación intacto tras el fix.
+- **Regresión backend**: `pytest tests/ -q` tras el fix →
+  `7 failed, 214 passed, 2 skipped, 3 errors in 94.61s` — coincide cifra por cifra con
+  el baseline ya confirmado dos veces (por el ejecutor original y por
+  revisor-independiente). Sin regresión.
+
+**Severidad**: mantengo **ALTA**, de acuerdo con la propuesta del revisor, por las
+mismas razones que ya dio (bloquea permanentemente una función de configuración básica,
+y se compone con el hallazgo crítico 2 de onboarding porque elimina también la única vía
+manual de mitigación) — no la subo a crítica porque, a diferencia del hallazgo 4
+(THALOS.SHIELD simulado), no hay aquí ninguna brecha de seguridad ni de aislamiento
+multi-tenant: el bug es un 500 que impide guardar, no una fuga de datos entre tenants
+(confirmado arriba explícitamente con dos tenants independientes).
+
+**Archivos y líneas tocados por el fix**: `backend/app/api/v1/endpoints/document_approval.py`
+— línea añadida antes de la mutación en `update_advisor_emails` (dentro del bloque que
+empieza en la antigua línea 230) y en `toggle_document_authorization` (dentro del bloque
+que empieza en la antigua línea 272). Commit atómico, un solo archivo, sin tocar
+`auth.py` ni `db/base.py`.
+
+### 7.2 Punto 2 — "Enter no envía el formulario de login": RETRACTADO
+
+**Veredicto: la afirmación original de la sección 2 del informe (nota al pie) no se
+sostiene. La retracto explícitamente. No hay evidencia de que sea un bug real de
+Login.vue ni de la app.**
+
+Repetí la prueba con el navegador integrado (Playwright vía MCP), sirviendo el frontend
+real de este worktree (confirmado por marcador único `Login.vue component is
+mounting` y por `withModifiers` — el código compilado de `@submit.prevent` — presentes
+en el módulo servido por Vite en `http://localhost:5192/src/views/auth/Login.vue`):
+
+1. Login real (`/auth/login`), campos email+password rellenados con una cuenta nueva
+   (`ejec2.enter@example.com`), clic explícito en el campo de contraseña, tecla
+   `Return` — **no se disparó ninguna petición de red** (`read_network_requests`
+   filtrado por `login` → "No network requests recorded"), no apareció ningún log de
+   consola de `handleSubmit` (que sí se loguea explícitamente en el código,
+   `console.log('[auth/Login.vue] handleSubmit llamado')`), y la captura de pantalla
+   confirma que la UI se quedó exactamente igual (sin mensaje de error, sin estado
+   "Enviando...", sin redirect).
+2. Repetido también pulsando `Return` en el campo de email (con password vacío
+   deliberadamente): si `handleSubmit` se hubiera ejecutado, `validateForm()` habría
+   poblado `error.value` con el mensaje de contraseña requerida y aparecería el cuadro
+   rojo de error (`v-if="error"`) — la captura confirma que **no apareció ningún
+   error**, es decir, `handleSubmit` no llegó a ejecutarse en absoluto, ni siquiera para
+   fallar la validación.
+3. **Control decisivo**: repetí la misma secuencia de teclas sobre un HTML plano de
+   control, sin ningún framework ni JavaScript de la app (`<form onsubmit="...">` con
+   un `<input type=text>`, un `<input type=password>` y un `<button type=submit>`,
+   servido como archivo estático desde el mismo Vite en el mismo puerto/entorno) —
+   **el mismo resultado: pulsar `Return` (y también probé el identificador `Enter`) no
+   disparó el `submit` nativo del navegador** (el título de la pestaña, que el propio
+   `onsubmit` del HTML de control cambia a `"SUBMITTED"`, permaneció como `"Enter
+   test"`). Sin embargo, **hacer clic en el botón `Go` de ese mismo formulario de
+   control sí lo envió al instante** (el título cambió a `"SUBMITTED"` inmediatamente
+   tras el clic).
+
+Esto demuestra de forma concluyente que la ausencia de envío al pulsar Enter es una
+**limitación del propio mecanismo de simulación de teclado de esta herramienta de
+automatización de navegador** (el evento de tecla sintético no dispara el algoritmo de
+envío implícito de formularios de Chromium), reproducible incluso en el HTML más simple
+posible sin una sola línea de JavaScript de por medio — **no es un bug de Login.vue ni
+de ZEUS IA**.
+
+Por lectura de código, además, no hay ningún indicio de que un navegador real fuera a
+comportarse igual: `Login.vue:24` tiene un `<form @submit.prevent="handleSubmit">`
+completamente estándar, con el `<input type="password">` (línea 42-52) dentro de ese
+mismo `<form>` y el `<button type="submit">` (línea 82-94) también dentro de él — la
+estructura exacta que en cualquier navegador real dispara el envío implícito al pulsar
+Enter en cualquier campo de texto del formulario. Grep exhaustivo sobre
+`frontend/src/` completo de `addEventListener('keydown', ...)`, `@keydown`, `key ===
+'Enter'` y variantes no encontró **ningún** listener global ni específico de la pantalla
+de login que intercepte o bloquee la tecla Enter — los únicos `keydown` globales
+registrados en toda la base de código (`DashboardProfesional.vue`, `OlympoGLB.vue`,
+`OlympoFirstPerson.vue`, `audioService.ts`, `settings.ts::bumpActivity`) no se montan en
+la pantalla de login ni interfieren con formularios (el de `settings.ts` solo
+actualiza un timestamp de actividad, sin `preventDefault`).
+
+**Conclusión**: retracto la afirmación de la sección 2 del informe original ("Enter no
+envía el formulario"). No hay evidencia, ni por prueba en vivo ni por lectura de código,
+de que sea un comportamiento real de la app — todo apunta a un falso positivo causado
+por la misma limitación de la herramienta de automatización que ya se documentó en la
+sección 0 para otros síntomas (ruido de HMR). Recomiendo, si se quiere una confirmación
+100% definitiva más allá de toda duda, una prueba manual con un teclado físico real por
+parte de un humano — algo que ni yo ni el revisor de la ronda anterior pudimos hacer con
+las herramientas disponibles en esta sesión.
+
+**Limpieza**: el archivo estático de control (`frontend/public/test-enter.html`) se creó
+solo para esta prueba y se eliminó inmediatamente después. La CSP temporal de
+`frontend/index.html` (se añadieron los puertos 8031/5192 a `connect-src` para que el
+navegador de pruebas pudiera hablar con el backend/frontend aislados de esta sesión) se
+revirtió con `git checkout -- frontend/index.html` antes de cerrar; confirmado con `git
+status`/`git diff` limpios (solo queda como cambio real
+`backend/app/api/v1/endpoints/document_approval.py`, más `.claude/` sin trackear como en
+todas las rondas anteriores).
+
+### 7.3 Qué NO se pudo verificar en esta vuelta
+
+- Confirmación con un clic/tecla físicos de un humano real de que Enter sí envía el
+  login en un navegador real fuera de esta herramienta de automatización — no disponible
+  en este entorno.
+- No se auditó si la misma dualidad `app.db.base.get_db` / `app.db.session.get_db`
+  causa problemas *silenciosos* (sin excepción, con pérdida de datos) en algún otro
+  flujo que mute `current_user` sin pasar por `db.refresh()` — el grep realizado busca
+  específicamente el patrón "mutar current_user + db.commit() en el mismo archivo", que
+  cubre los casos conocidos, pero no se puede descartar al 100% algún patrón más sutil
+  (p. ej. mutación a través de un método de servicio importado que reciba `current_user`
+  como parámetro) fuera del alcance de esta vuelta.
+
+### 7.4 Qué queda pendiente
+
+- **Decisión de producto/arquitectura, no tomada aquí**: si merece la pena, en un step
+  de producción dedicado (no en una auditoría), unificar `get_current_user` /
+  `get_current_active_user` (`app/core/auth.py`) para que usen `app.db.session.get_db`
+  en lugar de `app.db.base.get_db`, eliminando la dualidad de raíz para los ~55 archivos
+  de endpoints restantes, en vez de ir parcheando caso por caso con el patrón de
+  re-fetch. Esto tiene mayor radio de impacto (toca la cadena de autenticación de todo
+  el backend) y requiere su propia batería de pruebas de regresión antes de aplicarse —
+  señalado aquí, no ejecutado.
+- Los hallazgos 2, 3 y 4 de la sección 1 (heurística de onboarding, superusuario sin
+  empresa, THALOS.SHIELD simulado) siguen sin corregir, tal como ya señalaban tanto el
+  informe original como la revisión independiente — esta vuelta 2 no los toca, solo
+  cierra los dos huecos concretos que motivaron la devolución del informe.
+- Corresponde a `revisor-independiente`, en una nueva vuelta, confirmar de forma
+  independiente el fix de `update-advisor-emails`/`toggle-authorization` y la
+  retractación del punto de Enter, antes de dar la auditoría por cerrada. No la declaro
+  cerrada yo mismo.

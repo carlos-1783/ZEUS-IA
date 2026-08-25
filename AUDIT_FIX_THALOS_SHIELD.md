@@ -401,3 +401,294 @@ declarados con la severidad correcta:
 
 No se aprueba con reservas. Corregido esto, vuelve a esta revision con una
 Vuelta 2.
+
+---
+
+## 7. Vuelta 2 — cierre de los 3 motivos de devolución
+
+Ejecutado en el mismo worktree/rama (`feature/fix-thalos-shield-real`), con
+datos propios nuevos (tenants `company_id=181/182`, usuarios
+`ejec_ta_*@example.com` / `ejec_tb_*@example.com`, creados vía
+`POST /api/v1/auth/register` real, no reutilizados de ninguna sesión
+anterior; borrados de la BD de desarrollo al terminar). Baseline verificado
+antes de tocar nada: `7 failed, 220 passed, 2 skipped, 3 errors` (idéntico al
+de la Vuelta 1).
+
+### 7.1 CRÍTICO — kill-switch `THALOS_EXECUTION_ENABLED` en `ThalosAgent._block`
+
+**Diagnóstico del parche recibido a medio hacer.** Un ejecutor anterior (cortado
+por límite de sesión) había dejado sin commitear un cambio en
+`backend/app/core/zeus_agents.py::ThalosAgent._block` que comprueba
+`settings.THALOS_EXECUTION_ENABLED` justo antes de llamar a
+`services/thalos_executor.py::block_user`, devolviendo un resultado
+`status: "blocked"` explícito (`executed: False`, `reason: "THALOS_EXECUTION_ENABLED is false"`)
+sin ejecutar nada real si el flag está en `false`. Se revisó línea a línea con
+ojo crítico antes de aceptarlo:
+
+- La lógica es correcta y coincide exactamente con el gate real de la vía
+  REST oficial (`app/api/v1/endpoints/thalos_v1.py:104`:
+  `if not allowed or not settings.THALOS_EXECUTION_ENABLED`).
+- El `import` (`from app.core.config import settings as _settings`) está
+  dentro de la función, consistente con el resto de imports locales ya
+  existentes en el mismo método (`from services.thalos_executor import
+  block_user`); no había import de `settings` a nivel de módulo en
+  `zeus_agents.py`, así que no rompe nada existente.
+- `logger` ya existe como variable de módulo (`logging.getLogger(__name__)`,
+  línea 11); se usa correctamente.
+- El flujo normal con `THALOS_EXECUTION_ENABLED=true` no se ve alterado: el
+  nuevo bloque es un `if not ...: return {...}` que solo actúa cuando el flag
+  es falso; con el flag en `true` el código sigue exactamente igual que antes
+  (cae al `try` que llama a `block_user`). Confirmado en vivo (ver 7.2).
+
+**Veredicto: el diff se conserva tal cual, sin cambios.**
+
+**Test corregido**, tal como pidió el auditor. El test
+`test_block_with_email_respects_real_execution_flags`
+(`backend/tests/test_zeus_agents_thalos_real_v1.py:135` en la Vuelta 1) solo
+comprobaba `assert settings.THALOS_EXECUTION_ENABLED is False` pero el código
+bajo prueba en ese momento (antes del fix del kill-switch) usaba
+`THALOS_AUTO_BLOCK` — exactamente la discrepancia que señaló el revisor. Con
+el kill-switch ya aplicado, ese mismo test se rompía de una manera distinta
+pero reveladora: `KeyError: 'source'`, porque ahora el kill-switch corta
+*antes* de llegar a `thalos_executor.block_user` (que era quien añadía
+`data.source`). Se ha:
+
+1. Ajustado `test_block_with_email_respects_real_execution_flags` para que
+   solo afirme el contrato de alto nivel (con flags por defecto, nunca se
+   ejecuta un bloqueo real) sin acoplarse a qué capa exacta lo impide.
+2. Añadido `test_block_respects_execution_kill_switch_even_if_auto_block_true`:
+   fija `THALOS_EXECUTION_ENABLED=False` y, a propósito,
+   `THALOS_AUTO_BLOCK=True` — la combinación exacta que el revisor identificó
+   como el atajo real (si el código solo mirara `THALOS_AUTO_BLOCK`, este
+   test fallaría porque el bloqueo se ejecutaría de verdad). Verifica
+   `status == "blocked"`, `executed is False`, `reason ==
+   "THALOS_EXECUTION_ENABLED is false"`, que no hay `data.source` (no llegó a
+   invocar `block_user`), y que el usuario objetivo sigue `is_active=True` en
+   BD tras la llamada.
+3. Añadido `test_block_proceeds_to_real_executor_when_kill_switch_enabled`:
+   control positivo — con `THALOS_EXECUTION_ENABLED=True` y
+   `THALOS_AUTO_BLOCK=False`, confirma que el camino feliz sigue intacto
+   (llega a `thalos_executor.block_user`, que hace su propio `dry_run` por
+   `THALOS_AUTO_BLOCK=False`). Este test habría fallado si el kill-switch
+   nuevo hubiera roto el flujo normal.
+
+**Verificación en vivo (servidor uvicorn propio, puerto 8214,
+`THALOS_EXECUTION_ENABLED=true`/`THALOS_AUTO_BLOCK=true` vía variables de
+entorno)**: `THALOS.BLOCK` con el propio usuario del tenant A (mismo tenant)
+devolvió `status: "completed"`, `executed: true`; confirmado en la BD sqlite
+del entorno de desarrollo que `users.is_active` pasó de `1` a `0` para ese
+usuario — el kill-switch abierto no impide la ejecución real legítima. Con
+`THALOS_EXECUTION_ENABLED=false` (valor por defecto sin overrides, servidor
+en el puerto 8213) el mismo comando devolvió `status: "blocked"`,
+`reason: "THALOS_EXECUTION_ENABLED is false"`, sin tocar la BD.
+
+### 7.2 ALTO — `THALOS.BLOCK` no validaba que `user_email` perteneciera al tenant del solicitante
+
+**Cambio**: `backend/services/thalos_executor.py::block_user` ahora, cuando
+se conoce el `company_id` del solicitante (siempre lo conocen las dos vías
+reales que llaman a esta función: `thalos_v1.py::thalos_v1_execute` y
+`ThalosAgent._block`, ambas resuelven el tenant del usuario autenticado antes
+de invocar el bloqueo), comprueba que el `user_email` objetivo pertenece a
+una empresa de ese `company_id` (`JOIN user_companies/users`) **antes** de
+revelar nada sobre el usuario objetivo (protegido, existencia, superusuario,
+o siquiera intentar un `dry_run`). Si no pertenece, devuelve
+`status: "forbidden"`, `executed: False`,
+`reason: "target_user_not_in_requester_company"`, y lo registra igual que
+cualquier otro resultado de esta función (`_log_action` → `ActivityLogger` +
+`ThalosSecurityEvent`, con `severity="warning"` porque `status != "completed"`).
+
+Si `company_id` es `None` (llamadas internas/tests de bajo nivel sin
+contexto de tenant, p.ej. los tests preexistentes
+`test_block_user_dry_run_without_auto_block` y
+`test_block_user_respects_protected_email` en `test_thalos_safe_v1.py`, que
+llaman a `block_user` directamente sin `company_id`), se preserva el
+comportamiento previo — no se puede validar un tenant que no se conoce, y
+ninguna de las dos vías reales lo deja como `None` en un request
+autenticado real.
+
+**Vía REST oficial** (`app/api/v1/endpoints/thalos_v1.py::thalos_v1_execute`):
+se añadió la traducción de `status == "forbidden"` a un **403 real**
+(`raise HTTPException(status_code=403, ...)`), en el mismo estilo que
+`services/tpv_service.py:1068` ("La venta no pertenece a su empresa."),
+justo después de `db.commit()` (para no perder el log de seguridad del
+intento rechazado si se hubiera hecho antes).
+
+Nota honesta sobre alcance de la verificación de esta vía: con la
+clasificación de módulos actual
+(`services/thalos_control_layer_v1.py::MODULE_CLASSIFICATION["auditoria_real"]
+= "REAL_SAFE"`), `can_run_active_execution("auditoria_real", "block_user")`
+nunca es `True` salvo que el modo resuelto sea `REAL_ACTIVE` — y ese módulo
+está fijado a `REAL_SAFE` en el código actual, por lo que
+`POST /api/v1/thalos/v1/execute` con `action=block_user` devuelve siempre
+`status: "blocked"` / `"REAL_ACTIVE required"` *antes* de llegar a
+`execute_action`/`block_user`, con independencia de `THALOS_EXECUTION_ENABLED`.
+Esto ya era así antes de este fix (no es una regresión introducida aquí) y
+excede el alcance de esta vuelta (es una decisión de clasificación de
+módulos, no de aislamiento multi-tenant). Para poder probar el 403 nuevo de
+forma aislada sin depender de esa configuración, se monkeypatcheó
+`can_run_active_execution` a `True` en el test dedicado
+(`backend/tests/test_thalos_v1_execute_block_tenant.py`), y se documenta
+aquí con precisión para que quede claro qué se verificó de verdad vs. qué es
+inalcanzable hoy por configuración de producto independiente.
+
+**Tests nuevos**:
+- `backend/tests/test_zeus_agents_thalos_real_v1.py::test_block_rejects_cross_tenant_target_user`:
+  reproduce exactamente el escenario del revisor (tenant A pide bloquear a un
+  usuario de tenant B) con ambos flags reales activados (`THALOS_EXECUTION_ENABLED=True`,
+  `THALOS_AUTO_BLOCK=True` — el caso más peligroso), vía la capa legacy
+  `ThalosAgent._block`. Confirma `status == "forbidden"`, `executed is
+  False`, `reason == "target_user_not_in_requester_company"`, y que el
+  usuario víctima sigue `is_active=True`.
+- `backend/tests/test_thalos_v1_execute_block_tenant.py` (nuevo, 2 tests):
+  `test_thalos_v1_execute_block_user_cross_tenant_returns_403` (llama
+  directamente a la función del endpoint `thalos_v1_execute` con
+  `pytest.raises(HTTPException)` y confirma `status_code == 403`) y
+  `test_thalos_v1_execute_block_user_same_tenant_not_forbidden` (control
+  negativo: mismo tenant no dispara el 403).
+
+**Verificación end-to-end real por HTTP** (servidor uvicorn propio, puerto
+8214, `THALOS_EXECUTION_ENABLED=true`/`THALOS_AUTO_BLOCK=true`, 2 tenants
+nuevos creados por mí vía registro real —
+`ejec_ta_1787659130@example.com` / `company_id=181` y
+`ejec_tb_1787659130@example.com` / `company_id=182`—, JWT reales vía
+`POST /api/v1/auth/login`):
+
+1. `POST /api/v1/zeus/execute` con JWT del tenant A, `THALOS.BLOCK` con el
+   email del usuario del tenant B:
+   `{"status":"forbidden","data":{"executed":false,"reason":"target_user_not_in_requester_company",...,"company_id_scope":181}}`,
+   HTTP 200 (la capa legacy siempre devuelve 200 con el estado embebido, como
+   ya hacían `not_implemented`/`error` antes de este fix).
+2. Verificado en la BD sqlite de desarrollo justo después: el usuario del
+   tenant B (`id=278`) seguía con `is_active=1` — el rechazo fue real, no
+   solo un mensaje.
+3. Control positivo: `THALOS.BLOCK` del tenant A sobre **su propio** usuario
+   (mismo tenant) → `{"status":"success","data":{"executed":true,...}}`, y
+   en la BD `users.id=277` pasó a `is_active=0` — confirma que el nuevo
+   chequeo de tenant no rompe el bloqueo legítimo dentro del mismo tenant.
+4. Caso de error esperado: sin header `Authorization` → 401
+   `{"detail":"No se pudieron validar las credenciales"}`.
+5. Limpieza: usuarios 277/278, `user_companies` y `companies` 181/182, y los
+   3 `thalos_security_events` generados por estas pruebas se borraron de la
+   BD de desarrollo local (`sqlite:///./zeus.db`, no versionada) al terminar.
+
+**Hallazgo nuevo descubierto durante esta verificación, NO corregido en esta
+vuelta — requiere decisión**: `ThalosExecuteRequest.company_id` en
+`app/api/v1/endpoints/thalos_v1.py` es un campo que el **cliente** puede
+enviar en el body, y la línea `cid = body.company_id or
+primary_company_id_for_user(db, current_user)` lo usa tal cual, sin
+comprobar que ese `company_id` pertenezca de verdad al usuario autenticado.
+Esto significa que, en teoría, un atacante podría intentar sortear el
+chequeo de tenant que se acaba de añadir enviando explícitamente
+`"company_id": <el de la víctima>` en el propio body de la petición — el
+nuevo chequeo de `block_user` compara contra el `company_id` que le llega, y
+si ese valor ya viene falsificado desde el cliente, el chequeo no protege.
+No he reproducido esto en vivo por prudencia (implica intentar un bloqueo
+cross-tenant con datos falseados a propósito) y **no lo he corregido** porque:
+(a) afecta a las **otras** acciones de este mismo endpoint también
+(`audit_cashflow_anomaly`, `detect_suspicious_activity`, `alert_admin`), no
+solo a `block_user`, y una corrección aislada solo en `block_user` dejaría el
+resto del endpoint igual de expuesto; (b) es un problema en el *endpoint*
+(`thalos_v1.py`), no en la línea citada explícitamente en el encargo
+(`thalos_executor.py:91`). Se señala aquí con severidad **ALTA** (posible
+bypass del propio fix de este apartado, y fuga/escritura cross-tenant en el
+resto de acciones del endpoint) para que el usuario o el auditor decidan si
+se aborda en un step aparte (la corrección natural es ignorar
+`body.company_id` para autorización y usar siempre
+`primary_company_id_for_user(db, current_user)`, o validar que
+`body.company_id` esté entre las empresas del usuario autenticado antes de
+usarlo).
+
+### 7.3 MEDIO — fuga cross-tenant de `THALOS.SCAN` (reclasificada, investigada, no resuelta)
+
+**Investigación de viabilidad de filtrado por tenant, tal como se pidió**:
+
+- `agent_activities` (modelo `AgentActivity`,
+  `backend/app/models/agent_activity.py`): **no tiene columna `company_id`**.
+  Tiene una columna `user_email` (`String`, `nullable=True`, sin
+  `ForeignKey`) descrita en el propio modelo como "opcional" — muchas filas
+  no la rellenan (actividad general de agentes sin usuario/tenant asociado).
+  Aunque estuviera rellena, sería una vía indirecta débil: sería necesario
+  `email → users.email → user_companies.company_id`, y un usuario puede
+  pertenecer a varias empresas (`UserCompany` es N:M), así que no hay una
+  única atribución de tenant fiable ni siquiera para las filas que sí tienen
+  `user_email`.
+- `thalos_login_attempts` (modelo `ThalosLoginAttempt`,
+  `backend/app/models/thalos_security_event.py`): **no tiene columna
+  `company_id` ni `user_id`** — solo `email` (string libre, ni siquiera con
+  `ForeignKey` a `users`), `ip_address`, `success`, `created_at`. Se diseñó
+  así a propósito para poder registrar intentos de login fallidos de emails
+  que ni siquiera existen como usuarios reales (necesario para detectar
+  fuerza bruta con emails inventados) — no hay ninguna vía indirecta posible
+  hacia un tenant, ni siquiera débil, sin añadir una columna nueva.
+
+**Conclusión**: no es viable un filtrado por tenant de `scan_logs` sin una
+migración de esquema (añadir `company_id` nullable a ambas tablas) **y**
+actualizar todos los puntos de escritura de ambas tablas para poblarlo hacia
+adelante (los escaneos de agentes sin tenant claro y los intentos de login de
+emails no registrados seguirían sin poder atribuirse a una empresa de forma
+retroactiva). Esto excede el alcance de "arreglar `zeus_agents.py`" de este
+fix y afecta a la capa REST real compartida (`/thalos/v1/execute
+action=detect_suspicious_activity`, `/thalos/v1/monitor`), no solo al stub
+legacy.
+
+**Reclasificación de severidad, tal como pidió el revisor**: esto no es una
+"limitación de alcance" del motor — es una **vulnerabilidad real de fuga de
+datos entre tenants**, alcanzable hoy desde un endpoint autenticado real sin
+ningún requisito de rol de administrador
+(`get_current_active_user` es la única dependencia, igual en `zeus_core.py`
+y en `thalos_v1.py`). Se reprodujo en vivo con datos propios: el tenant B
+recién creado (`company_id=182`, sin ninguna actividad ni intento de login
+propio) llamó a `THALOS.SCAN` (`hours=999999`) y recibió
+`vulnerabilities_found: 16`, `activities_scanned: 238`, y
+`failed_login_candidates` con 7 emails `brute_XXXXXX@evil.test` — datos de
+actividad y de seguridad de otras empresas/sesiones de prueba en la misma
+BD, sin relación alguna con el tenant que hizo la llamada. Se mantiene la
+clasificación **MEDIO** que pidió el encargo, pero documentada explícitamente
+como vulnerabilidad de seguridad real (regla no negociable 4 de la skill
+`zeus-produccion`: aislamiento multi-tenant estricto, tratado como
+vulnerabilidad, no como bug menor) — no como limitación de alcance del motor.
+
+**Por qué no se resuelve en esta vuelta**: requiere una decisión de producto
+sobre alcance (migración de esquema + backfill imposible de forma retroactiva
+para intentos de login de emails no registrados) que excede una corrección
+puntual de un endpoint. Como mitigación *interina* de bajo costo (no
+implementada aquí, solo propuesta para decisión), cabría restringir
+`THALOS.SCAN`/`detect_suspicious_activity` a usuarios con rol de
+administrador de empresa o superusuario mientras no exista `company_id` real
+en `agent_activities`/`thalos_login_attempts` — el propio revisor lo sugirió
+en su veredicto de la ronda 1.
+
+### 7.4 Resumen de archivos tocados en esta vuelta
+
+- `backend/app/core/zeus_agents.py`: se conserva sin cambios adicionales el
+  kill-switch dejado a medio commitear (revisado y validado).
+- `backend/services/thalos_executor.py`: `block_user` ahora valida
+  aislamiento multi-tenant del usuario objetivo antes de cualquier otra
+  comprobación.
+- `backend/app/api/v1/endpoints/thalos_v1.py`: `thalos_v1_execute` traduce
+  `status == "forbidden"` en `HTTPException(403)`.
+- `backend/tests/test_zeus_agents_thalos_real_v1.py`: test de flags
+  corregido + 3 tests nuevos (kill-switch con `AUTO_BLOCK=True`, camino feliz
+  con kill-switch abierto, rechazo cross-tenant).
+- `backend/tests/test_thalos_v1_execute_block_tenant.py` (nuevo): 2 tests
+  del 403 en la vía REST oficial.
+
+### 7.5 Regresión
+
+Suite completa tras todos los cambios de esta vuelta:
+`7 failed, 225 passed, 2 skipped, 35 warnings, 3 errors in 228.41s` — mismos
+7 nombres de test fallando y mismos 3 errores que el baseline de la Vuelta 1
+(`7 failed, 220 passed, 2 skipped, 3 errors`); +5 tests nuevos, todos en
+verde. Sin regresión.
+
+### 7.6 Pendiente para el usuario o el auditor (además de lo ya listado en la sección 5)
+
+1. Decidir si se corrige también `body.company_id` en
+   `ThalosExecuteRequest`/`thalos_v1_execute` (hallazgo ALTO nuevo, 7.2) —
+   afecta a las 4 acciones del endpoint, no solo a `block_user`.
+2. Decidir si se acomete la migración de esquema
+   (`company_id` en `AgentActivity`/`ThalosLoginAttempt`) para cerrar de
+   raíz la fuga de `THALOS.SCAN`, o se aplica la mitigación interina de
+   restringir el endpoint a administradores mientras tanto (7.3).
+3. Esta vuelta no es autoaprobación: corresponde a `revisor-independiente`
+   confirmarla con su propia verificación en vivo.

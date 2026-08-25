@@ -133,7 +133,14 @@ def test_block_never_returns_fake_fixed_ips(db: Session):
 
 
 def test_block_with_email_respects_real_execution_flags(db: Session):
-    """Con flags reales desactivados (default), BLOCK no debe fingir éxito."""
+    """Con flags reales desactivados (default), BLOCK no debe fingir éxito.
+
+    Con THALOS_EXECUTION_ENABLED=False (default en este entorno), el
+    kill-switch corta ANTES de llegar a thalos_executor.block_user (ver
+    test_block_respects_execution_kill_switch_even_if_auto_block_true para
+    la aserción explícita de por qué), así que aquí solo se confirma el
+    contrato de alto nivel: nunca se ejecuta un bloqueo real con los flags
+    por defecto."""
     from app.core.config import settings
 
     assert settings.THALOS_EXECUTION_ENABLED is False
@@ -146,4 +153,102 @@ def test_block_with_email_respects_real_execution_flags(db: Session):
         company_id=company.id,
     )
     assert result["data"]["executed"] is False
+    assert result["status"] == "blocked"
+    db.refresh(user)
+    assert user.is_active is True
+
+
+def test_block_respects_execution_kill_switch_even_if_auto_block_true(db: Session, monkeypatch):
+    """Regresión directa del hallazgo CRÍTICO de la revisión (ronda 1):
+    ThalosAgent._block llamaba directamente a
+    services/thalos_executor.py::block_user, saltándose por completo el
+    kill-switch real THALOS_EXECUTION_ENABLED que sí respeta la vía REST
+    oficial (app/api/v1/endpoints/thalos_v1.py:104). Antes de este fix, si un
+    administrador activaba THALOS_AUTO_BLOCK=true sin activar
+    THALOS_EXECUTION_ENABLED, este stub desactivaba cuentas reales de todas
+    formas (services/thalos_executor.py::block_user solo comprueba
+    THALOS_AUTO_BLOCK, no THALOS_EXECUTION_ENABLED). Este test fija
+    explícitamente que, con THALOS_EXECUTION_ENABLED=False, el bloqueo NO se
+    ejecuta ni se intenta de verdad, sin importar el valor de
+    THALOS_AUTO_BLOCK."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "THALOS_EXECUTION_ENABLED", False)
+    # A propósito en true: si el código solo comprobara THALOS_AUTO_BLOCK (el
+    # bug original), el bloqueo se ejecutaría de verdad y este test fallaría.
+    monkeypatch.setattr(settings, "THALOS_AUTO_BLOCK", True)
+
+    user, company = _seed_company(db)
+    result = zeus_manager.execute_zeus_command(
+        "THALOS.BLOCK",
+        {"user_email": user.email},
+        db=db,
+        company_id=company.id,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["data"]["executed"] is False
+    assert result["data"]["reason"] == "THALOS_EXECUTION_ENABLED is false"
+    # No debe haber delegado en absoluto en thalos_executor.block_user: no
+    # hay "source" en el payload porque el kill-switch corta antes de esa
+    # llamada.
+    assert "source" not in result["data"]
+
+    db.refresh(user)
+    assert user.is_active is True
+
+
+def test_block_proceeds_to_real_executor_when_kill_switch_enabled(db: Session, monkeypatch):
+    """Con THALOS_EXECUTION_ENABLED=True (kill-switch abierto) y
+    THALOS_AUTO_BLOCK=False, el flujo normal debe seguir funcionando: debe
+    llegar a delegar en services.thalos_executor.block_user (que a su vez
+    hace dry_run por THALOS_AUTO_BLOCK=False) -- el kill-switch nuevo no debe
+    romper ni bloquear el camino feliz cuando está habilitado."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "THALOS_EXECUTION_ENABLED", True)
+    monkeypatch.setattr(settings, "THALOS_AUTO_BLOCK", False)
+
+    user, company = _seed_company(db)
+    result = zeus_manager.execute_zeus_command(
+        "THALOS.BLOCK",
+        {"user_email": user.email},
+        db=db,
+        company_id=company.id,
+    )
+
+    assert result["data"]["executed"] is False
     assert result["data"]["source"] == "thalos_executor.block_user"
+    assert result["data"]["reason"] == "THALOS_AUTO_BLOCK is false"
+
+    db.refresh(user)
+    assert user.is_active is True
+
+
+def test_block_rejects_cross_tenant_target_user(db: Session, monkeypatch):
+    """Regresión directa del hallazgo ALTO de la revisión (ronda 1): un
+    tenant no debe poder pedir el bloqueo de un usuario de OTRO tenant. Se
+    activan ambos flags reales para probar el caso más peligroso (el que el
+    revisor solo pudo evitar gracias a que, por defecto, THALOS_AUTO_BLOCK
+    estaba en false) y se confirma que sigue rechazado incluso así."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "THALOS_EXECUTION_ENABLED", True)
+    monkeypatch.setattr(settings, "THALOS_AUTO_BLOCK", True)
+
+    _, company_a = _seed_company(db)
+    victim, company_b = _seed_company(db)
+
+    result = zeus_manager.execute_zeus_command(
+        "THALOS.BLOCK",
+        {"user_email": victim.email},
+        db=db,
+        company_id=company_a.id,
+    )
+
+    assert result["status"] == "forbidden"
+    assert result["data"]["executed"] is False
+    assert result["data"]["reason"] == "target_user_not_in_requester_company"
+
+    db.refresh(victim)
+    assert victim.is_active is True

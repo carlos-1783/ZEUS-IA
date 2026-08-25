@@ -576,6 +576,40 @@ class ThalosAgent(ZeusAgent):
                 "data": {"executed": False},
             }
 
+        # Kill-switch real del sistema: la vía REST oficial
+        # (app/api/v1/endpoints/thalos_v1.py:104) exige
+        # settings.THALOS_EXECUTION_ENABLED antes de ejecutar cualquier acción
+        # real de THALOS. THALOS_AUTO_BLOCK (comprobado dentro de
+        # services/thalos_executor.py::block_user) es un flag DISTINTO e
+        # independiente que solo decide si el bloqueo concreto se ejecuta o
+        # queda en dry_run — no sustituye al kill-switch general. Sin este
+        # chequeo, este stub legacy podía desactivar cuentas reales aunque el
+        # administrador tuviera deshabilitada la ejecución real del sistema
+        # (ver AUDIT_FIX_THALOS_SHIELD.md, sección 6, hallazgo crítico).
+        from app.core.config import settings as _settings
+
+        if not _settings.THALOS_EXECUTION_ENABLED:
+            logger.warning(
+                "THALOS.BLOCK bloqueado por kill-switch THALOS_EXECUTION_ENABLED=false "
+                "(user_email=%s, company_id=%s)",
+                user_email,
+                self.company_id,
+            )
+            return {
+                "status": "blocked",
+                "message": "THALOS.BLOCK deshabilitado: THALOS_EXECUTION_ENABLED=false (kill-switch real del sistema)",
+                "agent": "THALOS",
+                "timestamp": datetime.utcnow().isoformat(),
+                "animation": "ip_blocking",
+                "voice": "Bloqueo no ejecutado: la ejecución real de THALOS está deshabilitada.",
+                "data": {
+                    "executed": False,
+                    "user_email": user_email,
+                    "reason": "THALOS_EXECUTION_ENABLED is false",
+                    "company_id_scope": self.company_id,
+                },
+            }
+
         try:
             from services.thalos_executor import block_user
             result = block_user(

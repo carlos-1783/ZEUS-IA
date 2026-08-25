@@ -138,6 +138,19 @@ def thalos_v1_execute(
         payload=body.payload,
     )
     db.commit()
+
+    # Aislamiento multi-tenant: services.thalos_executor.block_user devuelve
+    # status="forbidden" (ya registrado en el log de seguridad, commiteado
+    # arriba) cuando el user_email objetivo no pertenece al tenant del
+    # solicitante. Aquí, en la vía REST oficial, eso se traduce en un 403
+    # real (mismo estilo que services/tpv_service.py:1068), en vez de un 200
+    # con el rechazo solo embebido en el cuerpo.
+    if result.get("status") == "forbidden":
+        raise HTTPException(
+            status_code=403,
+            detail=result.get("reason") or "El usuario objetivo no pertenece a su empresa.",
+        )
+
     origin = "backend"
     real = bool(result.get("executed"))
     return wrap_response(result, module, data_origin=origin, real_execution=real)

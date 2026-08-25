@@ -66,6 +66,45 @@ def block_user(
     company_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     email = (user_email or "").strip().lower()
+
+    # Aislamiento multi-tenant: si se conoce el company_id del solicitante
+    # (siempre lo conocen las dos vías reales que llaman a esta función:
+    # thalos_v1.py::thalos_v1_execute y ThalosAgent._block, ambas resuelven
+    # el tenant del usuario autenticado antes de invocar el bloqueo), el
+    # usuario objetivo (`user_email`) debe pertenecer a una empresa de ese
+    # company_id. Sin este chequeo, cualquier tenant autenticado podía pedir
+    # el bloqueo de la cuenta de OTRO tenant con solo conocer su email (ver
+    # AUDIT_FIX_THALOS_SHIELD.md, sección 6, hallazgo ALTO #2). Se comprueba
+    # antes de revelar nada sobre el usuario objetivo (protegido, existencia,
+    # superusuario) para no habilitar enumeración cross-tenant. Si no se
+    # conoce company_id (llamadas internas/tests de bajo nivel sin contexto
+    # de tenant), se preserva el comportamiento previo: no se puede validar
+    # lo que no se conoce.
+    if company_id is not None:
+        from app.models.company import UserCompany
+
+        target_belongs = (
+            db.query(UserCompany)
+            .join(User, User.id == UserCompany.user_id)
+            .filter(func.lower(User.email) == email, UserCompany.company_id == company_id)
+            .first()
+        )
+        if not target_belongs:
+            result = {
+                "status": "forbidden",
+                "action": "block_user",
+                "email": email,
+                "executed": False,
+                "reason": "target_user_not_in_requester_company",
+            }
+            _log_action(db, action="block_user", status="forbidden", details=result, company_id=company_id)
+            logger.warning(
+                "THALOS.BLOCK rechazado por aislamiento multi-tenant: email=%s no pertenece a company_id=%s",
+                email,
+                company_id,
+            )
+            return result
+
     if email in thalos_security_engine.PROTECTED_EMAILS:
         result = {
             "status": "blocked_by_safeguard",

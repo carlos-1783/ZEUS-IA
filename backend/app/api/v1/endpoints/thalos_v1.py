@@ -63,6 +63,28 @@ def thalos_v1_monitor(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
+    # Mitigación interina (AUDIT_FIX_THALOS_SHIELD.md, sección 10.2/10.3): con
+    # la configuración por defecto (THALOS_REAL_MONITORING/THALOS_EXECUTION_ENABLED/
+    # THALOS_REAL_LOGS_ENABLED=false) `run_monitor_cycle` no llega a invocar
+    # `scan_logs` (security_scan queda `{}`), así que hoy esta ruta no es
+    # explotable sin cambiar flags de entorno — a diferencia de
+    # workspaces.py::workspace_thalos_logs y GET /thalos/v1/audit, que sí lo
+    # son sin ninguna condición. Aun así, en cuanto se active la
+    # monitorización real (el objetivo final del sistema) esta ruta hereda
+    # exactamente la misma fuga cross-tenant de `scan_logs`, así que se aplica
+    # el mismo gate por consistencia y para no dejar una fuga latente sin
+    # cerrar de antemano.
+    if not getattr(current_user, "is_superuser", False):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "POST /thalos/v1/monitor requiere privilegios de superusuario "
+                "(mitigación interina: el motor subyacente audita actividad "
+                "global sin filtrar por empresa en cuanto se activa la "
+                "monitorización real)."
+            ),
+        )
+
     log_execution_attempt(
         module="auditoria_real",
         action="security_monitor",
@@ -279,7 +301,24 @@ def thalos_v1_audit(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    _ = current_user
+    # Mitigación interina (AUDIT_FIX_THALOS_SHIELD.md, sección 10.2/10.3):
+    # audit_from_db() cuenta/lista ThalosEvent/ThalosAlert/ThalosSecurityEvent
+    # de forma GLOBAL, sin ningún filtro por company_id (esas tablas no lo
+    # tienen) — confirmado en vivo que un tenant nuevo sin actividad propia
+    # obtiene event_count/security_event_count y eventos recientes de otras
+    # empresas con solo autenticarse, sin flags ni condición alguna. Mismo
+    # gate ya aplicado a THALOS.SCAN/detect_suspicious_activity y a
+    # workspaces.py::workspace_thalos_logs.
+    if not getattr(current_user, "is_superuser", False):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "GET /thalos/v1/audit requiere privilegios de superusuario "
+                "(mitigación interina: el motor subyacente audita actividad "
+                "global sin filtrar por empresa hasta que se migre el esquema)."
+            ),
+        )
+
     from workers.thalos_worker import worker_status
 
     report = audit_from_db(db)

@@ -1380,3 +1380,215 @@ Para la Vuelta 4, como minimo:
 
 Repo verificado limpio tras esta revision (git status sin cambios salvo esta
 misma seccion anadida), main no tocado, sin push.
+
+---
+
+## 11. Vuelta 4 — cierre de la fuga en `workspaces/log-monitor`
+
+Ejecutado en el mismo worktree/rama (`feature/fix-thalos-shield-real`), con
+datos propios nuevos (`v4_normal_*@example.com`/`company_id=479`,
+`v4_admin_*@example.com`/`company_id=480`, creados vía
+`POST /api/v1/auth/register` real; ninguno reutilizado de rondas anteriores;
+borrados de la BD de desarrollo al terminar). Baseline verificado antes de
+tocar nada: `7 failed, 233 passed, 2 skipped, 3 errors` (idéntico al de la
+Vuelta 3 / ronda 3 de revisión).
+
+### 11.1 Alto/Crítico — gate de superusuario en `workspaces.py::workspace_thalos_logs`
+
+**Cambio**: `backend/app/api/v1/endpoints/workspaces.py`, endpoint
+`POST /api/v1/workspaces/thalos/log-monitor` (`workspace_thalos_logs`,
+líneas ~664-745 tras el cambio). Se añade, como primera instrucción de la
+función (antes de `log_execution_attempt` y de cualquier llamada a
+`scan_logs`), el mismo gate de superusuario ya validado en la Vuelta 3 para
+`THALOS.SCAN`/`detect_suspicious_activity`:
+
+```python
+if not getattr(current_user, "is_superuser", False):
+    raise HTTPException(status_code=403, detail=(...))
+```
+
+No se modificó nada de la lógica existente por debajo (ni
+`monitor_security_logs`, ni el `try/except Exception: pass` que envuelve la
+llamada a `scan_logs`/`write_workspace_item`, que queda fuera del alcance de
+esta vuelta) — el gate es estrictamente aditivo y se ejecuta antes de
+cualquier otra cosa.
+
+**Sobre el `except Exception: pass` preexistente (línea ~721 tras el
+cambio)**: se revisó con ojo crítico porque el encargo pedía explícitamente
+verificar que el 403 nuevo no quedara envuelto en un 500, como ya tuvo que
+corregirse en la Vuelta 3 para `zeus_core.py`. En este caso el `raise
+HTTPException(403, ...)` se ejecuta **antes** de entrar en el bloque `try`
+que contiene ese `except Exception: pass` (que solo envuelve la llamada a
+`scan_logs`/`write_workspace_item`, no la función completa), y no existe
+ningún manejador de excepciones global en `app/main.py` que intercepte
+`HTTPException` (confirmado por lectura: no hay `add_exception_handler` ni
+`@app.exception_handler` en el proyecto). Por tanto el 403 llega intacto al
+cliente — confirmado también en vivo (11.3).
+
+### 11.2 Por consistencia — mismo gate aplicado a `GET /thalos/v1/audit` y `POST /thalos/v1/monitor`
+
+Investigación pedida explícitamente por el encargo sobre los otros dos
+pendientes señalados en la ronda 3 (sección 10.3):
+
+- **`GET /thalos/v1/audit`** (`app/api/v1/endpoints/thalos_v1.py::thalos_v1_audit`,
+  delega en `services/thalos_monitor_service.py::audit_from_db`): **NO
+  estaba cubierto por ningún trabajo previo de esta rama** y es, igual que
+  `workspaces.py::workspace_thalos_logs`, explotable **hoy, sin ninguna
+  condición** — `audit_from_db` cuenta y lista `ThalosEvent`/`ThalosAlert`/
+  `ThalosSecurityEvent` sin ningún filtro por `company_id` (esas tablas no
+  lo tienen), y no hay ningún flag `THALOS_*` que lo module. Se aplicó el
+  mismo gate de superusuario. Confirmado en vivo (11.3): un tenant nuevo sin
+  actividad propia obtenía `event_count`, `security_event_count` y eventos
+  recientes de otras empresas con solo autenticarse.
+- **`POST /thalos/v1/monitor`** (`thalos_v1.py::thalos_v1_monitor`, delega en
+  `services/thalos_monitoring_service.py::run_monitoring_cycle` →
+  `services/thalos_monitor_service.py::run_monitor_cycle`): el bypass de
+  `body.company_id` para este endpoint **ya estaba cerrado por la Vuelta 3**
+  (sección 9.1, líneas 72-80 antes de este cambio) — no se duplicó ese gate.
+  Sin embargo, la mitigación de superusuario para el `scan_logs`
+  subyacente **no** se había aplicado aquí. Investigado con precisión antes
+  de decidir: `run_monitor_cycle` (línea 104 de
+  `thalos_monitor_service.py`) solo invoca `scan_logs` si
+  `THALOS_REAL_MONITORING or THALOS_EXECUTION_ENABLED or
+  THALOS_REAL_LOGS_ENABLED` es verdadero — los tres son `False` por defecto
+  en este entorno, así que **hoy, con la configuración por defecto, esta
+  ruta NO es explotable** (`security_scan` queda `{}`, confirmado en vivo en
+  11.3 antes del fix). Es distinto del `force_scan=True` que
+  `thalos_v1_monitor` pasa a la capa intermedia
+  (`thalos_monitoring_service.run_monitoring_cycle`), que es un chequeo
+  *distinto* y no gatilla el escaneo real por sí solo. Aun así, se aplicó el
+  mismo gate de superusuario **por consistencia y para no dejar una fuga
+  latente sin cerrar de antemano**: en cuanto se active la monitorización
+  real (el objetivo final del sistema), esta ruta heredaría exactamente la
+  misma fuga cross-tenant de `scan_logs` que las otras dos. Se documenta
+  explícitamente que esta ruta concreta no es la que motivó la devolución de
+  la ronda 3 (no era "explotable hoy sin condiciones"), a diferencia de
+  `workspaces.py:664` y `GET /thalos/v1/audit`.
+
+No se tocó nada de la lógica de resolución/validación de `company_id` ya
+cerrada en la Vuelta 3 para `thalos_v1.py` (9.1/9.2) — los tres gates nuevos
+de esta vuelta son puramente aditivos, colocados como primera instrucción de
+cada función.
+
+### 11.3 Verificación en vivo (reproducción exacta del exploit, antes y después del fix)
+
+Servidor uvicorn propio, puerto 8241; 2 tenants nuevos vía registro real
+(`v4_normal_1787665167@example.com`/`company_id=479`,
+`v4_admin_1787665167@example.com`/`company_id=480`).
+
+**Antes del fix** (código revertido temporalmente con `git stash` sobre los
+2 archivos tocados, servidor reiniciado, mismos 2 tenants/tokens
+reutilizados para la comparación antes/después):
+
+1. `POST /api/v1/workspaces/thalos/log-monitor` con JWT de `v4_normal`
+   (tenant sin actividad propia), body `{"logs":[]}` → `200`,
+   `success: true`. `GET /api/v1/thalos/v1/workspace/items` con el mismo JWT
+   mostró el item persistido con `real_scan.activities_scanned: 500` y
+   `real_scan.failed_login_candidates` con 22 emails `brute_*@evil.test` de
+   otras empresas/sesiones de prueba — **exploit reproducido exactamente
+   como lo describió el revisor**, sin flags, sin superusuario, sin
+   monkeypatch.
+2. `GET /api/v1/thalos/v1/audit` con el mismo JWT → `200`,
+   `event_count: 341`, `security_event_count: 154`, eventos recientes
+   `security_pattern` de otras empresas — **también confirmado explotable
+   hoy sin condición alguna**.
+3. `POST /api/v1/thalos/v1/monitor` con el mismo JWT, body `{}` → `200`,
+   pero `security_scan: {}` (flags por defecto en `false`) — **confirmado
+   NO explotable hoy con la configuración por defecto**, tal como predijo la
+   investigación de 11.2.
+
+**Después del fix** (`git stash pop`, servidor reiniciado, mismos 2
+tenants/tokens):
+
+1. `POST /api/v1/workspaces/thalos/log-monitor` con JWT de `v4_normal` →
+   `403 {"detail":"El monitor de logs THALOS con escaneo real requiere
+   privilegios de superusuario..."}`. **El exploit ya no funciona.**
+2. `GET /api/v1/thalos/v1/audit` con el mismo JWT → `403` con el mensaje de
+   mitigación.
+3. `POST /api/v1/thalos/v1/monitor` con el mismo JWT → `403` con el mensaje
+   de mitigación (aplicado por consistencia, ver 11.2).
+4. Caso de error esperado: sin header `Authorization` →
+   `401 {"detail":"No se pudieron validar las credenciales"}` en
+   `log-monitor` — falla controladamente, no `500` opaco, no falso éxito.
+5. **Control positivo (camino feliz no roto)**: se promovió a `v4_admin` a
+   superusuario en BD (`is_superuser=True`) y se repitieron las 3 llamadas
+   con su JWT → las 3 devolvieron `200` con datos reales (`log-monitor`:
+   `success: true`, item persistido con `real_scan` real; `audit`:
+   `event_count`/`security_event_count` reales; `monitor`: ciclo real
+   ejecutado). El superusuario sigue pudiendo usar las 3 rutas — la
+   mitigación es un gate de rol, no una prohibición total.
+6. Limpieza: usuarios 684/685, `user_companies`, `thalos_workspace_items` y
+   companies 479/480 borrados de la BD de desarrollo local
+   (`sqlite:///./zeus.db`, no versionada) al terminar.
+
+### 11.4 Tests de regresión nuevos
+
+`backend/tests/test_workspaces_thalos_log_monitor_superuser_gate_v1.py`
+(nuevo, 6 tests, llamando directamente a las funciones de los 3 endpoints,
+sin mocks de la lógica de negocio):
+
+- `test_workspace_log_monitor_rejects_normal_user_and_never_leaks`:
+  reproduce el escenario exacto del revisor (tenant nuevo sin actividad
+  propia, 6 `ThalosLoginAttempt` fallidos de un email de "otra empresa"
+  sembrados en la tabla global) y confirma `403` **y** que no se persiste
+  ningún `ThalosWorkspaceItem` para el atacante (el rechazo ocurre antes de
+  invocar `scan_logs`, no solo se oculta la respuesta).
+- `test_workspace_log_monitor_allows_superuser_with_real_scan`: control
+  positivo — superusuario obtiene `200` y el `ThalosWorkspaceItem`
+  persistido contiene el email de "otra empresa" en
+  `real_scan.failed_login_candidates` (confirma que la mitigación es un
+  gate de rol, no una desactivación del escaneo real).
+- `test_thalos_v1_audit_rejects_normal_user` /
+  `test_thalos_v1_audit_allows_superuser`.
+- `test_thalos_v1_monitor_rejects_normal_user` /
+  `test_thalos_v1_monitor_allows_superuser`.
+
+### 11.5 Regresión
+
+Suite completa tras el cambio:
+`7 failed, 239 passed, 2 skipped, 35 warnings, 3 errors in 164.70s` — mismos
+7 nombres de test fallando y mismos 3 errores que el baseline de la Vuelta 3
+(`7 failed, 233 passed, 2 skipped, 3 errors`); **+6 tests nuevos, todos en
+verde. Sin regresión.**
+
+### 11.6 Resumen de archivos tocados en esta vuelta
+
+- `backend/app/api/v1/endpoints/workspaces.py`: gate de superusuario en
+  `workspace_thalos_logs` (`POST /thalos/log-monitor`).
+- `backend/app/api/v1/endpoints/thalos_v1.py`: gate de superusuario en
+  `thalos_v1_audit` (`GET /audit`) y `thalos_v1_monitor` (`POST /monitor`).
+- `backend/tests/test_workspaces_thalos_log_monitor_superuser_gate_v1.py`
+  (nuevo): 6 tests.
+- No se tocó ninguna migración Alembic (no aplica: no se añadieron/
+  modificaron columnas ni tablas — la mitigación es interina, tal como en la
+  Vuelta 3).
+
+### 11.7 Qué sigue pendiente (para decisión del usuario o del auditor)
+
+Todos los pendientes ya declarados en 9.8/10.3 siguen abiertos y no se
+tocaron en esta vuelta (fuera de alcance explícito del encargo):
+
+1. La migración de esquema de raíz (`company_id` en
+   `AgentActivity`/`ThalosLoginAttempt`) sigue sin implementarse — las
+   mitigaciones de gate de superusuario (Vuelta 3 y esta vuelta) son
+   interinas.
+2. El resto de los hallazgos ya declarados como pendientes en 7.6/9.8
+   (`body.company_id` en otras posibles rutas nuevas que pudieran surgir,
+   decisión de producto sobre `can_run_active_execution`/`block_user`
+   clasificado `REAL_SAFE`) no se revisaron de nuevo en esta vuelta — no
+   estaban en el alcance del encargo.
+3. Hallazgo nuevo, menor, encontrado durante la investigación de 11.1 pero
+   **no corregido** por exceder el alcance estrecho de esta vuelta: el
+   `except Exception: pass` en `workspace_thalos_logs`
+   (`workspaces.py`, línea ~721) silencia cualquier error real de
+   `scan_logs`/`write_workspace_item` (no solo la ausencia de tenant),
+   dejando `real_written=False` sin registrar el motivo. No es una vía de
+   fuga cross-tenant (no afecta al gate nuevo, que se ejecuta antes de este
+   bloque) ni fue parte del hallazgo que motivó esta vuelta, pero es un
+   `try/except` silencioso que la skill `zeus-produccion` señala como
+   antipatrón de manejo de errores. Se deja anotado para que el usuario o el
+   auditor decidan si se aborda en un step aparte.
+4. Esta vuelta no es autoaprobación: corresponde a `revisor-independiente`
+   confirmarla con su propia verificación en vivo, incluyendo un nuevo
+   intento de reproducir el exploit de `workspaces.py:664` contra el código
+   corregido.

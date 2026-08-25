@@ -667,6 +667,29 @@ async def workspace_thalos_logs(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
+    # Mitigación interina (AUDIT_FIX_THALOS_SHIELD.md, sección 10.2/10.3):
+    # este endpoint invoca thalos_security_engine.scan_logs de forma
+    # incondicional (sin ningún flag THALOS_* que lo module) y persiste el
+    # resultado como ThalosWorkspaceItem del propio tenant llamante. Como
+    # `agent_activities`/`thalos_login_attempts` no tienen `company_id`,
+    # scan_logs audita actividad GLOBAL de todas las empresas — fuga
+    # cross-tenant confirmada en vivo por el revisor (activities_scanned,
+    # failed_login_candidates y pattern_alerts de OTRAS empresas, sin
+    # superusuario, sin flags, sin monkeypatch). Se aplica el mismo gate ya
+    # validado en la Vuelta 3 para THALOS.SCAN/detect_suspicious_activity
+    # (zeus_core.py y thalos_v1.py) mientras no exista `company_id` real en
+    # esas tablas.
+    if not getattr(current_user, "is_superuser", False):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "El monitor de logs THALOS con escaneo real requiere privilegios "
+                "de superusuario (mitigación interina: el motor subyacente audita "
+                "actividad global sin filtrar por empresa hasta que se migre el "
+                "esquema)."
+            ),
+        )
+
     log_execution_attempt(
         module="log_monitor",
         action="analyze_text",

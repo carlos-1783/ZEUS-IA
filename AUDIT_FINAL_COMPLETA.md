@@ -846,3 +846,263 @@ todas las rondas anteriores).
   independiente el fix de `update-advisor-emails`/`toggle-authorization` y la
   retractación del punto de Enter, antes de dar la auditoría por cerrada. No la declaro
   cerrada yo mismo.
+
+---
+
+## 7.5 Revision independiente de la Vuelta 2 (revisor-independiente)
+
+Fecha: 2026-08-25. Rama feature/rediseno-completo (worktree agent-a8873985b2803de19), HEAD
+al empezar ca2e7fe (commit del fix de la Vuelta 2). Sin merge ni push a main en ningun
+momento de esta sesion.
+
+Principio aplicado: no me fio de lo escrito por el ejecutor en la seccion 7. Cada afirmacion
+fue reproducida por mi, con mis propios comandos, contra el sistema real, con cuentas 100%
+nuevas (indep.rest1@example.com, indep.office1@example.com, indep.enter.test@example.com),
+ninguna reutilizada de audit.*, rev*. ni ejec2.* de rondas anteriores.
+
+### 7.5.0 Entorno de verificacion propio
+
+- git status/git log -1 confirmados al empezar: rama correcta, HEAD ca2e7fe.
+- Backend propio, aislado, en el puerto 8040 (libre, distinto de 8000/8010/8020/8030-8031
+  usados por el ejecutor y otro agente), mismo zeus.db de este worktree, venv compartido
+  C:\Users\Acer\ZEUS-IA\backend\venv.
+- Frontend propio, aislado, en el puerto 5195 (libre), servido con
+  node_modules/.bin/vite --port 5195 --strictPort directamente en este worktree, sin
+  reinstalar dependencias.
+- 2 cuentas propias nuevas via POST /auth/register real: indep.rest1@example.com
+  (business_type=restaurant, user_id=500, company_id=305) e
+  indep.office1@example.com (business_type=services, user_id=501, company_id=306).
+  Una tercera cuenta, indep.enter.test@example.com, usada solo para el punto 2 (no
+  necesita persistir en BD para esa prueba).
+- Al terminar, mate los procesos propios de los puertos 8040 y 5195 y confirme git status
+  limpio de nuevo (solo .claude/ sin trackear, git diff --stat vacio) - cero diffs
+  colgados de CSP ni de ningun otro archivo, igual que en todas las rondas anteriores.
+
+### 7.5.1 Punto 1 - fix de update-advisor-emails/toggle-authorization: verificado, correcto y completo
+
+Codigo leido directamente, no el diff:
+
+- backend/app/api/v1/endpoints/document_approval.py completo (478 lineas). Confirmado
+  linea por linea: update_advisor_emails (219-267) y toggle_document_authorization
+  (270-299) tienen ambas, antes de mutar current_user, la linea
+  current_user = db.query(User).filter(User.id == current_user.id).first() or current_user
+  (236 y 282 respectivamente), con comentario explicando la causa. El resto del archivo
+  (approve_document, get_pending_documents, get_approval_history, export_fiscal_document,
+  get_fiscal_document_trace) no muta atributos de current_user, por lo que no necesitaba
+  el mismo parche - confirmado que el fix no se aplico de mas ni de menos.
+- Causa raiz confirmada como tecnicamente correcta, no una racionalizacion post-hoc:
+  - backend/app/api/v1/endpoints/document_approval.py:15 - from app.db.session import get_db.
+  - backend/app/core/auth.py:13 - from app.db.base import get_db (import distinto), y
+    get_current_user (linea 233-235) usa ese get_db para su propio
+    db: Session = Depends(get_db).
+  - backend/app/db/base.py:885-888 - get_db() "de compatibilidad" que hace
+    yield from get_db_with_retry() reexportando app.db.session.get_db - pero como
+    objeto/funcion es un callable distinto.
+  - backend/app/db/session.py:11-32 - el get_db() real crea SessionLocal(), hace
+    yield db y en el finally hace db.close() sin commit() explicito antes. Esto
+    es coherente con SQLAlchemy estandar: al cerrar una sesion con una transaccion
+    pendiente sin commit, el rollback es implicito - confirma tecnicamente la segunda
+    mitad de la explicacion del ejecutor (perdida silenciosa de datos como fallo
+    alternativo al 500, no solo el 500 en si).
+  - Confirmado que FastAPI cachea las dependencias Depends() por identidad del callable
+    (comportamiento documentado de FastAPI, no una suposicion): dos funciones get_db
+    distintas como objetos, aunque una delegue en la otra, producen dos instancias de
+    Session distintas para la misma peticion HTTP. La explicacion del ejecutor es
+    correcta, no una racionalizacion incorrecta.
+  - backend/app/api/v1/endpoints/auth.py:812-813 - confirmado el patron ya existente:
+    current_user = db.query(User).filter(User.id == user_id).first() con el comentario
+    "Re-cargar el usuario desde esta sesion para evitar Object already attached to
+    session N", dentro de _onboarding_profile_impl (linea 801). El fix aplicado en
+    document_approval.py reutiliza exactamente este patron ya probado en el mismo
+    codebase - coherente, no una solucion inventada de cero.
+  - backend/app/api/v1/endpoints/auth.py:22 - confirmado que este archivo importa
+    get_db de app.db.session (igual que document_approval.py), consistente con el
+    diagnostico.
+
+Alcance del riesgo - grep exhaustivo propio, no solo el del ejecutor:
+
+- grep -rln "current_user\.\w+\s*=" backend/app/api/v1/endpoints/ | xargs grep -l "db.commit()"
+  devuelve solo auth.py y document_approval.py. Ampliado a grep -rln "db.refresh(current_user)" .
+  sobre todo backend/ (no solo endpoints/) devuelve los mismos 2 archivos, ningun otro.
+- Confirmado que current_user es, en la practica totalidad de los ~63 archivos que usan
+  get_current_active_user/get_current_user, el unico nombre de variable usado para el
+  resultado de esa dependencia (grep de la firma \w+: User = Depends(get_current sobre
+  todos los endpoints devuelve solo current_user), por lo que el grep de mutacion no deja
+  huecos por alias de variable distintos.
+- Solo 3 archivos en todo el backend importan get_db desde app.db.base (la fuente de
+  sesion distinta): app/core/auth.py, app/api/v1/endpoints/commands.py,
+  app/api/v1/endpoints/zeus_core.py - coincide exactamente con lo que reporto el ejecutor.
+  Ninguno de esos otros 2 archivos de endpoints mezcla ademas mutacion de current_user.
+- Revisado tambien user_account.py (candidato plausible por su nombre, "cuenta de
+  usuario") - no muta current_user, solo lee sus atributos y opera sobre otras filas
+  (UserSettings), por lo que no esta expuesto a este bug.
+
+Reproducido en vivo, de extremo a extremo, con cuentas 100% nuevas:
+
+- POST /documents/update-advisor-emails?email_gestor_fiscal=indep.gestor1@example.com
+  con el token de indep.rest1 -> 200 {"success":true,"email_gestor_fiscal":"indep.gestor1@example.com",...}.
+- POST /documents/toggle-authorization?autoriza=true con el mismo token -> 200
+  {"success":true,"autoriza_envio_documentos_a_asesores":true}.
+- POST /documents/update-advisor-emails?email_gestor_fiscal=indep.gestor2@example.com
+  con el token de indep.office1 (segundo tenant, independiente) -> 200 con su propio
+  valor.
+- Persistencia confirmada por llamada independiente, no por el eco de la respuesta:
+  GET /auth/onboarding/status con cada token devuelve exactamente el valor guardado por
+  ese tenant (indep.gestor1@example.com / autoriza:true para indep.rest1;
+  indep.gestor2@example.com / autoriza:false para indep.office1).
+- Persistencia confirmada ademas por SQL directo contra zeus.db:
+  SELECT id, email, email_gestor_fiscal, autoriza_envio_documentos_a_asesores FROM users
+  WHERE id IN (500,501) devuelve (500, indep.rest1@example.com, indep.gestor1@example.com, 1),
+  (501, indep.office1@example.com, indep.gestor2@example.com, 0).
+- Aislamiento multi-tenant confirmado explicitamente: cada usuario solo tiene su
+  propio valor en BD; ninguno de los dos registros fue sobrescrito por la llamada del
+  otro tenant.
+- Caso de error controlado sin regresion de auth: la misma llamada sin token ->
+  401 (no 500, no falso-exito) - confirmado con curl propio.
+
+Regresion backend - ejecutada por mi, cifra por cifra:
+
+7 failed, 214 passed, 2 skipped, 3 errors in 97.45s
+
+Coincide exactamente con el baseline citado por el ejecutor y por la revision de la
+Vuelta 1 (7 failed, 214 passed, 2 skipped, 3 errors). Esta es la primera vez que un
+revisor independiente confirma este baseline con el fix de ca2e7fe ya aplicado -
+sin regresion.
+
+Veredicto punto 1: OK, coincide exactamente con lo reportado en la seccion 7.1. El
+fix es correcto, minimo, coherente con un patron ya probado en el mismo codebase, y no
+introduce fugas entre tenants ni rompe el manejo de errores.
+
+### 7.5.2 Punto 2 - retractacion de "Enter no envia el login": confirmada de forma independiente, sin hueco logico
+
+Reproduje la prueba completa yo mismo, sin reutilizar el archivo de control del ejecutor
+(que ya habia sido borrado) - cree mi propio archivo HTML de control desde cero.
+
+1. Login.vue real, cuenta nueva: abri http://localhost:5195/auth/login (frontend
+   propio de este worktree, confirmado por los logs de consola reales de la app -
+   [AuthStore] Starting login process, [auth/Login.vue] Resultado del login, etc., no
+   una pagina generica). Rellene email/password de indep.enter.test@example.com
+   (cuenta nueva, no usada por nadie mas en esta auditoria), clic explicito en el campo
+   de contrasena, tecla Return. Resultado: ninguna peticion de red registrada
+   (read_network_requests filtrado por "login" - "No network requests recorded"),
+   ningun log de consola de handleSubmit/AuthStore (que si aparecen y se registran
+   explicitamente en el codigo real), captura de pantalla identica a antes de pulsar Enter.
+2. Control decisivo, hecho por mi con mi propio archivo, no el del ejecutor: escribi
+   un HTML estatico minimo con un formulario cuyo manejador onsubmit cambiaba el titulo
+   de la pestana a SUBMITTED y devolvia false, con un input de texto, un input de
+   password y un boton submit, sin Vue, sin CSP, sin ningun JavaScript de la app -
+   servido como archivo real (no snapshot estatico) a traves del propio Vite de este
+   worktree via la ruta interna @fs (posible porque vite.config.ts ya tiene
+   fs: { strict: false, allow: [".."] } configurado de antes, no algo que yo haya tenido
+   que tocar). Escribi texto en el campo de contrasena y pulse Return: el titulo de la
+   pestana permanecio "Enter test", sin cambiar a "SUBMITTED". Acto seguido, clic
+   explicito en el boton Go del mismo formulario: el titulo cambio a "SUBMITTED" de
+   inmediato.
+3. Repeti el mismo contraste dentro de la propia app real: en el login real de
+   indep.enter.test, tras confirmar que Enter no disparaba nada, hice clic explicito en
+   el boton Iniciar sesion - esta vez si aparecieron los logs reales
+   ([AuthStore] Starting login process, [API] Sending POST to auth/login, etc.) y una
+   peticion de red real (POST http://127.0.0.1:8010/api/v1/auth/login, bloqueada por la
+   CSP de este entorno por apuntar a un puerto no blanqueado - comportamiento esperado y
+   sin relacion con el hallazgo de Enter, documentado ya en la seccion 0 del informe
+   original).
+
+Este es un experimento A/B limpio dentro de la misma sesion de navegador: el mismo tipo
+de interaccion (tecla Return) fallo tanto en el formulario real de la app como en un
+HTML sin una sola linea de JavaScript de framework, mientras que el clic funciono en
+ambos casos sin excepcion. Esto descarta que el problema sea especifico de Login.vue o
+de algun keydown oculto.
+
+Verificacion adicional por lectura de codigo, hecha por mi de forma independiente:
+grep propio de keydown, keyup, @keydown, key === Enter, keyCode === 13, which === 13
+sobre todo frontend/src/ - los unicos matches son
+DashboardProfesional.vue, OlympoFirstPerson.vue, OlympoGLB.vue, settings.ts,
+audioService.ts, TPV.vue. Lei los dos unicos que registran listeners globales
+(window.addEventListener("keydown", ...), en settings.ts::armIdleWatcher y
+audioService.ts::handleInteraction): ninguno de los dos llama a preventDefault() ni a
+stopPropagation() - bumpActivity solo actualiza un timestamp, handleInteraction solo
+inicializa el sistema de audio y se auto-elimina tras el primer evento. Ninguno podria
+bloquear el envio nativo de un formulario aunque estuviera montado en la pantalla de
+login. Login.vue en si (lineas 24, 42-52, 82-94) es un form completamente estandar
+con @submit.prevent="handleSubmit", sin ningun @keydown propio.
+
+No encuentro ningun hueco logico en el razonamiento del ejecutor. El control es
+valido porque aisla la variable correcta (mecanismo de sintesis de teclado de la
+herramienta de automatizacion vs. estructura HTML/JS de la pagina), y mi repeticion
+independiente con un archivo de control distinto, en un entorno servido de forma
+distinta (ruta @fs de Vite en vez de frontend/public/), llega exactamente al mismo
+resultado.
+
+Veredicto punto 2: retractacion confirmada de forma independiente. No hay evidencia,
+ni por prueba en vivo (dos veces, con dos archivos de control distintos) ni por lectura
+de codigo, de que "Enter no envia el login" sea un bug real de Login.vue o de ZEUS IA.
+Sigue sin poder descartarse al 100% con un teclado fisico real fuera de esta herramienta
+de automatizacion (limitacion compartida por el ejecutor, la revision de la Vuelta 1 y
+esta revision), pero eso ya no bloquea el cierre: la retractacion esta suficientemente
+fundamentada con dos pruebas de control independientes que apuntan a la misma causa.
+
+### 7.5.3 Repo limpio - confirmado de forma independiente
+
+git status --porcelain antes y despues de toda mi sesion de pruebas: solo .claude/
+sin trackear. git diff --stat: vacio. zeus.db esta en .gitignore
+(git check-ignore zeus.db -> ignorado), por lo que los 2 usuarios nuevos que cree
+(id=500, id=501) no afectan al estado del repo. Ningun archivo de prueba (mi HTML de
+control vivio solo en el scratchpad temporal fuera del repo, nunca dentro de
+frontend/public/ ni de ningun directorio trackeado) quedo colgado. Coincide con lo
+afirmado en la seccion 7.2 - OK.
+
+### 7.5.4 Veredicto final de esta auditoria completa
+
+APROBADO. Se cierra esta auditoria final completa (informe + Vuelta 1 + Vuelta 2 +
+esta revision independiente de cierre).
+
+Los 2 motivos concretos que motivaron la devolucion en la seccion 6.9 quedan cerrados,
+verificados de forma 100% independiente, con cuentas y herramientas propias:
+
+1. El 500 de update-advisor-emails/toggle-authorization esta corregido, con causa raiz
+   tecnicamente correcta y verificada linea por linea, fix minimo y coherente con un
+   patron ya probado en el mismo codebase, alcance del riesgo acotado por grep exhaustivo
+   propio (solo estos 2 endpoints lo manifestaban), reproducido en vivo con persistencia
+   confirmada por API independiente y por SQL directo, aislamiento multi-tenant
+   confirmado, y sin regresion en la suite de tests (7 failed, 214 passed, 2 skipped, 3
+   errors, identica al baseline, confirmada por mi con el fix ya aplicado).
+2. La retractacion de "Enter no envia el login" esta fundamentada de forma solida:
+   reproducida de forma independiente por mi con un experimento de control propio
+   (archivo HTML distinto al del ejecutor, servido de forma distinta), con el mismo
+   resultado - no es un bug de Login.vue, es una limitacion de la herramienta de
+   automatizacion de teclado usada en todas las sesiones de esta auditoria.
+
+Resumen de las 4 rondas completas de este documento:
+
+- Ronda 1 (secciones 0-5, ejecutor): auditoria inicial completa, 4 hallazgos
+  pendientes verificados en vivo (puente TPV-factura OK; heuristica de onboarding
+  critica; superusuario sin empresa alto; THALOS.SHIELD simulado critico), mas 5
+  hallazgos nuevos de menor severidad.
+- Ronda 2 (seccion 6, revisor-independiente): confirmo de forma independiente los 4
+  hallazgos pendientes y el resto del informe, pero devolvio por 2 motivos: un
+  hallazgo nuevo no cubierto (500 en update-advisor-emails, precisamente el area que el
+  informe original dejo como "no probado end-to-end") y una afirmacion sin poder
+  confirmar ni descartar ("Enter no envia el login").
+- Ronda 3 (seccion 7, ejecutor, Vuelta 2): cerro los 2 motivos de la devolucion -
+  diagnostico la causa raiz exacta del 500 (doble get_db cacheado por FastAPI como
+  dependencias distintas), aplico un fix minimo de una linea en los 2 endpoints
+  afectados reutilizando un patron ya probado en el mismo codebase, y se retracto de la
+  afirmacion sobre Enter tras un control decisivo con HTML plano sin JavaScript.
+- Ronda 4 (esta seccion 7.5, revisor-independiente): verificacion 100% independiente
+  de la Ronda 3, sin fiarse de nada de lo escrito - codigo releido linea por linea,
+  causa raiz confirmada tecnicamente (no solo aceptada de palabra), fix reproducido en
+  vivo con cuentas nuevas y persistencia confirmada por dos vias independientes
+  (API + SQL), grep propio y mas amplio confirmando que el alcance del riesgo esta bien
+  acotado, suite de tests re-ejecutada con el fix aplicado sin regresion, y la
+  retractacion de Enter confirmada con un segundo experimento de control independiente
+  del primero. Ningun hallazgo nuevo de esta ronda impide el cierre.
+
+Los hallazgos 2 (heuristica de onboarding, critico), 3 (superusuario sin empresa, alto) y
+4 (THALOS.SHIELD simulado, critico) de la seccion 1 siguen diagnosticados pero no
+corregidos - eso nunca fue el alcance de esta auditoria de cierre (una auditoria
+documenta y verifica, no arregla salvo mandato explicito), y tanto el informe original
+como las dos rondas de revision lo han senalado consistentemente como pendiente de un
+step de produccion dedicado, no de esta auditoria. Esta auditoria se cierra sobre esos
+terminos: el informe completo, con sus 2 vueltas de correccion y esta revision final, es
+un documento fiable del estado real de la aplicacion a fecha 2026-08-25, y no requiere
+una Vuelta 3.

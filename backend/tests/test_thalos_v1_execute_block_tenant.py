@@ -78,6 +78,75 @@ def test_thalos_v1_execute_block_user_cross_tenant_returns_403(db: Session, monk
     assert victim.is_active is True
 
 
+def test_thalos_v1_execute_block_user_cross_tenant_spoofed_company_id_returns_403(
+    db: Session, monkeypatch
+):
+    """Regresión directa del exploit confirmado en AUDIT_FIX_THALOS_SHIELD.md,
+    sección 8.2: autenticado como el tenant A, un atacante envía explícitamente
+    el `company_id` REAL del tenant B en el body de `POST /thalos/v1/execute`
+    (`action=block_user`), pidiendo bloquear a la víctima de tenant B.
+
+    Antes de la Vuelta 3: `cid = body.company_id or primary_company_id_for_user(...)`
+    usaba el `company_id` spoofeado tal cual, `block_user` validaba la víctima
+    contra ESE company_id (el de su propio tenant) y el aislamiento resultaba
+    decorativo -> bloqueo cross-tenant ejecutado de verdad
+    (`victim.is_active` pasaba de True a False).
+
+    Tras la Vuelta 3: `thalos_v1_execute` valida `body.company_id` contra las
+    empresas reales del `current_user` autenticado (`user_has_company_access`)
+    ANTES de usarlo para nada; si no coincide, se rechaza con 403 sin llegar
+    siquiera a invocar `block_user`.
+    """
+    monkeypatch.setattr(thalos_v1, "can_run_active_execution", lambda module, action=None: True)
+    monkeypatch.setattr(settings, "THALOS_EXECUTION_ENABLED", True)
+    monkeypatch.setattr(settings, "THALOS_AUTO_BLOCK", True)
+
+    attacker, company_a = _seed_company(db)
+    victim, company_b = _seed_company(db)
+
+    # El atacante (tenant A) envía explícitamente el company_id REAL de la
+    # víctima (tenant B) -- exactamente el spoof que reprodujo el revisor.
+    body = ThalosExecuteRequest(
+        action="block_user",
+        user_email=victim.email,
+        company_id=company_b.id,
+    )
+
+    with pytest.raises(HTTPException) as excinfo:
+        thalos_v1_execute(body, current_user=attacker, db=db)
+
+    assert excinfo.value.status_code == 403
+
+    db.refresh(victim)
+    assert victim.is_active is True
+
+
+def test_thalos_v1_execute_rejects_spoofed_company_id_for_other_actions(db: Session, monkeypatch):
+    """El bypass de `body.company_id` no era exclusivo de `block_user`: las 4
+    acciones de `thalos_v1_execute` compartían la misma línea sin validar
+    (`detect_suspicious_activity`, `audit_cashflow_anomaly`, `alert_admin`).
+    Este test confirma que la validación nueva se aplica antes de despachar a
+    CUALQUIER acción, usando `alert_admin` como muestra (no `detect_suspicious_activity`,
+    que además está restringido a superusuarios por la mitigación interina de
+    THALOS.SCAN, ver test dedicado más abajo)."""
+    monkeypatch.setattr(thalos_v1, "can_run_active_execution", lambda module, action=None: True)
+    monkeypatch.setattr(settings, "THALOS_EXECUTION_ENABLED", True)
+
+    requester, company_a = _seed_company(db)
+    _other_user, company_b = _seed_company(db)
+
+    body = ThalosExecuteRequest(
+        action="alert_admin",
+        company_id=company_b.id,
+        payload={"message": "test"},
+    )
+
+    with pytest.raises(HTTPException) as excinfo:
+        thalos_v1_execute(body, current_user=requester, db=db)
+
+    assert excinfo.value.status_code == 403
+
+
 def test_thalos_v1_execute_block_user_same_tenant_not_forbidden(db: Session, monkeypatch):
     """Control negativo: mismo tenant no debe disparar el 403 de aislamiento
     (puede seguir bloqueado/skipped por otras razones reales, pero no por

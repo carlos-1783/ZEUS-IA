@@ -847,7 +847,7 @@ El checklist falla en el punto mas critico para este fix en concreto: el
 aislamiento multi-tenant, que era precisamente el motivo ALTO de la
 devolucion de la ronda 1.
 
-### Veredicto
+### Veredicto (ronda 2)
 
 DEVUELTO AL EJECUTOR. Hace falta una Vuelta 3.
 
@@ -893,3 +893,237 @@ No se puede aprobar sin que un revisor vuelva a intentar el mismo exploit de
 
 Repo verificado limpio tras esta revision (git status sin cambios salvo
 esta misma seccion anadida), main no tocado, sin push.
+
+---
+
+## 9. Vuelta 3 — cierre del bypass de `company_id` y mitigación de SCAN
+
+Ejecutado en el mismo worktree/rama (`feature/fix-thalos-shield-real`), con
+datos propios nuevos (usuarios `v3_attacker_*@example.com` /
+`v3_victim_*@example.com`, `company_id=342/343`, creados vía
+`POST /api/v1/auth/register` real; y `exploit_v3_*`/`exploit_none_v3_*`
+creados a través de scripts propios contra la sesión de BD directa —
+ninguno reutilizado de rondas anteriores, todos borrados de la BD de
+desarrollo al terminar). Baseline verificado antes de tocar nada: `7 failed,
+225 passed, 2 skipped, 3 errors` (idéntico al de la Vuelta 2).
+
+### 9.1 Crítico/Alto — cierre del bypass de `body.company_id`
+
+**Diagnóstico confirmado**: en `app/api/v1/endpoints/thalos_v1.py`, tanto
+`thalos_v1_execute` como `thalos_v1_monitor` usaban
+`cid = body.company_id or primary_company_id_for_user(db, current_user)` —
+el `company_id` del **cliente**, sin validar que perteneciera de verdad al
+`current_user` autenticado. `services/thalos_executor.py::block_user`
+validaba el usuario objetivo contra ESE `company_id`, así que si el
+`company_id` ya venía falsificado, la validación de aislamiento añadida en
+la Vuelta 2 quedaba alimentada con un dato controlado por el atacante — tal
+como demostró el revisor en 8.2.
+
+**Cambio, opción (b) del veredicto de la ronda 2** (validar explícitamente en
+vez de ignorar el campo, porque el patrón de superusuario global ya existe
+en el propio código — `UserCompany.__doc__`: "SUPERUSER es global", y
+`app/api/deps.py::get_current_active_superuser` lo usa como dependencia real
+en otros endpoints):
+
+- **`services/workspace_deliverables.py`**: nueva función
+  `user_has_company_access(db, user, company_id) -> bool` — `True` si el
+  usuario es superusuario (acceso global, patrón ya existente) o si existe
+  una fila `UserCompany` real que lo vincule a esa empresa. Se coloca junto a
+  `primary_company_id_for_user` porque ambas resuelven la misma pregunta de
+  autorización de tenant.
+- **`app/api/v1/endpoints/thalos_v1.py`**: tanto `thalos_v1_execute` (las 4
+  acciones: `block_user`, `audit_cashflow_anomaly`,
+  `detect_suspicious_activity`, `alert_admin`) como `thalos_v1_monitor`
+  (mismo patrón vulnerable, encontrado durante esta vuelta al revisar el
+  archivo completo — no estaba en el encargo original pero es la misma línea
+  de código con la misma causa raíz, así que se corrige igual para no dejar
+  un gemelo idéntico sin arreglar junto al que se acaba de cerrar) ahora:
+  ```python
+  if body.company_id is not None:
+      if not user_has_company_access(db, current_user, body.company_id):
+          raise HTTPException(status_code=403, detail="El company_id indicado no pertenece al usuario autenticado.")
+      cid = body.company_id
+  else:
+      cid = primary_company_id_for_user(db, current_user)
+  ```
+  Se rechaza ANTES de llegar a `execute_action`/`run_monitoring_cycle`, para
+  cualquiera de las acciones, no solo `block_user`.
+- La capa legacy (`app/core/zeus_agents.py::ThalosAgent._block`, invocada
+  desde `app/api/v1/endpoints/zeus_core.py::execute_zeus_command`) no se
+  toca: nunca acepta `company_id` del cliente — siempre lo resuelve
+  server-side con `primary_company_id_for_user(db, current_user)`
+  (`zeus_core.py:142`), así que no tenía este bypass.
+
+### 9.2 Alto — fail-closed cuando `company_id` es `None`
+
+**Cambio en `services/thalos_executor.py::block_user`**: se invirtió la
+condición. Antes, `company_id is None` se trataba como "no se puede
+validar, se permite" (hueco confirmado explotable en 8.2, segundo caso).
+Ahora, por defecto, `company_id is None` se **rechaza**
+(`status: "forbidden"`, `reason: "company_id_not_resolved_for_requester"`),
+registrado igual que cualquier otro rechazo
+(`_log_action` → `ActivityLogger` + `ThalosSecurityEvent`).
+
+Para no romper las llamadas internas/tests de bajo nivel que
+deliberadamente no tienen contexto de tenant (comportamiento ya señalado
+como legítimo en la sección 7.2:
+`test_block_user_dry_run_without_auto_block` y
+`test_block_user_respects_protected_email` en `test_thalos_safe_v1.py`), se
+añadió un parámetro explícito `allow_unscoped: bool = False` — solo esos dos
+tests preexistentes lo activan ahora (`allow_unscoped=True`), preservando su
+intención original (probar `dry_run`/`protected_email`, no aislamiento de
+tenant). Ninguna de las dos vías reales (`thalos_v1.py`,
+`zeus_agents.py::ThalosAgent._block`) pasa `allow_unscoped=True` — para
+ellas, `company_id=None` siempre se rechaza.
+
+### 9.3 Tests de regresión nuevos
+
+- `backend/tests/test_thalos_v1_execute_block_tenant.py`:
+  - `test_thalos_v1_execute_block_user_cross_tenant_spoofed_company_id_returns_403`:
+    reproduce **literalmente** el exploit de la sección 8.2 (atacante
+    autenticado en tenant A, `company_id` REAL de tenant B explícito en el
+    body, `user_email` de la víctima de tenant B) y confirma `403` +
+    `victim.is_active` sin cambios.
+  - `test_thalos_v1_execute_rejects_spoofed_company_id_for_other_actions`:
+    confirma que la validación no es exclusiva de `block_user` (usa
+    `alert_admin` como muestra, ya que `detect_suspicious_activity` está
+    ahora restringido a superusuarios por 9.4 y confundiría la aserción).
+- `backend/tests/test_thalos_safe_v1.py::test_block_user_without_company_id_fails_closed`:
+  reproduce el segundo hueco de 8.2 (`company_id=None`) y confirma
+  `status == "forbidden"`, `reason == "company_id_not_resolved_for_requester"`,
+  víctima sin cambios.
+- `backend/tests/test_zeus_core_scan_superuser_gate_v1.py` (nuevo, 5 tests):
+  cubre la mitigación de 9.4 en ambos endpoints (`/api/v1/zeus/execute`
+  `THALOS.SCAN` y `/thalos/v1/execute` `detect_suspicious_activity`) con
+  control positivo (superusuario) y negativo (usuario normal), más un
+  control de que la restricción no afecta a otros comandos del mismo
+  endpoint (`ZEUS.ANALIZAR`).
+
+### 9.4 Medio (reclasificado como vulnerabilidad activa) — mitigación interina de `THALOS.SCAN` aplicada
+
+Tal como pidió explícitamente el veredicto de la ronda 2 ("la mitigación
+interina no excede el alcance y debía aplicarse antes de cerrar"), se
+restringió el comando a superusuarios en los dos puntos donde un usuario
+autenticado normal podía dispararlo hoy:
+
+- `app/api/v1/endpoints/zeus_core.py::execute_zeus_command`: si
+  `command_data.command == "THALOS.SCAN"` y `current_user.is_superuser` es
+  `False`, se lanza `HTTPException(403)` antes de resolver `company_id` o
+  invocar al agente. Se añadió también `except HTTPException: raise` antes
+  del `except Exception` genérico de la función (que si no, habría envuelto
+  el 403 nuevo en un `500` opaco — revisado con ojo crítico para no
+  introducir un hallazgo nuevo al mismo tiempo que se cierra uno).
+- `app/api/v1/endpoints/thalos_v1.py::thalos_v1_execute`: si
+  `body.action == "detect_suspicious_activity"` y
+  `current_user.is_superuser` es `False`, `HTTPException(403)` antes de
+  cualquier otra lógica (incluida la resolución de `company_id` de 9.1).
+
+**No se restringieron** `POST /thalos/v1/monitor` ni `GET /thalos/v1/audit`
+(ambos disparan `scan_logs` indirectamente vía
+`services/thalos_monitor_service.py`), ni
+`app/api/v1/endpoints/workspaces.py:681`: quedan **fuera de alcance
+deliberado** de esta vuelta (el encargo pedía específicamente "el comando
+THALOS.SCAN o el endpoint que lo expone", no una auditoría completa de todos
+los llamadores de `scan_logs`) y se señalan aquí como hallazgo pendiente
+para que el usuario/auditor decida si se extiende la misma mitigación a
+esos tres puntos. La migración de esquema de raíz (`company_id` en
+`AgentActivity`/`ThalosLoginAttempt`) sigue sin abordarse, tal como pedía el
+encargo.
+
+### 9.5 Verificación en vivo
+
+Servidor uvicorn propio, puerto 8231,
+`THALOS_EXECUTION_ENABLED=true`/`THALOS_AUTO_BLOCK=true` vía variables de
+entorno; 2 tenants nuevos vía registro real
+(`v3_attacker_*@example.com`/`company_id=342`,
+`v3_victim_*@example.com`/`company_id=343`):
+
+1. **Exploit exacto de 8.2 reproducido contra el código corregido** (script
+   propio `exploit_v3.py`, invocando `thalos_v1_execute` directamente con
+   `can_run_active_execution` monkeypatcheado a `True` — misma técnica que
+   usa el propio revisor en 8.2, necesaria porque `can_run_active_execution`
+   para `block_user` sigue clasificado `REAL_SAFE` por configuración de
+   producto ajena a este fix, ver nota de 7.2): atacante (`company_id=344`
+   en esta ejecución concreta) envía `company_id` REAL de la víctima
+   (`company_id=345`) en el body -> `HTTPException(403, "El company_id
+   indicado no pertenece al usuario autenticado.")`, `victim.is_active`
+   permanece `True`. **El exploit ya no funciona.**
+2. **Caso `company_id=None` reproducido** (`exploit_none_v3.py`, llamada
+   directa a `block_user(db, user_email=victim.email, company_id=None)`):
+   `status: "forbidden"`, `reason: "company_id_not_resolved_for_requester"`,
+   víctima sin cambios. **Fail-closed confirmado.**
+3. **Mitigación de SCAN, ambos endpoints, HTTP real**: usuario normal
+   (`v3_attacker`) -> `POST /api/v1/zeus/execute {"command":"THALOS.SCAN"}`
+   y `POST /thalos/v1/execute {"action":"detect_suspicious_activity"}` ->
+   ambos `403` con el mensaje de mitigación interina. Tras promover la misma
+   cuenta a superusuario en BD (`is_superuser=True`), los mismos dos
+   endpoints devuelven `200` con datos reales de escaneo
+   (`vulnerabilities_found: 26`, `activities_scanned: 395`, patrones y
+   candidatos a fuerza bruta reales).
+4. **Camino feliz no roto (positivo, HTTP real, vía legacy)**: se creó un
+   compañero de equipo real en la misma empresa del atacante
+   (`company_id=342`) y `POST /api/v1/zeus/execute
+   {"command":"THALOS.BLOCK","data":{"user_email":"<teammate>"}}` ->
+   `status: "success"`, `executed: true` — el bloqueo legítimo dentro del
+   mismo tenant sigue funcionando exactamente igual que en la Vuelta 2. El
+   mismo comando contra el email de la víctima de OTRO tenant (sin poder
+   spoofear `company_id` en esta vía, porque `zeus_core.py` siempre lo
+   deriva server-side) sigue devolviendo `status: "forbidden"`.
+5. Limpieza: usuarios/`user_companies`/empresas de las pruebas de registro
+   real (`342`/`343` y el compañero de equipo) borrados de la BD de
+   desarrollo local (`sqlite:///./zeus.db`, no versionada) al terminar; los
+   scripts `exploit_v3.py`/`exploit_none_v3.py` se autolimpian al final de su
+   propia ejecución.
+
+### 9.6 Regresión
+
+Suite completa tras todos los cambios de esta vuelta:
+`7 failed, 233 passed, 2 skipped, 35 warnings, 3 errors in 131.98s` — mismos
+7 nombres de test fallando y mismos 3 errores que el baseline de la Vuelta 2
+(`7 failed, 225 passed, 2 skipped, 3 errors`); **+8 tests nuevos, todos en
+verde. Sin regresión.**
+
+### 9.7 Resumen de archivos tocados en esta vuelta
+
+- `backend/services/workspace_deliverables.py`: nueva función
+  `user_has_company_access`.
+- `backend/app/api/v1/endpoints/thalos_v1.py`: `thalos_v1_execute` y
+  `thalos_v1_monitor` validan `body.company_id` contra las empresas reales
+  del usuario autenticado antes de usarlo; `thalos_v1_execute` añade el gate
+  de superusuario para `detect_suspicious_activity`.
+- `backend/app/api/v1/endpoints/zeus_core.py`: `execute_zeus_command` añade
+  el gate de superusuario para `THALOS.SCAN` y un `except HTTPException:
+  raise` para no envolver ese 403 en un 500.
+- `backend/services/thalos_executor.py`: `block_user` ahora falla cerrado
+  cuando `company_id is None`, con parámetro `allow_unscoped` para las
+  llamadas internas legítimas sin contexto de tenant.
+- `backend/tests/test_thalos_safe_v1.py`: 2 tests existentes ajustados
+  (`allow_unscoped=True`) + 1 test nuevo (fail-closed).
+- `backend/tests/test_thalos_v1_execute_block_tenant.py`: 2 tests nuevos
+  (exploit exacto de 8.2, y validación de `company_id` en otra acción).
+- `backend/tests/test_zeus_core_scan_superuser_gate_v1.py` (nuevo): 5 tests
+  de la mitigación de SCAN.
+
+### 9.8 Qué sigue pendiente (no resuelto en esta vuelta, para decisión del usuario o del auditor)
+
+1. `POST /thalos/v1/monitor`, `GET /thalos/v1/audit` y
+   `app/api/v1/endpoints/workspaces.py:681` también disparan `scan_logs`
+   indirectamente y no se restringieron a superusuarios en esta vuelta
+   (fuera del alcance explícito del encargo, que pedía "el comando
+   THALOS.SCAN o el endpoint que lo expone"). Si se quiere cerrar la fuga de
+   forma más amplia mientras no exista la migración de esquema, estos tres
+   puntos deberían revisarse también.
+2. La migración de esquema de raíz (`company_id` en
+   `AgentActivity`/`ThalosLoginAttempt`) sigue sin implementarse — la
+   mitigación de 9.4 es interina, tal como pedía el encargo.
+3. Sigue sin resolverse la decisión de producto sobre `can_run_active_execution`
+   clasificando `auditoria_real`/`block_user` como `REAL_SAFE` (ver 7.2):
+   esto hace que `POST /thalos/v1/execute` con `action=block_user` nunca
+   ejecute un bloqueo real por HTTP hoy, con independencia de todos los
+   demás flags — no es parte de este fix, pero significa que la verificación
+   en vivo de 9.5.1 tuvo que usar `can_run_active_execution` monkeypatcheado
+   (igual que en la Vuelta 2), no una petición HTTP 100% sin overrides de
+   código.
+4. Esta vuelta no es autoaprobación: corresponde a `revisor-independiente`
+   confirmarla con su propia verificación en vivo, incluyendo un nuevo
+   intento del exploit de 8.2 con datos propios.

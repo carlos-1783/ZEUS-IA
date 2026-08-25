@@ -64,23 +64,44 @@ def block_user(
     user_email: str,
     reason: str = "thalos_security",
     company_id: Optional[int] = None,
+    allow_unscoped: bool = False,
 ) -> Dict[str, Any]:
     email = (user_email or "").strip().lower()
 
-    # Aislamiento multi-tenant: si se conoce el company_id del solicitante
-    # (siempre lo conocen las dos vías reales que llaman a esta función:
-    # thalos_v1.py::thalos_v1_execute y ThalosAgent._block, ambas resuelven
-    # el tenant del usuario autenticado antes de invocar el bloqueo), el
-    # usuario objetivo (`user_email`) debe pertenecer a una empresa de ese
-    # company_id. Sin este chequeo, cualquier tenant autenticado podía pedir
-    # el bloqueo de la cuenta de OTRO tenant con solo conocer su email (ver
+    # Aislamiento multi-tenant: el usuario objetivo (`user_email`) debe
+    # pertenecer a una empresa del `company_id` del solicitante. Sin este
+    # chequeo, cualquier tenant autenticado podía pedir el bloqueo de la
+    # cuenta de OTRO tenant con solo conocer su email (ver
     # AUDIT_FIX_THALOS_SHIELD.md, sección 6, hallazgo ALTO #2). Se comprueba
     # antes de revelar nada sobre el usuario objetivo (protegido, existencia,
-    # superusuario) para no habilitar enumeración cross-tenant. Si no se
-    # conoce company_id (llamadas internas/tests de bajo nivel sin contexto
-    # de tenant), se preserva el comportamiento previo: no se puede validar
-    # lo que no se conoce.
-    if company_id is not None:
+    # superusuario) para no habilitar enumeración cross-tenant.
+    #
+    # Fail-closed si company_id es None: no se puede determinar el tenant del
+    # solicitante (p.ej. `primary_company_id_for_user` devolvió None porque el
+    # usuario no tiene ninguna empresa asociada). Antes se interpretaba
+    # "company_id desconocido" como "sin restricción" y el bloqueo procedía
+    # igual que si el chequeo no existiera — confirmado explotable en vivo
+    # (AUDIT_FIX_THALOS_SHIELD.md, sección 8.2, segundo hueco). Ahora se
+    # rechaza explícitamente, salvo para las llamadas internas/tests de bajo
+    # nivel que necesitan seguir operando sin contexto de tenant: para ellas
+    # se debe pasar explícitamente `allow_unscoped=True`.
+    if company_id is None:
+        if not allow_unscoped:
+            result = {
+                "status": "forbidden",
+                "action": "block_user",
+                "email": email,
+                "executed": False,
+                "reason": "company_id_not_resolved_for_requester",
+            }
+            _log_action(db, action="block_user", status="forbidden", details=result, company_id=None)
+            logger.warning(
+                "THALOS.BLOCK rechazado: no se pudo determinar el company_id del solicitante "
+                "(fail-closed) para el bloqueo de email=%s",
+                email,
+            )
+            return result
+    else:
         from app.models.company import UserCompany
 
         target_belongs = (

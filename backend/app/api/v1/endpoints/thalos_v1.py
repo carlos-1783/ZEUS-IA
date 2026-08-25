@@ -26,7 +26,10 @@ from services.thalos_alert_service import list_alerts
 from services.thalos_executor import execute_action
 from services.thalos_monitor_service import audit_from_db
 from services.thalos_monitoring_service import run_monitoring_cycle
-from services.workspace_deliverables import primary_company_id_for_user
+from services.workspace_deliverables import (
+    primary_company_id_for_user,
+    user_has_company_access,
+)
 
 router = APIRouter(prefix="/thalos/v1", tags=["thalos-v1"])
 
@@ -66,7 +69,15 @@ def thalos_v1_monitor(
         allowed=True,
         actor_id=current_user.id,
     )
-    cid = body.company_id or primary_company_id_for_user(db, current_user)
+    if body.company_id is not None:
+        if not user_has_company_access(db, current_user, body.company_id):
+            raise HTTPException(
+                status_code=403,
+                detail="El company_id indicado no pertenece al usuario autenticado.",
+            )
+        cid = body.company_id
+    else:
+        cid = primary_company_id_for_user(db, current_user)
     result = run_monitoring_cycle(
         db,
         company_id=cid,
@@ -89,6 +100,24 @@ def thalos_v1_execute(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
+    # Mitigación interina (AUDIT_FIX_THALOS_SHIELD.md, sección 7.3/8.3):
+    # `detect_suspicious_activity` (el equivalente REST de `THALOS.SCAN`)
+    # delega en `thalos_security_engine.scan_logs`, que audita
+    # `agent_activities`/`thalos_login_attempts` de forma GLOBAL (esas tablas
+    # no tienen `company_id`, ver investigación en 7.3) — fuga cross-tenant
+    # confirmada en vivo por el revisor. La corrección de raíz (migración de
+    # esquema) excede este fix; se restringe a superusuarios mientras tanto.
+    if body.action == "detect_suspicious_activity" and not getattr(current_user, "is_superuser", False):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "detect_suspicious_activity (THALOS.SCAN) requiere privilegios de "
+                "superusuario (mitigación interina: el motor subyacente audita "
+                "actividad global sin filtrar por empresa hasta que se migre el "
+                "esquema)."
+            ),
+        )
+
     module = "backup_system" if body.action == "trigger_backup" else "auditoria_real"
     if body.action in ("block_user", "alert_admin"):
         module = "auditoria_real"
@@ -127,7 +156,24 @@ def thalos_v1_execute(
             real_execution=False,
         )
 
-    cid = body.company_id or primary_company_id_for_user(db, current_user)
+    # Aislamiento multi-tenant: `body.company_id` lo controla el cliente. Antes
+    # se usaba tal cual ("cid = body.company_id or primary_company_id_for_user(...)"),
+    # lo que permitía a un tenant autenticado hacerse pasar por otro enviando
+    # el company_id real de la víctima en el body — bypass confirmado en vivo
+    # contra `block_user` (ver AUDIT_FIX_THALOS_SHIELD.md, sección 8.2) y
+    # aplicable igual a las otras 3 acciones de este endpoint
+    # (audit_cashflow_anomaly, detect_suspicious_activity, alert_admin). Ahora
+    # se valida siempre contra las empresas reales del usuario autenticado
+    # (o se permite si es superusuario) antes de usarlo para cualquier acción.
+    if body.company_id is not None:
+        if not user_has_company_access(db, current_user, body.company_id):
+            raise HTTPException(
+                status_code=403,
+                detail="El company_id indicado no pertenece al usuario autenticado.",
+            )
+        cid = body.company_id
+    else:
+        cid = primary_company_id_for_user(db, current_user)
     result = execute_action(
         db,
         body.action,

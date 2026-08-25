@@ -133,6 +133,27 @@ async def execute_zeus_command(
     - IA.PROCESAR: Procesamiento de IA
     """
     try:
+        # Mitigación interina (AUDIT_FIX_THALOS_SHIELD.md, sección 7.3/8.3):
+        # `THALOS.SCAN` delega en `thalos_security_engine.scan_logs`, que audita
+        # `agent_activities`/`thalos_login_attempts` de forma GLOBAL — esas
+        # tablas no tienen `company_id` y no existe hoy una vía indirecta
+        # fiable para filtrar por tenant (ver investigación en la sección 7.3).
+        # Confirmado en vivo por el revisor: un tenant sin actividad propia
+        # recibe datos de seguridad (emails, patrones) de OTRAS empresas. La
+        # corrección de raíz (migración de esquema + backfill) excede el
+        # alcance de este fix puntual; como mitigación interina de bajo coste
+        # se restringe el comando a superusuarios hasta que exista aislamiento
+        # real por tenant en esas tablas.
+        if command_data.command == "THALOS.SCAN" and not getattr(current_user, "is_superuser", False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "THALOS.SCAN requiere privilegios de superusuario (mitigación "
+                    "interina: el motor subyacente audita actividad global sin "
+                    "filtrar por empresa hasta que se migre el esquema)."
+                ),
+            )
+
         from services.workspace_deliverables import primary_company_id_for_user
 
         # Aislamiento multi-tenant: se resuelve la empresa del usuario
@@ -157,7 +178,11 @@ async def execute_zeus_command(
         logger.info(f"Comando ZEUS ejecutado: {command_data.command} - Resultado: {result.get('status')}")
         
         return ZeusResponse(**result)
-        
+
+    except HTTPException:
+        # No envolver HTTPException ya deliberadas (p.ej. el 403 de
+        # THALOS.SCAN) en un 500 opaco — deben propagarse tal cual.
+        raise
     except Exception as e:
         logger.error(f"Error ejecutando comando ZEUS: {str(e)}")
         raise HTTPException(

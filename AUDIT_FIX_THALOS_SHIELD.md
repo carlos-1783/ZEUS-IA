@@ -1592,3 +1592,235 @@ tocaron en esta vuelta (fuera de alcance explícito del encargo):
    confirmarla con su propia verificación en vivo, incluyendo un nuevo
    intento de reproducir el exploit de `workspaces.py:664` contra el código
    corregido.
+
+
+## 12. Revision independiente (revisor, ronda 4) - DEVUELTO AL EJECUTOR (Vuelta 5 requerida)
+
+Verificacion realizada de forma 100% independiente sobre el commit 315d365
+(rama feature/fix-thalos-shield-real, worktree
+C:\Users\Acer\ZEUS-IA\.claude\worktrees\agent-a9f8f12f24d0bc95c), con cuentas
+100% nuevas (revv4_atk_1787666533@example.com / company_id=533,
+revv4_vic_1787666533@example.com / company_id=534, creadas via POST
+/api/v1/auth/register real contra un servidor uvicorn propio en el puerto
+8391/8392; ninguna reutilizada de rondas anteriores; borradas de zeus.db al
+terminar). No se uso Edit/Write sobre codigo de produccion en ningun momento;
+el unico archivo modificado por mi es este documento de auditoria.
+
+### 12.1 Lo que SI se confirmo correcto -- coincide con lo reportado en la seccion 11
+
+- POST /api/v1/workspaces/thalos/log-monitor: reproduje el escenario exacto
+  de mi propio hallazgo de la ronda 3 (10.2) con el usuario normal revv4_atk
+  (tenant sin actividad propia) -> 403 con el mensaje de mitigacion. El
+  exploit ya NO funciona. Confirmado tambien sin header Authorization -> 401
+  (no 500).
+- GET /api/v1/thalos/v1/audit: mismo usuario normal -> 403 con el mensaje de
+  mitigacion. Coincide con 11.2/11.3.
+- POST /api/v1/thalos/v1/monitor: mismo usuario normal -> 403. Coincide con
+  11.2/11.3.
+- Camino feliz (control positivo): promovi a revv4_vic a superusuario
+  directamente en zeus.db (UPDATE users SET is_superuser=1), re-loguee para
+  obtener un JWT con is_superuser true (confirmado por decodificacion del
+  payload) y repeti las 3 llamadas: las 3 devolvieron 200 con datos reales --
+  log-monitor persistio un ThalosWorkspaceItem con
+  real_scan.activities_scanned: 500 y failed_login_candidates reales de
+  otros tenants (brute_*@evil.test); audit devolvio event_count: 341,
+  security_event_count: 166; monitor devolvio security_scan: {} (flags por
+  defecto en false, comportamiento esperado). El gate es de rol, no una
+  prohibicion total -- confirmado.
+- thalos_monitor_service.py:104: lei el archivo yo mismo -- comprueba
+  settings.THALOS_REAL_MONITORING or settings.THALOS_EXECUTION_ENABLED or
+  settings.THALOS_REAL_LOGS_ENABLED antes de invocar scan_logs. Confirme en
+  app/core/config.py que los 3 flags son os.getenv(..., "false") y no hay
+  ningun override en .env/.env.stripe del proyecto. La explicacion del
+  ejecutor sobre por que POST /thalos/v1/monitor no es explotable HOY con la
+  configuracion por defecto es correcta.
+- 403 no envuelto en 500: confirme por lectura que app/main.py (el modulo
+  real que arranca en produccion segun railway.json/railway.toml,
+  app.main:app) no registra ningun @app.exception_handler generico (grep sin
+  resultados); el unico try/except en thalos_v1.py es uno de
+  json.JSONDecodeError en la linea 347, no relacionado con los 3 gates
+  nuevos. Confirmado tambien en vivo: las 3 rutas devuelven 403 limpio, no
+  500.
+- El except Exception: pass de workspaces.py (linea ~721): confirme por
+  lectura que el raise HTTPException(403, ...) (linea 682-691) se ejecuta
+  antes de log_execution_attempt (linea 693) y antes del bloque try que
+  empieza en la linea 703 -- un usuario normal nunca llega a ese except.
+  Solo un superusuario (ya autorizado por diseno a ver estos datos) llega a
+  ese bloque, asi que no hay via de fuga de informacion por mensaje de error
+  hacia un atacante no autorizado: no puede provocar la excepcion porque no
+  puede ejecutar la funcion mas alla del gate. De acuerdo con la
+  clasificacion del ejecutor: hallazgo real pero no bloqueante, correctamente
+  declarado.
+- Suite completa: ejecute yo mismo python -m pytest tests -q y obtuve
+  7 failed, 239 passed, 2 skipped, 35 warnings, 3 errors in 153.92s -- cifra
+  identica a la afirmada en 11.5, mismos 7 nombres de test fallando
+  (test_basic.py::test_config_loading,
+  test_justicia_control_layer_v1.py::test_default_flags_simulated,
+  test_perseo_autofix_v2.py::test_audit_includes_ai_modules, 3x
+  test_thalos_control_layer_v1.py,
+  test_thalos_safe_v1.py::test_monitoring_cycle_respects_flags) y mismos 3
+  errores de test_app.py (NameError: TestClient). Sin regresion.
+- Los 6 tests nuevos: ejecute
+  pytest tests/test_workspaces_thalos_log_monitor_superuser_gate_v1.py -v ->
+  6 passed. Confirmado.
+
+### 12.2 Hallazgo nuevo -- al menos 3 rutas hermanas del mismo motor siguen sin ningun gate, explotables HOY sin condiciones
+
+El encargo de esta ronda me pidio explicitamente agotar un grep exhaustivo de
+cualquier otra ruta que use scan_logs, AgentActivity, ThalosLoginAttempt o
+tablas de logs de seguridad de THALOS. Al hacerlo hasta agotar el mapa de
+rutas de workspaces.py y thalos_v1.py completo (no solo las 3 tocadas por
+esta vuelta), encontre que el motor de "threat/events/alerts" tiene el MISMO
+patron de fuga (consultas globales sin company_id) en rutas que esta vuelta
+no toco ni menciono:
+
+1. POST /api/v1/workspaces/thalos/threat-detector
+   (app/api/v1/endpoints/workspaces.py:743, funcion workspace_thalos_threat,
+   delega en services/workspaces/thalos_tools.py::detect_threat_events):
+   llama incondicionalmente (sin ningun flag THALOS_*, sin gate de
+   superusuario) a services/thalos_threat_engine.py::evaluate_events(db) y a
+   services/thalos_monitor_service.py::audit_from_db(db) -- ambas consultas
+   GLOBALES, exactamente las mismas fuentes de datos que motivaron el gate de
+   workspace_thalos_logs y thalos_v1_audit en esta misma vuelta. Reproduje en
+   vivo con revv4_atk (usuario normal, tenant sin actividad propia, mismo JWT
+   usado para confirmar el 403 en log-monitor):
+   POST /api/v1/workspaces/thalos/threat-detector con body {"events":[]} ->
+   200, risk_score: 34, 17 candidates con rule_id "brute_force_email" y
+   emails reales de otros tenants (p. ej. brute_other_tenant_d70ffebf@evil.test,
+   brute_other_tenant_344906ba@evil.test), y un campo database con
+   event_count: 341, security_event_count: 177 y recent_events de otras
+   empresas -- la misma clase de dato que ya se protegio en
+   GET /thalos/v1/audit. Ademas, el resultado se persiste via
+   _persist_agent_tool_response (persist_workspace_deliverable, document_id:
+   41 en mi prueba) en el workspace del propio atacante, con company_id del
+   atacante. Agravante: el thalos_wrap de esta ruta etiqueta la respuesta
+   como data_origin="mock", real_execution=False -- es decir, el sistema
+   afirma explicitamente al frontend que estos datos NO son reales, cuando en
+   realidad son datos reales de otros tenants. Esta ruta es la hermana
+   directa de workspace_thalos_logs (mismo router, mismo patron
+   _persist_agent_tool_response, mismo motor subyacente) y no fue mencionada
+   ni en 9.8 ni en 10.2/10.3 ni en la seccion 11 del ejecutor.
+2. GET /api/v1/thalos/v1/events (app/api/v1/endpoints/thalos_v1.py:227,
+   funcion thalos_v1_events): consulta ThalosSecurityEvent y ThalosEvent SIN
+   ningun filtro por company_id ni gate de superusuario -- solo
+   get_current_active_user. Reproduje en vivo con revv4_atk: GET
+   /api/v1/thalos/v1/events?limit=10 -> 200 con eventos de otros tenants,
+   incluyendo un action_block_user con
+   "email": "thalos_shield_7e091d61@example.test", "company_id": 564
+   (un intento de bloqueo de OTRA empresa, con su company_id real expuesto) y
+   varios detect_suspicious_activity/thalos_security_engine.scan_logs con
+   pattern_alerts completos de actividad ajena. El campo user_email del
+   modelo ThalosSecurityEvent tambien se expone sin filtrar (era null en mis
+   filas de prueba, pero el codigo no lo redacta ni lo filtra por tenant
+   cuando existe).
+3. GET /api/v1/thalos/v1/alerts (app/api/v1/endpoints/thalos_v1.py:274,
+   funcion thalos_v1_alerts): consulta list_alerts(db, ...) tambien SIN
+   ningun filtro por tenant ni gate -- la linea "_ = current_user" descarta
+   explicitamente al usuario autenticado sin usarlo para nada. Reproduje en
+   vivo con revv4_atk: GET /api/v1/thalos/v1/alerts?limit=10 -> 200 con 3
+   alertas globales, incluida "title": "Brute-force por email", "message":
+   "brute_5da013@evil.test: 6 fallos en 60min" -- un email de fuerza bruta de
+   otra sesion/tenant, visible para un usuario que no tiene ninguna relacion
+   con ese evento.
+
+Las tres rutas comparten exactamente el patron que ya causo 3 devoluciones en
+esta rama: consultas a ThalosEvent/ThalosSecurityEvent/ThalosLoginAttempt/
+AgentActivity sin company_id (las tablas no lo tienen), expuestas sin gate a
+cualquier usuario autenticado. GET /workspace/items (linea 330) si filtra
+correctamente por user_id == current_user.id -- no es un hallazgo.
+
+Grep exhaustivo ejecutado para llegar a esta conclusion (reproducible):
+grep -rn "scan_logs" backend, grep -rn "ThalosLoginAttempt" backend, seguido
+de lectura completa de cada archivo resultante (thalos_threat_engine.py,
+thalos_alert_service.py, services/workspaces/thalos_tools.py) y del mapa
+completo de rutas de workspaces.py y thalos_v1.py, verificando una por una si
+tenian gate y si consultaban datos globales.
+
+### 12.3 Por que esto obliga a otra devolucion
+
+La regla no negociable 4 de la skill zeus-produccion no admite excepcion de
+alcance para fugas de datos entre tenants. El propio patron de esta rama
+(rondas 2, 3 y ahora 4) es que cada vuelta cierra las rutas senaladas
+explicitamente pero deja sin revisar rutas hermanas que comparten el mismo
+motor subyacente. La Vuelta 4 amplio correctamente el alcance por
+"consistencia" a 2 rutas mas de las exigidas, pero no llego a agotar el mapa
+completo de consumidores de scan_logs/evaluate_events/audit_from_db dentro
+del mismo router (workspaces.py) y del mismo modulo (thalos_v1.py) donde ya
+estaba trabajando. threat-detector es particularmente grave porque ademas de
+la fuga cross-tenant, enganya activamente al frontend etiquetando datos
+reales como mock/real_execution false.
+
+No exijo repetir nada de lo ya cerrado en 9.1-9.4 ni en 11.1/11.2 --
+confirmado correcto por mi de forma independiente (12.1). Exijo, como
+minimo, para la Vuelta 5:
+
+1. Alto/Critico -- aplicar el mismo gate de superusuario (o filtrado real
+   por company_id si se decide abordar la migracion de esquema) a:
+   - POST /api/v1/workspaces/thalos/threat-detector
+     (workspaces.py::workspace_thalos_threat, antes de invocar
+     detect_threat_events), y corregir ademas el data_origin="mock" enganoso
+     del thalos_wrap para esta ruta si se mantiene accesible para
+     no-superusuarios de alguna forma.
+   - GET /api/v1/thalos/v1/events (thalos_v1.py::thalos_v1_events).
+   - GET /api/v1/thalos/v1/alerts (thalos_v1.py::thalos_v1_alerts).
+2. Tests de regresion nuevos que reproduzcan el escenario exacto de 12.2 para
+   las 3 rutas (tenant nuevo sin actividad propia recibe datos de otras
+   empresas) y confirmen que tras el fix ya no ocurre, siguiendo el mismo
+   patron que test_workspaces_thalos_log_monitor_superuser_gate_v1.py.
+3. Antes de cerrar la Vuelta 5, repetir el mismo grep exhaustivo de esta
+   seccion para confirmar que no queda ninguna ruta mas colgando del mismo
+   motor (thalos_alert_service.py, thalos_threat_engine.py,
+   thalos_security_engine.py, thalos_monitor_service.py son los 4 puntos de
+   origen de los datos globales; cualquier endpoint que los use
+   transitivamente debe revisarse).
+4. Esta vuelta no es autoaprobacion: corresponde a revisor-independiente
+   confirmar la Vuelta 5 con su propia verificacion en vivo.
+
+### 12.4 Checklist de no-simulacion (verificado por mi sobre el diff de 315d365 en si)
+
+- [x] Datos reales de BD, no valores fijos -- confirmado para las 3 rutas
+      tocadas por esta vuelta.
+- [x] Pasa por autenticacion (get_current_active_user) -- confirmado en las
+      3 vias tocadas.
+- [ ] Filtra por tenant en cada query -- NO, a nivel del motor completo: las
+      3 rutas tocadas por esta vuelta si quedan cerradas, pero 3 rutas
+      hermanas del mismo motor (12.2) siguen sin ningun filtro ni gate y son
+      explotables hoy sin condiciones.
+- [x] Manejo de errores real -- confirmado para las 3 rutas tocadas (403 con
+      detalle explicito, no envuelto en 500).
+- [x] Logs verificables -- confirmado (mensajes de rechazo explicitos).
+- [x] Tests/ejecucion manual -- 6 tests nuevos verificados en verde por mi,
+      mas mi propia reproduccion en vivo de las 3 rutas tocadas y de las 3
+      rutas nuevas encontradas.
+- [x] Migracion Alembic -- no aplica (no se anadieron columnas).
+
+### Veredicto (ronda 4)
+
+DEVUELTO AL EJECUTOR. Hace falta una Vuelta 5.
+
+Lo bueno primero: los 3 gates de esta vuelta (workspace_thalos_logs,
+thalos_v1_audit, thalos_v1_monitor) estan correctamente implementados,
+verificados por mi en vivo con cuentas 100% nuevas, sin regresion en la
+suite completa (7 failed, 239 passed, 2 skipped, 3 errors, identico a lo
+reportado), y el hallazgo exacto que motivo la devolucion de la ronda 3
+(workspaces.py:664) esta cerrado sin ninguna duda. El analisis honesto del
+ejecutor sobre por que POST /thalos/v1/monitor no es explotable hoy con los
+flags por defecto es correcto y lo confirme yo mismo leyendo
+thalos_monitor_service.py:104 y app/core/config.py.
+
+No se aprueba porque, al agotar el grep exhaustivo que pedia explicitamente
+el encargo de esta ronda, encontre 3 rutas mas del mismo motor de auditoria
+global (POST /thalos/threat-detector, GET /thalos/v1/events, GET
+/thalos/v1/alerts) explotables hoy, sin ninguna condicion, con una cuenta
+100% nueva y sin actividad propia -- la misma clase de vulnerabilidad que ya
+causo 3 devoluciones anteriores de esta rama. threat-detector es
+especialmente grave porque ademas persiste el dato ajeno en el workspace del
+atacante y lo etiqueta enganosamente como mock.
+
+Repo verificado limpio tras esta revision (git status --short sin salida
+antes de este commit, salvo esta misma seccion anadida), main no tocado
+(sigue en 97b949a), sin push, sin rama nueva. Cuentas y empresas de prueba
+(revv4_atk_1787666533, revv4_vic_1787666533, company_id 533/534) borradas de
+zeus.db al terminar.
+
+---

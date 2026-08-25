@@ -1127,3 +1127,256 @@ verde. Sin regresión.**
 4. Esta vuelta no es autoaprobación: corresponde a `revisor-independiente`
    confirmarla con su propia verificación en vivo, incluyendo un nuevo
    intento del exploit de 8.2 con datos propios.
+
+---
+
+## 10. Revision independiente (revisor, ronda 3) - DEVUELTO AL EJECUTOR (Vuelta 4 requerida, alcance acotado)
+
+Verificacion realizada de forma 100% independiente sobre el commit 3200624
+(rama feature/fix-thalos-shield-real, worktree
+C:\Users\Acer\ZEUS-IA\.claude\worktrees\agent-a9f8f12f24d0bc95c), con cuentas
+100% nuevas (rev3_attacker_*/rev3_victim_*, company_id nuevos por ejecucion;
+ningun dato ni script reutilizado de rondas anteriores). No se uso Edit/Write
+sobre codigo de produccion en ningun momento; el unico archivo modificado por
+mi es este documento de auditoria, via Bash, tal como se me indico
+explicitamente en el encargo de esta ronda.
+
+### 10.1 Lo que SI se confirmo correcto -- coincide con el informe de la Vuelta 3
+
+Reproduje el exploit EXACTO de la seccion 8.2 (el mismo ataque que yo mismo
+confirme explotable en la ronda 2) con un script propio
+(reviewer_v3_exploit.py, llamada directa a thalos_v1_execute con
+can_run_active_execution monkeypatcheado a True -- necesario porque
+MODULE_CLASSIFICATION["auditoria_real"] = "REAL_SAFE" sigue haciendo
+inalcanzable el 403 via HTTP real hoy para block_user, limitacion de
+producto preexistente y ajena a este fix, confirmada de nuevo por mi):
+
+- TEST 1 -- exploit de spoof de company_id: atacante autenticado en
+  tenant nuevo (company_a), user_email de victima real de otro tenant
+  nuevo (company_b) Y company_id=company_b.id explicito en el body ->
+  HTTPException 403 "El company_id indicado no pertenece al usuario
+  autenticado.", victim.is_active permanece True. El exploit ya NO
+  funciona.
+- TEST 2 -- company_id=None: llamada directa a
+  block_user(db, user_email=victima, company_id=None) -> status:
+  "forbidden", reason: "company_id_not_resolved_for_requester", victima
+  sin cambios. Fail-closed confirmado.
+- TEST 3 -- gate de superusuario en THALOS.SCAN/detect_suspicious_activity,
+  en ambas vias (REST /thalos/v1/execute y legacy
+  /api/v1/zeus/execute): usuario normal -> HTTPException 403 en ambas;
+  tras promover al mismo usuario a superusuario en BD
+  (is_superuser=True) -> 200/status: "success"/"completed" con datos
+  reales de escaneo en ambas vias.
+- TEST 4 -- control positivo: bloqueo legitimo dentro del mismo tenant
+  (owner bloquea a su propio teammate, mismo company_id) via la via REST
+  oficial -> status: "completed", executed: True,
+  teammate.is_active pasa de True a False. El nuevo chequeo de tenant
+  no rompe el bloqueo legitimo.
+
+Ademas:
+- Releido integro el diff de 3200624 (thalos_v1.py, zeus_core.py,
+  thalos_executor.py, workspace_deliverables.py): user_has_company_access
+  hace exactamente lo que dice (superusuario global O UserCompany real);
+  sin huecos logicos encontrados (usa int(company_id), sin ambiguedad de
+  tipos; un usuario sin ninguna empresa obtiene False para cualquier
+  company_id, correctamente fail-closed; no hay via indirecta de
+  adivinar acceso, la consulta es un filtro exacto user_id AND
+  company_id).
+- Confirmado por lectura que ThalosAgent._block
+  (app/core/zeus_agents.py) nunca acepta company_id de un cliente: lo
+  resuelve siempre server-side via primary_company_id_for_user en
+  zeus_core.py:163, asi que la via legacy nunca tuvo este bypass concreto
+  (coincide con lo declarado en 9.1).
+- Ejecute yo mismo la suite completa:
+  7 failed, 233 passed, 2 skipped, 35 warnings, 3 errors in 142.85s --
+  cifra identica a la afirmada en la seccion 9.6, mismos 7 nombres de
+  test fallando (test_basic.py::test_config_loading,
+  test_justicia_control_layer_v1.py::test_default_flags_simulated,
+  test_perseo_autofix_v2.py::test_audit_includes_ai_modules, 3x
+  test_thalos_control_layer_v1.py,
+  test_thalos_safe_v1.py::test_monitoring_cycle_respects_flags) y mismos 3
+  errores de test_app.py (NameError: TestClient). Sin regresion,
+  confirmado de forma independiente.
+- Ejecute tambien los 4 ficheros de test nuevos/tocados de esta vuelta
+  (test_thalos_v1_execute_block_tenant.py,
+  test_zeus_core_scan_superuser_gate_v1.py, test_thalos_safe_v1.py,
+  test_zeus_agents_thalos_real_v1.py): 1 failed, 25 passed -- el unico
+  fallo es el mismo preexistente ya contabilizado en el baseline
+  (test_monitoring_cycle_respects_flags), no relacionado con esta vuelta.
+- Repo verificado limpio antes y despues de mi verificacion
+  (git status --short sin salida), main no tocado, sin push, todos mis
+  scripts temporales (reviewer_v3_exploit_tmp.py,
+  reviewer_v3_leak_tmp.py, reviewer_v3_leak2_tmp.py,
+  reviewer_v3_leak3_tmp.py) borrados del worktree tras usarlos, y todas mis
+  cuentas/empresas de prueba borradas de zeus.db al terminar cada script.
+
+Los 4 puntos concretos exigidos por mi propio veredicto de la ronda 2 estan
+cerrados y verificados en vivo por mi de forma independiente.
+
+### 10.2 Hallazgo nuevo -- uno de los "pendientes fuera de alcance" declarados en 9.8 es un exploit vivo, trivial, sin precondiciones
+
+El encargo de esta ronda me pidio explicitamente evaluar si alguno de los
+pendientes declarados en 9.8 (POST /thalos/v1/monitor,
+GET /thalos/v1/audit, app/api/v1/endpoints/workspaces.py:681) "representa
+el mismo tipo de vulnerabilidad explotable que ya motivo 2 devoluciones y
+deberia bloquear el cierre tambien". Investigue los tres y reproduje en vivo
+con datos propios (tenant nuevo, cero actividad propia, sin flags THALOS
+activados, sin superusuario, sin monkeypatch de ningun tipo):
+
+- GET /thalos/v1/audit (audit_from_db): confirmado que expone
+  contadores y eventos GLOBALES sin filtrar por tenant
+  (event_count, security_event_count, recent_events, recent_alerts
+  vienen de queries sin WHERE company_id). Un tenant nuevo sin actividad
+  propia obtuvo event_count: 341, security_event_count: 137 y eventos
+  recientes de tipo security_pattern que no le pertenecen. Requiere solo
+  autenticacion, sin flags especiales.
+- POST /thalos/v1/monitor: el escaneo global (scan_logs) solo se
+  ejecuta si THALOS_REAL_MONITORING/THALOS_EXECUTION_ENABLED/
+  THALOS_REAL_LOGS_ENABLED estan activos (todos False por defecto en este
+  entorno) -- confirmado que con los flags por defecto el escaneo queda vacio
+  ({}), asi que hoy, con la configuracion por defecto, no es explotable
+  de inmediato, pero se activa exactamente cuando se activa la
+  monitorizacion real (el objetivo final del sistema), momento en el que
+  vuelve a ser la misma fuga.
+- app/api/v1/endpoints/workspaces.py:681 (POST
+  /api/v1/workspaces/thalos/log-monitor): CONFIRMADO CRITICO Y
+  EXPLOTABLE HOY, SIN NINGUNA PRECONDICION. A diferencia de los otros dos,
+  esta ruta llama a thalos_security_engine.scan_logs(db, hours=24,
+  company_id=cid) de forma incondicional (no hay ningun flag
+  THALOS_* que lo module). Lo reproduje en vivo: cree un tenant 100% nuevo
+  (company_id=416, cero actividad propia), llame a POST
+  /thalos/log-monitor con logs=[] (payload minimo, sin nada especial), y
+  el resultado (persistido como ThalosWorkspaceItem de ESE tenant, legible
+  luego por el mismo usuario via GET /thalos/v1/workspace/items) contenia:
+
+  real_scan.activities_scanned: 458
+  real_scan.failed_login_candidates:
+    brute_77077f@evil.test (failed_count 6)
+    brute_d663b5@evil.test (failed_count 6)
+    ... 13 emails reales de otros tenants/sesiones de prueba en total
+  real_scan.pattern_alerts:
+    pattern=403 agent=AFRODITA action_type=cost_calculated
+    ... mas eventos de otros tenants
+
+  Es decir: cualquier usuario autenticado de cualquier empresa, con una
+  sola llamada HTTP ordinaria a un endpoint que ya existia antes de esta
+  rama, obtiene y persiste de forma permanente en su propio workspace datos
+  de seguridad reales de OTRAS empresas (emails de intentos de fuerza
+  bruta, patrones de actividad de otros agentes/tenants) -- sin superusuario,
+  sin activar ningun flag THALOS_*, sin monkeypatch, sin conocer nada de
+  antemano sobre las otras empresas.
+
+  Esta ruta especifica ya estaba nombrada por el propio ejecutor en la
+  seccion 9.4/9.8 (workspaces.py:681... quedan fuera de alcance
+  deliberado), pero el informe no verifico ni declaro que fuera explotable
+  sin condiciones (a diferencia de THALOS.SCAN, que si necesitaba
+  monkeypatch de can_run_active_execution para poder probarse en algunos
+  contextos, aunque para detect_suspicious_activity tampoco -- ver 9.5.3).
+  Al no distinguir "necesita flags que hoy estan en false" (como
+  /thalos/v1/monitor) de "se ejecuta siempre, hoy, sin condiciones" (como
+  este endpoint), el informe subestima la urgencia relativa de este pendiente
+  frente a los otros dos.
+
+### 10.3 Por que esto obliga a otra devolucion, con alcance acotado
+
+La regla no negociable 4 de la skill zeus-produccion es explicita: una
+fuga de datos entre tenants se trata "como vulnerabilidad de seguridad, no
+como bug menor", sin excepcion de alcance. El propio precedente de la ronda
+2 de esta misma rama establecio que "la mitigacion interina es barata... y
+no se aplico... aunque la migracion de esquema completa exceda el alcance
+del fix puntual, la mitigacion interina no lo excede y debia aplicarse antes
+de cerrar" -- exactamente la misma logica aplica aqui: el patron de gate de
+superusuario que esta Vuelta 3 ya aplico con exito a
+THALOS.SCAN/detect_suspicious_activity es igual de barato de aplicar a
+workspace_thalos_logs (workspaces.py:681), y este ultimo es hoy MAS
+facil de explotar que los dos que si se corrigieron (cero precondiciones,
+mientras que el bypass de block_user necesitaba can_run_active_execution
+monkeypatcheado para ser observable en este entorno).
+
+No estoy exigiendo repetir el trabajo ya cerrado de esta vuelta (9.1, 9.2,
+9.3, y el gate de superusuario en los 2 endpoints que si se tocaron quedan
+confirmados correctos y no deben rehacerse), ni exijo la migracion de
+esquema completa (company_id en AgentActivity/ThalosLoginAttempt,
+correctamente fuera de alcance de un fix puntual). Exijo especificamente que
+antes de dar este branch por cerrado se aplique la misma mitigacion interina
+barata (gate de superusuario, o como minimo dejar de incrustar real_scan
+crudo en el payload persistido) a workspace_thalos_logs
+(workspaces.py:681), por ser la unica de las tres rutas pendientes
+confirmada explotable hoy sin ninguna condicion adicional. Extender el mismo
+gate a GET /thalos/v1/audit y a POST /thalos/v1/monitor (para cuando se
+activen los flags de monitorizacion real) es recomendable por consistencia,
+pero la exigencia dura de esta devolucion es la ruta de workspaces.py:681.
+
+### 10.4 Checklist de no-simulacion (verificado por mi sobre el diff de 3200624 en si)
+
+- [x] Datos reales de BD, no valores fijos -- confirmado, sin cambios sobre
+      lo ya validado en rondas anteriores.
+- [x] Pasa por autenticacion (get_current_active_user) -- confirmado en las
+      3 vias tocadas por esta vuelta.
+- [x] Filtra por tenant en cada query -- para el alcance especifico de esta
+      vuelta (bypass de company_id en block_user/las 4 acciones de
+      thalos_v1_execute/thalos_v1_monitor), SI, confirmado en vivo
+      (10.1). A nivel de la fuga general de "seguridad global sin
+      company_id" que motivo la ronda 2, el fix cierra las 2 rutas que se
+      le pidieron pero dos rutas hermanas del mismo motor
+      (GET /thalos/v1/audit, y sobre todo workspaces.py:681) siguen sin
+      filtrar y una de ellas es explotable hoy sin condiciones (10.2).
+- [x] Manejo de errores real -- confirmado (forbidden con
+      reason explicito, log de seguridad en cada rama).
+- [x] Logs verificables -- confirmado (ActivityLogger + ThalosSecurityEvent
+      en cada rechazo nuevo).
+- [x] Tests / ejecucion manual -- 8 tests nuevos verificados por mi en verde,
+      mas mi propia reproduccion independiente del exploit exacto de 8.2 y
+      del caso company_id=None.
+- [x] Migracion Alembic -- no aplica (no se anadieron columnas).
+
+### Veredicto (ronda 3)
+
+DEVUELTO AL EJECUTOR. Hace falta una Vuelta 4, de alcance acotado.
+
+Lo bueno primero, para que quede explicito: los 4 puntos exigidos por mi
+propio veredicto de la ronda 2 (cierre del bypass de company_id en las 4
+acciones de thalos_v1_execute y en thalos_v1_monitor, fail-closed de
+company_id=None, test de regresion del exploit exacto, y aplicacion real
+-no solo propuesta- de la mitigacion interina de THALOS.SCAN) estan
+cerrados correctamente y los he verificado yo mismo en vivo con datos
+propios, sin encontrar ninguna discrepancia. Si el alcance de esta
+auditoria fuera exactamente el de los hallazgos de la ronda 2, esto se
+aprobaria sin reservas.
+
+No se aprueba por un hallazgo nuevo que descubri al evaluar, tal como pedia
+el encargo de esta ronda, los pendientes declarados en la seccion 9.8:
+app/api/v1/endpoints/workspaces.py:681 (POST
+/api/v1/workspaces/thalos/log-monitor) es una fuga de datos cross-tenant
+real, confirmada por mi en vivo con una cuenta 100% nueva y sin ninguna
+precondicion (sin flags, sin superusuario, sin monkeypatch) -- mas facil de
+explotar que el propio hallazgo que motivo la devolucion de la ronda 2. Es
+la misma clase de vulnerabilidad (fuga via thalos_security_engine.scan_logs
+sin filtrado real por tenant) que ya causo 2 devoluciones de esta rama, y la
+mitigacion que la cerraria (gate de superusuario) es la misma que esta
+misma Vuelta 3 ya aplico con exito en dos sitios hermanos.
+
+Para la Vuelta 4, como minimo:
+
+1. Alto/Critico -- aplicar el mismo gate de superusuario (o equivalente) a
+   app/api/v1/endpoints/workspaces.py::workspace_thalos_logs
+   (workspaces.py:681) antes de invocar scan_logs, o dejar de incrustar
+   real_scan en el payload persistido para usuarios no-superusuario.
+   Anadir un test de regresion que reproduzca exactamente mi prueba (tenant
+   nuevo sin actividad propia recibe failed_login_candidates/
+   pattern_alerts de otras empresas via este endpoint) y confirme que tras
+   el fix ya no ocurre.
+2. Recomendado por consistencia (no bloqueante si se documenta con la misma
+   honestidad ya demostrada en esta vuelta): extender el mismo gate a
+   GET /thalos/v1/audit y dejar constancia expresa de que
+   POST /thalos/v1/monitor hereda la misma fuga en cuanto se activen
+   THALOS_REAL_MONITORING/THALOS_REAL_LOGS_ENABLED.
+3. No es necesario rehacer nada de 9.1/9.2/9.3/9.4 tal como estan
+   commiteados en 3200624 -- quedan confirmados correctos por esta revision
+   independiente.
+4. Esta vuelta no es autoaprobacion: corresponde a revisor-independiente
+   confirmar la Vuelta 4 con su propia verificacion en vivo, incluyendo un
+   nuevo intento de mi propia reproduccion de workspaces.py:681.
+
+Repo verificado limpio tras esta revision (git status sin cambios salvo esta
+misma seccion anadida), main no tocado, sin push.

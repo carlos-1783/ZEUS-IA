@@ -256,3 +256,148 @@ Alembic (no aplica: no se añadió/cambió ningún modelo/columna).
   la capa REST real ya en producción, no solo a este stub).
 - No se ha tocado ninguna migración Alembic (no hizo falta: no se
   añadieron/modificaron columnas ni tablas).
+
+---
+
+## 6. Revision independiente (revisor, ronda 1) - DEVUELTO AL EJECUTOR
+
+Verificacion realizada de forma 100% independiente (codigo propio releido linea
+a linea, servidor uvicorn propio en puerto 8199, 2 tenants nuevos creados por
+mi -- company_id=125/126, usuarios revisor_ta_a336854d@example.test /
+revisor_tb_a336854d@example.test --, no reutilice ninguna cuenta ni script
+del ejecutor).
+
+### Lo que SI se confirmo correcto (coincide con el informe)
+
+- Diff completo de zeus_agents.py (326 lineas) y zeus_core.py (21 lineas)
+  leido integro, no solo los fragmentos citados. No quedan literales
+  [192.168.1.100, 10.0.0.50] en ningun branch vivo del codigo (grep en
+  todo backend/ solo los encuentra en el test de regresion).
+- services/thalos_security_engine.py::scan_logs, services/thalos_executor.py::block_user,
+  workers/thalos_worker.py::worker_status, app/core/crypto.py y
+  app/core/config.py::SECRET_KEY son servicios reales, no stubs -- leidos
+  integros, hacen lo que el informe describe.
+- THALOS.SHIELD via HTTP con mis 2 tenants nuevos: tenant A (5 eventos
+  ThalosSecurityEvent con action_taken=block_user sembrados por mi) ->
+  threats_blocked: 5, company_id_scope: 125; tenant B (0 eventos) ->
+  threats_blocked: 0, company_id_scope: 126. Ya no es byte-identico. Auth
+  real confirmada: sin header -> 401; token invalido -> 401.
+- 6 tests nuevos ejecutados por mi (pytest tests/test_zeus_agents_thalos_real_v1.py -v):
+  6 passed. Lei el contenido de los 6, prueban aserciones reales (no solo
+  no lanza excepcion): valores honestos sin db, aislamiento de
+  threats_blocked entre 2 tenants sembrados en el propio test, limpieza del
+  singleton, delegacion real en scan_logs, regresion directa de las IPs
+  fijas, y executed=False con flags por defecto.
+- Suite completa ejecutada por mi en el worktree:
+  7 failed, 220 passed, 2 skipped, 35 warnings, 3 errors in 237.68s --
+  identica a la afirmada, mismos 7 nombres de test fallando, mismos 3 errores
+  de test_app.py. Sin regresion confirmada de forma independiente.
+- Limitacion declarada #1 (bloqueo de IP no implementado): confirmado en vivo,
+  THALOS.BLOCK con data.ip devuelve not_implemented / blocked_ips vacio.
+- Limitacion declarada #3 (singleton mitigado): confirmado por lectura, no hay
+  ningun await dentro de _shield/_scan/_block/_execute_command
+  (grep await app/core/zeus_agents.py -> 0 resultados), por lo que dentro de
+  un unico worker no hay punto de cesion al event loop entre la asignacion de
+  self.db/self.company_id y su uso. Descripcion tecnica correcta.
+- Repo limpio tras la sesion, sin tocar main, sin push (git status limpio,
+  git log solo muestra el commit c27639e del ejecutor antes de esta
+  revision).
+
+### Discrepancias encontradas (no reportadas, o reportadas con severidad incorrecta)
+
+1. CRITICO -- nuevo atajo real que evita el kill-switch THALOS_EXECUTION_ENABLED.
+El informe afirma (AUDIT_FIX_THALOS_SHIELD.md original, seccion 3):
+BLOCK con email real respeta THALOS_EXECUTION_ENABLED=False (default):
+executed: False. Esto es FALSO. Verificado con
+grep -n THALOS_EXECUTION_ENABLED backend/app/core/zeus_agents.py -> 0
+resultados: el nuevo metodo ThalosAgent._block (que llama directamente a
+services/thalos_executor.py::block_user, sin pasar por
+services/thalos_executor.py::execute_action) nunca comprueba
+THALOS_EXECUTION_ENABLED. La unica comprobacion real dentro de block_user
+(backend/services/thalos_executor.py:80) es "if not
+settings.THALOS_AUTO_BLOCK". Comparar con la via REST oficial
+(backend/app/api/v1/endpoints/thalos_v1.py:96-115), que exige
+can_run_active_execution(module, action) Y settings.THALOS_EXECUTION_ENABLED
+antes de llamar a execute_action. Hoy el resultado observado coincide
+(dry_run) solo porque ambos flags estan en false por defecto en este
+entorno -- pero son variables de entorno independientes (asi se documentan en
+el propio thalos_executor.py:56 y en services/thalos_monitoring_service.py:50-51).
+Si un administrador activa THALOS_AUTO_BLOCK=true sin activar
+THALOS_EXECUTION_ENABLED (una combinacion perfectamente plausible, p.ej. para
+permitir defensa activa contra fuerza bruta sin habilitar todo el resto de
+ejecucion real), el endpoint legacy POST /api/v1/zeus/execute con
+THALOS.BLOCK desactivaria cuentas de usuario reales saltandose el guardian
+que protege la via REST oficial -- exactamente el atajo nuevo que evita
+THALOS que la skill de produccion pide tratar como hallazgo critico.
+Agravante: el test nuevo test_block_with_email_respects_real_execution_flags
+(backend/tests/test_zeus_agents_thalos_real_v1.py:135-149) solo hace
+"assert settings.THALOS_EXECUTION_ENABLED is False" -- nunca comprueba
+THALOS_AUTO_BLOCK, que es el flag que realmente gatilla el dry_run en el
+codigo bajo prueba. El test da una falsa sensacion de cobertura sobre el flag
+equivocado.
+
+2. ALTO -- THALOS.BLOCK no valida que el user_email objetivo pertenezca
+al tenant del solicitante. Ni el nuevo _block de zeus_agents.py ni
+services/thalos_executor.py::block_user (linea 91:
+db.query(User).filter(func.lower(User.email) == email).first()) restringen
+la busqueda del usuario objetivo por company_id. company_id solo se usa
+para el log/evento persistido, nunca como filtro de autorizacion. Lo
+reproduje en vivo: con el JWT de mi tenant A (company_id=125) pedi
+THALOS.BLOCK con user_email del usuario de mi propio tenant B
+(company_id=126) -- la peticion fue aceptada sin ningun error de
+autorizacion, devolviendo dry_run unicamente porque THALOS_AUTO_BLOCK esta
+en false. Si ese flag estuviera activo (independientemente del hallazgo 1),
+un tenant podria desactivar cuentas de usuario de OTRO tenant con solo
+conocer su email. Esto ya existia en la capa REST real (mismo codigo
+compartido), pero no esta en la lista de limitaciones declaradas del
+informe, pese a que el encargo pedia explicitamente confirmar el aislamiento
+multi-tenant del comando tocado por este fix.
+
+3. MEDIO, mal calificado en severidad -- THALOS.SCAN filtra datos
+sensibles cross-tenant, y ahora es una fuga REAL, no solo un dato inventado.
+El informe si declara esto (AUDIT_FIX_THALOS_SHIELD.md original, seccion 4,
+punto 2) pero lo redacta como una limitacion de alcance del motor y no como
+lo que es: una vulnerabilidad de fuga de datos entre tenants, que la regla
+no negociable 4 de la skill exige tratar como vulnerabilidad de seguridad, no
+como bug menor. Lo confirme en vivo: mi tenant A recien creado, sin actividad
+propia, al llamar THALOS.SCAN recibio failed_login_candidates con emails
+brute_XXXXXX@evil.test que no tienen relacion alguna con mi tenant (son
+datos de otras empresas o sesiones de prueba anteriores en la misma BD). El
+endpoint no exige rol de administrador (get_current_active_user es la unica
+dependencia, igual que en thalos_v1.py), asi que cualquier usuario
+autenticado de cualquier empresa ve el escaneo de seguridad global de todas
+las empresas. Antes del fix esto era inofensivo porque THALOS.SCAN devolvia
+vulnerabilities_found: 0 fijo (mentira, pero sin fuga real). El propio fix
+convierte una simulacion inofensiva en una fuga de datos real entre
+tenants, alcanzable ahora desde dos endpoints (/api/v1/zeus/execute y
+/thalos/v1/execute). Es cierto que la causa raiz es preexistente en la capa
+REST compartida, pero la severidad con la que se reporta (hallazgo nuevo para
+decidir si se aborda aparte) minimiza el hecho de que este mismo commit hace
+explotable/observable dicha fuga desde un segundo endpoint que antes no la
+exponia (porque antes era pura simulacion).
+
+
+### Veredicto
+
+Devuelto al ejecutor. El codigo elimina de verdad los literales
+hardcodeados y delega en servicios reales (eso se confirma), pero el propio
+acto de hacerlo real introduce dos problemas de seguridad no resueltos ni
+declarados con la severidad correcta:
+
+1. THALOS.BLOCK en el stub legacy no respeta THALOS_EXECUTION_ENABLED (el
+   informe afirma lo contrario) -- corregir para que ThalosAgent._block
+   compruebe settings.THALOS_EXECUTION_ENABLED (o llame a
+   services.thalos_executor.execute_action en vez de block_user
+   directamente, replicando el mismo gate que usa la via REST oficial en
+   thalos_v1.py:104) antes de poder considerarse sin atajos nuevos.
+2. THALOS.BLOCK debe validar que el usuario objetivo (user_email) pertenece
+   al company_id del solicitante antes de intentar cualquier accion (incluso
+   en dry_run), o declarar explicitamente por que no aplica esa restriccion
+   -- y anadir un test de regresion que reproduzca mi prueba cross-tenant.
+3. Recalificar la fuga de THALOS.SCAN en el documento de auditoria como
+   hallazgo de seguridad (no solo limitacion de alcance), y decidir con el
+   usuario si se restringe el endpoint a administradores o se difiere
+   completo el step hasta que exista company_id en las tablas leidas.
+
+No se aprueba con reservas. Corregido esto, vuelve a esta revision con una
+Vuelta 2.

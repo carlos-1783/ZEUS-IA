@@ -592,15 +592,31 @@ def onboarding_status(
     )
 
     if not setup_completed and co:
-        ce_count = (
-            db.query(CompanyEmployee)
-            .filter(CompanyEmployee.company_id == co.id)
-            .count()
+        # El registro estándar (apply_registration_onboarding -> _apply_roce_automation_seed
+        # -> _create_owner_employee_and_default_schedules) crea SIEMPRE, para CUALQUIER alta
+        # nueva y CUALQUIER business_type, un CompanyEmployee placeholder con
+        # source="onboarding_owner" (employee_code=f"U{{user.id}}-OWNER") y turnos ficticios
+        # L-V 09:00-17:00, incluso si el usuario nunca abrió el wizard. Ese placeholder NO
+        # es una señal de que el usuario completó el onboarding real, así que se excluye del
+        # conteo. Los empleados añadidos de verdad durante el wizard (source="onboarding_profile"),
+        # desde AFRODITA (source="afrodita_rrhh_v1") o mediante scripts de alta de pilotos
+        # (source="pilot_seed_json") sí cuentan como señal legítima, igual que filas antiguas
+        # sin "source" (creadas antes de que esta columna existiera).
+        ce_count = sum(
+            1
+            for e in db.query(CompanyEmployee).filter(CompanyEmployee.company_id == co.id).all()
+            if (e.source or "") != "onboarding_owner"
         )
-        tpv_products = (
-            db.query(TPVProduct)
-            .filter(TPVProduct.user_id == current_user.id)
-            .count()
+        # Mismo problema que con company_employees: el registro estándar
+        # (_seed_tpv_products en onboarding_engine.py, y _ensure_hospitality_products en
+        # global_company_bootstrap.py para el alta post-pago) crea SIEMPRE una plantilla de
+        # producto de catálogo por defecto para cualquier business_type, marcada con
+        # metadata_={"auto_created": True, ...}. Esa plantilla no es una señal de que el
+        # usuario configuró de verdad su catálogo/TPV, así que se excluye del conteo.
+        tpv_products = sum(
+            1
+            for p in db.query(TPVProduct).filter(TPVProduct.user_id == current_user.id).all()
+            if not (isinstance(p.metadata_, dict) and p.metadata_.get("auto_created"))
         )
         has_profile_data = bool(
             existing_operational_profile.get("updated_at")

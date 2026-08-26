@@ -216,3 +216,74 @@ def test_justice_compliance_events_allows_superuser(db: Session):
     admin, _ = _seed_company(db, is_superuser=True)
     result = justice_compliance_events(limit=50, current_user=admin, db=db)
     assert "events" in result or "data" in result
+
+
+# ---------------------------------------------------------------------------
+# 5) services/justice_cross_agent_v1.py::sync_cross_agent_events -- paso 4:
+#    tras la migración de company_id, filtra las alertas THALOS por la
+#    empresa real del usuario que dispara el audit, en vez de leer TODAS las
+#    alertas abiertas de TODAS las empresas.
+# ---------------------------------------------------------------------------
+
+
+def test_sync_cross_agent_events_only_syncs_own_company_alerts(db: Session):
+    from app.models.thalos_alert import ThalosAlert
+    from services.justice_cross_agent_v1 import sync_cross_agent_events
+
+    user_a, company_a = _seed_company(db, is_superuser=False)
+    _, company_b = _seed_company(db, is_superuser=False)
+
+    db.add(
+        ThalosAlert(
+            level="critical",
+            title="Alerta de la empresa B",
+            rule_id="v6_sweep_test_b",
+            resolved=False,
+            company_id=company_b.id,
+        )
+    )
+    db.add(
+        ThalosAlert(
+            level="high",
+            title="Alerta de la empresa A",
+            rule_id="v6_sweep_test_a",
+            resolved=False,
+            company_id=company_a.id,
+        )
+    )
+    db.commit()
+
+    result = sync_cross_agent_events(db, user_a)
+    db.commit()
+
+    assert result["synced"]["thalos"] >= 1
+    # No debe haberse escrito ningún compliance_event con el rule_id/título
+    # de la alerta de la OTRA empresa.
+    from app.models.compliance_event import ComplianceEvent
+
+    rows = db.query(ComplianceEvent).filter(ComplianceEvent.source == "THALOS").all()
+    assert not any("v6_sweep_test_b" in (r.details_json or "") for r in rows)
+
+
+def test_sync_cross_agent_events_superuser_sees_all_companies(db: Session):
+    from app.models.thalos_alert import ThalosAlert
+    from services.justice_cross_agent_v1 import sync_cross_agent_events
+
+    admin, _ = _seed_company(db, is_superuser=True)
+    _, other_company = _seed_company(db, is_superuser=False)
+
+    db.add(
+        ThalosAlert(
+            level="critical",
+            title="Alerta ajena visible para superusuario",
+            rule_id="v6_sweep_test_super",
+            resolved=False,
+            company_id=other_company.id,
+        )
+    )
+    db.commit()
+
+    result = sync_cross_agent_events(db, admin)
+    db.commit()
+
+    assert result["synced"]["thalos"] >= 1

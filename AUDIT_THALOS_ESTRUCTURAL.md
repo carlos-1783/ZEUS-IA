@@ -630,3 +630,341 @@ archivo de prueba quedó en el repositorio.
 Repo verificado limpio tras cada commit de esta vuelta (`git status --short`
 sin salida salvo los archivos de cada paso), `main` no tocado, sin push, sin
 rama nueva.
+
+---
+
+## 15. Revision independiente (revisor, ronda 6) - DEVUELTO AL EJECUTOR (Vuelta 7 requerida)
+
+Verificacion realizada de forma 100% independiente sobre los 4 commits de esta
+vuelta (292a5cc, ee6f9a3, db06137, 9718d81), rama
+feature/fix-thalos-shield-real, worktree
+C:\Users\Acer\ZEUS-IA\.claude\worktrees\agent-a9f8f12f24d0bc95c. Confirmado
+al empezar que un revisor anterior de esta misma vuelta (cortado por limite de
+sesion) no dejo nada sin commitear ni sin trackear (git status -> working
+tree clean antes de empezar mi propia verificacion).
+
+Cuentas/datos usados, todos creados por mi, ninguno reutilizado de vueltas
+anteriores: revv6_atk_*@example.test / revv6_vicowner_*@example.test
+(company_id nuevos por ejecucion, para el exploit de handlers de
+automatizacion y de justice/compliance-events), revv6_legacy_atk_*@example.test
+(para el hallazgo nuevo de esta ronda), y una copia desechable de zeus.db
+en C:\Users\Acer\AppData\Local\Temp\claude\zeus_migtest\zeus_reviewer_test.db
+con datos sinteticos propios para el ciclo de migracion. No use Edit/Write
+sobre codigo de produccion en ningun momento; el unico archivo modificado por
+mi es este documento de auditoria, via shell, tal como se me indico
+explicitamente en el encargo.
+
+### 15.1 Migracion 0046 -- verificada linea a linea y en vivo con datos propios
+
+Lei el archivo completo (alembic/versions/0046_thalos_tables_company_id.py).
+El backfill es honesto: usa la senal mas fiable disponible por tabla y deja
+NULL sin inventar nada cuando no hay atribucion fiable, exactamente como se
+documenta.
+
+Reproduje yo mismo el ciclo upgrade -> downgrade -> upgrade sobre una
+copia desechable de zeus.db (no la de desarrollo), insertando mis propios
+datos sinteticos antes de cada upgrade:
+
+- thalos_login_attempts: fila con email real (usuario+empresa sembrados por
+  mi) -> backfill correcto al company_id real; fila con email tipo
+  brute_xxx@evil.test -> quedo NULL, tal como se documenta.
+- thalos_events: fila con el email real embebido en message -> backfill
+  correcto via regex; fila sin ningun email -> NULL.
+- thalos_alerts: fila rule_id=brute_force_email con metadata_json.email
+  = email real -> backfill correcto via campo estructurado; fila que hereda
+  company_id desde thalos_events via event_id -> backfill correcto por
+  herencia; fila huerfana sin email ni event_id -> NULL.
+
+Los 7 escenarios se comportaron exactamente como predice la tabla de
+AUDIT_THALOS_ESTRUCTURAL.md seccion 1.3. Tras el downgrade a 0045
+confirme por lectura directa de SQLite que las 3 columnas company_id
+desaparecieron de las 3 tablas (y que thalos_security_events, que ya
+tenia company_id desde antes, no se toco en ningun momento del ciclo). El
+segundo upgrade a head volvio a dejar el esquema en 0047 sin error.
+Ciclo up-down-up limpio, confirmado por mi con datos que yo mismo elegi,
+no con los del ejecutor.
+
+### 15.2 Migracion 0047 (RLS) -- coherente con el patron de referencia, no-op confirmado en SQLite
+
+Comparado linea a linea con "git show feature/multi-tenant-bd:backend/alembic/versions/0047_row_level_security.py"
+(mismo nombre de archivo, contenido distinto: esa version cubre
+invoices/agent_activities/companies/users con policies mas complejas,
+incluyen fallback por user_email/created_by/pertenencia a empresa,
+mientras que la de esta rama cubre las 4 tablas de THALOS con una policy mas
+simple, coherente con que estas 4 tablas no tienen ningun concepto de fila
+propia del usuario distinto de company_id). Mismo mecanismo
+ENABLE/FORCE ROW LEVEL SECURITY, misma forma de policy
+(current_setting con NULLIF y comparacion de company_id como texto),
+mismo criterio de fail-open sin contexto. Sintacticamente correcto para
+Postgres (verificado por lectura, sin poder ejecutarlo contra un Postgres
+real, ver 15.3). Confirmado que _is_postgres() hace que upgrade()/
+downgrade() sean no-op completos en SQLite (mismo patron ya usado en mi
+propio ciclo de 15.1, que no fallo ni altero nada al pasar por 0047 en
+SQLite).
+
+app/db/tenant_context.py::get_db_scoped revisado completo: fija
+app.current_company_id / app.current_user_id / app.current_user_email via
+set_config con is_local=true (alcance de transaccion, se resetea solo al
+commit/rollback, no requiere limpieza manual). Investigue especificamente
+el riesgo de fuga entre peticiones concurrentes que pedia el encargo: cada
+llamada a get_db() (app.db.session.get_db) crea una SessionLocal() nueva
+por peticion (confirmado leyendo app/db/session.py:18), y cada Session de
+SQLAlchemy hace checkout de su propia conexion del pool de forma perezosa;
+al hacer db.close() al final de la peticion (bloque finally del generador)
+se hace rollback implicito si no hubo commit explicito, lo que termina la
+transaccion Postgres y descarta automaticamente cualquier set_config local
+antes de devolver la conexion al pool. No encontre ninguna via por la que
+dos peticiones concurrentes compartan la misma conexion con el contexto de
+tenant sin resetear entre ellas, asumiendo (como advierte el propio codigo)
+que el rol de conexion NO es superusuario/BYPASSRLS de Postgres.
+
+Nota adicional que no estaba en el informe pero no cambia la conclusion:
+get_current_active_user/get_current_user obtienen su propia sesion via
+app.db.base.get_db (un wrapper "yield from" distinto, por identidad de
+funcion, del app.db.session.get_db que usa get_db_scoped), asi que FastAPI
+crea DOS sesiones/conexiones fisicas por peticion para los endpoints que
+dependen de current_user y de db=Depends(get_db_scoped) a la vez. Esto ya
+ocurria ANTES de esta vuelta (todo endpoint con Depends(get_current_active_user)
+mas Depends(get_db) ya tenia este mismo patron) y no es una regresion de
+get_db_scoped: el db que get_db_scoped fija con set_tenant_context es
+exactamente el mismo objeto Session que el endpoint recibe y usa para sus
+queries, asi que el contexto de RLS SI coincide con la conexion que ejecuta
+las queries protegidas. Es una ineficiencia preexistente (dos conexiones por
+peticion en vez de una), no un fallo de aislamiento.
+
+### 15.3 Postgres real -- intento breve, mismo resultado que el ejecutor
+
+"docker --version" da command not found. No segui ningun otro camino (no
+intente psql contra el servicio Postgres 17 local preexistente sin
+credenciales, tal como se me indico explicitamente evitar). Acepto la misma
+limitacion documentada por el ejecutor: la sintaxis de 0047 esta verificada
+por lectura contra el patron ya validado en dec54c0, pero el mecanismo de
+RLS en si (y muy especialmente si la conexion de la app en el entorno real de
+despliegue usa o no un rol superusuario de Postgres, que inutilizaria RLS por
+completo pese a FORCE) no se ha podido probar contra un Postgres real en
+ninguna ronda de esta rama.
+
+### 15.4 Verificacion en vivo del hallazgo mas grave de la ronda 5 (paso 1) -- CERRADO, confirmado
+
+Reproduje el exploit exacto de la seccion 14.2 con cuentas 100% nuevas
+(revv6_atk_*, company_id nuevo, y revv6_vicowner_*, otro company_id nuevo),
+llamando directamente a los handlers (mismo patron que usan los propios tests
+del ejecutor y que uso el revisor de la ronda 5):
+
+  CASHFLOW result: blocked / superuser_required_for_global_audit
+  BACKUP result:   blocked / superuser_required_for_global_audit
+  ALERT result:    blocked / superuser_required_for_global_audit
+  ThalosSecurityEvent count for company_b: before=0 after=0 (sin fila forjada)
+  JUSTICE compliance-events (no superuser): HTTPException 403
+
+Control positivo (mismo atacante promovido a superusuario, sobre su propia
+empresa): ALERT devuelve status completed (con THALOS_EXECUTION_ENABLED
+desactivado por defecto, responde "THALOS_EXECUTION_ENABLED is false",
+confirmando que paso el gate y llego al motor real); justice/compliance-events
+devuelve 200 con datos reales. El camino legitimo sigue intacto. Los 2
+hallazgos exactos que motivaron la devolucion de la ronda 5 estan cerrados y
+lo confirmo de forma independiente.
+
+### 15.5 Hallazgo nuevo, bloqueante -- handle_thalos_backup (accion legacy backup_created) sigue sin ningun gate, misma clase exacta que el hallazgo que esta vuelta acaba de cerrar
+
+El HANDLER_MAP para THALOS (services/automation/handlers/__init__.py,
+lineas 114 a 126) registra 7 entradas, no solo las 6 de thalos_v1.py que
+esta vuelta (y la 5) revisaron: ademas de detect_suspicious_activity,
+scan_security_logs, block_user y security_monitor (gateadas desde la
+Vuelta 5) y audit_cashflow_anomaly, trigger_backup y alert_admin (gateadas
+en esta Vuelta 6, paso 1), existen tres entradas legacy, alcanzables por el
+mismo vector exacto (POST /api/v1/activities/log con status pending, luego
+AgentAutomationExecutor, luego resolve_handler):
+
+  security_scan   -> handle_thalos_security_scan   (services/automation/handlers/thalos.py)
+  task_assigned   -> handle_thalos_alerts          (services/automation/handlers/thalos.py)
+  backup_created  -> handle_thalos_backup          (services/automation/handlers/thalos.py)
+
+Ninguna de las 3 tiene ningun chequeo de superusuario ni de company_id; son
+un archivo (handlers/thalos.py) completamente distinto y anterior al
+handlers/thalos_v1.py que ha sido el foco exclusivo de las Vueltas 5 y 6 (el
+propio archivo thalos_v1.py se autodescribe en su docstring como paralelo al
+legacy handlers/thalos.py). El barrido de esta vuelta (grep recursivo de
+ThalosEvent, ThalosAlert, ThalosSecurityEvent y ThalosLoginAttempt sobre
+services/ y app/) no las detecta porque ninguna de las 3 lee ni escribe esas
+4 tablas, pero handle_thalos_backup ejecuta la MISMA accion peligrosa
+(shutil.copy2 de zeus.db completo, copia de la base de datos de TODAS las
+empresas) que motivo que trigger_backup/handle_thalos_v1_backup se
+clasificara como hallazgo de mayor gravedad de la ronda 5 y se cerrara en el
+paso 1 de esta misma vuelta. Es exactamente el mismo tipo de vulnerabilidad
+(disparo de una operacion global sensible por un usuario NO superusuario,
+via el mismo vector asincrono) que el propio encargo de esta vuelta pidio
+cerrar primero, por instruccion explicita, para su hermano trigger_backup;
+solo que con un action_type distinto (backup_created en vez de
+trigger_backup) que enruta a un handler legacy nunca revisado.
+
+Reproducido en vivo por mi, de forma concluyente (script propio,
+revv6_legacy_atk_*@example.test, usuario autenticado real, NO superusuario,
+sin ninguna relacion con otra empresa, llamando a handle_thalos_backup
+exactamente como lo haria AgentAutomationExecutor al recoger una
+AgentActivity real con agent_name THALOS, action_type backup_created,
+status pending, creada por este mismo usuario via
+POST /api/v1/activities/log):
+
+  attacker=revv6_legacy_atk_6e05dd88@example.test (NOT superuser)
+  LEGACY handle_thalos_backup result (sin NINGUN chequeo de superusuario en el codigo):
+   status: completed
+   backup_created (metrics_update): {backup_created: 1}
+   notes: Backup generado automaticamente en storage/backups/zeus_backup_20260826T162709Z.db
+  NEW backup files created by non-superuser attacker: storage/backups/zeus_backup_20260826T162709Z.db
+
+El backup se genero de verdad (fichero real en disco, confirmado por listado
+de directorio antes y despues, eliminado por mi al terminar la
+verificacion). Un usuario autenticado normal, sin ninguna relacion con otras
+empresas ni ningun privilegio especial, puede disparar una copia completa de
+la base de datos de produccion (todas las empresas) con una unica llamada
+HTTP a un endpoint que ya exige autenticacion real desde la Vuelta 5;
+exactamente el resultado que el paso 1 de esta misma vuelta declaro haber
+cerrado, solo que por una puerta distinta del mismo HANDLER_MAP.
+
+handle_thalos_alerts (task_assigned) y handle_thalos_security_scan
+(security_scan) tambien carecen de gate, pero su severidad es menor: el
+primero es puramente sintetico (no toca BD real, contiene literalmente
+"Simulacion de evento critico" en el propio codigo; en si mismo un hallazgo
+de simulacion segun la regla no negociable 2 de la skill, pero no es una
+fuga cross-tenant); el segundo solo expone booleanos de si ciertas variables
+de entorno de infraestructura estan configuradas (no contenido de otra
+empresa). Se documentan aqui por completitud pero no son, por si solos,
+motivo de devolucion; handle_thalos_backup si lo es, por identidad casi
+exacta con el hallazgo que esta vuelta acaba de cerrar para su hermano
+trigger_backup.
+
+### 15.6 Resto de la vuelta -- confirmado correcto
+
+- Migracion 0046/0047, modelos, y forward-population en
+  thalos_security_engine.py::record_login_attempt,
+  thalos_monitor_service.py::run_monitor_cycle,
+  thalos_alert_service.py::create_alert/generate_alerts_from_engine:
+  releidos integros, coinciden con lo descrito.
+- get_db_scoped aplicado exactamente donde se declara (thalos.py con 7 usos,
+  thalos_v1.py con 3, workspaces.py con 2, zeus_core.py con 1) y
+  deliberadamente NO aplicado en thalos_v1_execute/thalos_v1_monitor; razon
+  tecnica revisada y correcta (falta de WITH CHECK reutilizaria USING para
+  escrituras y romperia el caso legitimo de usuario con varias empresas).
+- sync_cross_agent_events (commit db06137): diff revisado, filtra por
+  company_id real para no-superusuarios, preserva visibilidad global para
+  superusuarios, y la evaluacion honesta de que esto NO permite retirar el
+  gate de justice/compliance-events es correcta (ComplianceEvent sigue sin
+  company_id).
+- Diagnostico de GET /api/v1/metrics/dashboard (paso 5): confirmado por mi
+  que app/models/agent_activity.py no tiene company_id (grep sin resultados)
+  y que feature/multi-tenant-bd NO es ancestro de esta rama (git merge-base
+  --is-ancestor devuelve exit 1, no ancestro). El diagnostico es correcto y
+  la decision de no aplicar el fix aqui (requiere su propia migracion de
+  esquema, dominio distinto de metricas de negocio, no logs de seguridad de
+  THALOS) es razonable y no bloqueante para esta rama.
+- Hallazgos BAJOS de gdpr_engine.py y teamflow_audit_service_v1.py (paso
+  4.1): confirmado por lectura que ambos solo exponen conteos/booleanos
+  agregados GLOBALES, nunca contenido individual (email, titulo, company_id
+  de una fila concreta); clasificacion correcta, no bloqueante.
+- Suite completa ejecutada por mi (venv compartido, pytest tests -q):
+  7 failed, 290 passed, 2 skipped, 35 warnings, 3 errors en 145.81 segundos;
+  identico a lo afirmado, mismos 7 nombres de test fallando y mismos 3
+  errores de test_app.py. Sin regresion, confirmado de forma independiente.
+  Los 20 tests nuevos de esta vuelta (test_thalos_v6_estructural_v1.py mas
+  test_thalos_company_id_structural_v1.py) ejecutados de forma aislada por
+  mi: 20 passed.
+- zeus.db de desarrollo del worktree: PRAGMA integrity_check da ok; conteos
+  de filas coherentes en las 4 tablas de THALOS mas users/companies tras la
+  migracion real aplicada por el ejecutor. No corrupta.
+- Repo verificado limpio al empezar (git status muestra working tree clean),
+  main sin tocar (97b949a, identico a origin/main), sin push, sin rama
+  nueva.
+
+### 15.7 Checklist de no-simulacion (verificado por mi, no por el informe)
+
+- Datos reales de BD, no valores fijos: confirmado para los 4 pasos de esta
+  vuelta.
+- Pasa por autenticacion real: confirmado (get_current_active_user en los
+  endpoints sincronos; re-verificacion en BD para los handlers asincronos).
+- Filtra por tenant/gatea correctamente en TODA la superficie del mismo
+  motor: NO. handle_thalos_backup (accion legacy backup_created, mismo
+  HANDLER_MAP de THALOS, mismo vector de entrada que las 3 acciones que esta
+  vuelta SI cerro) permite a cualquier usuario autenticado no-superusuario
+  disparar un backup completo de la base de datos de todas las empresas.
+  Confirmado explotable en vivo por mi.
+- Manejo de errores real en lo ya gateado: confirmado.
+- Logs verificables en lo ya gateado: confirmado.
+- Migracion Alembic generada y aplicada: confirmado, ciclo up-down-up
+  verificado por mi con datos propios sobre una copia desechable, y aplicada
+  tambien a la BD de desarrollo del worktree (integridad confirmada).
+- RLS verificada contra Postgres real: NO, limitacion aceptada igual que el
+  ejecutor (ver 15.3), bloqueante solo para el despliegue a produccion, no
+  para la parte de company_id/gates verificable en SQLite.
+
+### Veredicto (ronda 6)
+
+Devuelto al ejecutor. Vuelta 7 requerida.
+
+Distincion explicita pedida por el encargo: la parte estructural de
+company_id, backfill y forward-population (paso 1 y paso 2 de esta vuelta,
+migracion 0046) esta correctamente implementada y la verifique yo mismo de
+forma exhaustiva, incluyendo mi propio ciclo upgrade-downgrade-upgrade con
+datos sinteticos propios. Esta parte SI se podria dar por cerrada a nivel de
+codigo/SQLite, dejando como condicion de despliegue (no como motivo de
+devolucion en si) verificar RLS (migracion 0047) contra un Postgres real
+antes de confiar en la segunda capa de proteccion en produccion, tal como el
+propio ejecutor ya declaro con honestidad.
+
+Sin embargo, el hallazgo de la seccion 15.5 por si solo obliga a la
+devolucion, independientemente de la limitacion de Postgres:
+handle_thalos_backup permite HOY, sin ninguna condicion, que cualquier
+usuario autenticado no-superusuario dispare un backup completo de la base de
+datos de produccion; la misma clase exacta de vulnerabilidad que el paso 1
+de esta misma vuelta declaro haber cerrado primero, por instruccion
+explicita, para su accion hermana trigger_backup. El barrido de esta vuelta
+(grepear las 4 tablas de THALOS) tiene el mismo tipo de punto ciego
+metodologico que ya causo las devoluciones de las rondas 3, 4 y 5: quedarse
+en las tablas/funciones ya conocidas en vez de recorrer TODO el HANDLER_MAP
+alcanzable por el mismo vector de entrada (POST /activities/log mas
+AgentAutomationExecutor) que la propia Vuelta 5 identifico como el vector
+mas grave de toda la rama.
+
+Para la Vuelta 7, como minimo:
+
+1. Critico: aplicar el mismo gate de superusuario (_is_superuser_email o
+   equivalente) a handle_thalos_backup en
+   services/automation/handlers/thalos.py, accion backup_created, con un
+   test de regresion que reproduzca exactamente mi prueba de 15.5 (usuario
+   no-superusuario dispara la accion, se confirma que NO se crea ningun
+   fichero de backup nuevo).
+2. Evaluar y decidir explicitamente (gatear o documentar por que no aplica)
+   handle_thalos_alerts (accion task_assigned) y handle_thalos_security_scan
+   (accion security_scan). Severidad menor (no tocan las 4 tablas de THALOS
+   ni datos de otra empresa) pero comparten el mismo defecto de diseno
+   (ningun gate) y el mismo vector de entrada; ademas handle_thalos_alerts
+   es una simulacion literal segun su propio codigo, lo cual es un hallazgo
+   aparte segun la regla no negociable 2 de la skill zeus-produccion.
+3. Repetir el metodo de cobertura, esta vez recorriendo el HANDLER_MAP
+   completo de TODOS los agentes (no solo THALOS) alcanzable via
+   POST /activities/log, para confirmar que no hay una accion hermana de
+   otro agente con el mismo defecto (fuera de mandato estricto de esta rama
+   si no toca THALOS, pero se recomienda al menos inventariarlo para
+   decision del usuario).
+4. No es necesario rehacer nada de los pasos 1, 2 y 4 de esta vuelta tal
+   como estan commiteados en 292a5cc, ee6f9a3 y db06137; confirmados
+   correctos por esta revision independiente (secciones 15.1, 15.2, 15.4 y
+   15.6).
+5. Verificar RLS (migracion 0047) contra un Postgres real (Railway staging u
+   otro) antes de desplegar esta migracion a produccion; sigue pendiente, no
+   bloqueante para cerrar esta rama a nivel de codigo/SQLite pero si para
+   confiar en la segunda capa de proteccion en produccion real.
+6. Esta vuelta no es autoaprobacion: corresponde a revisor-independiente
+   confirmar la Vuelta 7 con su propia verificacion en vivo, incluyendo un
+   nuevo intento de mi propio exploit de 15.5 contra el codigo corregido.
+
+Repo verificado limpio tras esta revision (mi unico cambio es esta seccion
+del documento), main no tocado (97b949a), sin push, sin rama nueva. El
+fichero de backup sintetico generado durante mi verificacion
+(storage/backups/zeus_backup_20260826T162709Z.db) fue eliminado al
+terminar. Nota aparte, no bloqueante: encontre un fichero de backup huerfano
+de una verificacion anterior (storage/backups/zeus_backup_20260825T225430Z.db,
+de la ronda 5 de revision) que nunca se elimino pese a que esa ronda declaro
+haberlo hecho; esta gitignored, no afecta al estado del repositorio
+versionado, pero conviene que el ejecutor lo limpie en la Vuelta 7 por
+higiene del entorno de desarrollo compartido.

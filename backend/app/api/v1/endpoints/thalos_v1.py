@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_active_user
 from app.core.config import settings
 from app.db.session import get_db
+from app.db.tenant_context import get_db_scoped
 from app.models.thalos_security_event import ThalosSecurityEvent
 from app.models.thalos_event import ThalosEvent
 from app.models.thalos_workspace_item import ThalosWorkspaceItem
@@ -82,6 +83,18 @@ def thalos_v1_monitor(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
+    # Nota (AUDIT_THALOS_ESTRUCTURAL.md, paso 2): deliberadamente NO se usa
+    # `get_db_scoped` aquí. Este endpoint acepta `body.company_id` (validado
+    # contra las empresas reales del usuario en 9.1, puede ser distinto de su
+    # empresa "primaria"), y `get_db_scoped` fija el contexto de RLS a la
+    # empresa primaria del usuario autenticado. Si se usara aquí, un usuario
+    # con varias empresas que opera legítimamente sobre una NO primaria vería
+    # sus propias escrituras (`ThalosEvent`/`ThalosSecurityEvent` con ese
+    # `company_id`) rechazadas por la policy de RLS en Postgres (la política
+    # no tiene `WITH CHECK` propio, así que reutiliza `USING` también para
+    # filas nuevas) -- una regresión real, solo visible contra Postgres, que
+    # no se puede verificar en este entorno (solo SQLite). El gate de
+    # superusuario de arriba sigue siendo la única protección de esta ruta.
     # Mitigación interina (AUDIT_FIX_THALOS_SHIELD.md, sección 10.2/10.3): con
     # la configuración por defecto (THALOS_REAL_MONITORING/THALOS_EXECUTION_ENABLED/
     # THALOS_REAL_LOGS_ENABLED=false) `run_monitor_cycle` no llega a invocar
@@ -247,7 +260,7 @@ def thalos_v1_execute(
 def thalos_v1_events(
     limit: int = 50,
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
 ) -> Dict[str, Any]:
     # Mitigación interina (AUDIT_FIX_THALOS_SHIELD.md, sección 12.2/13):
     # ThalosSecurityEvent/ThalosEvent no tienen `company_id` real de filtrado
@@ -311,7 +324,7 @@ def thalos_v1_alerts(
     limit: int = 50,
     unresolved_only: bool = False,
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
 ) -> Dict[str, Any]:
     # Mitigación interina (AUDIT_FIX_THALOS_SHIELD.md, sección 12.2/13):
     # `list_alerts` consulta ThalosAlert de forma GLOBAL (la tabla no tiene
@@ -350,7 +363,7 @@ def thalos_v1_alerts(
 @router.get("/audit")
 def thalos_v1_audit(
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
 ) -> Dict[str, Any]:
     # Mitigación interina (AUDIT_FIX_THALOS_SHIELD.md, sección 10.2/10.3):
     # audit_from_db() cuenta/lista ThalosEvent/ThalosAlert/ThalosSecurityEvent

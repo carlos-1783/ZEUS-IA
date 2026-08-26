@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user
 from app.core.config import settings
-from app.db.session import get_db
+from app.db.tenant_context import get_db_scoped
 from app.models.thalos_alert import ThalosAlert
 from app.models.thalos_event import ThalosEvent
 from app.models.user import User
@@ -50,7 +50,7 @@ def _require_superuser_for_global_audit(current_user: User, *, endpoint: str) ->
 @router.get("/status")
 def thalos_status(
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
 ) -> Dict[str, Any]:
     _require_superuser_for_global_audit(current_user, endpoint="GET /thalos/status")
     if not getattr(settings, "THALOS_ENABLED", True):
@@ -79,7 +79,7 @@ def thalos_status(
 def thalos_events(
     limit: int = 50,
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
 ) -> Dict[str, Any]:
     _require_superuser_for_global_audit(current_user, endpoint="GET /thalos/events")
     rows = db.query(ThalosEvent).order_by(ThalosEvent.id.desc()).limit(min(limit, 200)).all()
@@ -112,7 +112,7 @@ def thalos_alerts(
     limit: int = 50,
     unresolved_only: bool = False,
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
 ) -> Dict[str, Any]:
     _require_superuser_for_global_audit(current_user, endpoint="GET /thalos/alerts")
     rows = list_alerts(db, limit=limit, unresolved_only=unresolved_only)
@@ -136,7 +136,7 @@ def thalos_alerts(
 def thalos_resolve_alert(
     alert_id: int,
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
 ) -> Dict[str, Any]:
     # ThalosAlert no tiene `company_id`: sin este gate, cualquier usuario
     # autenticado podía marcar como resuelta (silenciar) una alerta de
@@ -152,7 +152,7 @@ def thalos_resolve_alert(
 @router.get("/audit")
 def thalos_audit(
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
 ) -> Dict[str, Any]:
     _require_superuser_for_global_audit(current_user, endpoint="GET /thalos/audit")
     report = audit_from_db(db)
@@ -165,7 +165,7 @@ def thalos_audit(
 @router.post("/monitor")
 def thalos_monitor_now(
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
 ) -> Dict[str, Any]:
     # `run_monitor_cycle` solo invoca `scan_logs` (global, sin filtro por
     # tenant) si THALOS_REAL_MONITORING/THALOS_EXECUTION_ENABLED/
@@ -184,7 +184,7 @@ def thalos_monitor_now(
 def thalos_ingest_logs(
     body: LogIngestBody,
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
 ) -> Dict[str, Any]:
     # `ingest_log_lines` -> `generate_alerts_from_engine` evalúa
     # `ThalosEvent`/`ThalosLoginAttempt` GLOBALES (60 min) y devuelve en la

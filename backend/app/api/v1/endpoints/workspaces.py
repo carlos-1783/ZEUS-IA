@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_active_user
 from app.core.config import settings
 from app.db.session import get_db
+from app.db.tenant_context import get_db_scoped
 from app.models.user import User
 from services.activity_logger import ActivityLogger
 from services.thalos_control_layer_v1 import log_execution_attempt, wrap_response as thalos_wrap
@@ -665,7 +666,7 @@ async def workspace_justicia_gdpr(
 async def workspace_thalos_logs(
     request: ThalosLogRequest,
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
 ):
     # Mitigación interina (AUDIT_FIX_THALOS_SHIELD.md, sección 10.2/10.3):
     # este endpoint invoca thalos_security_engine.scan_logs de forma
@@ -744,7 +745,7 @@ async def workspace_thalos_logs(
 async def workspace_thalos_threat(
     request: ThalosThreatRequest,
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
 ):
     # Mitigación interina (AUDIT_FIX_THALOS_SHIELD.md, sección 12.2/13):
     # detect_threat_events() delega en services/thalos_threat_engine.py::evaluate_events(db)

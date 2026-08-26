@@ -12,6 +12,7 @@ from app.core.zeus_agents import zeus_manager, AgentType
 from app.core.auth import get_current_active_user
 from app.models.user import User
 from app.db.base import get_db
+from app.db.tenant_context import get_db_scoped
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -101,7 +102,7 @@ async def activate_zeus_core(
 async def execute_zeus_command(
     command_data: ZeusCommand,
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db_scoped)
 ):
     """
     Ejecuta un comando específico del Núcleo ZEUS.

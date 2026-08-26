@@ -1166,3 +1166,243 @@ Rama `feature/fix-thalos-shield-real`, sin merge ni push a `main`. Este
 ejecutor no se declara a si mismo cerrado; corresponde a
 `revisor-independiente` confirmar la Vuelta 7, incluyendo un nuevo intento
 del exploit de 15.5 contra el codigo corregido.
+
+## 17. Revision independiente (revisor, Vuelta 7) -- CIERRE DEFINITIVO de la rama
+
+Septima verificacion independiente de esta rama. El nucleo estructural
+(migracion company_id + RLS en las 4 tablas de THALOS) ya se aprobo en la
+ronda 6 (seccion 15) y no se reabre aqui. Esta vuelta se centra
+exclusivamente en el hallazgo que motivo la devolucion (15.5): el handler
+legacy services/automation/handlers/thalos.py sin gate de superusuario.
+
+### 17.1 Reproduccion independiente del exploit de 15.5
+
+Script propio (no reutiliza el del ejecutor ni sus tests), tenants nuevos
+con prefijo distinto (reviewer7_indep_*@example.test), llamando
+directamente a los 3 handlers tal como lo hace AgentAutomationExecutor
+sobre una AgentActivity en pending:
+
+=== TENANT A: atacante NO superusuario ===
+attacker: reviewer7_indep_a82043b6ee@example.test is_superuser: False
+BACKUP (attacker): blocked superuser_required_for_global_audit
+ficheros nuevos: set()
+SECURITY_SCAN (attacker): blocked superuser_required_for_global_audit
+ALERTS (attacker): blocked superuser_required_for_global_audit
+
+=== TENANT B: superusuario real (control positivo, tenant DISTINTO de A) ===
+admin: reviewer7_indep_8874cef2fd@example.test is_superuser: True (company distinta de A: True)
+BACKUP (admin): completed - genero storage/backups/zeus_backup_20260826T170255Z.db (eliminado tras confirmar)
+SECURITY_SCAN (admin): completed
+ALERTS (admin): completed
+Ficheros .db restantes en storage/backups tras la verificacion: ninguno
+
+Los 3 handlers (backup_created, security_scan, task_assigned->alerts)
+bloquean al atacante no-superusuario y no crean ningun fichero; el control
+positivo con un tenant DISTINTO de superusuario real funciona sin bloqueo y
+genera el backup esperado. Confirmado tambien que storage/backups/
+(worktree) queda vacio despues de mis propias pruebas.
+
+### 17.2 Lectura completa e independiente de handlers/thalos.py
+
+Releido el archivo completo (167 lineas tras el cambio). Confirmado por mi:
+solo existen 3 funciones handle_* en el archivo (handle_thalos_security_scan,
+handle_thalos_alerts, handle_thalos_backup), las 3 con
+"if not _require_superuser(activity): return _blocked_superuser_required(...)"
+como primera instruccion, sin ninguna rama muerta del comportamiento
+anterior. _require_superuser abre su propia SessionLocal() y la cierra en
+finally. El import "from .thalos_v1 import _is_superuser_email" no genera
+ciclo: verificado que thalos_v1.py no importa thalos.py ni
+handlers/__init__.py (solo importa services.thalos_executor,
+services.thalos_monitoring_service, services.thalos_workspace_writer_v1),
+y la suite completa (abajo) corre sin ImportError. HANDLER_MAP["THALOS"]
+(handlers/__init__.py:114-126) confirma que las 3 acciones legacy
+(security_scan, task_assigned, backup_created) mapean exactamente a estas
+3 funciones y ninguna otra funcion del archivo queda fuera del mapa. No
+queda ninguna funcion sin gate en este archivo especifico.
+
+### 17.3 Higiene de backups -- confirmado, sin huerfanos
+
+storage/backups/ (worktree) vacio antes y despues de mi propia
+verificacion en vivo (17.1). Confirmado ademas, ejecutando yo mismo la
+suite completa, que la nota de higiene de 16.5 es real: 2 ficheros .db
+nuevos quedaron en storage/backups/ tras mi propia corrida de
+"pytest tests -q" (generados por tests preexistentes con
+THALOS_EXECUTION_ENABLED=True que disparan trigger_backup real via
+services/thalos_executor.py, un camino distinto del handler legacy
+tocado en esta vuelta). Eliminados por mi tras confirmar que
+backend/storage/ esta en .gitignore (git check-ignore positivo) y que no
+afectan al repositorio versionado (git status limpio antes y despues). Se
+confirma el hallazgo de higiene ya reportado en 16.5: no bloqueante,
+pendiente para que el usuario decida si esos tests deben mockear
+thalos_backup_service.create_backup().
+
+### 17.4 Decision explicita sobre el HANDLER_MAP de los otros 5 agentes
+
+El ejecutor declaro, sin corregir, que no recorrio el HANDLER_MAP de
+RAFAEL/PERSEO/JUSTICIA/AFRODITA/ZEUS buscando el mismo patron de handler
+legacy sin gate. Mi criterio explicito: no bloquea el cierre de esta
+rama, por los siguientes motivos:
+
+- Esta rama (feature/fix-thalos-shield-real) se abrio especificamente
+  para una vulnerabilidad concreta y acotada: THALOS careciendo de
+  aislamiento multi-tenant en sus 4 tablas de logs de seguridad, y
+  handlers de THALOS que ejecutan operaciones GLOBALES (backup completo de
+  la BD de todas las empresas, escaneo de variables de entorno del
+  sistema, alertas del sistema) alcanzables sin gate de superusuario. Las
+  7 vueltas giraron integramente en torno a ese mismo eje: aislamiento de
+  tenant + gate de superusuario para operaciones de alcance global del
+  propio THALOS.
+- Los handlers de los otros 5 agentes resuelven acciones de negocio
+  propias de CADA tenant (tareas de RAFAEL, generacion de video de PERSEO,
+  cumplimiento de JUSTICIA por empresa, RRHH de AFRODITA): no son, por
+  diseno, operaciones globales cross-tenant como backup_created o
+  security_scan de THALOS. Que compartan el mismo HANDLER_MAP/vector de
+  entrada (POST /activities/log -> AgentAutomationExecutor) no implica
+  automaticamente la misma vulnerabilidad: para que exista el mismo
+  hallazgo, cada handler tendria que, ademas de carecer de gate, operar
+  sobre datos de una empresa distinta a la del user_email de la actividad
+  o ejecutar una accion de alcance global -- eso requiere auditar la
+  logica de negocio especifica de cada agente, no solo grepear la
+  ausencia de un gate.
+- Tratar esto como bloqueante extenderia el alcance de esta rama
+  indefinidamente (exactamente el patron de "un hallazgo lleva a otro" que
+  ya causo 7 vueltas dentro del propio THALOS). Es mas sano cerrar el
+  alcance acordado (THALOS y sus 4 tablas de logs de seguridad) y abrir una
+  tarea nueva, separada, para auditar el HANDLER_MAP de los otros 5
+  agentes bajo sus propias reglas de negocio.
+
+Se deja como tarea nueva y separada, recomendada para
+auditor-priorizador: "Auditar HANDLER_MAP de RAFAEL/PERSEO/JUSTICIA/
+AFRODITA/ZEUS en busca de handlers legacy sin gate que ejecuten
+operaciones de alcance global o crucen el company_id de la actividad."
+
+### 17.5 Suite completa -- confirmado por mi de forma independiente
+
+pytest tests -q (venv compartido
+C:\Users\Acer\ZEUS-IA\backend\venv\Scripts\python.exe, worktree backend/):
+
+7 failed, 296 passed, 2 skipped, 35 warnings, 3 errors in 160.08s
+
+Identico a lo reportado en 16.5: mismos 7 tests fallando
+(test_basic.py::test_config_loading,
+test_justicia_control_layer_v1.py::test_default_flags_simulated,
+test_perseo_autofix_v2.py::test_audit_includes_ai_modules,
+test_thalos_control_layer_v1.py::test_default_mode_is_simulation_for_heuristic_modules,
+test_thalos_control_layer_v1.py::test_backup_requires_execution_and_backup_flags,
+test_thalos_control_layer_v1.py::test_build_metadata_origin_mock,
+test_thalos_safe_v1.py::test_monitoring_cycle_respects_flags) y los mismos
+3 NameError: TestClient de test_app.py. Sin regresion. Ademas ejecute
+test_thalos_v7_legacy_gate_v1.py en aislamiento: 6 passed, sin fichero
+huerfano en storage/backups/ al terminar.
+
+### 17.6 Checklist de no-simulacion (verificado por mi)
+
+- Datos reales, no valores fijos: confirmado, el gate no altera la logica
+  de negocio real de los 3 handlers cuando se permiten.
+- Pasa por autenticacion real: confirmado, _require_superuser re-verifica
+  en BD activity.user_email contra User.is_superuser; user_email esta
+  forzado server-side desde la Vuelta 5 (activities.py::log_activity), no
+  spoofeable por el cliente.
+- Filtra/gatea correctamente en TODA la superficie del archivo
+  handlers/thalos.py: SI, confirmado por lectura completa (17.2) y por
+  exploit en vivo (17.1) contra las 3 funciones.
+- Manejo de errores real: _require_superuser cierra la sesion en finally;
+  sin try/except: pass.
+- Logs verificables: sin cambio respecto a la logica ya auditada, se
+  preserva utils.write_json/utils.write_log.
+- Test que lo prueba: si, test_thalos_v7_legacy_gate_v1.py (6 passed en
+  aislamiento, confirmado por mi) mas mi propia verificacion en vivo con
+  tenants nuevos (17.1).
+- Migracion Alembic: no aplica (no toca esquema).
+
+### 17.7 Repo y rama
+
+git status limpio antes y despues de mi verificacion (mis propios ficheros
+de prueba se generaron y eliminaron fuera del repo o en rutas gitignored).
+main sin tocar (97b949a, identico a origin/main). Sin push. Sin rama
+nueva. Working tree en feature/fix-thalos-shield-real limpio tras esta
+seccion.
+
+### Veredicto (Vuelta 7)
+
+CIERRE DEFINITIVO de la rama feature/fix-thalos-shield-real.
+
+Cada verificacion independiente que hice coincide con lo reportado por el
+ejecutor: el exploit exacto de 15.5 queda bloqueado en los 3 handlers, el
+control positivo de superusuario funciona con un tenant distinto, no
+quedan ficheros huerfanos, el archivo handlers/thalos.py esta
+completamente gateado sin ramas muertas, y la suite completa reproduce
+exactamente 7 failed, 296 passed, 2 skipped, 3 errors. El checklist de
+no-simulacion de la skill zeus-produccion pasa integramente para el
+cambio de esta vuelta.
+
+#### Resumen ejecutivo de las 7 vueltas
+
+Vuelta 1 (previa a esta rama): THALOS.SHIELD/SCAN/BLOCK eran stubs
+simulados (legacy). Severidad: critico.
+
+Vuelta 2 (commit 3a05469): kill-switch THALOS_EXECUTION_ENABLED ignorado;
+BLOCK sin validar tenant del objetivo; SCAN con fuga. Severidad: critico.
+
+Vuelta 3 (commit 3200624): company_id del body del cliente sorteaba el
+fix de la vuelta 2 en /thalos/v1/execute y /monitor; SCAN restringido a
+superusuarios. Severidad: critico.
+
+Vuelta 4 (commit 315d365): fuga cross-tenant en workspaces/log-monitor,
+/thalos/v1/audit, /thalos/v1/monitor. Severidad: critico.
+
+Vuelta 5 (commit 52389cf): 3 rutas hermanas mas sin gate (threat-detector,
+thalos_v1_events, thalos_v1_alerts); 17 rutas/funciones gateadas en
+total. Severidad: alto.
+
+Vuelta 6 (commits 292a5cc, ee6f9a3, db06137): causa raiz -- migracion
+company_id + RLS real en las 4 tablas de logs de THALOS (ThalosEvent,
+ThalosAlert, ThalosLoginAttempt, mas la ya migrada); 3 handlers de
+thalos_v1.py sin gate (cashflow, backup, alert); justice/compliance-events
+sin gate; sync_cross_agent_events filtrado por tenant. Severidad: critico
+(estructural).
+
+Vuelta 7 (commit 1f29cdd): handlers/thalos.py legacy (backup_created,
+security_scan, task_assigned) sin ningun gate -- backup completo de BD de
+todas las empresas disparable por cualquier usuario autenticado.
+Severidad: critico.
+
+#### Pendientes explicitos para tareas futuras SEPARADAS (no bloquean este cierre)
+
+1. RLS (migracion 0047) como gate de despliegue: verificada logicamente y
+   contra SQLite, pero nunca contra un Postgres real. Antes de confiar en
+   la segunda capa de proteccion (RLS) en produccion, se debe verificar
+   contra un Postgres real de staging (Railway) que las policies rechazan
+   de verdad accesos cross-tenant con el rol de aplicacion real (no
+   superusuario/BYPASSRLS). Bloqueante para el DESPLIEGUE, no para el
+   cierre de esta rama a nivel de codigo.
+2. HANDLER_MAP de los otros 5 agentes (RAFAEL, PERSEO, JUSTICIA, AFRODITA,
+   ZEUS): sin auditar en busca de handlers legacy sin gate que ejecuten
+   operaciones de alcance global. Ver criterio en 17.4 de por que no
+   bloquea este cierre.
+3. GET /api/v1/metrics/dashboard: diagnosticado en la ronda 6 (Paso 5)
+   como pendiente -- requiere su propia migracion de company_id en
+   agent_activity, dominio distinto (metricas de negocio, no logs de
+   seguridad de THALOS). No corregido, correctamente fuera de alcance.
+4. Tests preexistentes que generan backups reales
+   (test_zeus_core_orchestrator_v1.py, test_zeus_agents_thalos_real_v1.py,
+   test_zeus_core_scan_superuser_gate_v1.py, test_thalos_safe_v1.py):
+   fijan THALOS_EXECUTION_ENABLED=True y disparan trigger_backup real via
+   thalos_backup_service.create_backup(), dejando ficheros gitignored
+   pero reales en storage/backups/ en cada corrida de la suite completa.
+   Confirmado por mi de forma independiente (17.3). Recomendacion:
+   mockear create_backup() en esos tests.
+5. handle_thalos_alerts contiene literalmente "Simulacion de evento
+   critico" en su propio codigo (hallazgo de simulacion segun la regla 2
+   de la skill zeus-produccion), sin corregir -- ya gateado por
+   superusuario (Vuelta 7), pero la simulacion interna de la logica de
+   negocio en si sigue pendiente si se decide que esta accion deba dejar
+   de ser una simulacion.
+6. Hallazgos BAJOS ya evaluados y aceptados como no bloqueantes en rondas
+   anteriores (gdpr_engine.py, teamflow_audit_service_v1.py): solo
+   exponen agregados globales, no datos individuales de otra empresa.
+
+Estado final: rama feature/fix-thalos-shield-real, main sin tocar
+(97b949a, identico a origin/main), sin push, sin rama nueva, working tree
+limpio. Corresponde al usuario decidir el orden y prioridad de los 6
+pendientes listados arriba como tareas nuevas.

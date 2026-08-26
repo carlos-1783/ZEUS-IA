@@ -2199,3 +2199,257 @@ empresas de prueba de la verificación en vivo
 prueba de anti-spoof) borradas de `zeus.db` al terminar.
 
 ---
+
+## 14. Revision independiente (revisor, ronda 5) - DEVUELTO AL EJECUTOR (Vuelta 6 requerida)
+
+Verificacion repetida de forma independiente, con comandos propios (no copiados
+del ejecutor), servidor uvicorn propio (127.0.0.1:8777 y 127.0.0.1:8778,
+THALOS_EXECUTION_ENABLED=true para poder probar tambien el camino activado hoy
+o manana), y cuentas 100% nuevas creadas por mi: r5rev_normal_1787698264 at example.com
+(company_id=825, NO superusuario), r5rev_admin_1787698264 at example.com
+(company_id=826, promovido a superusuario con UPDATE users SET is_superuser=1
+en zeus.db), y r5rev_justice_1787698835 at example.com (company_id=912, cuenta
+recien creada sin ninguna actividad THALOS propia, usada especificamente para
+probar fuga cross-tenant sin contaminar la prueba con datos propios).
+
+### 14.1 Lo que SI se confirmo correcto - coincide con lo reportado en la seccion 13
+
+- Los 7 endpoints de thalos.py (status, events, alerts, alerts por id resolve,
+  audit, monitor, logs ingest): usuario normal -> 403 limpio en los 7 (no 500);
+  sin token -> 401. Superusuario -> 200 con datos reales (GET /thalos/status
+  devolvio event_count, security_event_count, recent_events/recent_alerts
+  reales de BD).
+- thalos_v1_events, thalos_v1_alerts, thalos_v1_status: usuario normal -> 403
+  en los 3; sin token -> 401 (thalos_v1_status); superusuario -> 200 con datos
+  reales en los 3.
+- workspace_thalos_threat: usuario normal -> 403; superusuario -> 200, con
+  risk_score, candidates (incluidos varios brute_force_email reales) y
+  real_execution: true, data_origin: backend en la respuesta - confirma que
+  el fix del data_origin mock enganoso funciona en el camino feliz real.
+- POST /activities/log: sin Authorization -> 401. Con el JWT de r5rev_normal
+  y user_email de r5rev_admin (spoof) en el body -> 200, pero la fila
+  persistida en agent_activities (id 875, consultada directamente en zeus.db)
+  tiene user_email igual al de r5rev_normal - el spoof fue ignorado,
+  exactamente como reporta 13.3.
+- Suite completa ejecutada por mi (python -m pytest tests -q, mismo comando
+  usado en rondas 3/4): 7 failed, 270 passed, 2 skipped, 35 warnings, 3 errors
+  in 123.58s - coincide exactamente con lo reportado. Los 7 fallos y 3 errores
+  son los mismos nombres preexistentes (test_config_loading,
+  test_default_flags_simulated, test_audit_includes_ai_modules,
+  test_default_mode_is_simulation_for_heuristic_modules,
+  test_backup_requires_execution_and_backup_flags,
+  test_build_metadata_origin_mock, test_monitoring_cycle_respects_flags, y
+  los 3 NameError TestClient de test_app.py), ninguno relacionado con los
+  cambios de esta vuelta. Sin regresion confirmada.
+- Los 31 tests nuevos (test_thalos_v5_exhaustive_sweep_v1.py) si prueban
+  escenarios reales (aserciones sobre status_code, sobre el estado persistido
+  row.resolved / victim.is_active / row.user_email, no solo ausencia de
+  excepcion).
+- Repo limpio (git status -> nothing to commit, working tree clean), main en
+  97b949a sin tocar, sin push, sin rama nueva.
+
+### 14.2 Por que esto NO cierra la rama - el metodo de 13.2 tiene un punto ciego real, y lo explote en vivo
+
+La tarea de esta vuelta pedia explicitamente repetir el metodo de 13.2 con
+comandos propios y comprobar si cubre indireccion de 2-3 capas fuera de
+app/api/v1/endpoints/. Repeti el barrido asi:
+
+    grep -rlE "ThalosEvent|ThalosAlert|ThalosSecurityEvent|ThalosLoginAttempt" --include=*.py services/ app/ | grep -v pycache
+
+Esto devuelve, ademas de los 8 archivos ya identificados en 13.2, tres
+archivos que el metodo del ejecutor nunca miro porque su paso 2 limito la
+busqueda a app/api/v1/endpoints/: services/gdpr_engine.py,
+services/justice_cross_agent_v1.py, services/teamflow_audit_service_v1.py.
+
+Hallazgo bloqueante nuevo: GET /api/v1/justice/compliance-events filtra
+alertas THALOS de otros tenants a cualquier usuario autenticado, sin flags,
+hoy mismo.
+
+- backend/services/justice_cross_agent_v1.py lineas 37 a 51 (funcion
+  sync_cross_agent_events) consulta ThalosAlert filtrando solo por
+  resolved igual a False, sin ningun filtro de company_id (la tabla no lo
+  tiene), y por cada alerta abierta de cualquier empresa inserta una fila en
+  ComplianceEvent (app/models/compliance_event.py, tabla sin company_id ni
+  user_id, cien por cien global) con event_type security_alert, severity
+  igual al nivel de la alerta original, source THALOS.
+- Esta funcion se dispara automaticamente en cada GET /api/v1/justice/audit
+  (services/justice_audit_service.py linea 123, dentro de run_real_audit),
+  que solo exige el usuario autenticado activo, es decir cualquier usuario
+  autenticado de cualquier empresa la dispara, y JUSTICE_REAL_AUDIT_ENABLED
+  por defecto es verdadero (app/core/config.py linea 294), a diferencia de
+  los flags de THALOS que son falso por defecto. Es decir, esto es
+  explotable hoy, en produccion, sin activar nada.
+- backend/app/api/v1/endpoints/justice.py lineas 145 a 161 (funcion
+  justice_compliance_events, endpoint GET /justice/compliance-events) tiene
+  literalmente la linea que descarta el usuario autenticado sin usarlo para
+  ningun filtro (el mismo patron exacto que motivo las 5 vueltas de esta
+  rama en thalos.py y thalos_v1.py) y devuelve hasta 200 filas de
+  ComplianceEvent de todas las empresas, ordenadas por id descendente, sin
+  ningun filtro.
+
+Verificado en vivo (servidor propio puerto 8778, cuenta r5rev_justice
+creada el 1787698835, company_id=912, recien creada, sin ninguna alerta ni
+actividad THALOS propia):
+
+    GET /api/v1/justice/audit                       -> 200, compliance_events_count: 116
+    GET /api/v1/justice/compliance-events?limit=10  -> 200, devuelve 9 filas
+      con event_type security_alert, severity high o critical, source THALOS
+
+Esas 9 alertas security_alert de THALOS no pueden ser de la empresa 912 (la
+cuenta se acaba de crear, cero actividad) - son metadatos (tipo, severidad,
+fecha) de las alertas ThalosAlert abiertas de otras empresas ya sembradas en
+la base de datos por las rondas de prueba anteriores (titulo Alerta de
+prueba vuelta 5, ids 22 a 31, varias con resolved en false, severidad high).
+Esto es exactamente la misma clase de fuga cross-tenant en el subsistema de
+logs de seguridad de THALOS que motivo las 5 vueltas de esta rama, alcanzada
+por una ruta que el metodo de 13.2 nunca examino por restringirse a
+app/api/v1/endpoints/ como unico punto de partida en vez de rastrear tambien
+los modulos de services/ que leen las 4 tablas y re-exponen datos derivados
+a traves de una tabla y un endpoint distintos.
+
+Hallazgo bloqueante nuevo: 3 de los 6 handlers asincronos de
+services/automation/handlers/thalos_v1.py quedaron sin el gate que si se
+aplico a sus 3 hermanos, en el mismo archivo, en este mismo commit.
+
+El HANDLER_MAP para THALOS, definido en
+services/automation/handlers/__init__.py lineas 119 a 125, registra 7
+acciones, todas alcanzables por el mismo camino recien cerrado en 13.3
+(POST /activities/log, luego AgentAutomationExecutor, luego
+resolve_handler): detect_suspicious_activity y su alias
+scan_security_logs (gateados), block_user (gateado), security_monitor
+(gateado) - pero audit_cashflow_anomaly, que llama a
+handle_thalos_v1_cashflow, trigger_backup, que llama a
+handle_thalos_v1_backup, y alert_admin, que llama a handle_thalos_v1_alert,
+no tienen ningun gate de superusuario, y no aparecen ni una vez en la tabla
+de cobertura de 13.2 ni en la lista de 17 rutas de 13.6. Tampoco hay ni un
+test nuevo que los mencione (conteo de coincidencias de cashflow, backup o
+alert_admin en test_thalos_v5_exhaustive_sweep_v1.py: cero).
+
+Reproducido en vivo importando los handlers directamente (mismo patron que
+usan los propios tests del ejecutor para probar estos handlers sin pasar por
+el scheduler), con THALOS_EXECUTION_ENABLED=true y una actividad simulando
+exactamente lo que AgentAutomationExecutor recogeria de una fila creada por
+r5rev_normal (NO superusuario, company_id=825) con company_id=826 en los
+detalles (la empresa ajena de r5rev_admin):
+
+    FakeActivity.user_email = r5rev_normal at example.com   (no superusuario)
+    FakeActivity.details = company_id 826                    (empresa ajena)
+
+    handle_thalos_v1_cashflow(FakeActivity())
+    resultado: status completed, result con company_id 826, anomaly False,
+    reason no_entries -- ejecutado SIN NINGUN chequeo de superusuario ni de
+    pertenencia de company_id 826 al solicitante (el unico chequeo
+    equivalente, user_has_company_access, SI existe en el endpoint sincrono
+    thalos_v1.py funcion thalos_v1_execute pero NO se replico aqui).
+
+    handle_thalos_v1_alert(FakeActivity())
+    resultado: escribe una fila NUEVA en ThalosSecurityEvent (id 210,
+    confirmado por consulta directa a zeus.db) con event_type
+    action_alert_admin, company_id 826 -- una inyeccion, con company_id
+    elegido libremente por un usuario NO superusuario, en una de las 4
+    tablas explicitamente contaminadas que motivan toda esta rama.
+
+    handle_thalos_v1_backup(FakeActivity())
+    resultado: ejecuto create_backup() y genero una copia completa de
+    zeus.db en storage/backups/zeus_backup_20260825T225430Z.db -- un
+    usuario NO superusuario disparo un backup completo de TODAS las
+    empresas sin ningun gate.
+
+Esto es la misma clase de vulnerabilidad que 13.3 ya identifico y cerro para
+sus 3 hermanas en el mismo HANDLER_MAP, con el mismo vector de entrada
+(POST /activities/log, ya autenticado tras el fix de esta vuelta, pero
+alcanzable por cualquier usuario autenticado no-superusuario) - no es un
+dominio distinto como metrics/dashboard: alert_admin escribe directamente en
+ThalosSecurityEvent, una de las 4 tablas nombradas en el encargo original de
+esta rama.
+
+### 14.3 Evaluacion de la decision de dejar GET /api/v1/metrics/dashboard sin corregir
+
+De los dos hallazgos de la seccion 14.2, la fuga de justice.py es
+estrictamente peor que metrics/dashboard (toca directamente una de las 4
+tablas contaminadas y es explotable hoy sin flags, mientras que
+metrics/dashboard solo toca AgentActivity agregada). Con ese contraste ya
+confirmado, mi criterio sobre metrics/dashboard en si:
+
+Es razonable dejarlo documentado y no bloqueante en esta vuelta, porque a
+diferencia de los hallazgos de 14.2:
+1. No toca ninguna de las 4 tablas de logs de seguridad de THALOS ni ninguna
+   de las 9 funciones del motor contaminado - es agregados de negocio
+   (total_interactions, success_rate, cost_savings) sobre AgentActivity, no
+   logs de seguridad.
+2. No expone filas individuales, emails ni contenido - solo numeros
+   agregados, un orden de magnitud menos sensible que exponer el titulo o el
+   rule_id de eventos de seguridad concretos de otra empresa.
+3. Corregirlo bien (filtrar por empresa, por usuario como sus hermanos
+   /performance y /summary, o mantenerlo global solo-superusuario como panel
+   ejecutivo) es una decision de producto, no una mitigacion interina de
+   gate.
+
+Pero, aplicando la regla no negociable 4 de la skill (todo aislamiento
+multi-tenant roto es vulnerabilidad de seguridad, no bug menor,
+independientemente del dominio), no debe quedar indefinidamente
+documentado sin fecha: recomiendo abrir ya una tarea separada y urgente
+(no bloqueante para el cierre de esta rama, que es especificamente sobre el
+motor de logs de seguridad de THALOS) para GET /api/v1/metrics/dashboard,
+con la misma prioridad con la que se abrio esta rama - es una fuga de datos
+de negocio agregados sin ninguna autenticacion, accesible por cualquiera en
+Internet, y su bajo esfuerzo de arreglo (exigir autenticacion real como
+minimo) no justifica dejarla abierta mas de un step.
+
+### 14.4 Checklist de no-simulacion (verificado por mi sobre el diff de 52389cf en si)
+
+- Datos reales de BD para superusuario en los 17 gates: SI, verificado con
+  event_count y security_event_count reales, no valores fijos.
+- Pasa por autenticacion real: SI, get_current_active_user real, 401 sin
+  token en los endpoints probados.
+- Filtra por tenant en cada ruta que toca la superficie contaminada: NO -
+  justice.py funcion justice_compliance_events y los 3 handlers asincronos
+  de 14.2 no filtran ni gatean.
+- Manejo de errores real en los 17 gates ya aplicados: SI, 403 limpio, no
+  500, confirmado en vivo.
+- Registra logs verificables: SI, ThalosSecurityEvent y ActivityLogger para
+  las acciones ya gateadas.
+- Tests nuevos ejecutados con exito: SI para los 17 gates (31 tests, todos
+  en verde) - pero sin test alguno para los 3 handlers de 14.2.
+- Migracion Alembic: no aplica en esta vuelta, no se toco esquema.
+
+### Veredicto (ronda 5)
+
+Devuelto al ejecutor. Vuelta 6 requerida.
+
+Lo que se afirmo: cobertura del 100% de la superficie contaminada, 17 rutas
+protegidas, metodo reproducible que garantiza no dejar ninguna ruta hermana
+sin cerrar.
+
+Lo que confirme de forma independiente: los 17 gates reportados si
+funcionan correctamente tal como se describen (403, 401 y 200 reales, sin
+envolver en 500, sin regresion, suite en verde 7 failed, 270 passed, 2
+skipped, 3 errors). Pero el barrido de cobertura tiene un punto ciego real
+que reproduje y explote en vivo:
+
+1. GET /api/v1/justice/compliance-events (backend/app/api/v1/endpoints/
+   justice.py, linea 145) - mismo patron de descartar el usuario
+   autenticado sin filtrar por el, expone ComplianceEvent alimentado por
+   ThalosAlert global sin gate ni filtro de tenant, explotable HOY sin
+   ningun flag (JUSTICE_REAL_AUDIT_ENABLED es verdadero por defecto).
+   Confirmado en vivo: cuenta nueva sin actividad propia (company_id=912)
+   vio 9 alertas security_alert de THALOS de otras empresas.
+2. handle_thalos_v1_cashflow, handle_thalos_v1_backup y
+   handle_thalos_v1_alert (backend/services/automation/handlers/
+   thalos_v1.py) - 3 de los 6 handlers del mismo HANDLER_MAP para THALOS
+   cuyos 3 hermanos si fueron gateados en esta misma vuelta, alcanzables
+   por el mismo POST /activities/log, sin gate de superusuario ni
+   verificacion de company_id. Confirmado en vivo: un usuario
+   no-superusuario disparo una auditoria de cashflow y un backup completo
+   de la base de datos para una empresa ajena, y escribio una fila forjada
+   en ThalosSecurityEvent con el company_id de otra empresa.
+
+Que falta para aprobar en la siguiente vuelta: gatear (o filtrar por tenant
+de verdad, si el modelo de datos lo permite) las 2 rutas de 14.2, anadir
+tests de regresion para ambas siguiendo el mismo patron de
+test_thalos_v5_exhaustive_sweep_v1.py, y, dado que esta vuelta ya demostro
+que restringir el grep a app/api/v1/endpoints/ deja fuera indirecciones via
+services/, repetir el metodo de cobertura arrancando desde las 4 tablas y
+las funciones que las leen en todo el backend (busqueda recursiva sin
+restringir a endpoints/, tal como se hizo en 14.2), no solo desde los
+archivos de endpoints/ que ya se sabia que las tocaban.

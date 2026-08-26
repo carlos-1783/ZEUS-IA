@@ -148,7 +148,17 @@ def justice_compliance_events(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    _ = current_user
+    if not getattr(current_user, "is_superuser", False):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "El listado de compliance-events con datos de seguridad cross-agente "
+                "requiere privilegios de superusuario (mitigación interina, "
+                "AUDIT_THALOS_ESTRUCTURAL.md, sección 3; compliance_events no tiene "
+                "company_id y agrega ThalosAlert/CompanyEmployee/PerseoJob/Expense de "
+                "todas las empresas)."
+            ),
+        )
     rows = db.query(ComplianceEvent).order_by(ComplianceEvent.id.desc()).limit(min(limit, 200)).all()
     events = [
         {

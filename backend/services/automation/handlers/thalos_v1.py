@@ -94,6 +94,8 @@ def handle_thalos_v1_detect(activity: AgentActivity) -> Dict[str, Any]:
 def handle_thalos_v1_cashflow(activity: AgentActivity) -> Dict[str, Any]:
     db = SessionLocal()
     try:
+        if not _is_superuser_email(db, activity.user_email):
+            return _blocked_superuser_required("audit_cashflow_anomaly")
         p = _payload(activity)
         result = execute_action(
             db,
@@ -114,6 +116,8 @@ def handle_thalos_v1_cashflow(activity: AgentActivity) -> Dict[str, Any]:
 def handle_thalos_v1_backup(activity: AgentActivity) -> Dict[str, Any]:
     db = SessionLocal()
     try:
+        if not _is_superuser_email(db, activity.user_email):
+            return _blocked_superuser_required("trigger_backup")
         result = execute_action(db, "trigger_backup")
         write_for_activity(db, activity, action="trigger_backup", result=result)
         db.commit()
@@ -151,6 +155,8 @@ def handle_thalos_v1_block(activity: AgentActivity) -> Dict[str, Any]:
 def handle_thalos_v1_alert(activity: AgentActivity) -> Dict[str, Any]:
     db = SessionLocal()
     try:
+        if not _is_superuser_email(db, activity.user_email):
+            return _blocked_superuser_required("alert_admin")
         p = _payload(activity)
         result = execute_action(
             db,

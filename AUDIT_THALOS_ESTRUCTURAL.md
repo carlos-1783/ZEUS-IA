@@ -968,3 +968,201 @@ de la ronda 5 de revision) que nunca se elimino pese a que esa ronda declaro
 haberlo hecho; esta gitignored, no afecta al estado del repositorio
 versionado, pero conviene que el ejecutor lo limpie en la Vuelta 7 por
 higiene del entorno de desarrollo compartido.
+
+## 16. Vuelta 7 -- gate en handler legacy de backup (services/automation/handlers/thalos.py)
+
+Alcance deliberadamente estrecho, tal como se encargo: cerrar el hallazgo
+bloqueante de la seccion 15.5 (`handle_thalos_backup`, accion legacy
+`backup_created`, sin gate de superusuario) y agotar el resto del archivo
+`services/automation/handlers/thalos.py` en la misma vuelta.
+
+### 16.1 Cambio aplicado
+
+`backend/services/automation/handlers/thalos.py`:
+
+- Import nuevo: `from app.db.session import SessionLocal` y
+  `from .thalos_v1 import _is_superuser_email` -- se reutiliza EXACTAMENTE
+  la misma funcion ya validada en la Vuelta 5/6 (no se duplica logica; no
+  hay ciclo de import, `thalos_v1.py` no depende de `thalos.py` ni de
+  `handlers/__init__.py`, confirmado con
+  `python -c "from services.automation.handlers import thalos"`).
+- Helper nuevo `_require_superuser(activity)`: abre su propia `SessionLocal()`
+  (estos handlers corren fuera de una peticion HTTP, disparados por
+  `AgentAutomationExecutor` sobre una `AgentActivity` en estado `pending`,
+  igual que sus hermanos de `thalos_v1.py`), re-verifica en BD que
+  `activity.user_email` pertenezca a un superusuario real, y cierra la
+  sesion en `finally`.
+- Helper nuevo `_blocked_superuser_required(action)`: misma forma de
+  respuesta `status: blocked` / `reason: superuser_required_for_global_audit`
+  que ya usa `thalos_v1.py`, adaptada a la clave `automation` que ya usan
+  las respuestas de este archivo (en vez de `thalos_v1`).
+
+### 16.2 Barrido completo del archivo (no solo backup_created)
+
+Se leyo el archivo entero (121 lineas antes del cambio). Contenia exactamente
+3 funciones, las 3 registradas en `HANDLER_MAP["THALOS"]`
+(`services/automation/handlers/__init__.py` lineas 114-117) y las 3 SIN
+ningun gate, confirmando el hallazgo 15.5 al pie de la letra:
+
+- `handle_thalos_security_scan` (accion `security_scan`) -- solo lee
+  booleanos de variables de entorno, sin tocar datos de otra empresa.
+- `handle_thalos_alerts` (accion `task_assigned`) -- contiene literalmente
+  "Simulacion de evento critico" en su propio codigo (hallazgo de
+  simulacion segun la regla 2 de la skill, ya senalado por el revisor en
+  15.5 como no bloqueante en si mismo pero real).
+- `handle_thalos_backup` (accion `backup_created`) -- el hallazgo
+  bloqueante: `shutil.copy2` real de `zeus.db` completo (todas las
+  empresas) sin ninguna condicion.
+
+Las 3 se gatearon en esta vuelta con el mismo helper, no solo la que
+motivo la devolucion: aunque el revisor clasifico las dos primeras como
+"no bloqueantes por si solas", comparten el mismo defecto de diseno y el
+mismo vector de entrada (`POST /api/v1/activities/log` ->
+`AgentAutomationExecutor` -> `resolve_handler`) que la propia auditoria
+pidio agotar en esta vuelta, y el coste de cerrarlas junto con la critica
+es minimo (mismo patron, mismo archivo, mismo commit). No se toco ningun
+otro archivo del `HANDLER_MAP` (RAFAEL, PERSEO, JUSTICIA, AFRODITA, ZEUS):
+la recomendacion 3 del veredicto de la ronda 6 (recorrer el HANDLER_MAP
+completo de TODOS los agentes) queda fuera de este alcance estrecho y se
+reporta aqui como pendiente para decision del usuario, no se investigo.
+
+### 16.3 Verificacion en vivo (tenants 100% nuevos, exploit exacto de 15.5)
+
+Script propio ejecutado contra el codigo corregido, con cuentas nuevas
+`v7_legacy_*@example.test` (no reutilizadas de ninguna vuelta anterior),
+simulando exactamente lo que hace `AgentAutomationExecutor` sobre una
+`AgentActivity` real en estado `pending`:
+
+```
+=== EXPLOIT: atacante NO superusuario, backup_created (legacy) ===
+attacker=v7_legacy_6b2b83b4c4@example.test (NOT superuser)
+BACKUP result: blocked - superuser_required_for_global_audit
+Ficheros de backup NUEVOS creados por el atacante: set()
+
+=== EXPLOIT: atacante NO superusuario, security_scan (legacy) ===
+SECURITY_SCAN result: blocked - superuser_required_for_global_audit
+
+=== EXPLOIT: atacante NO superusuario, task_assigned -> alerts (legacy) ===
+ALERTS result: blocked - superuser_required_for_global_audit
+
+=== CONTROL POSITIVO: superusuario real dispara backup_created ===
+admin=v7_legacy_36944def63@example.test (superuser)
+BACKUP (admin) result: completed - Backup generado automaticamente en
+  .../backend/storage/backups/zeus_backup_20260826T164326Z.db.
+Ficheros de backup creados por el superusuario (control positivo): 1
+Eliminado: storage\backups\zeus_backup_20260826T164326Z.db
+
+=== CONTROL POSITIVO: superusuario real dispara security_scan/alerts ===
+SECURITY_SCAN (admin) result: completed
+ALERTS (admin) result: completed
+
+TODO OK: exploit legacy cerrado, control positivo intacto, sin ficheros huerfanos.
+```
+
+El exploit exacto que reproducia el revisor en 15.5 (usuario autenticado
+NO superusuario disparando `backup_created` via este handler legacy) queda
+rechazado; el camino legitimo de superusuario sigue intacto (control
+positivo: el backup SI se genera, confirmando que el gate no rompe el uso
+real, no solo que bloquea). El fichero de backup generado por el control
+positivo se elimino inmediatamente despues de confirmarlo.
+
+Ademas se elimino el fichero huerfano
+`storage/backups/zeus_backup_20260825T225430Z.db`, senalado explicitamente
+por el revisor en la seccion 15 (parrafo final) como pendiente de limpieza
+de la ronda 5, nunca eliminado pese a que esa ronda declaro haberlo hecho.
+El directorio `storage/backups/` queda vacio tras esta vuelta.
+
+### 16.4 Test de regresion permanente
+
+`backend/tests/test_thalos_v7_legacy_gate_v1.py` (nuevo, 6 tests): reproduce
+el mismo patron ya usado en `test_thalos_v6_estructural_v1.py` (seed de
+usuario+empresa via SQLAlchemy, `AgentActivity` en `pending`, llamada
+directa al handler). Cubre las 3 funciones, caso bloqueado y control
+positivo de superusuario para cada una, y verifica explicitamente con
+`glob` que el atacante no crea ningun fichero `.db` nuevo en
+`storage/backups/`. El test de control positivo de `handle_thalos_backup`
+limpia el fichero real que genera (esta accion legacy no tiene el
+kill-switch `THALOS_EXECUTION_ENABLED` de `thalos_v1.py`, asi que el
+superusuario SI produce una copia real en cada ejecucion del test).
+
+Ejecutado en aislamiento 4 veces seguidas (incluida la ronda dentro de la
+suite completa): 6 passed cada vez, sin fichero huerfano en
+`storage/backups/` al finalizar cada ejecucion aislada.
+
+### 16.5 Suite completa -- sin regresion
+
+`pytest tests -q` (venv compartido
+`C:\Users\Acer\ZEUS-IA\backend\venv\Scripts\python.exe`):
+
+```
+7 failed, 296 passed, 2 skipped, 35 warnings, 3 errors in 170.62s
+```
+
+296 = 290 (baseline) + 6 (tests nuevos de esta vuelta). Mismos 7 tests
+fallando y mismos 3 errores que el baseline documentado en 15.6
+(`test_basic.py::test_config_loading`,
+`test_justicia_control_layer_v1.py::test_default_flags_simulated`,
+`test_perseo_autofix_v2.py::test_audit_includes_ai_modules`,
+`test_thalos_control_layer_v1.py::test_default_mode_is_simulation_for_heuristic_modules`,
+`test_thalos_control_layer_v1.py::test_backup_requires_execution_and_backup_flags`,
+`test_thalos_control_layer_v1.py::test_build_metadata_origin_mock`,
+`test_thalos_safe_v1.py::test_monitoring_cycle_respects_flags`, y los 3
+`NameError: TestClient` de `test_app.py`). Sin regresion.
+
+Nota de higiene detectada durante esta corrida (no causada por el cambio de
+esta vuelta): varios tests preexistentes que fijan
+`THALOS_EXECUTION_ENABLED=True` (`test_zeus_core_orchestrator_v1.py`,
+`test_zeus_agents_thalos_real_v1.py`, `test_zeus_core_scan_superuser_gate_v1.py`,
+`test_thalos_safe_v1.py`) disparan `trigger_backup` via
+`services/thalos_executor.py::execute_action` ->
+`thalos_backup_service.create_backup()`, un camino totalmente distinto al
+handler legacy tocado en esta vuelta, y dejan ficheros reales en
+`storage/backups/` tras correr la suite completa (5 ficheros nuevos
+observados). Esto ya ocurria antes de esta vuelta (no toca
+`handle_thalos_backup` ni ningun codigo modificado aqui) y esta gitignored,
+por lo que no afecta al repositorio versionado; se eliminaron los 5
+ficheros generados durante esta verificacion por higiene, pero **queda
+como hallazgo nuevo, no bloqueante, para que el usuario decida** si esos
+tests deben mockear `thalos_backup_service.create_backup()` en vez de
+ejecutar un `shutil.copy2` real de la BD de desarrollo en cada corrida de
+la suite.
+
+### 16.6 Checklist de no-simulacion
+
+- Datos reales, no valores fijos: sin cambio funcional en la logica de
+  negocio, solo se anadio el gate; el backup/scan/alert siguen siendo
+  operaciones reales cuando se permiten.
+- Pasa por autenticacion real: confirmado, re-verificacion en BD del
+  `user_email` de la actividad contra `User.is_superuser`, mismo patron ya
+  auditado y aprobado en `thalos_v1.py`.
+- Filtra/gatea correctamente en TODA la superficie de
+  `services/automation/handlers/thalos.py`: SI, las 3 funciones del archivo
+  quedan cubiertas, no solo `handle_thalos_backup`.
+- Manejo de errores real: `_require_superuser` cierra la sesion en
+  `finally`; no se anadio ningun `try/except: pass`.
+- Logs verificables: sin cambio, se preserva `utils.write_json`/
+  `utils.write_log` para las acciones que si se ejecutan.
+- Migracion Alembic: no aplica a este cambio (no toca esquema).
+- Test que lo prueba: si, `test_thalos_v7_legacy_gate_v1.py`, mas
+  verificacion manual en vivo documentada en 16.3.
+
+### 16.7 Que NO se verifico / queda pendiente
+
+- No se recorrio el `HANDLER_MAP` completo de los otros 5 agentes
+  (RAFAEL, PERSEO, JUSTICIA, AFRODITA, ZEUS) en busca de handlers legacy sin
+  gate equivalente; era la recomendacion 3 del veredicto de la ronda 6 pero
+  el encargo de esta vuelta fue deliberadamente estrecho (solo
+  `handlers/thalos.py`). Se deja como hallazgo pendiente para
+  auditor-priorizador/usuario.
+- No se verifico RLS (migracion 0047) contra un Postgres real; limitacion
+  ya conocida y aceptada desde la seccion 15.3, sin cambios en esta vuelta.
+- Nota de higiene de 16.5 (backups reales generados por tests preexistentes
+  con `THALOS_EXECUTION_ENABLED=True`) reportada pero no corregida, por
+  estar fuera del alcance estrecho de esta tarea.
+
+### Estado
+
+Rama `feature/fix-thalos-shield-real`, sin merge ni push a `main`. Este
+ejecutor no se declara a si mismo cerrado; corresponde a
+`revisor-independiente` confirmar la Vuelta 7, incluyendo un nuevo intento
+del exploit de 15.5 contra el codigo corregido.

@@ -11,11 +11,51 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+from app.db.session import SessionLocal
 from app.models.agent_activity import AgentActivity
 from .. import utils
+from .thalos_v1 import _is_superuser_email
+
+
+def _blocked_superuser_required(action: str) -> Dict[str, Any]:
+    """Mismo gate ya aplicado en thalos_v1.py (Vuelta 5/6) — Vuelta 7 lo
+    extiende a las 3 acciones legacy de este archivo (`security_scan`,
+    `task_assigned` -> alerts, `backup_created`), alcanzables por el mismo
+    HANDLER_MAP["THALOS"] y el mismo vector asíncrono
+    (POST /api/v1/activities/log -> AgentAutomationExecutor -> resolve_handler)
+    que ya se cerró para sus hermanos de thalos_v1.py. Ver
+    AUDIT_THALOS_ESTRUCTURAL.md sección 15.5/16.
+    """
+    return {
+        "status": "blocked",
+        "details_update": {
+            "automation": {
+                "status": "blocked",
+                "action": action,
+                "executed": False,
+                "reason": "superuser_required_for_global_audit",
+            }
+        },
+        "metrics_update": {"executed": 0},
+        "notes": (
+            f"THALOS {action}: bloqueado, requiere superusuario "
+            "(mismo gate ya aplicado a los handlers hermanos de thalos_v1.py)."
+        ),
+    }
+
+
+def _require_superuser(activity: AgentActivity) -> bool:
+    db = SessionLocal()
+    try:
+        return _is_superuser_email(db, activity.user_email)
+    finally:
+        db.close()
 
 
 def handle_thalos_security_scan(activity: AgentActivity) -> Dict[str, Any]:
+    if not _require_superuser(activity):
+        return _blocked_superuser_required(activity.action_type or "security_scan")
+
     checks = {
         "DATABASE_URL": bool(os.getenv("DATABASE_URL")),
         "OPENAI_API_KEY": bool(os.getenv("OPENAI_API_KEY")),
@@ -49,6 +89,9 @@ def handle_thalos_security_scan(activity: AgentActivity) -> Dict[str, Any]:
 
 
 def handle_thalos_alerts(activity: AgentActivity) -> Dict[str, Any]:
+    if not _require_superuser(activity):
+        return _blocked_superuser_required(activity.action_type or "task_assigned")
+
     configuration = {
         "log_level": os.getenv("LOG_LEVEL", "INFO"),
         "sentry_enabled": bool(os.getenv("SENTRY_DSN")),
@@ -79,6 +122,9 @@ def handle_thalos_alerts(activity: AgentActivity) -> Dict[str, Any]:
 
 
 def handle_thalos_backup(activity: AgentActivity) -> Dict[str, Any]:
+    if not _require_superuser(activity):
+        return _blocked_superuser_required(activity.action_type or "backup_created")
+
     source = Path("zeus.db")
     backup_dir = Path(os.getenv("AGENT_BACKUP_DIR", "storage/backups"))
     utils.ensure_dir(backup_dir)

@@ -35,15 +35,24 @@ def upgrade() -> None:
         "employee_work_sessions",
         ["user_id", "status"],
     )
-    op.add_column(
-        "tpv_sales",
-        sa.Column("work_session_id", sa.Integer(), sa.ForeignKey("employee_work_sessions.id", ondelete="SET NULL"), nullable=True),
-    )
+    with op.batch_alter_table("tpv_sales") as batch_op:
+        batch_op.add_column(
+            sa.Column("work_session_id", sa.Integer(), nullable=True),
+        )
+        batch_op.create_foreign_key(
+            "fk_tpv_sales_work_session_id",
+            "employee_work_sessions",
+            ["work_session_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
     op.create_index("ix_tpv_sales_work_session_id", "tpv_sales", ["work_session_id"])
 
 
 def downgrade() -> None:
     op.drop_index("ix_tpv_sales_work_session_id", table_name="tpv_sales")
-    op.drop_column("tpv_sales", "work_session_id")
+    with op.batch_alter_table("tpv_sales") as batch_op:
+        batch_op.drop_constraint("fk_tpv_sales_work_session_id", type_="foreignkey")
+        batch_op.drop_column("work_session_id")
     op.drop_index("ix_employee_work_sessions_user_active", table_name="employee_work_sessions")
     op.drop_table("employee_work_sessions")

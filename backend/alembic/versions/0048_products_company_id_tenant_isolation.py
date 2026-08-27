@@ -47,27 +47,27 @@ def upgrade() -> None:
     cols = {c["name"] for c in inspect(bind).get_columns("products")}
 
     if "company_id" not in cols:
-        op.add_column("products", sa.Column("company_id", sa.Integer(), nullable=True))
+        with op.batch_alter_table("products") as batch_op:
+            batch_op.add_column(sa.Column("company_id", sa.Integer(), nullable=True))
+            batch_op.create_foreign_key(
+                "fk_products_company_id",
+                "companies",
+                ["company_id"],
+                ["id"],
+                ondelete="SET NULL",
+            )
         op.create_index(op.f("ix_products_company_id"), "products", ["company_id"], unique=False)
-        op.create_foreign_key(
-            "fk_products_company_id",
-            "products",
-            "companies",
-            ["company_id"],
-            ["id"],
-            ondelete="SET NULL",
-        )
 
     if "created_by" not in cols:
-        op.add_column("products", sa.Column("created_by", sa.Integer(), nullable=True))
-        op.create_foreign_key(
-            "fk_products_created_by",
-            "products",
-            "users",
-            ["created_by"],
-            ["id"],
-            ondelete="SET NULL",
-        )
+        with op.batch_alter_table("products") as batch_op:
+            batch_op.add_column(sa.Column("created_by", sa.Integer(), nullable=True))
+            batch_op.create_foreign_key(
+                "fk_products_created_by",
+                "users",
+                ["created_by"],
+                ["id"],
+                ondelete="SET NULL",
+            )
 
 
 def downgrade() -> None:
@@ -75,10 +75,12 @@ def downgrade() -> None:
     cols = {c["name"] for c in inspect(bind).get_columns("products")}
 
     if "created_by" in cols:
-        op.drop_constraint("fk_products_created_by", "products", type_="foreignkey")
-        op.drop_column("products", "created_by")
+        with op.batch_alter_table("products") as batch_op:
+            batch_op.drop_constraint("fk_products_created_by", type_="foreignkey")
+            batch_op.drop_column("created_by")
 
     if "company_id" in cols:
-        op.drop_constraint("fk_products_company_id", "products", type_="foreignkey")
         op.drop_index(op.f("ix_products_company_id"), table_name="products")
-        op.drop_column("products", "company_id")
+        with op.batch_alter_table("products") as batch_op:
+            batch_op.drop_constraint("fk_products_company_id", type_="foreignkey")
+            batch_op.drop_column("company_id")

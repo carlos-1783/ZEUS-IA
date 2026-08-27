@@ -103,7 +103,14 @@ def downgrade() -> None:
         return
     cols = {c["name"] for c in inspector.get_columns("agent_activities")}
     if "company_id" in cols:
-        if bind.dialect.name != "sqlite":
-            op.drop_constraint("fk_agent_activities_company_id", "agent_activities", type_="foreignkey")
         op.drop_index("ix_agent_activities_company_id", table_name="agent_activities")
-        op.drop_column("agent_activities", "company_id")
+        # batch_alter_table: en SQLite el FK puede haber quedado embebido en el
+        # CREATE TABLE original (rama sin create_all previo, arriba), por lo que
+        # un DROP COLUMN directo falla ("unknown column in foreign key
+        # definition") aunque la propia FK nunca se creara con ALTER. El modo
+        # batch recrea la tabla sin esa columna/constraint y es un no-op
+        # equivalente a un ALTER directo en Postgres.
+        with op.batch_alter_table("agent_activities") as batch_op:
+            if bind.dialect.name != "sqlite":
+                batch_op.drop_constraint("fk_agent_activities_company_id", type_="foreignkey")
+            batch_op.drop_column("company_id")

@@ -94,14 +94,14 @@ def upgrade() -> None:
     op.create_index(
         op.f("ix_tpv_products_company_id"), "tpv_products", ["company_id"], unique=False
     )
-    op.create_foreign_key(
-        "fk_tpv_products_company_id",
-        "tpv_products",
-        "companies",
-        ["company_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    with op.batch_alter_table("tpv_products") as batch_op:
+        batch_op.create_foreign_key(
+            "fk_tpv_products_company_id",
+            "companies",
+            ["company_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
 
     op.add_column(
         "tpv_sales",
@@ -110,14 +110,14 @@ def upgrade() -> None:
     op.create_index(
         op.f("ix_tpv_sales_company_id"), "tpv_sales", ["company_id"], unique=False
     )
-    op.create_foreign_key(
-        "fk_tpv_sales_company_id",
-        "tpv_sales",
-        "companies",
-        ["company_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    with op.batch_alter_table("tpv_sales") as batch_op:
+        batch_op.create_foreign_key(
+            "fk_tpv_sales_company_id",
+            "companies",
+            ["company_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
 
     op.add_column(
         "invoices",
@@ -126,14 +126,14 @@ def upgrade() -> None:
     op.create_index(
         op.f("ix_invoices_company_id"), "invoices", ["company_id"], unique=False
     )
-    op.create_foreign_key(
-        "fk_invoices_company_id",
-        "invoices",
-        "companies",
-        ["company_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    with op.batch_alter_table("invoices") as batch_op:
+        batch_op.create_foreign_key(
+            "fk_invoices_company_id",
+            "companies",
+            ["company_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
 
     connection = op.get_bind()
 
@@ -226,14 +226,17 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint("fk_invoices_company_id", "invoices", type_="foreignkey")
-    op.drop_index(op.f("ix_invoices_company_id"), table_name="invoices")
-    op.drop_column("invoices", "company_id")
+    with op.batch_alter_table("invoices") as batch_op:
+        batch_op.drop_constraint("fk_invoices_company_id", type_="foreignkey")
+        batch_op.drop_index(op.f("ix_invoices_company_id"))
+        batch_op.drop_column("company_id")
 
-    op.drop_constraint("fk_tpv_sales_company_id", "tpv_sales", type_="foreignkey")
-    op.drop_index(op.f("ix_tpv_sales_company_id"), table_name="tpv_sales")
-    op.drop_column("tpv_sales", "company_id")
+    with op.batch_alter_table("tpv_sales") as batch_op:
+        batch_op.drop_constraint("fk_tpv_sales_company_id", type_="foreignkey")
+        batch_op.drop_index(op.f("ix_tpv_sales_company_id"))
+        batch_op.drop_column("company_id")
 
-    op.drop_constraint("fk_tpv_products_company_id", "tpv_products", type_="foreignkey")
-    op.drop_index(op.f("ix_tpv_products_company_id"), table_name="tpv_products")
-    op.drop_column("tpv_products", "company_id")
+    with op.batch_alter_table("tpv_products") as batch_op:
+        batch_op.drop_constraint("fk_tpv_products_company_id", type_="foreignkey")
+        batch_op.drop_index(op.f("ix_tpv_products_company_id"))
+        batch_op.drop_column("company_id")

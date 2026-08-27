@@ -18,30 +18,23 @@ def upgrade() -> None:
     op.drop_index("ix_customers_email", table_name="customers")
     op.create_index(op.f("ix_customers_email"), "customers", ["email"], unique=False)
 
-    op.add_column(
-        "customers",
-        sa.Column("company_id", sa.Integer(), nullable=True),
-    )
-    op.add_column(
-        "customers",
-        sa.Column("owner_user_id", sa.Integer(), nullable=True),
-    )
-    op.create_foreign_key(
-        "fk_customers_company_id",
-        "customers",
-        "companies",
-        ["company_id"],
-        ["id"],
-        ondelete="CASCADE",
-    )
-    op.create_foreign_key(
-        "fk_customers_owner_user_id",
-        "customers",
-        "users",
-        ["owner_user_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    with op.batch_alter_table("customers") as batch_op:
+        batch_op.add_column(sa.Column("company_id", sa.Integer(), nullable=True))
+        batch_op.add_column(sa.Column("owner_user_id", sa.Integer(), nullable=True))
+        batch_op.create_foreign_key(
+            "fk_customers_company_id",
+            "companies",
+            ["company_id"],
+            ["id"],
+            ondelete="CASCADE",
+        )
+        batch_op.create_foreign_key(
+            "fk_customers_owner_user_id",
+            "users",
+            ["owner_user_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
     op.create_index(op.f("ix_customers_company_id"), "customers", ["company_id"], unique=False)
 
     op.create_table(
@@ -126,11 +119,12 @@ def downgrade() -> None:
     op.drop_index("ix_customer_records_company_id", table_name="customer_records")
     op.drop_table("customer_records")
 
-    op.drop_constraint("fk_customers_owner_user_id", "customers", type_="foreignkey")
-    op.drop_constraint("fk_customers_company_id", "customers", type_="foreignkey")
     op.drop_index(op.f("ix_customers_company_id"), table_name="customers")
-    op.drop_column("customers", "owner_user_id")
-    op.drop_column("customers", "company_id")
+    with op.batch_alter_table("customers") as batch_op:
+        batch_op.drop_constraint("fk_customers_owner_user_id", type_="foreignkey")
+        batch_op.drop_constraint("fk_customers_company_id", type_="foreignkey")
+        batch_op.drop_column("owner_user_id")
+        batch_op.drop_column("company_id")
 
     op.drop_index(op.f("ix_customers_email"), table_name="customers")
     op.create_index(op.f("ix_customers_email"), "customers", ["email"], unique=True)

@@ -404,3 +404,227 @@ probar el ciclo completo desde cero.
 
 No se ha tocado main, no se ha hecho push, no se ha creado ninguna rama
 nueva. Este documento se commitea en feature/consolidacion-final.
+
+---
+
+## 6. Fix del hallazgo de la seccion 3 - migraciones Alembic (ejecutor-produccion)
+
+**Rol**: ejecutor-produccion (agente separado del revisor-independiente que
+escribio la seccion 3). **Rama**: feature/consolidacion-final (worktree
+`consolidacion-final`, sin rama nueva, sin push, sin tocar main).
+
+### 6.1 Diagnostico exacto
+
+El hallazgo original de la seccion 3 documentaba 2 migraciones rotas para
+SQLite (0012 y 0023). Al aplicar el primer parche y reintentar el
+`alembic upgrade head` desde una base vacia, aparecieron **6 fallos mas en
+cascada** con el mismo patron de incompatibilidad de dialecto (no
+reportados antes porque la cadena se detenia en 0012, mucho antes de
+llegar a ellos). En total, 8 archivos con el problema:
+
+| # | Archivo | Problema exacto |
+|---|---|---|
+| 1 | `0012_company_id_multitenant_tpv_invoice.py` | 3x `op.create_foreign_key()` fuera de `batch_alter_table` (tpv_products, tpv_sales, invoices). SQLite no soporta `ALTER TABLE ADD CONSTRAINT`. |
+| 2 | `0016_document_approvals_workspace_company.py` | 1x `op.create_foreign_key()` fuera de batch (document_approvals). |
+| 3 | `0018_employee_work_sessions.py` | `op.add_column()` con `sa.ForeignKey(...)` inline sobre una columna que ya existe en tpv_sales (tabla creada en migraciones previas) - SQLite rechaza anadir una FK via ALTER, incluso via `ForeignKey` inline dentro de `add_column`. |
+| 4 | `0021_crm_office.py` | 2x `op.create_foreign_key()` fuera de batch (customers.company_id, customers.owner_user_id). |
+| 5 | `0023_chat_messages.py` | `server_default=sa.text("now()")` en `created_at` dentro de `op.create_table()` - `now()` es sintaxis nativa de PostgreSQL, invalida en SQLite (`sqlite3.OperationalError: near "(": syntax error`). |
+| 6 | `0043_agent_activities_company_id.py` | `downgrade()`: `op.drop_column("agent_activities", "company_id")` directo tras haber creado la tabla (en instalaciones sin `create_all` previo) con la FK embebida en el propio `CREATE TABLE` - SQLite rechaza el `DROP COLUMN` directo cuando la columna participa en una FK de la definicion original de la tabla. |
+| 7 | `0048_products_company_id_tenant_isolation.py` | 2x `op.create_foreign_key()` fuera de batch (products.company_id, products.created_by). |
+| 8 | `0050_invoice_tpv_sale_link.py` | `op.add_column()` con `sa.ForeignKey(...)` inline + `op.create_unique_constraint()` fuera de batch (invoices.tpv_sale_id). El `downgrade()` ademas usaba `try/except: pass` para silenciar errores de constraint ya inexistente, en vez de comprobar su existencia real. |
+
+En los 8 casos el patron de fondo es el mismo: **PostgreSQL soporta
+`ALTER TABLE ADD/DROP CONSTRAINT` de forma nativa; SQLite no**, y
+`backend/alembic/env.py` (funcion `run_migrations_online`, lineas 68-90)
+no activa `render_as_batch=True` en `context.configure(...)`, por lo que
+cada operacion de constraint debe envolverse explicitamente en
+`op.batch_alter_table(...)` migracion por migracion.
+
+### 6.2 Fix aplicado (mismo patron en los 8 archivos)
+
+- Toda llamada a `op.create_foreign_key()` / `op.create_unique_constraint()`
+  / `op.drop_constraint()` / `op.drop_column()` que participa en una FK se
+  movio dentro de un bloque `with op.batch_alter_table("<tabla>") as batch_op:`,
+  usando `batch_op.<metodo>(...)` (sin el nombre de tabla como primer
+  argumento, que batch ya conoce por contexto).
+- `0018` y `0050`: se separo el `add_column()` con `sa.ForeignKey(...)`
+  inline en dos pasos dentro del mismo batch: `batch_op.add_column(sa.Column(...))`
+  sin FK inline, seguido de `batch_op.create_foreign_key(...)` explicito con
+  nombre de constraint propio (`fk_tpv_sales_work_session_id`,
+  `fk_invoices_tpv_sale_id`) - esto ademas corrige un problema latente
+  independiente: las FK inline de SQLAlchemy generadas por `add_column`
+  quedan sin nombre explicito, dificultando su `DROP` posterior en
+  Postgres.
+- `0023`: `sa.text("now()")` -> `sa.func.now()`. Verificado que
+  `sa.func.now()` es dialecto-agnostico (ver evidencia 6.3.4): compila a
+  `CURRENT_TIMESTAMP` en SQLite y a `now()` en PostgreSQL. Es el mismo
+  patron ya usado en ~30 migraciones existentes del proyecto (0007, 0008,
+  0010, 0011, 0025-0042, 0046, 0049), por lo que 0023 pasa a ser
+  consistente con el resto del repositorio en vez de una excepcion.
+- `0043` (downgrade): se envolvio el `drop_column("company_id")` (y el
+  `drop_constraint` condicional para no-SQLite) en `batch_alter_table`,
+  con comentario explicando por que hace falta incluso cuando la FK nunca
+  se creo via `ALTER` (puede haber quedado embebida en el `CREATE TABLE`
+  original, rama usada cuando `agent_activities` no existia todavia).
+- `0050` (downgrade): se elimino el `try/except: pass` que silenciaba
+  errores de constraints inexistentes (viola la regla de "no
+  simulaciones/manejo de errores real" de la skill zeus-produccion) y se
+  sustituyo por una comprobacion real de existencia via
+  `inspector.get_indexes()` / `get_unique_constraints()` / `get_foreign_keys()`
+  antes de intentar el `drop_constraint`/`drop_index` correspondiente.
+- Todos los `downgrade()` correspondientes se revisaron y corrigieron en
+  paralelo con el mismo patron batch, para mantener la reversibilidad real
+  (no solo el `upgrade()`).
+
+Cambio de comportamiento en PostgreSQL: **ninguno**. `batch_alter_table`
+con `recreate="auto"` (el valor por defecto, sin especificar) solo activa
+la estrategia de copia de tabla en SQLite; en el resto de dialectos
+(incluido PostgreSQL) emite las mismas sentencias `ALTER TABLE` estandar
+que las llamadas directas que sustituye - confirmado leyendo el docstring
+oficial de `Operations.batch_alter_table` instalado en el venv (alembic
+1.13.1, ver evidencia 6.3.5). No se introduce ninguna regresion silenciosa
+en produccion.
+
+### 6.3 Evidencia de verificacion (ejecutada por mi, desde cero)
+
+**6.3.1 - Estado del working tree al empezar** (cambios ya presentes sin
+commitear, heredados de un ejecutor anterior cortado por limite de
+sesion, revisados linea por linea antes de aceptarlos):
+
+```
+git status
+  modified: backend/alembic/versions/0012_company_id_multitenant_tpv_invoice.py
+  modified: backend/alembic/versions/0016_document_approvals_workspace_company.py
+  modified: backend/alembic/versions/0018_employee_work_sessions.py
+  modified: backend/alembic/versions/0021_crm_office.py
+  modified: backend/alembic/versions/0023_chat_messages.py
+  modified: backend/alembic/versions/0043_agent_activities_company_id.py
+  modified: backend/alembic/versions/0048_products_company_id_tenant_isolation.py
+  modified: backend/alembic/versions/0050_invoice_tpv_sale_link.py
+```
+
+**6.3.2 - `alembic upgrade head` desde una base SQLite completamente
+vacia y desechable** (fuera del repositorio, `DATABASE_URL` apuntando a
+`.../scratchpad/ejecutor_migtest_<timestamp>.db`, venv compartido
+`backend/venv/Scripts/alembic.exe`):
+
+```
+alembic upgrade head
+INFO  Running upgrade  -> 0001, Initial migration
+...
+INFO  Running upgrade 0011 -> 0012, ZEUS_MULTITENANT_MIGRATION_SAFE_001: company_id on tpv_products, tpv_sales, invoices
+...
+INFO  Running upgrade 0022 -> 0023, Persistencia de mensajes de chat.
+...
+INFO  Running upgrade 0052 -> 0053, Row Level Security (PostgreSQL) para las 4 tablas de logs de THALOS
+
+alembic current -> 0053 (head)
+alembic heads   -> 0053 (head)
+```
+
+Las 53 revisiones aplicaron sin ningun error, incluidas las dos que
+fallaban en la seccion 3 (0012, 0023) y las 6 adicionales descubiertas
+en esta pasada (0016, 0018, 0021, 0043, 0048, 0050).
+
+**6.3.3 - Ciclo `downgrade`/`upgrade` completo** (no solo un muestreo:
+downgrade continuo desde 0053 hasta 0011, es decir, la reversa de las 42
+migraciones 0012-0053 incluidas las 8 tocadas, seguido de `upgrade head`
+de vuelta):
+
+```
+alembic downgrade 0011
+INFO  Running downgrade 0053 -> 0052, ...
+...
+INFO  Running downgrade 0012 -> 0011, ZEUS_MULTITENANT_MIGRATION_SAFE_001...
+alembic current -> 0011
+
+alembic upgrade head
+INFO  Running upgrade 0011 -> 0012, ...
+...
+INFO  Running upgrade 0052 -> 0053, ...
+alembic current -> 0053 (head)
+```
+
+Sin ningun error en ninguna direccion. Reversibilidad real confirmada
+para las 8 migraciones tocadas (y para todo lo que hay entre medias).
+
+**6.3.4 - `sa.func.now()` es dialecto-agnostico** (verificado compilando
+la misma columna contra ambos dialectos con SQLAlchemy, sin necesidad de
+una instancia real de Postgres):
+
+```python
+col = sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now())
+CreateColumn(col).compile(dialect=sqlite.dialect())     -> created_at DATETIME DEFAULT (CURRENT_TIMESTAMP)
+CreateColumn(col).compile(dialect=postgresql.dialect()) -> created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+```
+
+**6.3.5 - `batch_alter_table` con `recreate="auto"` no cambia el
+comportamiento en PostgreSQL** (docstring oficial de
+`alembic.operations.Operations.batch_alter_table`, alembic 1.13.1
+instalado en el venv):
+
+> "recreate": under what circumstances the table should be recreated.
+> At its default of "auto", the SQLite dialect will recreate the table
+> if any operations other than add_column(), create_index(), or
+> drop_index() are present. [...] The batch operation on other backends
+> will proceed using standard ALTER TABLE operations.
+
+**6.3.6 - Suite completa de tests, sin regresion** (venv compartido,
+BD de desarrollo normal del worktree, `backend/zeus.db`):
+
+```
+cd backend && python -m pytest tests -q
+...
+7 failed, 300 passed, 34 warnings, 3 errors in 183.11s (0:03:03)
+```
+
+Mismos 7 nombres de fallo y mismos 3 errores que el baseline documentado
+en la seccion 4 de este mismo documento (`test_config_loading`,
+`test_default_flags_simulated`, `test_audit_includes_ai_modules`,
+`test_default_mode_is_simulation_for_heuristic_modules`,
+`test_backup_requires_execution_and_backup_flags`,
+`test_build_metadata_origin_mock`, `test_monitoring_cycle_respects_flags`;
+errores en `test_health_check`, `test_root_endpoint`, `test_favicon` por
+`NameError: TestClient no definido`, preexistente y documentado). Sin
+regresion.
+
+**6.3.7 - Limpieza de bases de datos desechables**: se elimino la base
+SQLite de prueba creada para 6.3.2/6.3.3 (fuera del repositorio, en
+`scratchpad`), y se eliminaron dos artefactos `.db` sueltos que habian
+quedado en el worktree de sesiones de revision anteriores
+(`backend/zeus_reviewer_frontend.db`, `backend/zeus_reviewer_test.db`,
+ambos vacios) y una `zeus.db` residual en la raiz del worktree (ajena a
+`backend/`, ambas ignoradas por git, ninguna es el estado de desarrollo
+real). Se conservo intacta `backend/zeus.db` (la base de desarrollo real
+usada por el pytest de 6.3.6).
+
+### 6.4 Limitacion que sigue sin poder verificarse en este entorno
+
+Igual que documento la seccion 3: **no hay ninguna instancia de
+PostgreSQL disponible en este entorno** (sin binarios de Postgres ni
+Docker en el PATH). El fix de esta seccion se limita, por diseno
+(`batch_alter_table` con `recreate="auto"`), a no cambiar el SQL emitido
+en PostgreSQL - respaldado por el docstring oficial de Alembic (6.3.5) y
+por el hecho de que `sa.func.now()` compila a la sintaxis nativa correcta
+en ambos dialectos (6.3.4) - pero esto sigue siendo una verificacion por
+lectura de codigo y documentacion oficial, no una ejecucion real contra
+Postgres. Sigue siendo recomendable, cuando haya acceso a un Postgres de
+staging o Docker, ejecutar `alembic upgrade head` una vez desde cero
+contra el como confirmacion final independiente de este razonamiento.
+
+### 6.5 Veredicto de este step
+
+No me autodeclaro aprobado. Este documento y el commit correspondiente
+quedan listos para la verificacion de `revisor-independiente`, que es
+quien decide si el hallazgo de la seccion 3 queda cerrado.
+
+Resumen para el revisor: los 8 archivos ahora usan de forma consistente
+`batch_alter_table` para toda operacion de constraint sobre SQLite y
+`sa.func.now()` en vez de `now()` literal; `alembic upgrade head` desde
+cero (53 revisiones) y el ciclo `downgrade`/`upgrade` completo (0053 a
+0011 y de vuelta) se ejecutaron sin error; la suite de tests no tiene
+regresion (7 failed, 300 passed, 3 errors, identico al baseline);
+PostgreSQL real sigue sin poder probarse en este entorno, limitacion ya
+conocida y ahora acotada con evidencia adicional (docstring oficial +
+compilacion de columna por dialecto) de que el fix no deberia alterar el
+comportamiento alli.

@@ -212,7 +212,14 @@ class Settings(BaseSettings):
         "yes",
     )
     THALOS_AUTO_BLOCK: bool = os.getenv("THALOS_AUTO_BLOCK", "false").lower() in ("true", "1", "yes")
-    THALOS_REAL_MONITORING: bool = os.getenv("THALOS_REAL_MONITORING", "false").lower() in (
+    # Bloque 3 (limpieza de simulación): por defecto era "false" — el único
+    # middleware real que existe con el nombre THALOS (ThalosLoginAuditMiddleware,
+    # solo audita intentos de login) estaba inactivo de fábrica salvo que
+    # alguien pusiera esta variable de entorno a mano. Activado por defecto:
+    # es una escritura de auditoría de solo-lectura de negocio (no bloquea ni
+    # valida nada, ver AUDIT_FIX_BLOQUE3.md), envuelta en try/except con
+    # rollback, así que no puede romper el login si falla.
+    THALOS_REAL_MONITORING: bool = os.getenv("THALOS_REAL_MONITORING", "true").lower() in (
         "true",
         "1",
         "yes",

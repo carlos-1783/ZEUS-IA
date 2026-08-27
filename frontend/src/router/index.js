@@ -23,10 +23,7 @@ import AuthLayout from '../layouts/AuthLayout.vue'
 
 // Lazy loading de componentes pesados
 const MainLayout = () => import('../layouts/MainLayout.vue')
-const Dashboard = () => import('../views/Dashboard.vue')
-const DashboardHolographic = () => import('../views/DashboardHolographic.vue')
 const OlymposDashboard = () => import('../views/OlymposDashboard.vue')
-const ZeusCore = () => import('../views/ZeusCore.vue')
 const Login = () => import('../views/auth/Login.vue')
 const Register = () => import('../views/auth/Register.vue')
 const ForgotPassword = () => import('../views/auth/ForgotPassword.vue')
@@ -387,26 +384,7 @@ const router = createRouter({
       ]
     },
     
-    // Protected routes
-    {
-      path: '/dashboard',
-      name: 'DashboardProtected',
-      component: Dashboard,
-      meta: { 
-        title: 'Panel de control',
-        requiresAuth: true
-      }
-    },
-    {
-      path: '/zeus-core',
-      name: 'ZeusCore',
-      component: ZeusCore,
-      meta: { 
-        title: 'Núcleo ZEUS-IA',
-        requiresAuth: true
-      }
-    },
-    
+
         // Test routes (temporarily public)
     {
       path: '/auth-test',

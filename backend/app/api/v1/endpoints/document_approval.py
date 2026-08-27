@@ -228,6 +228,13 @@ async def update_advisor_emails(
     Actualizar emails de asesores del usuario.
     """
     try:
+        # current_user llega vinculado a la sesión de BD que usa get_current_active_user
+        # (app.db.base.get_db), distinta de la `db` inyectada en este endpoint
+        # (app.db.session.get_db). Sin este re-fetch, db.commit()/db.refresh(current_user)
+        # fallan con "Instance ... is not persistent within this Session" (mismo patrón
+        # ya resuelto en auth.py::_onboarding_profile_impl con el mismo comentario).
+        current_user = db.query(User).filter(User.id == current_user.id).first() or current_user
+
         if email_gestor_fiscal:
             current_user.email_gestor_fiscal = str(email_gestor_fiscal).strip().lower()
         
@@ -270,6 +277,10 @@ async def toggle_document_authorization(
     Activar/desactivar autorización para envío de documentos a asesores.
     """
     try:
+        # Mismo problema de sesión de BD distinta que en update-advisor-emails: re-fetch
+        # necesario para que db.commit()/db.refresh(current_user) funcionen.
+        current_user = db.query(User).filter(User.id == current_user.id).first() or current_user
+
         current_user.autoriza_envio_documentos_a_asesores = autoriza
         db.commit()
         db.refresh(current_user)

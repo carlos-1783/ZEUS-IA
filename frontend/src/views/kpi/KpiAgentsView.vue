@@ -103,48 +103,71 @@ onMounted(async () => {
   grid-template-columns: 1fr 1fr auto auto auto 1fr;
   gap: 12px;
   align-items: center;
-  padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  padding: 16px 20px;
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e5e9f0);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow-sm);
   font-size: 14px;
+  color: var(--zeus-text-secondary, #52607a);
+  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.kpi-list-item:hover {
+  box-shadow: var(--zeus-shadow);
+  border-color: var(--zeus-border-strong, #d7dce5);
+}
+
+.kpi-list-item strong {
+  color: var(--zeus-text, #0f172a);
 }
 
 .pill {
   font-size: 12px;
   font-weight: 600;
+  justify-self: end;
+  padding: 4px 10px;
+  border-radius: var(--zeus-radius-full, 999px);
 }
 
+/* Plano, no gradiente: hay 6 filas de agentes en esta vista y el
+   acento vibrante debe aparecer como mucho una vez por vista, no
+   repetido en cada fila. */
 .pill.online {
-  color: #10b981;
+  color: #0d9668;
+  background: var(--zeus-success-soft, #e9faf3);
 }
 
 .pill.idle {
-  color: #f59e0b;
+  color: #b45309;
+  background: var(--zeus-warning-soft, #fef3e2);
 }
 
 .pill.offline {
-  color: #ef4444;
+  color: #b91c1c;
+  background: var(--zeus-danger-soft, #fde8e8);
 }
 
 .pill.loading {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-secondary, #52607a);
+  background: var(--zeus-surface-muted, #f1f4f8);
 }
 
 .metric {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--zeus-text-secondary, #52607a);
   font-size: 13px;
   white-space: nowrap;
 }
 
 .last-activity {
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--zeus-text-tertiary, #8a93a6);
   font-size: 12px;
   text-align: right;
 }
 
 .empty {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-secondary, #52607a);
   padding: 14px 16px;
 }
 

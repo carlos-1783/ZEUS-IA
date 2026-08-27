@@ -1,23 +1,33 @@
 <template>
   <div class="control-horario-container">
-    <!-- Botón de vuelta al Dashboard -->
-    <button @click="goToDashboard" class="back-to-dashboard-btn fixed-top-left">
-      <span class="btn-icon">📊</span>
+    <!-- Botón de vuelta al Dashboard: en flujo normal (antes position:fixed
+         en la esquina superior izquierda, exactamente sobre el título
+         "Control Horario Universal" -> se solapaban en todos los anchos
+         de pantalla, no solo móvil). Mismo patrón que el resto de vistas
+         (Seguros, Ajustes, /agents): un enlace/botón "volver" en flujo,
+         antes de la cabecera. -->
+    <button @click="goToDashboard" class="back-to-dashboard-btn">
+      <span class="btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M4 20h16"/></svg></span>
       <span class="btn-label">{{ $t('controlHorario.backToDashboard') }}</span>
     </button>
 
     <!-- Header del Control Horario -->
     <div class="control-horario-header">
       <div class="control-horario-title-section">
-        <h1 class="control-horario-title">⏰ {{ $t('controlHorario.title') }}</h1>
+        <h1 class="control-horario-title">
+          <span class="title-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></span>
+          {{ $t('controlHorario.title') }}
+        </h1>
         <p class="control-horario-subtitle">{{ $t('controlHorario.subtitle') }}</p>
       </div>
       <div class="header-actions">
         <button @click="checkStatus" class="header-btn">
-          🔄 {{ $t('controlHorario.refresh') }}
+          <span class="header-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-5h5"/></svg></span>
+          {{ $t('controlHorario.refresh') }}
         </button>
         <div v-if="businessProfile" class="business-profile-badge">
-          🏢 {{ getBusinessProfileLabel(businessProfile) }}
+          <span class="header-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1M10 21v-4h4v4"/></svg></span>
+          {{ getBusinessProfileLabel(businessProfile) }}
         </div>
       </div>
     </div>
@@ -49,7 +59,13 @@
               :class="{ active: selectedMethod === method.id }"
               :disabled="!isMethodEnabled(method.id)"
             >
-              <span class="method-icon">{{ method.icon }}</span>
+              <span class="method-icon" aria-hidden="true">
+                <svg v-if="method.id === 'face'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+                <svg v-else-if="method.id === 'qr'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="6" height="6" rx="1"/><rect x="14.5" y="3.5" width="6" height="6" rx="1"/><rect x="3.5" y="14.5" width="6" height="6" rx="1"/><path d="M14.5 14.5h2.5v2.5h-2.5zM19.5 19.5h1v1h-1zM14.5 19.5v2M19.5 14.5h2"/></svg>
+                <svg v-else-if="method.id === 'code'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 7 20M17 4l-2 16M4 9h16M3 15h16"/></svg>
+                <svg v-else-if="method.id === 'location'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.5 7-11.5A7 7 0 0 0 5 9.5C5 14.5 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+                <svg v-else-if="method.id === 'remote'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="11" rx="1.5"/><path d="M2 19h20M9 19l1-3h4l1 3"/></svg>
+              </span>
               <span class="method-label">{{ method.label }}</span>
             </button>
           </div>
@@ -717,26 +733,55 @@ onUnmounted(() => {
 <style scoped>
 .control-horario-container {
   min-height: 100vh;
-  background: #f5f5f5;
+  background-image: var(--zeus-bg);
+  font-family: var(--zeus-font-sans, 'Inter', sans-serif);
   padding: 20px;
   position: relative;
 }
 
+.control-horario-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+.control-horario-container > * {
+  position: relative;
+}
+
 .back-to-dashboard-btn {
-  position: fixed;
-  top: 20px;
-  left: 20px;
-  padding: 12px 20px;
-  background: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  display: flex;
+  /* En flujo normal (bug: antes position:fixed en (20,20), exactamente
+     donde arranca el título del header -> se solapaban en TODOS los
+     anchos, no solo móvil). margin-bottom la separa del header. */
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  z-index: 100;
+  margin-bottom: 16px;
+  padding: 12px 20px;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  border: 1px solid #D1D5DB;
+  border-radius: var(--zeus-radius-sm, 8px);
+  cursor: pointer;
   font-weight: 600;
+  box-shadow: var(--zeus-shadow-btn, 0 2px 4px rgba(0, 0, 0, 0.15));
+  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.back-to-dashboard-btn:hover {
+  border-color: #9aa2af;
+  transform: translateY(-1px);
+}
+
+.back-to-dashboard-btn:active {
+  box-shadow: var(--zeus-shadow-btn-active, 0 1px 1px rgba(0, 0, 0, 0.1));
+  transform: translateY(0);
 }
 
 .control-horario-header {
@@ -745,20 +790,52 @@ onUnmounted(() => {
   align-items: center;
   margin-bottom: 30px;
   padding: 20px;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  background: var(--zeus-surface, white);
+  border: 1px solid var(--zeus-border, transparent);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 2px 4px rgba(0,0,0,0.1));
 }
 
 .control-horario-title {
   margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   font-size: 32px;
-  color: #1f2937;
+  color: var(--zeus-text, #1f2937);
+}
+
+.title-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 4px;
+  color: var(--zeus-accent, #4f46e5);
+}
+
+.title-icon svg {
+  width: 30px;
+  height: 30px;
+}
+
+.btn-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.header-btn-icon {
+  display: inline-flex;
+  vertical-align: -4px;
+  margin-right: 4px;
+}
+
+.header-btn-icon svg {
+  width: 16px;
+  height: 16px;
 }
 
 .control-horario-subtitle {
   margin: 8px 0 0;
-  color: #6b7280;
+  color: var(--zeus-text-secondary, #6b7280);
 }
 
 .header-actions {
@@ -767,41 +844,59 @@ onUnmounted(() => {
   align-items: center;
 }
 
+/* Pendiente señalado en la Ronda 3 ("botón verde plano, tercera
+   variante fuera de la regla de dos estados") — "Actualizar" es una
+   utilidad repetible, no la acción de mayor jerarquía de esta vista
+   (esa es fichar entrada/salida) -> secundario blanco/borde. */
 .header-btn {
   padding: 10px 20px;
-  background: #10b981;
-  color: white;
-  border: none;
-  border-radius: 8px;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  border: 1px solid #D1D5DB;
+  border-radius: var(--zeus-radius-sm, 8px);
   cursor: pointer;
   font-weight: 600;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.header-btn:hover {
+  border-color: #9aa2af;
 }
 
 .business-profile-badge {
   padding: 10px 20px;
-  background: #f3f4f6;
-  border-radius: 8px;
+  background: var(--zeus-bg-subtle, #f3f4f6);
+  border-radius: var(--zeus-radius-sm, 8px);
   font-weight: 600;
-  color: #374151;
+  color: var(--zeus-text-secondary, #374151);
 }
 
 .control-horario-main-interface {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
+  /* Bug real: .status-panel y .history-panel comparten fila (sin
+     grid-column propio) y CSS Grid las estira por defecto (align-items:
+     stretch) a la altura de la más alta de las dos -> cuando una lista
+     es mucho más corta que la otra (p.ej. pocos/ningún empleado dentro
+     vs historial con varios registros), la tarjeta corta queda con un
+     hueco en blanco al final, del tamaño de la diferencia. align-items:
+     start hace que cada tarjeta ocupe solo su altura de contenido real. */
+  align-items: start;
 }
 
 .check-in-out-panel {
-  background: white;
+  background: var(--zeus-surface, white);
   padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border: 1px solid var(--zeus-border, transparent);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 2px 4px rgba(0,0,0,0.1));
   grid-column: 1 / -1;
 }
 
 .method-selector h3 {
   margin: 0 0 16px;
-  color: #1f2937;
+  color: var(--zeus-text, #1f2937);
 }
 
 .methods-grid {
@@ -812,26 +907,37 @@ onUnmounted(() => {
 }
 
 .method-btn {
+  position: relative;
   padding: 16px;
-  background: #f9fafb;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
+  background: var(--zeus-bg-flat, #f9fafb);
+  border: 2px solid var(--zeus-border, #e5e7eb);
+  border-radius: var(--zeus-radius-sm, 8px);
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  transition: all 0.2s;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .method-btn:hover:not(:disabled) {
-  border-color: #3b82f6;
-  background: #eff6ff;
+  border-color: var(--zeus-accent, #3b82f6);
+  background: var(--zeus-accent-soft, #eff6ff);
 }
 
+/* Selector de metodo de fichaje: es seleccion DENTRO de un grupo (5
+   metodos), no la accion principal de la vista -> sin gradiente, solo
+   borde+fondo con tinte, segun la regla ya establecida en rondas
+   anteriores ("seleccion dentro de un grupo: gradiente retirado, solo
+   negrita y/o cambio de borde"). Antes llevaba una barra ::after con el
+   gradiente de 4 paradas CON naranja (valor obsoleto de Ronda 1, ni
+   siquiera coincidia con el --zeus-accent-gradient de 3 paradas actual)
+   — corregido al pasar por este bloque para los iconos SVG. */
 .method-btn.active {
-  border-color: #3b82f6;
-  background: #dbeafe;
+  border-color: var(--zeus-accent, #3b82f6);
+  background: var(--zeus-accent-soft, #dbeafe);
+  font-weight: 600;
 }
 
 .method-btn:disabled {
@@ -840,7 +946,17 @@ onUnmounted(() => {
 }
 
 .method-icon {
-  font-size: 32px;
+  display: inline-flex;
+  color: var(--zeus-text-secondary, #52607a);
+}
+
+.method-btn.active .method-icon {
+  color: var(--zeus-accent, #4f46e5);
+}
+
+.method-icon svg {
+  width: 28px;
+  height: 28px;
 }
 
 .check-form {
@@ -851,7 +967,7 @@ onUnmounted(() => {
 
 .employee-selector label {
   font-weight: 600;
-  color: #374151;
+  color: var(--zeus-text-secondary, #374151);
   margin-bottom: 8px;
   display: block;
 }
@@ -859,9 +975,18 @@ onUnmounted(() => {
 .employee-select {
   width: 100%;
   padding: 12px;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
+  border: 2px solid var(--zeus-border, #e5e7eb);
+  border-radius: var(--zeus-radius-sm, 8px);
   font-size: 16px;
+  font-family: var(--zeus-font-sans, 'Inter', sans-serif);
+  color: var(--zeus-text, #0f172a);
+  background: var(--zeus-surface, #fff);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .method-btn {
+    transition-duration: 1ms;
+  }
 }
 
 .check-buttons {
@@ -881,47 +1006,58 @@ onUnmounted(() => {
 .btn-break-end {
   padding: 16px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--zeus-radius-sm, 8px);
   font-size: 18px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  color: var(--zeus-text-on-accent, white);
+  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn-check-in {
-  background: #10b981;
-  color: white;
+  background: var(--zeus-success, #10b981);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(16, 185, 129, 0.2);
 }
 
 .btn-check-in:hover:not(:disabled) {
   background: #059669;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(16, 185, 129, 0.28);
+  transform: translateY(-1px);
 }
 
 .btn-check-out {
-  background: #ef4444;
-  color: white;
+  background: var(--zeus-danger, #ef4444);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(239, 68, 68, 0.2);
 }
 
 .btn-check-out:hover:not(:disabled) {
   background: #dc2626;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(239, 68, 68, 0.28);
+  transform: translateY(-1px);
 }
 
 .btn-break-start {
-  background: #f59e0b;
-  color: white;
+  background: var(--zeus-warning, #f59e0b);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(245, 158, 11, 0.2);
 }
 
 .btn-break-start:hover:not(:disabled) {
   background: #d97706;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(245, 158, 11, 0.28);
+  transform: translateY(-1px);
 }
 
 .btn-break-end {
-  background: #6366f1;
-  color: white;
+  background: var(--zeus-accent-2, #6366f1);
+  box-shadow: var(--zeus-shadow-btn, 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(79, 70, 229, 0.2));
 }
 
 .btn-break-end:hover:not(:disabled) {
-  background: #4f46e5;
+  background: var(--zeus-accent, #4f46e5);
+  box-shadow: var(--zeus-shadow-btn-hover, 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(79, 70, 229, 0.28));
+  transform: translateY(-1px);
 }
 
 .btn-check-in:disabled,
@@ -932,19 +1068,29 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .btn-check-in:hover:not(:disabled),
+  .btn-check-out:hover:not(:disabled),
+  .btn-break-start:hover:not(:disabled),
+  .btn-break-end:hover:not(:disabled) {
+    transform: none;
+  }
+}
+
 .alerts-panel,
 .tpv-hint-panel {
   grid-column: 1 / -1;
-  background: white;
+  background: var(--zeus-surface, white);
   padding: 20px 24px;
-  border-radius: 12px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--zeus-border, transparent);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 2px 4px rgba(0, 0, 0, 0.08));
 }
 
 .alerts-panel h3,
 .tpv-hint-panel h3 {
   margin: 0 0 12px;
-  color: #1f2937;
+  color: var(--zeus-text, #1f2937);
 }
 
 .alerts-list {
@@ -955,53 +1101,54 @@ onUnmounted(() => {
 
 .alerts-list li {
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--zeus-radius-sm, 8px);
   margin-bottom: 8px;
   font-size: 14px;
-  color: #374151;
+  color: var(--zeus-text-secondary, #374151);
 }
 
 .alerts-list li.sev-critical {
-  background: #fef2f2;
-  border-left: 4px solid #dc2626;
+  background: var(--zeus-danger-soft, #fef2f2);
+  border-left: 4px solid var(--zeus-danger, #dc2626);
 }
 
 .alerts-list li.sev-warning {
-  background: #fffbeb;
-  border-left: 4px solid #f59e0b;
+  background: var(--zeus-warning-soft, #fffbeb);
+  border-left: 4px solid var(--zeus-warning, #f59e0b);
 }
 
 .alerts-list li.sev-info {
-  background: #eff6ff;
-  border-left: 4px solid #3b82f6;
+  background: var(--zeus-info-soft, #eff6ff);
+  border-left: 4px solid var(--zeus-info, #3b82f6);
 }
 
 .alert-kind {
   display: inline-block;
   font-size: 11px;
   text-transform: uppercase;
-  color: #6b7280;
+  color: var(--zeus-text-muted, #6b7280);
   margin-right: 8px;
 }
 
 .tpv-hint-text {
   margin: 0;
-  color: #4b5563;
+  color: var(--zeus-text-secondary, #4b5563);
   font-size: 15px;
 }
 
 .status-panel,
 .history-panel {
-  background: white;
+  background: var(--zeus-surface, white);
   padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border: 1px solid var(--zeus-border, transparent);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 2px 4px rgba(0,0,0,0.1));
 }
 
 .status-panel h3,
 .history-panel h3 {
   margin: 0 0 16px;
-  color: #1f2937;
+  color: var(--zeus-text, #1f2937);
 }
 
 .employees-status-list {
@@ -1015,37 +1162,38 @@ onUnmounted(() => {
   align-items: center;
   gap: 16px;
   padding: 16px;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
-  transition: all 0.2s;
+  border: 2px solid var(--zeus-border, #e5e7eb);
+  border-radius: var(--zeus-radius-sm, 8px);
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .employee-status-card.status-inside {
-  border-color: #10b981;
-  background: #f0fdf4;
+  border-color: var(--zeus-success, #10b981);
+  background: var(--zeus-success-soft, #f0fdf4);
 }
 
 .employee-status-card.status-outside {
-  border-color: #e5e7eb;
+  border-color: var(--zeus-border, #e5e7eb);
 }
 
 .employee-status-card.status-break {
-  border-color: #f59e0b;
-  background: #fffbeb;
+  border-color: var(--zeus-warning, #f59e0b);
+  background: var(--zeus-warning-soft, #fffbeb);
 }
 
 .today-hours {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--zeus-text-secondary, #6b7280);
 }
 
 .employee-avatar {
   width: 48px;
   height: 48px;
-  border-radius: 50%;
-  background: #3b82f6;
-  color: white;
+  border-radius: var(--zeus-radius-full, 50%);
+  background: var(--zeus-accent, #3b82f6);
+  color: var(--zeus-text-on-accent, white);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1058,40 +1206,40 @@ onUnmounted(() => {
 
 .employee-info h4 {
   margin: 0;
-  color: #1f2937;
+  color: var(--zeus-text, #1f2937);
 }
 
 .employee-id {
   margin: 4px 0 0;
-  color: #6b7280;
+  color: var(--zeus-text-secondary, #6b7280);
   font-size: 14px;
 }
 
 .status-badge {
   padding: 6px 12px;
-  border-radius: 20px;
+  border-radius: var(--zeus-radius-full, 20px);
   font-size: 14px;
   font-weight: 600;
 }
 
 .status-badge.inside {
-  background: #d1fae5;
+  background: var(--zeus-success-soft, #d1fae5);
   color: #065f46;
 }
 
 .status-badge.outside {
-  background: #fee2e2;
+  background: var(--zeus-danger-soft, #fee2e2);
   color: #991b1b;
 }
 
 .status-badge.break {
-  background: #fef3c7;
+  background: var(--zeus-warning-soft, #fef3c7);
   color: #92400e;
 }
 
 .check-in-time {
   margin: 4px 0 0;
-  color: #6b7280;
+  color: var(--zeus-text-secondary, #6b7280);
   font-size: 12px;
 }
 
@@ -1108,8 +1256,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 12px;
   padding: 12px;
-  background: #f9fafb;
-  border-radius: 8px;
+  background: var(--zeus-bg-flat, #f9fafb);
+  border-radius: var(--zeus-radius-sm, 8px);
 }
 
 .history-icon {
@@ -1123,13 +1271,13 @@ onUnmounted(() => {
 .history-employee {
   margin: 0;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--zeus-text, #1f2937);
 }
 
 .history-type,
 .history-time {
   margin: 4px 0 0;
-  color: #6b7280;
+  color: var(--zeus-text-secondary, #6b7280);
   font-size: 14px;
 }
 
@@ -1142,15 +1290,16 @@ onUnmounted(() => {
 
 .cost-engine-panel {
   grid-column: 1 / -1;
-  background: white;
+  background: var(--zeus-surface, white);
   padding: 20px 24px;
-  border-radius: 12px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border: 1px solid var(--zeus-border, transparent);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 2px 4px rgba(0,0,0,0.1));
 }
 
 .cost-engine-panel h3 {
   margin: 0 0 16px;
-  color: #1f2937;
+  color: var(--zeus-text, #1f2937);
 }
 
 .cost-metrics-inline {
@@ -1166,21 +1315,22 @@ onUnmounted(() => {
 
 .active-sessions-list li {
   padding: 8px 0;
-  border-top: 1px solid #e5e7eb;
-  color: #374151;
+  border-top: 1px solid var(--zeus-border, #e5e7eb);
+  color: var(--zeus-text-secondary, #374151);
 }
 
 .no-active-sessions {
   margin: 0;
-  color: #6b7280;
+  color: var(--zeus-text-secondary, #6b7280);
   font-size: 14px;
 }
 
 .metric-card {
-  background: white;
+  background: var(--zeus-surface, white);
   padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border: 1px solid var(--zeus-border, transparent);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 2px 4px rgba(0,0,0,0.1));
   display: flex;
   align-items: center;
   gap: 16px;
@@ -1193,7 +1343,7 @@ onUnmounted(() => {
 .metric-value {
   font-size: 32px;
   font-weight: 700;
-  color: #3b82f6;
+  color: var(--zeus-accent, #3b82f6);
   margin: 8px 0 0;
 }
 
@@ -1206,11 +1356,17 @@ onUnmounted(() => {
 .spinner {
   width: 48px;
   height: 48px;
-  border: 4px solid #e5e7eb;
-  border-top-color: #3b82f6;
+  border: 4px solid var(--zeus-border, #e5e7eb);
+  border-top-color: var(--zeus-accent, #3b82f6);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 1.5s;
+  }
 }
 
 @keyframes spin {
@@ -1235,16 +1391,17 @@ onUnmounted(() => {
 }
 
 .jornada-employee-panel {
-  background: #fff;
-  border-radius: 12px;
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, transparent);
+  border-radius: var(--zeus-radius, 12px);
   padding: 16px 20px;
   margin-bottom: 16px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--zeus-shadow, 0 2px 4px rgba(0, 0, 0, 0.08));
 }
 
 .jornada-intro {
   margin: 0 0 12px;
-  color: #475569;
+  color: var(--zeus-text-secondary, #475569);
   font-size: 0.95rem;
 }
 
@@ -1256,32 +1413,41 @@ onUnmounted(() => {
   margin-bottom: 12px;
 }
 
+/* Estado "en turno" del propio empleado: usa el color semantico de
+   estado (verde = presente), coherente con el resto de indicadores de
+   presencia de la pantalla (status-badge.inside, employee-status-card). */
 .jornada-status.active .jornada-dot {
-  background: #10b981;
+  background: var(--zeus-success, #10b981);
+  box-shadow: 0 0 0 3px var(--zeus-success-soft, #e9faf3);
 }
 
 .jornada-dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #94a3b8;
+  background: var(--zeus-text-muted, #94a3b8);
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .jornada-time {
   font-size: 0.9rem;
-  color: #64748b;
+  color: var(--zeus-text-secondary, #64748b);
 }
 
 .btn-close-shift {
   padding: 10px 18px;
-  border-radius: 8px;
-  border: 1px solid #cbd5e1;
-  background: #f8fafc;
+  border-radius: var(--zeus-radius-sm, 8px);
+  border: 1px solid var(--zeus-border-strong, #cbd5e1);
+  background: var(--zeus-bg-flat, #f8fafc);
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   font-weight: 600;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn-close-shift:hover {
-  background: #e2e8f0;
+  background: var(--zeus-border, #e2e8f0);
+  box-shadow: var(--zeus-shadow-btn-ghost-hover, 0 3px 8px rgba(15, 23, 42, 0.08));
 }
 </style>

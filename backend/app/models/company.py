@@ -3,7 +3,7 @@ ZEUS_INTERNAL_COMPANY_BOOTSTRAP_002
 Modelos Company y UserCompany para empresa interna y vinculación de usuarios.
 NO pilot_company, NO modificar SUPERUSER, NO cobros.
 """
-from sqlalchemy import Boolean, CheckConstraint, Column, Integer, String, DateTime, ForeignKey, JSON
+from sqlalchemy import Boolean, CheckConstraint, Column, Integer, String, DateTime, ForeignKey, JSON, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.base import Base
@@ -31,6 +31,12 @@ class Company(Base):
     country = Column(String(10), nullable=True)
     currency = Column(String(10), default="EUR", nullable=False)
     metadata_ = Column("metadata", JSON, nullable=True)  # internal_company, purpose, billing_enabled, etc.
+    # Datos de facturación (onboarding): CIF/NIF y razón social son datos ya
+    # públicos en cualquier factura real, no requieren cifrado. El IBAN es
+    # sensible: se guarda cifrado (Fernet, app/core/crypto.py) y nunca en claro.
+    tax_id = Column(String(20), nullable=True, index=True)  # CIF/NIF
+    legal_name = Column(String(255), nullable=True)  # razón social
+    iban_encrypted = Column(Text, nullable=True)  # IBAN cifrado en reposo
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

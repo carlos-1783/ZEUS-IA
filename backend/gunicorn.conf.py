@@ -1,6 +1,24 @@
 # Configuración de Gunicorn para ZEUS-IA - Producción
 # ===================================================
 
+# ZEUS_ENCODING_GUARD: mismo guard que app/main.py (ver ese archivo y
+# AUDIT_ENCODING_TPV.md para el detalle). Los hooks de este archivo
+# (when_ready, post_fork, etc.) corren en el proceso master/worker de
+# gunicorn ANTES de que app.main se importe en cada worker (preload_app =
+# False), así que su propio guard no los cubre — se repite aquí para que
+# ningún log de arranque con emoji (🚀, 👥, 🔗, ✅, 🔄, ⚠️) pueda reventar
+# si el contenedor no tiene una locale UTF-8, con el mismo criterio
+# "protege por defecto, sin depender de variables de entorno externas".
+import sys
+
+for _stream_name in ("stdout", "stderr"):
+    _stream = getattr(sys, _stream_name, None)
+    if _stream is not None and hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
 import os
 
 _root = (os.getenv("ZEUS_APP_ROOT") or "").strip()

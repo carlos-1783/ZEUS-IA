@@ -55,15 +55,16 @@ const onKpiClick = (item) => {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  background: linear-gradient(135deg, rgba(26, 31, 46, 0.95) 0%, rgba(15, 20, 25, 0.95) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e5e9f0);
+  border-radius: var(--zeus-radius-sm, 8px);
   padding: 6px 4px;
   min-width: 0;
   overflow: hidden;
   font: inherit;
   color: inherit;
   text-align: center;
+  box-shadow: var(--zeus-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04));
 }
 
 .kpi-item--clickable {
@@ -94,7 +95,7 @@ const onKpiClick = (item) => {
 .kpi-value {
   font-size: 16px;
   font-weight: 700;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
@@ -104,7 +105,7 @@ const onKpiClick = (item) => {
 
 .kpi-label {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--zeus-text-muted, #8792a6);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   text-align: center;

@@ -37,6 +37,7 @@ const AdminPanel = () => import('../views/AdminPanel.vue')
 const TPV = () => import('../views/TPV.vue')
 const PayrollDrafts = () => import('../views/PayrollDrafts.vue')
 const OfficeCrm = () => import('../views/OfficeCrm.vue')
+const InsuranceView = () => import('../views/InsuranceView.vue')
 const Terminos = () => import('../views/legal/Terminos.vue')
 const Privacidad = () => import('../views/legal/Privacidad.vue')
 const LandingPage = () => import('../views/LandingPage.vue')
@@ -340,7 +341,19 @@ const router = createRouter({
         requiresAuth: true
       }
     },
-    
+
+    // Vertical Seguros — Multirriesgo (pólizas + siniestros). Sin gating por
+    // company_type: ver AUDIT_VERTICAL_SEGUROS.md para la decisión de diseño.
+    {
+      path: '/insurance',
+      name: 'Insurance',
+      component: InsuranceView,
+      meta: {
+        title: 'Seguros - ZEUS-IA',
+        requiresAuth: true
+      }
+    },
+
     // Direct login route (redirect to auth/login)
     {
       path: '/login',
@@ -443,6 +456,20 @@ router.beforeEach(async (to, from, next) => {
   // Continue with the regular authentication check
   const authStore = useAuthStore()
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
+
+  // Bug conocido (ver AUDIT_REDISENO_COMPLETO.md, sección 3): tras un
+  // refresco de página / navegación directa por URL con sesión ya
+  // guardada en localStorage, `authStore.modules` nace vacío ({}) porque
+  // solo se rellena dentro de login()/register() — nunca al arrancar la
+  // app (main.ts no llama a authStore.initialize()). El guard de abajo
+  // (routeAllowed) evalúa entonces contra módulos vacíos y bloquea a
+  // cuentas que sí tienen el módulo activado según /auth/me real.
+  // authStore.initialize() es idempotente (hasInitialized interno) y no
+  // hace red si ya hay perfil cargado, así que es seguro esperarlo aquí
+  // en cada navegación.
+  if (authStore.isAuthenticated && typeof authStore.initialize === 'function') {
+    await authStore.initialize()
+  }
   
   // Set page title
   const appName = import.meta.env.VITE_APP_NAME || 'ZEUS-IA'

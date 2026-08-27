@@ -67,8 +67,18 @@
           <span class="icon">📁</span>
           <span>{{ t('dashboardPro.nav.officeCrm') }}</span>
         </button>
+        <!-- Seguros: sin gating por company_type (vertical nueva, ver AUDIT_VERTICAL_SEGUROS.md) -->
+        <button
+          v-if="!isEmployee"
+          type="button"
+          class="nav-item"
+          @click="closeSidebarOnMobile(); goToInsurance()"
+        >
+          <span class="icon">🛡️</span>
+          <span>{{ t('dashboardPro.nav.insurance') }}</span>
+        </button>
         <!-- Nóminas: solo dueño de empresa (empleado no ve) -->
-        <button 
+        <button
           v-if="showModule('payroll')"
           class="nav-item"
           @click="closeSidebarOnMobile(); goToPayroll()"
@@ -348,12 +358,21 @@
       </section>
 
       <!-- Agent Activity Panel (si hay agente seleccionado) -->
-      <div v-if="selectedAgent" class="agent-overlay" @click.self="selectedAgent = null">
-        <div class="agent-panel-container">
-          <button class="btn-close-panel" @click="selectedAgent = null">✕</button>
-          <AgentActivityPanel :agent="selectedAgent" />
+      <Transition name="agent-modal">
+        <div
+          v-if="selectedAgent"
+          class="agent-overlay"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="`Workspace de ${selectedAgent?.name || 'agente'}`"
+          @click.self="closeAgentPanel"
+        >
+          <div class="agent-panel-container">
+            <button class="btn-close-panel" @click="closeAgentPanel" aria-label="Cerrar">✕</button>
+            <AgentActivityPanel :agent="selectedAgent" />
+          </div>
         </div>
-      </div>
+      </Transition>
     </main>
   </div>
 </template>
@@ -418,6 +437,10 @@ const goToControlHorario = () => {
 
 const goToOfficeCrm = () => {
   router.push('/office-crm')
+}
+
+const goToInsurance = () => {
+  router.push('/insurance')
 }
 
 // Navegar a Nóminas
@@ -1109,19 +1132,56 @@ const chatWith = (agent) => {
   selectedAgent.value = agent
   emit('agentClicked', agent)
 }
+
+const closeAgentPanel = () => {
+  selectedAgent.value = null
+}
+
+const handleAgentPanelKeydown = (event) => {
+  if (event.key === 'Escape' && selectedAgent.value) {
+    closeAgentPanel()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleAgentPanelKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleAgentPanelKeydown)
+})
 </script>
 
 <style scoped>
 .dashboard-profesional {
+  position: relative;
   display: flex;
   height: 100vh;
   min-height: 100vh;
   max-height: 100vh;
-  background: #0a0e1a;
-  color: #fff;
-  font-family: 'Inter', -apple-system, sans-serif;
+  background-image: var(--zeus-bg);
+  color: var(--zeus-text);
+  font-family: var(--zeus-font-sans);
   overflow: hidden;
   box-sizing: border-box;
+}
+
+/* Grano/ruido del fondo de bandas metálicas — obligatorio en toda
+   página, sin excepción. */
+.dashboard-profesional::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dashboard-profesional > * {
+  position: relative;
+  z-index: 1;
 }
 
 /* SIDEBAR OVERLAY (solo móvil) */
@@ -1132,7 +1192,7 @@ const chatWith = (agent) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(15, 23, 42, 0.4);
   z-index: 998;
   opacity: 0;
   pointer-events: none;
@@ -1147,8 +1207,8 @@ const chatWith = (agent) => {
 /* SIDEBAR */
 .sidebar-dark {
   width: 280px;
-  background: linear-gradient(180deg, #0f1419 0%, #1a1f2e 100%);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-surface);
+  border-right: 1px solid var(--zeus-border);
   padding: 32px 24px;
   display: flex;
   flex-direction: column;
@@ -1181,7 +1241,7 @@ const chatWith = (agent) => {
 }
 
 .subtitle {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted);
   font-size: 12px;
   margin: 4px 0 0;
 }
@@ -1189,7 +1249,7 @@ const chatWith = (agent) => {
 .nav-menu {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   margin-bottom: auto;
 }
 
@@ -1197,58 +1257,62 @@ const chatWith = (agent) => {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 10px 14px;
   background: transparent;
   border: none;
-  border-radius: 8px;
-  color: rgba(255, 255, 255, 0.7);
+  border-radius: var(--zeus-radius-sm);
+  color: var(--zeus-text-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background var(--zeus-transition), color var(--zeus-transition);
   font-size: 14px;
+  font-weight: 500;
 }
 
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+  background: var(--zeus-bg-subtle);
+  color: var(--zeus-text);
 }
 
 .nav-item.active {
-  background: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
+  background: var(--zeus-accent-soft);
+  color: var(--zeus-accent);
 }
 
 .nav-item.admin-btn {
   margin-top: 8px;
-  background: rgba(139, 92, 246, 0.1);
-  border: 1px solid rgba(139, 92, 246, 0.3);
+  background: var(--zeus-accent-2-soft);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  color: #7c3aed;
 }
 
 .nav-item.admin-btn:hover {
-  background: rgba(139, 92, 246, 0.2);
-  color: #8b5cf6;
-  border-color: rgba(139, 92, 246, 0.5);
+  background: rgba(124, 58, 237, 0.14);
+  color: #7c3aed;
+  border-color: rgba(139, 92, 246, 0.4);
 }
 
 .nav-item.tpv-nav-btn {
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: var(--zeus-success-soft);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #0d9668;
 }
 
 .nav-item.tpv-nav-btn:hover {
-  background: rgba(16, 185, 129, 0.2);
-  color: #10b981;
-  border-color: rgba(16, 185, 129, 0.5);
+  background: rgba(16, 185, 129, 0.16);
+  color: #0d9668;
+  border-color: rgba(16, 185, 129, 0.4);
 }
 
 .nav-item.control-horario-nav-btn {
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: var(--zeus-info-soft);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  color: #2563eb;
 }
 
 .nav-item.control-horario-nav-btn:hover {
-  background: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
-  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.16);
+  color: #2563eb;
+  border-color: rgba(59, 130, 246, 0.4);
 }
 
 .icon {
@@ -1259,7 +1323,7 @@ const chatWith = (agent) => {
   display: flex;
   gap: 16px;
   padding-top: 24px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--zeus-border);
 }
 
 .metric-item {
@@ -1269,12 +1333,12 @@ const chatWith = (agent) => {
 .metric-value {
   font-size: 24px;
   font-weight: 700;
-  color: #3b82f6;
+  color: var(--zeus-accent);
 }
 
 .metric-label {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted);
   margin-top: 4px;
 }
 
@@ -1294,7 +1358,7 @@ const chatWith = (agent) => {
   display: block;
   width: 24px;
   height: 2px;
-  background: #fff;
+  background: var(--zeus-text);
   transition: all 0.3s;
 }
 
@@ -1383,12 +1447,18 @@ const chatWith = (agent) => {
   max-width: 720px;
   height: 100%;
   padding: 10px 20px;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(139, 92, 246, 0.08) 100%);
-  border: 1px solid rgba(59, 130, 246, 0.35);
-  border-radius: 14px;
-  box-shadow: 0 4px 24px rgba(59, 130, 246, 0.12);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.06) 0%, rgba(139, 92, 246, 0.05) 100%), var(--zeus-surface);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: var(--zeus-radius-lg);
+  box-shadow: var(--zeus-shadow);
   box-sizing: border-box;
   cursor: pointer;
+  transition: box-shadow var(--zeus-transition), border-color var(--zeus-transition);
+}
+
+.zeus-core-card:hover {
+  box-shadow: var(--zeus-shadow-md);
+  border-color: rgba(59, 130, 246, 0.4);
 }
 
 .zeus-core-avatar {
@@ -1414,13 +1484,13 @@ const chatWith = (agent) => {
   margin: 0;
   font-size: 18px;
   font-weight: 700;
-  color: #fff;
+  color: var(--zeus-text);
 }
 
 .zeus-core-role {
   margin: 2px 0 8px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--zeus-text-secondary);
 }
 
 .zeus-core-metrics {
@@ -1443,7 +1513,7 @@ const chatWith = (agent) => {
 }
 
 .zeus-core-activity {
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--zeus-text-muted);
 }
 
 .executive-agents-grid {
@@ -1469,30 +1539,33 @@ const chatWith = (agent) => {
   font-size: 32px;
   font-weight: 700;
   margin: 0;
+  color: var(--zeus-text);
 }
 
 .breadcrumb {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted);
   font-size: 14px;
   margin: 4px 0 0;
 }
 
 .status-badge {
   padding: 8px 16px;
-  border-radius: 20px;
+  border-radius: var(--zeus-radius-full);
   font-size: 13px;
   font-weight: 600;
+  border: 1px solid transparent;
 }
 
 .status-badge.degraded {
-  background: rgba(255, 165, 0, 0.15);
-  color: #ffa500;
-  border-color: rgba(255, 165, 0, 0.4);
+  background: var(--zeus-warning-soft);
+  color: #b45309;
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
 .status-badge.online {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
+  background: var(--zeus-success-soft);
+  color: #0d9668;
+  border-color: rgba(16, 185, 129, 0.25);
 }
 
 /* RESPONSIVE - MÓVIL Y TABLET */
@@ -1510,7 +1583,7 @@ const chatWith = (agent) => {
     height: 100vh;
     transform: translateX(-100%);
     z-index: 999;
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--zeus-shadow-lg);
   }
 
   /* Sidebar visible cuando está abierto */
@@ -1691,20 +1764,21 @@ const chatWith = (agent) => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  background: var(--zeus-surface);
+  border: 1px solid var(--zeus-border);
+  border-radius: var(--zeus-radius);
   padding: 10px;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: transform var(--zeus-transition), border-color var(--zeus-transition), box-shadow var(--zeus-transition);
   overflow: hidden;
   box-sizing: border-box;
+  box-shadow: var(--zeus-shadow-sm);
 }
 
 .agent-card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(59, 130, 246, 0.5);
-  box-shadow: 0 8px 32px rgba(59, 130, 246, 0.2);
+  transform: translateY(-3px);
+  border-color: rgba(59, 130, 246, 0.35);
+  box-shadow: var(--zeus-shadow-md);
 }
 
 .agent-card--executive .avatar-container {
@@ -1739,17 +1813,17 @@ const chatWith = (agent) => {
   flex-shrink: 0;
   border-radius: 50%;
   overflow: hidden;
-  background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.08) 0%, transparent 70%);
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 3px solid rgba(59, 130, 246, 0.3);
+  border: 3px solid rgba(59, 130, 246, 0.18);
   transition: all 0.3s;
 }
 
 .agent-card:hover .avatar-container {
-  border-color: rgba(59, 130, 246, 0.8);
-  box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.08);
 }
 
 .avatar-image {
@@ -1777,11 +1851,11 @@ const chatWith = (agent) => {
   font-size: 16px;
   font-weight: 700;
   margin: 0;
-  color: #fff;
+  color: var(--zeus-text);
 }
 
 .agent-role {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-muted);
   font-size: 12px;
   margin: 0;
 }
@@ -1801,28 +1875,38 @@ const chatWith = (agent) => {
 
 .stat-label {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted);
   text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .stat-value {
   font-size: 16px;
   font-weight: 600;
+  color: var(--zeus-text);
 }
 
 .status-active {
-  color: #10b981;
+  color: #0d9668;
 }
 
+/* Botón secundario: el Dashboard es una vista de selección entre 6
+   agentes de igual jerarquía — ninguno de los 6 "Interactuar" es "el"
+   botón primario de la vista (mismo criterio que el open-trigger del
+   preview de referencia: un disparador que abre otra vista no es la
+   acción de mayor jerarquía de ESTA vista). El gradiente vibrante queda
+   reservado para la acción única de mayor jerarquía dentro de cada
+   panel de agente ya abierto (ej. "Actualizar"). */
 .btn-interact {
   padding: 8px 16px;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  border: none;
-  border-radius: 8px;
-  color: #fff;
+  background: #ffffff;
+  border: 1px solid #D1D5DB;
+  border-radius: var(--zeus-radius-sm);
+  color: var(--zeus-text, #0f172a);
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  box-shadow: none;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   font-size: 12px;
   display: inline-flex;
   align-items: center;
@@ -1833,8 +1917,13 @@ const chatWith = (agent) => {
 }
 
 .btn-interact:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
+  border-color: #9aa2af;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-interact {
+    transition-duration: 1ms;
+  }
 }
 
 /* AGENT ACTIVITY PANEL OVERLAY */
@@ -1844,14 +1933,65 @@ const chatWith = (agent) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(10px);
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
   padding: 32px 24px;
   overflow-y: auto;
+}
+
+/* Modal animado — entrada/salida (240ms), backdrop en fade, panel con
+   fade + escala + desplazamiento sutil. Easing distinto para entrada
+   (desaceleración natural) y salida (aceleración) — sistema de motion
+   compartido, ver tokens zeus-ease y zeus-dur en zeus-light-system.css.
+   Ver .agent-modal-* más abajo para las clases que genera
+   <Transition name="agent-modal">. */
+.agent-modal-enter-active {
+  transition: background-color var(--zeus-dur-modal, 240ms) var(--zeus-ease-enter, ease-out);
+}
+
+.agent-modal-leave-active {
+  transition: background-color var(--zeus-dur-modal, 240ms) var(--zeus-ease-exit, ease-in);
+}
+
+.agent-modal-enter-active .agent-panel-container {
+  transition: opacity var(--zeus-dur-modal, 240ms) var(--zeus-ease-enter, ease-out),
+    transform var(--zeus-dur-modal, 240ms) var(--zeus-ease-enter, ease-out);
+}
+
+.agent-modal-leave-active .agent-panel-container {
+  transition: opacity var(--zeus-dur-modal, 240ms) var(--zeus-ease-exit, ease-in),
+    transform var(--zeus-dur-modal, 240ms) var(--zeus-ease-exit, ease-in);
+}
+
+.agent-modal-enter-from,
+.agent-modal-leave-to {
+  background-color: rgba(15, 23, 42, 0);
+}
+
+.agent-modal-enter-from .agent-panel-container,
+.agent-modal-leave-to .agent-panel-container {
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+}
+
+/* Respeta la preferencia del sistema de reducir movimiento: sin escala
+   ni desplazamiento, solo un fade casi instantáneo. */
+@media (prefers-reduced-motion: reduce) {
+  .agent-modal-enter-active,
+  .agent-modal-leave-active,
+  .agent-modal-enter-active .agent-panel-container,
+  .agent-modal-leave-active .agent-panel-container {
+    transition-duration: 1ms;
+  }
+
+  .agent-modal-enter-from .agent-panel-container,
+  .agent-modal-leave-to .agent-panel-container {
+    transform: none;
+  }
 }
 
 .agent-panel-container {
@@ -1864,16 +2004,6 @@ const chatWith = (agent) => {
   gap: 16px;
 }
 
-.agent-panel-container::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: 20px;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.6), rgba(139, 92, 246, 0.4));
-  opacity: 0.2;
-  pointer-events: none;
-  z-index: -1;
-}
 
 .btn-close-panel {
   align-self: flex-end;
@@ -2021,33 +2151,35 @@ const chatWith = (agent) => {
 }
 
 .stat-card {
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  background: var(--zeus-surface);
+  border: 1px solid var(--zeus-border);
+  border-radius: var(--zeus-radius);
   padding: 24px;
   display: flex;
   gap: 16px;
   align-items: flex-start;
+  box-shadow: var(--zeus-shadow-sm);
 }
 
 .stat-icon {
   font-size: 32px;
-  background: rgba(59, 130, 246, 0.15);
+  background: var(--zeus-accent-soft);
   padding: 12px;
-  border-radius: 12px;
+  border-radius: var(--zeus-radius);
 }
 
 .stat-content h3 {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--zeus-text-secondary);
   margin: 0 0 8px;
+  font-weight: 500;
 }
 
 .stat-number {
   font-size: 28px;
   font-weight: 700;
   margin: 0;
-  color: #fff;
+  color: var(--zeus-text);
 }
 
 .stat-change {
@@ -2057,22 +2189,24 @@ const chatWith = (agent) => {
 }
 
 .stat-change.positive {
-  color: #10b981;
+  color: #0d9668;
 }
 
 .chart-placeholder {
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  background: var(--zeus-surface);
+  border: 1px solid var(--zeus-border);
+  border-radius: var(--zeus-radius);
   padding: 32px;
   min-height: 400px;
   display: flex;
   flex-direction: column;
+  box-shadow: var(--zeus-shadow-sm);
 }
 
 .chart-placeholder h3 {
   margin: 0 0 24px;
   font-size: 20px;
+  color: var(--zeus-text);
 }
 
 .placeholder-content {
@@ -2086,11 +2220,11 @@ const chatWith = (agent) => {
 
 .icon-large {
   font-size: 64px;
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 .placeholder-content p {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted);
   font-size: 16px;
 }
 
@@ -2106,33 +2240,34 @@ const chatWith = (agent) => {
 }
 
 .settings-card {
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  background: var(--zeus-surface);
+  border: 1px solid var(--zeus-border);
+  border-radius: var(--zeus-radius);
   padding: 24px;
+  box-shadow: var(--zeus-shadow-sm);
 }
 
 .settings-card h3 {
   margin: 0 0 20px;
   font-size: 18px;
-  color: #fff;
+  color: var(--zeus-text);
 }
 
 .settings-embed-hint {
   margin: 0 0 16px;
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--zeus-text-secondary);
   line-height: 1.45;
 }
 
 .settings-link {
-  color: #7eb8ff;
+  color: var(--zeus-accent);
   text-decoration: underline;
   cursor: pointer;
 }
 
 .settings-link:hover {
-  color: #a8d4ff;
+  color: var(--zeus-accent-hover);
 }
 
 .setting-item {
@@ -2140,7 +2275,7 @@ const chatWith = (agent) => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--zeus-border);
 }
 
 .setting-item:last-child {
@@ -2148,7 +2283,7 @@ const chatWith = (agent) => {
 }
 
 .setting-item label {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--zeus-text);
   font-size: 14px;
 }
 
@@ -2159,25 +2294,25 @@ const chatWith = (agent) => {
 }
 
 .setting-item select {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-surface);
+  border: 1px solid var(--zeus-border);
   border-radius: 6px;
   padding: 8px 12px;
-  color: #fff;
+  color: var(--zeus-text);
   font-size: 14px;
   cursor: pointer;
 }
 
 .setting-item select option {
-  background: #1a1f2e;
+  background: var(--zeus-surface);
 }
 
 .btn-secondary {
   padding: 8px 16px;
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: var(--zeus-accent-soft);
+  border: 1px solid rgba(59, 130, 246, 0.25);
   border-radius: 6px;
-  color: #3b82f6;
+  color: var(--zeus-accent);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -2185,8 +2320,8 @@ const chatWith = (agent) => {
 }
 
 .btn-secondary:hover {
-  background: rgba(59, 130, 246, 0.25);
-  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(59, 130, 246, 0.4);
 }
 
 /* Mobile-only executive dashboard (≤768px) */

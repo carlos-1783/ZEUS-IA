@@ -806,11 +806,11 @@ onMounted(async () => {
   flex-direction: column;
   gap: 28px;
   padding: 32px 48px 64px;
-  background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 55%);
   min-height: calc(100vh - 96px);
   max-width: 98%;
   width: calc(100% - 24px);
   margin: 0 auto 24px;
+  font-family: var(--zeus-font-sans, 'Inter', sans-serif);
 }
 
 .workspace-header {
@@ -823,12 +823,12 @@ onMounted(async () => {
 .workspace-header h3 {
   font-size: 28px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
 }
 
 .workspace-header .subtitle {
   font-size: 15px;
-  color: #475569;
+  color: var(--zeus-text-secondary, #475569);
   margin-top: 4px;
 }
 
@@ -844,27 +844,43 @@ onMounted(async () => {
   font-size: 14px;
 }
 
+/* Único botón con gradiente de esta vista. */
 .refresh-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
   border-radius: 999px;
-  border: 1px solid rgba(59, 130, 246, 0.4);
-  background: rgba(59, 130, 246, 0.08);
-  color: #1d4ed8;
+  border: none;
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%));
+  color: #fff;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 8px rgba(0, 0, 0, 0.15));
+  transition: transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .refresh-btn:hover:not(:disabled) {
-  background: rgba(59, 130, 246, 0.15);
+  box-shadow: var(--zeus-accent-gradient-shadow-hover, 0 4px 14px rgba(0, 0, 0, 0.22));
+  transform: translateY(-1px);
+}
+
+.refresh-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+  transition-duration: var(--zeus-dur-press, 100ms);
 }
 
 .refresh-btn:disabled {
   opacity: 0.6;
   cursor: wait;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .refresh-btn:hover:not(:disabled),
+  .refresh-btn:active:not(:disabled) {
+    transform: none;
+  }
 }
 
 .workspace-body {
@@ -878,11 +894,11 @@ onMounted(async () => {
 }
 
 .deliverable-list {
-  background: #ffffff;
-  border-radius: 20px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: var(--zeus-surface, #ffffff);
+  border-radius: var(--zeus-radius-lg, 20px);
+  border: 1px solid var(--zeus-border, #e5e9f0);
   padding: 28px;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--zeus-shadow-sm);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -893,7 +909,7 @@ onMounted(async () => {
 .deliverable-list h4 {
   font-size: 16px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
 }
 
 .deliverable-list ul {
@@ -906,26 +922,33 @@ onMounted(async () => {
 }
 
 .deliverable-list li {
+  position: relative;
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 14px;
-  padding: 14px 16px;
+  padding: 14px 16px 14px 20px;
   background: rgba(248, 250, 252, 0.8);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
+/* Seleccionado: solo borde + negrita — el gradiente vibrante queda
+   reservado al único botón primario de la vista (.refresh-btn). */
 .deliverable-list li.active {
-  border-color: rgba(59, 130, 246, 0.45);
-  background: rgba(59, 130, 246, 0.08);
-  box-shadow: 0 6px 14px rgba(59, 130, 246, 0.1);
+  border-color: #9aa2af;
 }
 
 .deliverable-list .title {
   font-weight: 600;
   color: #1e293b;
+}
+
+.deliverable-list li.active .title {
+  font-weight: 700;
 }
 
 .deliverable-list .meta {
@@ -996,20 +1019,23 @@ onMounted(async () => {
   gap: 6px;
   padding: 10px 16px;
   border-radius: 10px;
-  border: none;
+  border: 1px solid #D1D5DB;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  box-shadow: none;
   cursor: pointer;
   font-weight: 600;
-  transition: transform 0.15s;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn.ghost {
-  border: 1px solid rgba(59, 130, 246, 0.4);
-  background: rgba(59, 130, 246, 0.05);
-  color: #1d4ed8;
+  border: 1px solid #D1D5DB;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
 }
 
 .btn:hover {
-  transform: translateY(-1px);
+  border-color: #9aa2af;
 }
 
 .details-grid {

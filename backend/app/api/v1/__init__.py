@@ -51,6 +51,7 @@ from app.api.v1.endpoints import (
     justicia_v1,
     justice,
     products,
+    insurance,
     zeus_closure_v1,
     zeus_core_v2,
     webhooks,
@@ -137,6 +138,9 @@ api_router.include_router(cashflow.router, prefix="/cashflow", tags=["cashflow"]
 # ERP Invoices & payments
 api_router.include_router(invoices.router, prefix="/invoices", tags=["invoices"])
 api_router.include_router(products.router, prefix="/products", tags=["products"])
+
+# Vertical Seguros — Multirriesgo (pólizas + siniestros)
+api_router.include_router(insurance.router, prefix="/insurance", tags=["insurance"])
 
 # Physical scan flows (QR / NFC / DNI)
 api_router.include_router(scan.router, prefix="/scan", tags=["scan"])

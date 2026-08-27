@@ -1,6 +1,9 @@
 // ZEUS IA - Estilos principales
 // Archivo SCSS limpio sin dependencias problemáticas
 
+// Sistema de diseño claro/futurista — Fase 1 del rediseño (ver AUDIT_REDISENO_FASE1.md)
+@import './zeus-light-system.css';
+
 @import '../../styles/documents.scss';
 
 // Variables CSS personalizadas

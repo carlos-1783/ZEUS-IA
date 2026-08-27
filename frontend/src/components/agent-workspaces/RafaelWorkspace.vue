@@ -314,11 +314,11 @@ onMounted(async () => {
   flex-direction: column;
   gap: 28px;
   padding: 32px 48px 64px;
-  background: radial-gradient(circle at top left, rgba(245, 158, 11, 0.12), transparent 55%);
   min-height: calc(100vh - 96px);
   max-width: 98%;
   width: calc(100% - 24px);
   margin: 0 auto 24px;
+  font-family: var(--zeus-font-sans, 'Inter', sans-serif);
 }
 
 .workspace-header {
@@ -331,25 +331,42 @@ onMounted(async () => {
 .workspace-header h3 {
   font-size: 28px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
 }
 
 .subtitle {
   font-size: 15px;
-  color: #475569;
+  color: var(--zeus-text-secondary, #475569);
 }
 
+/* Único botón con gradiente de esta vista: la acción de mayor
+   jerarquía del workspace de RAFAEL. Ya no lleva el ámbar de identidad
+   del agente — el sistema definitivo reserva el gradiente vibrante
+   para un solo tratamiento en toda la app. */
 .refresh-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  border-radius: 999px;
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  background: rgba(245, 158, 11, 0.1);
-  color: #b45309;
+  border-radius: var(--zeus-radius-full, 999px);
+  border: none;
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%));
+  color: #fff;
   font-weight: 600;
   cursor: pointer;
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 8px rgba(0, 0, 0, 0.15));
+  transition: transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.refresh-btn:hover:not(:disabled) {
+  box-shadow: var(--zeus-accent-gradient-shadow-hover, 0 4px 14px rgba(0, 0, 0, 0.22));
+  transform: translateY(-1px);
+}
+
+.refresh-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+  transition-duration: var(--zeus-dur-press, 100ms);
 }
 
 .refresh-btn:disabled {
@@ -378,11 +395,11 @@ onMounted(async () => {
 }
 
 .deliverable-list {
-  background: #ffffff;
-  border-radius: 20px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: var(--zeus-surface, #ffffff);
+  border-radius: var(--zeus-radius-lg, 20px);
+  border: 1px solid var(--zeus-border, #e5e9f0);
   padding: 28px;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--zeus-shadow-sm);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -409,21 +426,23 @@ onMounted(async () => {
 }
 
 .deliverable-list li.active {
-  border-color: rgba(245, 158, 11, 0.45);
-  background: rgba(245, 158, 11, 0.1);
-  box-shadow: 0 6px 14px rgba(245, 158, 11, 0.15);
+  border-color: #9aa2af;
+}
+
+.deliverable-list li.active .title {
+  font-weight: 700;
 }
 
 .title {
   font-weight: 600;
-  color: #1e293b;
+  color: var(--zeus-text, #1e293b);
 }
 
 .meta {
   display: flex;
   gap: 8px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--zeus-text-muted, #64748b);
 }
 
 .tags {
@@ -442,11 +461,11 @@ onMounted(async () => {
 }
 
 .deliverable-details {
-  background: #ffffff;
-  border-radius: 24px;
-  border: 1px solid rgba(15, 23, 42, 0.05);
+  background: var(--zeus-surface, #ffffff);
+  border-radius: var(--zeus-radius-lg, 20px);
+  border: 1px solid var(--zeus-border, #e5e9f0);
   padding: 32px;
-  box-shadow: 0 18px 35px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--zeus-shadow-md);
   display: flex;
   flex-direction: column;
   gap: 28px;
@@ -464,13 +483,13 @@ onMounted(async () => {
 .details-meta {
   display: block;
   font-size: 13px;
-  color: #64748b;
+  color: var(--zeus-text-muted, #64748b);
   margin-top: 4px;
 }
 
 .details-summary {
   margin-top: 8px;
-  color: #475569;
+  color: var(--zeus-text-secondary, #475569);
   font-size: 14px;
 }
 
@@ -479,25 +498,33 @@ onMounted(async () => {
   gap: 10px;
 }
 
+/* Botones secundarios: "Actualizar" (.refresh-btn) es el único botón
+   con gradiente de esta vista, así que estas acciones de descarga
+   (situadas más abajo en la jerarquía) son blancas, sin sombra. */
 .btn {
-  padding: 8px 14px;
-  border-radius: 8px;
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  background: rgba(245, 158, 11, 0.12);
-  color: #b45309;
+  padding: 9px 16px;
+  border-radius: var(--zeus-radius-sm, 8px);
+  border: 1px solid #D1D5DB;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
   font-weight: 600;
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  box-shadow: none;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+.btn:hover {
+  border-color: #9aa2af;
 }
 .btn.primary {
-  background: #d97706;
-  border-color: #b45309;
-  color: #fff;
+  font-weight: 700;
 }
 .workspace-fiscal-card {
-  border: 1px solid rgba(245, 158, 11, 0.35);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 16px;
   padding: 20px;
-  background: #fffbeb;
+  background: #ffffff;
 }
 .fiscal-summary {
   color: #475569;
@@ -516,15 +543,15 @@ onMounted(async () => {
 }
 
 .card {
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  border-radius: 16px;
+  border: 1px solid var(--zeus-border, #e5e9f0);
+  border-radius: var(--zeus-radius, 12px);
   padding: 20px;
-  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 60%);
+  background: var(--zeus-bg-subtle, #f8fafc);
 }
 
 .card h5 {
   font-size: 17px;
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
   margin-bottom: 12px;
 }
 
@@ -545,13 +572,13 @@ onMounted(async () => {
 .note {
   margin-top: 10px;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--zeus-text-muted, #6b7280);
 }
 
 .bullet {
   margin: 0;
   padding-left: 18px;
-  color: #475569;
+  color: var(--zeus-text-secondary, #475569);
   font-size: 14px;
 }
 
@@ -564,12 +591,12 @@ onMounted(async () => {
 }
 
 .empty-container {
-  background: rgba(248, 250, 252, 0.7);
-  border: 2px dashed rgba(148, 163, 184, 0.5);
-  border-radius: 20px;
+  background: var(--zeus-bg-subtle, #f8fafc);
+  border: 2px dashed var(--zeus-border-strong, #d7dce5);
+  border-radius: var(--zeus-radius-lg, 20px);
   padding: 60px 30px;
   text-align: center;
-  color: #475569;
+  color: var(--zeus-text-secondary, #475569);
 }
 
 .empty-state {

@@ -1,0 +1,315 @@
+/**
+ * ZEUS-IA — Sistema de diseño "Fase 1" (claro/futurista)
+ * ------------------------------------------------------
+ * Base visual para el rediseño frontend: fondo claro, líneas limpias,
+ * acentos de color puntuales. Referencia: Stripe / Linear / Vercel.
+ *
+ * Reutiliza los primitivos de color ya existentes en _variables.scss
+ * (--color-primary, --color-success, etc.) y añade encima un sistema
+ * de superficie/tipografía/sombra pensado para paneles claros, con
+ * nombre propio (--zeus-*) para no chocar con overrides de tema oscuro
+ * que ya existen en otras partes de la app.
+ *
+ * Pensado para extenderse a Seguros y al resto de la app en fases
+ * futuras sin tocar estos valores base — solo añadiendo pantallas que
+ * los consuman.
+ */
+
+:root {
+  /* ---- Superficie: sistema de diseño DEFINITIVO ----
+     Fondo de bandas metálicas — obligatorio en TODA página/modal, sin
+     excepción. Valores exactos, no reinterpretados:
+     repeating-linear-gradient(90deg, #E8E9EB 0px, #F5F6F7 15px,
+     #D4D6D9 35px, #F0F1F3 60px, #C9CCD0 85px, #E5E7E9 110px)
+     + veta diagonal blanco→transparente al 12% + grano SVG al 3%
+     (el grano va en ::before vía .zeus-metal-surface, ver más abajo).
+     Las tarjetas/superficies (--zeus-surface) siguen siendo blanco
+     plano flotando encima. */
+  --zeus-bg-bands: repeating-linear-gradient(90deg,
+      #E8E9EB 0px, #F5F6F7 15px, #D4D6D9 35px,
+      #F0F1F3 60px, #C9CCD0 85px, #E5E7E9 110px);
+  --zeus-bg-sheen: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 55%);
+  --zeus-bg: var(--zeus-bg-sheen), var(--zeus-bg-bands);
+  --zeus-bg-flat: #eef0f3;         /* misma gama en plano, para elementos pequeños donde un degradado no aporta */
+  --zeus-bg-subtle: #eef1f6;       /* fondo de zonas secundarias (sidebar, headers) */
+  --zeus-surface: #ffffff;         /* tarjetas, paneles */
+  --zeus-surface-raised: #ffffff;  /* tarjetas destacadas / overlays */
+  --zeus-border: #e1e5eb;          /* borde estándar */
+  --zeus-border-strong: #cdd3db;   /* borde con más contraste (hover, foco) */
+
+  /* ---- Texto ---- */
+  --zeus-text: #0f172a;            /* texto principal */
+  --zeus-text-secondary: #52607a;  /* texto secundario / labels */
+  --zeus-text-muted: #8792a6;      /* texto terciario / hints */
+  --zeus-text-on-accent: #ffffff;  /* texto sobre fondo de acento */
+
+  /* ---- Acento — índigo de marca real, tomado de la landing de producción
+     (zeus-ia-production-16d8.up.railway.app): botón primario #4f46e5,
+     texto de acento #818cf8, chips de icono #6366f1. Mismo primitivo que
+     ya existe en _variables.scss ($primary). Un único tono de índigo,
+     no azul+violeta — así el dashboard se siente parte de la misma marca
+     que la landing pública, no una app distinta. ---- */
+  --zeus-accent: #4f46e5;          /* índigo — acción primaria (igual que la landing) */
+  --zeus-accent-hover: #4338ca;
+  --zeus-accent-soft: #eef1ff;     /* fondo suave para chips/estados activos */
+  --zeus-accent-2: #6366f1;        /* índigo más claro — acento secundario / variación */
+  --zeus-accent-2-soft: #eef2ff;
+
+  --zeus-success: #10b981;
+  --zeus-success-soft: #e9faf3;
+  --zeus-warning: #f59e0b;
+  --zeus-warning-soft: #fef6e7;
+  --zeus-danger: #ef4444;
+  --zeus-danger-soft: #fdecec;
+  --zeus-info: #3b82f6;
+  --zeus-info-soft: #eaf2ff;
+
+  /* ---- Tipografía ---- */
+  --zeus-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --zeus-font-mono: 'Fira Code', 'Fira Mono', 'Roboto Mono', 'Courier New', monospace;
+
+  --zeus-text-xs: 0.75rem;    /* 12px — metadatos, badges */
+  --zeus-text-sm: 0.8125rem;  /* 13px — texto secundario, labels */
+  --zeus-text-base: 0.9375rem;/* 15px — cuerpo */
+  --zeus-text-md: 1.0625rem;  /* 17px — subtítulos */
+  --zeus-text-lg: 1.25rem;    /* 20px — títulos de tarjeta */
+  --zeus-text-xl: 1.625rem;   /* 26px — títulos de sección */
+  --zeus-text-2xl: 2rem;      /* 32px — cifras destacadas (KPIs) */
+
+  --zeus-weight-normal: 400;
+  --zeus-weight-medium: 500;
+  --zeus-weight-semibold: 600;
+  --zeus-weight-bold: 700;
+
+  /* ---- Espaciado (escala de 4px) ---- */
+  --zeus-space-1: 0.25rem;
+  --zeus-space-2: 0.5rem;
+  --zeus-space-3: 0.75rem;
+  --zeus-space-4: 1rem;
+  --zeus-space-5: 1.5rem;
+  --zeus-space-6: 2rem;
+  --zeus-space-8: 3rem;
+
+  /* ---- Radio de borde ---- */
+  --zeus-radius-sm: 8px;
+  --zeus-radius: 12px;
+  --zeus-radius-lg: 16px;
+  --zeus-radius-full: 999px;
+
+  /* ---- Sombra de superficie (tarjetas/paneles — sutil, el contraste
+     lo da sobre todo el borde) ---- */
+  --zeus-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --zeus-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --zeus-shadow-md: 0 4px 16px rgba(15, 23, 42, 0.06);
+  --zeus-shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.10);
+  --zeus-shadow-focus: 0 0 0 3px rgba(59, 91, 253, 0.15);
+
+  /* ---- Sombra de botón — con más presencia que las de superficie:
+     los botones necesitan profundidad real (no plana) para no
+     fundirse con el fondo gris platino. */
+  --zeus-shadow-btn: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(79, 70, 229, 0.20);
+  --zeus-shadow-btn-hover: 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 18px rgba(79, 70, 229, 0.28);
+  --zeus-shadow-btn-active: 0 1px 1px rgba(15, 23, 42, 0.08);
+  --zeus-shadow-btn-ghost: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --zeus-shadow-btn-ghost-hover: 0 3px 8px rgba(15, 23, 42, 0.08);
+
+  /* ---- Transición (sutil, nunca > 200ms para no sentirse lenta) ---- */
+  --zeus-transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --zeus-transition-slow: 220ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ---- Motion system (validado en preview-rafael.html, ahora sistema
+     compartido para toda la app): easing distinto para entrada/salida/
+     microinteracción, y duraciones fijas por tipo de movimiento. Los
+     componentes con <Transition> propio consumen estas variables en sus
+     propias clases *-enter-active/-leave-active en vez de reinventar
+     timings sueltos. ---- */
+  --zeus-ease-enter: cubic-bezier(0.22, 1, 0.36, 1); /* desaceleración natural — entradas */
+  --zeus-ease-exit: cubic-bezier(0.4, 0, 1, 1);       /* aceleración — salidas */
+  --zeus-ease-micro: cubic-bezier(0.4, 0, 0.2, 1);    /* estándar — hover/press */
+  --zeus-dur-modal: 240ms;  /* entrada/salida de modales: dentro de 200-300ms */
+  --zeus-dur-hover: 180ms;  /* microinteracción hover: dentro de 150-200ms */
+  --zeus-dur-press: 100ms;  /* feedback de click: rápido, perceptible */
+
+  /* ---- Acento vibrante — teal→morado→rosa (3 paradas exactas, SIN
+     naranja). Uso deliberadamente restringido: SOLO el botón activo/
+     primario de mayor jerarquía en cada vista — nunca más de uno por
+     vista, nunca como fondo de página ni de texto. El anillo de avatar
+     de cada agente es la única excepción (no es un botón, es marca de
+     identidad). ---- */
+  --zeus-accent-gradient: linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%);
+  --zeus-accent-gradient-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  --zeus-accent-gradient-shadow-hover: 0 4px 14px rgba(0, 0, 0, 0.22);
+
+  /* ---- Grano/ruido del fondo de bandas metálicas — vía
+     .zeus-metal-surface::before, 3% de opacidad exacto. --zeus-metal-bg
+     se mantiene como alias de --zeus-bg: ya no hay dos tratamientos de
+     fondo distintos (página vs modal/panel) — es el mismo en todas
+     partes, sin excepción. */
+  --zeus-metal-bg: var(--zeus-bg);
+  --zeus-noise-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ------------------------------------------------------------------ */
+/* Botones del sistema — clases globales reutilizables por cualquier
+   componente (agregar junto a las clases propias del componente).
+   Pensadas para que el acento indigo destaque con claridad sobre el
+   fondo gris platino: sombra con tinte de color (no gris plano),
+   elevación al hover, "presión" real al pulsar.               */
+/* ------------------------------------------------------------------ */
+.zeus-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--zeus-font-sans);
+  font-weight: var(--zeus-weight-semibold);
+  font-size: var(--zeus-text-sm);
+  border-radius: var(--zeus-radius-sm);
+  padding: 10px 18px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform var(--zeus-transition), box-shadow var(--zeus-transition),
+    background-color var(--zeus-transition), border-color var(--zeus-transition);
+}
+
+.zeus-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* .zeus-btn-primary queda en desuso: el sistema definitivo solo tiene
+   DOS estados de botón (ver .zeus-btn-accent / .zeus-btn-secondary más
+   abajo). Se deja definida por compatibilidad con CSS ya compilado en
+   caché, pero ningún componente nuevo debe usarla — usar
+   .zeus-btn-accent para el único botón primario de la vista y
+   .zeus-btn-secondary para todos los demás. */
+.zeus-btn-primary {
+  background: var(--zeus-accent);
+  color: var(--zeus-text-on-accent);
+  box-shadow: var(--zeus-shadow-btn);
+}
+
+.zeus-btn-primary:hover:not(:disabled) {
+  background: var(--zeus-accent-hover);
+  box-shadow: var(--zeus-shadow-btn-hover);
+  transform: translateY(-1px);
+}
+
+.zeus-btn-primary:active:not(:disabled) {
+  box-shadow: var(--zeus-shadow-btn-active);
+  transform: translateY(0);
+}
+
+.zeus-btn-ghost {
+  background: var(--zeus-surface);
+  color: var(--zeus-text);
+  border-color: var(--zeus-border);
+  box-shadow: var(--zeus-shadow-btn-ghost);
+}
+
+.zeus-btn-ghost:hover:not(:disabled) {
+  border-color: var(--zeus-border-strong);
+  box-shadow: var(--zeus-shadow-btn-ghost-hover);
+  transform: translateY(-1px);
+}
+
+.zeus-btn-ghost:active:not(:disabled) {
+  box-shadow: none;
+  transform: translateY(0);
+}
+
+/* ---- Botón secundario — TODOS los botones que no sean el único
+   primario de la vista. Blanco, borde 1px solid #D1D5DB, sin gradiente,
+   sin sombra. La selección dentro de un grupo (toggle/tabs) se comunica
+   solo con peso tipográfico (.zeus-btn-secondary--selected), nunca con
+   color de fondo — así no se crea una tercera variante de botón. ---- */
+.zeus-btn-secondary {
+  background: #ffffff;
+  color: var(--zeus-text);
+  border: 1px solid #D1D5DB;
+  box-shadow: none;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.zeus-btn-secondary:hover:not(:disabled) {
+  border-color: #9aa2af;
+}
+
+.zeus-btn-secondary--selected {
+  font-weight: var(--zeus-weight-bold, 700);
+  color: var(--zeus-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zeus-btn-primary:hover:not(:disabled),
+  .zeus-btn-ghost:hover:not(:disabled),
+  .zeus-btn-primary:active:not(:disabled),
+  .zeus-btn-ghost:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Acento gradiente — botón activo/primario, anillo de avatar y badges.
+   Uso puntual: ver comentario del token --zeus-accent-gradient arriba. */
+/* ------------------------------------------------------------------ */
+.zeus-btn-accent {
+  background: var(--zeus-accent-gradient);
+  color: #ffffff;
+  box-shadow: var(--zeus-accent-gradient-shadow);
+  transition: box-shadow var(--zeus-dur-hover) var(--zeus-ease-micro),
+    transform var(--zeus-dur-hover) var(--zeus-ease-micro);
+}
+
+.zeus-btn-accent:hover:not(:disabled) {
+  box-shadow: var(--zeus-accent-gradient-shadow-hover);
+  transform: translateY(-1px);
+}
+
+.zeus-btn-accent:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+  transition-duration: var(--zeus-dur-press);
+}
+
+.zeus-avatar-ring-accent {
+  background: var(--zeus-accent-gradient);
+  box-shadow: var(--zeus-accent-gradient-shadow);
+  padding: 3px;
+  border-radius: 50%;
+}
+
+.zeus-badge-accent {
+  background: var(--zeus-accent-gradient);
+  color: #ffffff;
+}
+
+/* ------------------------------------------------------------------ */
+/* Superficie de bandas metálicas — fondo obligatorio de TODA página y
+   modal, sin excepción. Requiere position:relative en el elemento. El
+   grano SVG va en ::before al 3% exacto, por encima del fondo pero por
+   debajo del contenido real (que necesita position:relative en sus
+   hijos directos si el propio elemento no aísla su stacking context). */
+/* ------------------------------------------------------------------ */
+.zeus-metal-surface {
+  position: relative;
+  overflow: hidden;
+  background-image: var(--zeus-bg);
+}
+
+.zeus-metal-surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zeus-btn-accent:hover:not(:disabled),
+  .zeus-btn-accent:active:not(:disabled) {
+    transform: none;
+  }
+}

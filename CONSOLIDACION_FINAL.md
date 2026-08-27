@@ -583,3 +583,127 @@ inducir un falso negativo en cualquier verificación futura si no se
 reinicia el servidor tras cada merge.
 
 **Commit de esta fusión**: `merge: feature/checkout-publico-fix + verificacion`
+
+---
+
+## 7. `feature/fix-onboarding-wizard-real`
+
+**Hallazgo de planificación**: esta rama (841 commits) resultó tener como
+ancestros `feature/facturacion-tpv-real`, `feature/onboarding-facturacion` y
+`feature/rediseno-completo` — las mismas que el encargo esperaba encontrar
+como ancestros de `feature/fix-thalos-shield-real` en el paso 8. Es decir,
+el árbol real diverge de la suposición del encargo: ambas ramas grandes
+comparten esa base común pero cada una añadió trabajo distinto encima. Se
+verificó con `git merge-base --is-ancestor` en ambas direcciones: NO es
+ancestro de `fix-thalos-shield-real` (son ramas hermanas divergentes, no
+una contenida en la otra). Se documenta aquí y se confirmará en los pasos
+9-12 si de verdad quedan como no-ops tras este merge.
+
+**Merge-base con HEAD antes del merge**: `97b949a` → **merge real con 3
+conflictos**: `backend/app/db/base.py`, `backend/app/models/company.py`,
+`frontend/src/views/kpi/KpiAgentsView.vue`.
+
+**Conflictos y resolución**:
+- **`db/base.py`**: el diff de git intercaló de forma confusa DOS funciones
+  completamente distintas (`_migrate_company_type_column` de HEAD y
+  `_migrate_invoice_tpv_sale_link` de esta rama) porque ambas usan el mismo
+  patrón de código (`inspect(engine)` + `is_postgres` + añadir columna) en
+  la misma posición relativa al ancestro común. Se reconstruyeron ambas
+  funciones completas por separado, leyendo con cuidado qué fragmento de
+  cada bloque en conflicto pertenecía a cuál función, y se mantuvieron
+  ambas íntegras (aditivo, no son alternativas de lo mismo). Verificado con
+  `py_compile` y listando `grep '^def _migrate'` para confirmar que las 17
+  funciones de parcheo de esquema siguen presentes y ninguna quedó
+  truncada a mitad.
+- **`models/company.py`**: import de `sqlalchemy` — HEAD necesitaba
+  `CheckConstraint` (para el `ck_user_companies_role` de multi-tenant-bd),
+  esta rama necesitaba `Text` (para `iban_encrypted`, de
+  onboarding-facturacion). **Se importaron ambos**, no es una alternativa.
+
+**Hallazgo de higiene de migraciones (bloqueante, corregido antes de
+commitear)**: el merge trajo TRES ficheros más con IDs de revisión Alembic
+duplicados: `0043_insurance_policies_claims.py` (colisión con
+`0043_agent_activities_company_id.py`), `0044_invoice_tpv_sale_link.py`
+(colisión con `0044_role_check_constraints.py`) y
+`0045_company_billing_fields.py` (colisión con
+`0045_fix_misleading_company_id_naming.py`). Los tres formaban su propia
+cadena interna consistente (0042→0043→0044→0045). **Renumerados en bloque**
+a `0049`, `0050`, `0051`, encadenados tras el head real `0048` (ver paso 6),
+sin tocar lógica. Verificado con el mismo script de análisis estático:
+**51 revisiones, una sola cabeza (`0051`), cero IDs duplicados**.
+
+**Qué trae** (además de arrastrar como ancestros `facturacion-tpv-real`,
+`onboarding-facturacion` y `rediseno-completo` completos):
+- **El fix específico de esta rama** (`AUDIT_FIX_ONBOARDING_WIZARD.md`):
+  la heurística `setup_completed` en `GET /onboarding/status` contaba como
+  "señal de onboarding completado" el `CompanyEmployee` placeholder
+  (`source="onboarding_owner"`) y los productos TPV de plantilla
+  (`metadata_.auto_created=True`) que el registro estándar crea SIEMPRE
+  para CUALQUIER alta nueva — daba `setup_completed=True` inmediatamente
+  tras el registro, sin que el usuario abriera el wizard. Ahora excluye
+  explícitamente esas filas auto-generadas del conteo.
+- Vertical Seguros completa (`insurance.py`, modelo/schema `Insurance{Policy,Claim}`,
+  migración 0049 con RLS fail-closed nativo) — fuera del alcance normal de
+  esta skill (`zeus-produccion` no cubre verticales), pero llega como
+  ancestro obligatorio de esta rama según el encargo; se revisó solo
+  superficialmente (auth real + filtro de tenant por `company_ids_for_user`
+  confirmado por lectura de código, sin pruebas end-to-end por estar fuera
+  del alcance del núcleo).
+- `app/core/crypto.py` (cifrado Fernet de IBAN) y `app/core/validators_es.py`
+  (enmascarado de IBAN) — el IBAN de facturación nunca se devuelve en claro.
+- Rediseño visual completo (`zeus-light-system.css`, tema claro con
+  variables `--zeus-*`) — aplicado también a `KpiAgentsView.vue` en la
+  resolución del conflicto (se combinó con la lógica de datos reales que
+  ya tenía HEAD, adaptando colores de los 4 estados de pill al tema claro).
+
+**Hallazgo importante para el cierre final (documentado, NO corregido en
+este paso por estar fuera del alcance de esta rama, según su propia
+auditoría)**: `POST /auth/onboarding/questionnaire` devuelve **500** por un
+bug de doble sesión SQLAlchemy (`db.add(user)` sobre un `User` ya adjunto a
+otra sesión — `onboarding_engine.py:417` y `auth.py:513` usan dos
+proveedores `get_db` distintos, mismo patrón que ya se corrigió en
+`update-advisor-emails`/`toggle-authorization` pero no aquí). Existe un
+test `xfail` explícito para esto
+(`test_questionnaire_endpoint_completes_and_flips_flag`). **Esto significa
+que, aunque el falso positivo de `setup_completed=True` inmediato ya está
+cerrado, completar el cuestionario DE VERDAD todavía no funciona vía API**
+— se confirma con curl real más abajo y se retoma en el cierre final de
+este documento (hallazgo crítico 4 del encargo).
+
+**Suite de tests tras el merge (con `zeus.db` fresco)**:
+```
+7 failed, 218 passed, 1 xfailed, 3 errors
+```
+Sube de 214→218 `passed` (esta rama añade tests propios), y aparece 1
+`xfailed` nuevo (el bug de doble sesión de arriba, marcado explícitamente
+como fuera de alcance). Los `2 skipped` del baseline desaparecen — uno de
+ellos pasó a `xfailed` con el marcador explícito. Mismos 7 nombres de
+fallo y mismos 3 errores que el baseline; sin regresión.
+
+**Prueba real (curl, servidor reiniciado con BD fresca)**:
+
+```
+POST /api/v1/auth/register  (usuario nuevo, business_type=restaurant)
+→ 201, user_id=2, company_id=1
+
+GET /api/v1/auth/onboarding/status  (inmediatamente tras registro, con token real)
+→ {"setup_completed": false, "setup_inferred": false,
+   "questionnaire_completed": false,
+   "checks": {"tpv_products": 4, "has_tpv_profile": true,
+              "company_employees_count": 1, ...}}
+```
+Confirma el fix: pese a tener 4 productos TPV auto-creados y 1 empleado
+auto-creado (exactamente las señales que antes disparaban el falso
+positivo), `setup_completed` queda en `false` — el usuario nuevo SÍ ve el
+cuestionario en vez de saltárselo.
+
+```
+POST /api/v1/auth/onboarding/questionnaire  (con employees_count/uses_tpv/business_hours completos)
+→ 500 {"detail":"Error interno del servidor. El servicio sigue activo; reintenta."}
+```
+Confirma en vivo el bug documentado (log del servidor:
+`sqlalchemy.exc.InvalidRequestError: Object '<User at ...>' is already
+attached to session '31' (this is '30')`) — coincide exactamente con el
+diagnóstico de `AUDIT_FIX_ONBOARDING_WIZARD.md`.
+
+**Commit de esta fusión**: `merge: feature/fix-onboarding-wizard-real + verificacion`

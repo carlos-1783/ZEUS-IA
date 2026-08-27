@@ -497,6 +497,12 @@ async def onboarding_questionnaire(
         company.metadata_ = meta
         db.add(company)
 
+        # current_user llega vinculado a la sesión de get_current_active_user
+        # (app.db.base.get_db), distinta de esta `db` (app.db.session.get_db).
+        # Re-fetch vía `db` antes de mutar, mismo patrón ya usado en
+        # auth.py::_onboarding_profile_impl y document_approval.py.
+        current_user = db.query(User).filter(User.id == current_user.id).first() or current_user
+
         # Intento best-effort de persistir empleados/tpv_config.
         try:
             setattr(current_user, "employees", body.employees_count)

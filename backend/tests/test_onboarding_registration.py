@@ -74,18 +74,6 @@ def test_register_restaurant_creates_user_company_and_login(client: TestClient):
     assert body.get("setup_inferred") is False
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Bug PRE-EXISTENTE (no introducido por este fix, fuera de su alcance): "
-        "apply_questionnaire_answers (backend/services/onboarding_engine.py:417) hace "
-        "db.add(user) sobre un User que ya está attached a otra sesión SQLAlchemy, y "
-        "onboarding_questionnaire (auth.py:513) repite el mismo db.add(current_user) en "
-        "el except; ambos lanzan sqlalchemy.exc.InvalidRequestError y el endpoint "
-        "POST /auth/onboarding/questionnaire responde 500 incluso en un registro+login "
-        "recién creados. Ver AUDIT_FIX_ONBOARDING_WIZARD.md, hallazgo pendiente."
-    ),
-    strict=False,
-)
 def test_questionnaire_endpoint_completes_and_flips_flag(client: TestClient):
     p = _register_payload()
     r = client.post(f"{settings.API_V1_STR}/auth/register", json=p)

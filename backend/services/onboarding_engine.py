@@ -378,6 +378,12 @@ def apply_registration_onboarding(
 
 def apply_questionnaire_answers(db: Session, user: User, body: Any) -> Dict[str, Any]:
     """Persiste respuestas del cuestionario en metadata de empresa y ajusta TPV si aplica."""
+    # `user` llega vinculado a la sesión de BD de get_current_active_user
+    # (app.db.base.get_db), distinta de la `db` propia de este flujo
+    # (app.db.session.get_db). Re-fetch vía `db` antes de mutar, mismo patrón ya
+    # usado en auth.py::_onboarding_profile_impl y document_approval.py.
+    user = db.query(User).filter(User.id == user.id).first() or user
+
     link = (
         db.query(UserCompany)
         .filter(UserCompany.user_id == user.id)

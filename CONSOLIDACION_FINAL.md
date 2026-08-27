@@ -1010,15 +1010,139 @@ preexistente y fuera del alcance de la tarea que se pidió corregir en
 explícitamente como pendiente para una tarea nueva, no como motivo de
 devolución de esa tarea).
 
-**Veredicto: PARCIALMENTE CERRADO.** El hallazgo original exacto (falso
-positivo inmediato, bloqueaba el acceso al cuestionario manual mostrando la
-cuenta como "ya configurada") está cerrado. Queda abierto un hallazgo
-distinto y ya documentado (bug de doble sesión en el endpoint del
-cuestionario) que impide validar end-to-end el camino de completar el
-onboarding manualmente vía API. Recomendación: nueva tarea dedicada a
-unificar el proveedor de `get_db` en `onboarding_engine.py`/`auth.py`
-(mismo patrón que ya se corrigió para `document_approval.py` en
-`ca2e7fe`), antes de dar este hallazgo por cerrado al 100%.
+**Veredicto (antes de la sección 5): PARCIALMENTE CERRADO.** El hallazgo
+original exacto (falso positivo inmediato, bloqueaba el acceso al
+cuestionario manual mostrando la cuenta como "ya configurada") estaba
+cerrado. Quedaba abierto un hallazgo distinto y ya documentado (bug de
+doble sesión en el endpoint del cuestionario) que impedía validar
+end-to-end el camino de completar el onboarding manualmente vía API. **Ver
+sección 5 más abajo: este segundo hallazgo ya está corregido y verificado
+— veredicto final actualizado a CERRADO.**
+
+---
+
+## 5. Fix del hallazgo 4 (segunda parte) — 500 en `POST /onboarding/questionnaire`
+
+**Causa raíz exacta** (mismo patrón de doble sesión SQLAlchemy ya
+diagnosticado y corregido para `document_approval.py` en `ca2e7fe`, y ya
+señalado como pendiente en la sección 4 de arriba y en
+`AUDIT_FIX_ONBOARDING_WIZARD.md`): `current_user`, inyectado por
+`get_current_active_user` (que usa `app.db.base.get_db`), pertenece a una
+sesión SQLAlchemy distinta de la `db: Session = Depends(get_db)`
+(`app.db.session.get_db`) propia del endpoint. Dos puntos concretos
+mutaban ese objeto y luego lo pasaban a `db`:
+
+- `backend/services/onboarding_engine.py:407` (antes del fix, ahora
+  desplazado tras el re-fetch) — `apply_questionnaire_answers()` hacía
+  `user.employees = body.employees_count`, `user.tpv_config = ...` y
+  `db.add(user)` sobre el `user` recibido tal cual, sin re-obtenerlo de
+  `db`. `db.add()` sobre un objeto ya adjunto a *otra* sesión lanza
+  `sqlalchemy.exc.InvalidRequestError` inmediatamente.
+- `backend/app/api/v1/endpoints/auth.py` (bloque fallback de
+  `onboarding_questionnaire`, antigua línea 513) — repetía exactamente el
+  mismo patrón sobre `current_user`. Al no estar esa línea protegida por
+  ningún `try/except` propio (solo el `db.commit()` posterior lo estaba) y
+  al ser el segundo/tercer `except` del mismo `try` código muerto
+  (`except Exception` ya había capturado todo antes), la excepción escapaba
+  sin control hasta el middleware `uncaught_exception_guard`
+  (`backend/app/main.py:116-128`), que la convertía en el 500 genérico
+  observado: `{"detail":"Error interno del servidor. El servicio sigue
+  activo; reintenta."}`.
+
+**Fix aplicado** (mismo patrón exacto que `ca2e7fe`, sin inventar uno
+nuevo): re-obtener el `User` a través de la propia sesión `db` antes de
+mutarlo, en los dos sitios donde ocurre la causa raíz:
+
+- `backend/services/onboarding_engine.py:385` (dentro de
+  `apply_questionnaire_answers`):
+  `user = db.query(User).filter(User.id == user.id).first() or user`
+- `backend/app/api/v1/endpoints/auth.py:504` (dentro del bloque fallback de
+  `onboarding_questionnaire`):
+  `current_user = db.query(User).filter(User.id == current_user.id).first() or current_user`
+
+No se tocó `app/core/auth.py` ni `app/db/base.py` — la unificación de raíz
+de `get_current_user` sigue pendiente como decisión de mayor alcance (igual
+que se señaló en `ca2e7fe`), fuera del alcance de este fix puntual.
+
+**Verificado en vivo, antes y después del fix, en esta misma rama
+(`feature/consolidacion-final`), backend propio en SQLite
+(`backend/zeus.db`, recreado en cada arranque vía `create_tables()`),
+venv compartido:**
+
+Antes del fix (`git stash` temporal para reproducir el estado sin el
+parche), registro 100% nuevo (`preonb_1787821718@example.com`), login,
+`POST /auth/onboarding/questionnaire` con los tres campos exigidos por el
+schema (`employees_count`, `uses_tpv`, `business_hours`):
+```
+HTTP 500
+{"detail":"Error interno del servidor. El servicio sigue activo; reintenta."}
+```
+
+Después del fix, registro 100% nuevo distinto
+(`postonb_1787821846@example.com`):
+```
+POST /api/v1/auth/onboarding/questionnaire
+→ HTTP 200
+{"success":true,"company_id":2,"message":"Cuestionario guardado correctamente",
+ "fallback_mode":false,"warnings":[]}
+
+GET /api/v1/auth/onboarding/status  (llamada independiente, inmediatamente después)
+→ HTTP 200
+{"questionnaire_completed":true, "setup_completed":true,
+ "existing_questionnaire":{"employees_count":3,"uses_tpv":true,
+   "business_hours":"L-V 9:00-18:00","completed_at":"2026-08-27T09:10:59..."}}
+```
+`fallback_mode:false` confirma que el fix corrige la ruta *principal*
+(`apply_questionnaire_answers`), no solo el fallback — antes del fix, ambas
+rutas fallaban en cascada (la primaria lanzaba `InvalidRequestError`, caía
+al fallback, que repetía el mismo error sin protección).
+
+Casos de error controlados (sin regresión de auth):
+```
+POST sin token                              → 401 "No se pudieron validar las credenciales"
+POST con body incompleto (falta business_hours) → 422 (validación Pydantic, no 500)
+```
+
+**Aislamiento multi-tenant**, verificado con un segundo tenant nuevo
+(`postonb2_1787821880@example.com`, `business_type=retail`):
+```
+POST /onboarding/questionnaire (tenant2, employees_count=7, uses_tpv=false,
+  business_hours="L-D 8:00-20:00") → 200
+GET /onboarding/status (tenant2) → questionnaire_completed:true,
+  existing_questionnaire con SUS propios valores (7, false, "L-D 8:00-20:00")
+```
+Confirmado además por **SQL directo** sobre `zeus.db`: `users.employees` =
+3 para el usuario del tenant 1 y 7 para el del tenant 2;
+`users.tpv_config` con `tables_enabled`/`products_enabled` en `true`/`false`
+respectivamente; `companies.metadata` con un `onboarding_questionnaire`
+completo e independiente por empresa (id 2 vs id 3) — ningún tenant
+sobreescribe ni ve los datos del otro.
+
+**Regresión — suite completa** (`pytest tests -q`, venv compartido):
+antes de este fix (documentado en la sección de cierre de arriba y en el
+resumen ejecutivo): `7 failed, 288 passed, 1 xfailed, 3 errors`. Después
+del fix: **`7 failed, 289 passed, 3 errors`** — mismos 7 fallos
+preexistentes (mismos nombres, no relacionados: flags de
+simulación de THALOS/JUSTICIA, `test_config_loading`, `test_audit_includes_ai_modules`),
+mismos 3 errores preexistentes (`TestClient` no importado en
+`test_app.py`), **sin regresiones**. El único cambio es que
+`tests/test_onboarding_registration.py::test_questionnaire_endpoint_completes_and_flips_flag`
+pasó de estar marcado `xfail(strict=False)` (documentando este mismo bug
+como conocido) a pasar limpiamente de verdad — se retiró el marcador
+`@pytest.mark.xfail` de ese test en este mismo commit, ya que mantenerlo
+habría dejado una anotación de "bug conocido" incorrecta en el código tras
+corregirlo.
+
+**Qué no se pudo verificar**: el comportamiento contra PostgreSQL real (RLS
+de multi-tenant) — este entorno solo tiene SQLite disponible, igual que el
+resto de esta consolidación (ver nota de RLS en el resumen ejecutivo).
+
+**Veredicto actualizado del hallazgo 4: CERRADO.** Tanto el falso positivo
+original de `setup_completed` como el 500 de doble sesión en
+`POST /onboarding/questionnaire` están corregidos y verificados end-to-end
+con curl real, dos tenants nuevos y SQL directo. No me declaro a mí mismo
+"listo para producción" — corresponde a `revisor-independiente` confirmar
+esto de forma independiente antes de considerar la consolidación cerrada.
 
 ---
 
@@ -1054,18 +1178,20 @@ cabeza (`0053`), cero IDs duplicados** — se encontraron y corrigieron
 todas renumeradas preservando la lógica original y documentando el motivo
 del cambio en cada docstring.
 
-**Estado final de la suite de tests** (backend, SQLite local):
+**Estado final de la suite de tests** (backend, SQLite local, tras la
+sección 5 — fix del 500 de doble sesión en `/onboarding/questionnaire`):
 ```
-7 failed, 288 passed, 1 xfailed, 3 errors
+7 failed, 289 passed, 3 errors
 ```
 Frente al baseline inicial (`7 failed, 214 passed, 2 skipped, 3 errors`):
-+74 tests pasando netos, mismos 7 fallos preexistentes (mismos nombres en
++75 tests pasando netos, mismos 7 fallos preexistentes (mismos nombres en
 todo momento), mismos 3 errores preexistentes (`TestClient` no importado en
-`test_app.py`), 1 nuevo `xfail` explícito y documentado (bug de doble
-sesión del onboarding, hallazgo 4 de arriba). **Ninguna regresión real en
-ningún punto de la consolidación** — cada vez que apareció un fallo nuevo
-se investigó su causa (dos veces fue higiene del entorno de pruebas: datos
-de un esquema de enum anterior en el `zeus.db` compartido, y en otra un
+`test_app.py`). El `xfail` que documentaba el bug de doble sesión del
+onboarding (hallazgo 4) se retiró en la sección 5 al corregirse ese bug de
+raíz — el test pasa limpiamente ahora. **Ninguna regresión real en ningún
+punto de la consolidación** — cada vez que apareció un fallo nuevo se
+investigó su causa (dos veces fue higiene del entorno de pruebas: datos de
+un esquema de enum anterior en el `zeus.db` compartido, y en otra un
 proceso de otro agente ocupando el mismo puerto — ninguna de las dos era
 una regresión real de código).
 
@@ -1080,12 +1206,13 @@ entorno** — solo hay SQLite disponible aquí, ambas ramas lo documentan
 honestamente como pendiente de verificación contra un Postgres real antes
 de confiar en ello en producción.
 
-**Veredicto sobre los 4 hallazgos críticos**: 3 de 4 cerrados por completo
-(`metrics/dashboard`, `invoices/products/customers`, `google.py`). El
-cuarto (heurística de onboarding) está cerrado para el hallazgo exacto que
-se pidió corregir, pero descubre y documenta un hallazgo nuevo y distinto
-(bug de doble sesión SQLAlchemy en `POST /onboarding/questionnaire`) que
-impide considerar el flujo de onboarding manual 100% funcional end-to-end.
+**Veredicto sobre los 4 hallazgos críticos**: **4 de 4 cerrados por
+completo** (`metrics/dashboard`, `invoices/products/customers`, `google.py`,
+y heurística de onboarding — este último en dos partes: el falso positivo
+original de `setup_completed`, cerrado en la sección 4, y el 500 de doble
+sesión SQLAlchemy en `POST /onboarding/questionnaire` que ese cierre
+descubrió como hallazgo nuevo, corregido y verificado end-to-end en la
+sección 5).
 
 **No me declaro "listo para producción"** — esto lo decide el usuario, y
 corresponde a una revisión independiente antes de tocar `main`. No se ha

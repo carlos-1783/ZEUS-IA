@@ -1,0 +1,48 @@
+# AUDITORÍA TOTAL FINAL — feature/fix-thalos-shield-real (revisión independiente)
+
+**Rol**: revisor-independiente (solo lectura, sin permiso de Edit/Write sobre código).
+**Rama auditada**: `feature/fix-thalos-shield-real`, commit `e6c9717` (confirmado con
+`git branch --show-current` y `git log -1` al iniciar; `git status` limpio).
+**Worktree**: `C:\Users\Acer\ZEUS-IA\.claude\worktrees\agent-a9f8f12f24d0bc95c`.
+**Backend usado para todas las pruebas en vivo**: proceso `uvicorn app.main:app`
+en `127.0.0.1:8020` (PID 29292), confirmado que sirve ESTE worktree inyectando
+un registro marcador (`MarkerCheck ABC123`, company_id 1952) vía API y
+verificándolo acto seguido directamente en `backend/zeus.db` de este worktree.
+DB: SQLite local (`backend/zeus.db`), alembic `current` = `0047 (head)` = `alembic
+heads` → sin migraciones pendientes.
+**Nota de continuidad**: esta ejecución es la continuación, en la misma sesión,
+de un intento anterior de esta misma auditoría que fue cortado por límite de
+sesión. El repo seguía limpio (`git status` sin cambios, sin
+`AUDITORIA_TOTAL_FINAL.md`) al empezar esta vuelta — se confirma que no había
+nada guardado. El scratchpad de la sesión conservaba artefactos de trabajo
+previo (tokens, scripts de exploit) que se han reutilizado como PUNTO DE
+PARTIDA pero cuyos resultados se han vuelto a ejecutar/confirmar en esta
+vuelta, no se han dado por buenos sin repetir la prueba.
+
+---
+## 1. Los 6 agentes — input real → proceso real → output real → log real
+
+Metodología: llamadas curl reales contra el backend en vivo, con tokens de
+usuarios creados por mí en esta sesión (Tenant A = `revisor.marker.abc123@test.com`,
+company_id 1952; superusuario = `revisor.super.rev1@test.com`), verificación
+cruzada en `backend/zeus.db` y en `agent_activities`.
+
+| Agente | Endpoint probado | Resultado real observado | Log verificado |
+|---|---|---|---|
+| ✅ ZEUS (orquestador) | `POST /api/v1/zeus-core/leads` | `{"success":true,"lead_id":49,"lead_score":10.0,"customer_priority":"low","next_best_action":"nurture"}` (HTTP 200). Confirmado en `crm_leads` (`id=49, company_id=1952, owner_user_id=2449, lead_score=10.0`) — persistencia real, scoring real, `company_id` correcto (tenant A). | `agent_activities`: 331 filas `ZEUS` + 204 `ZEUS CORE` |
+| ⚠️ ZEUS legacy stub | `POST /api/v1/zeus/execute` `{"agent":"THALOS","command":"SCAN"}` | HTTP 500: `2 validation errors for ZeusResponse — agent / timestamp Field required`. El stub legacy de `app/core/zeus_agents.py` no solo es "hardcodeado" (ya documentado) sino que además **crashea** con esta rama de código (bug de Pydantic, no solo simulación). Sigue montado y accesible en producción. | N/A (crashea antes de loggear) |
+| ✅ PERSEO | `GET /api/v1/perseo/v2/status` | `"perseo_v2_enabled": false, "execution_mode": "SIMULATED", "writes_enabled": false` — el propio sistema declara honestamente su modo simulado, no oculta el estado. | — |
+| ✅ PERSEO (fallo honesto) | `POST /api/v1/perseo/v2/ads/create` `{"platform":"google","name":"Test Revisor","budget":100,"objective":"traffic"}` | HTTP 403 `{"detail":"writes_enabled false"}` — falla explícito, no éxito falso, en la capa v2 actual. | `agent_activities`: 35 filas `PERSEO` |
+| ⚠️ PERSEO (placeholder histórico NO resuelto de raíz) | Código: `backend/services/perseo_ads_engine_v2.py:66-81` (`create_google_campaign`) | Con `_google_configured()==False` (caso real de este entorno, sin credenciales Google Ads) devuelve honestamente HTTP 503 `google_ads_not_configured` — mejora real frente a lo documentado en `agentes.md`. **Pero si `_google_configured()` fuera `True`** (credenciales presentes), el mismo código sigue devolviendo `{"success": true, "campaign_id": None, "simulated": False, "message": "Google Ads API client not installed — campaign persisted locally only"}` **sin llamar nunca a la API real de Google** — éxito falso con `simulated:false` que sigue siendo el hallazgo histórico, solo que ahora enmascarado por un guard que en este entorno concreto (sin credenciales) no deja verlo en vivo. No se pudo forzar el branch "configurado" sin fijar variables de entorno del sistema (fuera de alcance de un rol de solo lectura). | — |
+| ✅ RAFAEL | `POST /api/v1/rafael-fiscal/model-303/generate` `{"year":2026,"quarter":2}` | HTTP 422 `{"detail":"No hay datos financieros en el periodo (facturas ni gastos)."}` — consulta real a BD (no hay facturas en ese periodo para el tenant), falla controlado, no simulado. | `agent_activities`: 76 filas `RAFAEL` |
+| ✅ JUSTICIA | `POST /api/v1/justice/contracts/generate` | HTTP 200, `{"document_id":"2d1bd7bd-...","db_id":1,"version":1,"status":"draft","content_preview":"# CONTRATO..."}` — documento real generado y persistido (`db_id=1`). `GET /api/v1/justice/status` confirma `"compliance_events":181,"justice_real_audit_enabled":true,"execution_mode":"REAL"`. | `agent_activities`: 1 fila `JUSTICIA` (bajo, pero no cero) |
+| ✅ AFRODITA | `GET /api/v1/afrodita/rrhh/v1/status` | `{"execution_mode":"SIMULATED","writes_enabled":false,"db_connected":true,...}` — estado real y honesto de los flags de ejecución (por defecto en `false` en este entorno, igual que PERSEO/THALOS). | `agent_activities`: 576 filas `AFRODITA` |
+
+**Conclusión Sección 1**: los 6 agentes tienen endpoint propio, ejecutan lógica
+real contra BD y registran actividad verificable. El hallazgo histórico de
+PERSEO/Google Ads sigue sin resolverse de raíz (solo se añadió un guard de
+"no configurado" que oculta el problema en el caso común, no lo elimina). El
+stub legacy de `/api/v1/zeus/execute` sigue montado y ahora además crashea con
+un error 500 no controlado en vez de devolver el placeholder falso silencioso
+documentado previamente — sigue siendo deuda técnica viva, ahora peor (error
+no controlado en vez de simulación silenciosa).

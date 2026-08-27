@@ -46,3 +46,100 @@ stub legacy de `/api/v1/zeus/execute` sigue montado y ahora además crashea con
 un error 500 no controlado en vez de devolver el placeholder falso silencioso
 documentado previamente — sigue siendo deuda técnica viva, ahora peor (error
 no controlado en vez de simulación silenciosa).
+
+---
+
+## 2. THALOS — fix estructural (repetición independiente de exploits)
+
+### 2.1 Migración de esquema (company_id en tablas THALOS)
+
+- `alembic current` → `0047 (head)`, igual que `alembic heads` → sin desfase.
+- `backend/alembic/versions/0046_thalos_tables_company_id.py` añade
+  `company_id` a `thalos_events`, `thalos_alerts`, `thalos_login_attempts`
+  (`thalos_security_events` ya lo tenía desde 0030).
+- Confirmado en vivo contra `backend/zeus.db` (no solo leyendo la migración):
+
+```
+thalos_events            company_id presente: True
+thalos_alerts            company_id presente: True
+thalos_login_attempts    company_id presente: True
+thalos_security_events   company_id presente: True
+```
+
+- `0047_thalos_row_level_security.py` (RLS) solo aplica políticas reales en
+  Postgres; en este entorno (SQLite) no se puede verificar la policy en vivo
+  — limitación ya reconocida en el propio commit `e6c9717` ("RLS-vs-Postgres-real"
+  queda como tarea aparte). No se puede dar por bueno el RLS sin una BD Postgres
+  real; queda como verificación pendiente, no como "aprobado".
+
+### 2.2 Exploit de handlers de automatización (`services/automation/handlers/thalos.py`)
+
+Reejecuté en vivo (no reutilicé el resultado pegado en ningún informe previo)
+el script de exploit con tenants 100% nuevos generados con UUID aleatorio en
+esta sesión:
+
+```
+=== TENANT A: atacante NO superusuario ===
+BACKUP (attacker): blocked superuser_required_for_global_audit
+SECURITY_SCAN (attacker): blocked superuser_required_for_global_audit
+ALERTS (attacker): blocked superuser_required_for_global_audit
+
+=== TENANT B: superusuario real (tenant distinto de A) ===
+BACKUP (admin): completed   (1 fichero de backup creado y verificado, luego borrado por el propio test)
+SECURITY_SCAN (admin): completed
+ALERTS (admin): completed
+```
+
+Los 3 handlers (`handle_thalos_backup`, `handle_thalos_security_scan`,
+`handle_thalos_alerts`) bloquean correctamente al atacante no-superusuario y
+permiten el control positivo con un tenant superusuario distinto. **Hallazgo
+de higiene (no bloqueante, ya conocido)**: en `backend/storage/backups/`
+quedaban 2 ficheros huérfanos de una sesión de pruebas anterior
+(`zeus_backup_20260826T173026Z.db`, `...173027Z.db`, timestamps que coinciden
+con la creación de `AuditCo A/B` de la Vuelta 7) — confirma lo ya documentado
+en el commit `e6c9717` sobre "higiene de tests que generan backups reales".
+No se han borrado estos ficheros porque este rol no tiene permiso de
+escritura/limpieza.
+
+### 2.3 Spoofing de `company_id` en endpoints REST
+
+- Los 7 endpoints de `backend/app/api/v1/endpoints/thalos.py`
+  (`/status`, `/events`, `/alerts`, `/alerts/{id}/resolve`, `/audit`,
+  `/monitor`, `/logs/ingest`) y los de `thalos_v1.py` (`/status`, `/events`,
+  `/alerts`, `/audit`) exigen `is_superuser` antes de tocar las tablas
+  globales sin `company_id` fiable. Probado en vivo:
+
+```
+Tenant A (no superuser) -> /thalos/status, /thalos/audit, /thalos/alerts,
+/thalos/events, /thalos/v1/status, /thalos/v1/events, /thalos/v1/alerts,
+/thalos/v1/audit  => 403 en los 8
+Superuser          -> los mismos endpoints => 200 en los 4 comprobados
+```
+
+- Spoofing de `company_id` en el body de `POST /thalos/v1/execute`: con la
+  configuración por defecto de este entorno (`THALOS_EXECUTION_ENABLED=false`)
+  la ruta corta ANTES de llegar a la validación de `company_id` (devuelve
+  `"status":"blocked","reason":"REAL_ACTIVE required..."` tanto si Tenant A
+  manda `company_id:1954` — de Tenant B — como si manda el suyo propio,
+  1952). Para no dar por bueno un gate que en la práctica es inalcanzable con
+  los flags actuales, probé la función real de aislamiento
+  (`services/workspace_deliverables.py:190 user_has_company_access`)
+  directamente contra la sesión de BD real:
+
+```
+A -> own company 1952: True
+A -> company B 1954 (SPOOF attempt): False
+super -> company A 1952: True
+super -> company B 1954: True
+```
+
+  Confirma que el gate de aislamiento SÍ funciona a nivel de lógica, aunque
+  hoy esté detrás de un segundo gate (flags de ejecución) que lo hace no
+  observable end-to-end vía HTTP en este entorno.
+
+**Conclusión Sección 2**: los 3 exploits repetidos (handlers de automatización,
+gates de superusuario en REST, aislamiento de `company_id`) siguen bloqueados.
+Confirmo el cierre de la Vuelta 7 tal como está documentado en el commit
+`e6c9717`, con dos matices que NO son bloqueantes pero deben quedar
+explícitos: (a) el RLS de Postgres no se puede verificar sin una BD Postgres
+real; (b) persisten ficheros de backup huérfanos de pruebas anteriores.

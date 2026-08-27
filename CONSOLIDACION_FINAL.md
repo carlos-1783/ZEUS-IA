@@ -238,3 +238,114 @@ verificó con navegador/Playwright por límite de tiempo de esta sesión;
 verificación solo de código + grep.
 
 **Commit de esta fusión**: `merge: feature/limpieza-simulacion + verificacion`
+
+---
+
+## 4. `feature/envio-gestoria`
+
+**Merge-base con HEAD antes del merge**: `97b949a` (parte de `main`,
+independiente) → **merge real con 3 conflictos**.
+
+**Conflictos y resolución**:
+- `backend/app/core/security.py` — dos bloques en conflicto dentro de
+  `get_current_user`:
+  1. Línea `audience=claimed_audience` (presente en HEAD, heredada de
+     `multi-tenant-bd` vía commit `8e538f1`) vs ausencia de ese parámetro en
+     `envio-gestoria`. **Se mantuvo la versión de HEAD** (pasa el audience ya
+     validado contra la whitelist, coherente con el bloque de comentarios que
+     la calcula justo antes, líneas 271-291, que es idéntico en ambas ramas).
+  2. Resolución de `sub` como ID-o-email: ambas ramas implementan el mismo
+     fallback (probar como ID, si falla o no encuentra usuario probar como
+     email) con variables distintas (`subject` en HEAD, `user_identifier` en
+     envio-gestoria). **Se adoptó la versión de envio-gestoria**: es
+     ligeramente más robusta porque intenta el fallback a email tanto si
+     `int(sub)` lanza excepción COMO si el `id` no existe en BD (la de HEAD
+     solo caía a email en el primer caso).
+  - **Hallazgo importante**: el bug raíz de audiencia JWT
+    ("audience must be a string or None", que rompía `/invoices/`,
+    `/products/`, `/customers`) ya estaba resuelto por `multi-tenant-bd`
+    (commit `8e538f1`, fusionado en el paso 2) antes de llegar a este paso.
+    Es decir, había **dos implementaciones independientes del mismo fix**
+    (multi-tenant-bd y envio-gestoria), tal como advertía el encargo. Se
+    consolidaron en una sola versión combinada (ver arriba) en vez de dejar
+    ambas.
+- `backend/app/models/erp.py` (líneas ~45-64) y `backend/app/schemas/erp.py`
+  (líneas ~109-125): **mismo fix de enums `values_callable`** implementado
+  independientemente en `multi-tenant-bd` Y en `envio-gestoria` (commit
+  `cd5f16a`), con comentarios ligeramente distintos pero código idéntico.
+  Se fusionó el comentario para dejar constancia de ambos orígenes; el
+  código en sí no cambió (ya estaba resuelto desde el paso 2).
+
+**Qué más trae** (`AUDIT_FIX_GESTORIA.md`):
+- `invoices.py::create_invoice`: `db.flush()` + `db.expire(invoice, ["items"])`
+  antes de `calculate_invoice_totals()` — sin esto, `invoice.items` podía
+  verse vacío tras un `db.add(item)` suelto (no
+  `invoice.items.append(item)`), devolviendo subtotal/total en 0 pese a
+  tener items reales con precio. Auto-mergeado sin conflicto.
+- `services/email_service.py`: nuevo `send_email_with_attachments()` — envío
+  real de adjuntos (PDF/XLSX) vía SMTP Gmail, SendGrid o Resend (mismo orden
+  de prioridad que `send_email()`), con `MIMEMultipart("mixed")` y
+  `base64` para Resend. No es un stub: sube el fichero real desde disco
+  (`Path(file_path).is_file()` se comprueba antes de adjuntar, lanza
+  `FileNotFoundError` si no existe).
+- `services/legal_fiscal_firewall.py::_send_to_advisor`: adjunta el fichero
+  real generado por RAFAEL (factura PDF / modelo 303 XLSX) si existe; si no,
+  cae al resumen JSON en el cuerpo (nunca un email vacío). Antes de enviar,
+  comprueba `email_service.is_configured() or is_resend_configured() or
+  is_smtp_configured()` y si NINGUNO está configurado, devuelve
+  `{"success": False, "status": "email_not_configured", ...}` explícito —
+  no finge un envío exitoso.
+- `_get_advisor_email`: prioridad real al email configurado por el propio
+  usuario (`User.email_gestor_fiscal`/`email_asesor_legal`), con
+  `GESTORIA_EMAIL_DEFAULT` solo como fallback de entorno.
+- `services/fiscal_db_compat.py`: `table_column_names`/`_table_names`
+  reescritos con `sqlalchemy.inspect()` (dialect-agnostic) en vez de SQL
+  crudo contra `information_schema.columns` (solo existe en Postgres) — en
+  SQLite fallaba siempre en silencio y hacía creer que la tabla
+  `document_approvals` no existía.
+
+**Suite de tests tras el merge (con `zeus.db` fresco)**:
+```
+7 failed, 214 passed, 2 skipped, 3 errors  (idéntico al baseline)
+```
+Mismos 7 nombres de fallo, mismos 3 errores. Sin regresión.
+
+**Prueba real (curl, servidor reiniciado con BD fresca, tenants
+`tenant1.consolidacion@gmail.com`→company_id 29,
+`tenant2.consolidacion@gmail.com`→company_id 30)**:
+
+```
+GET /api/v1/invoices/  (con token1, tras el fix de audiencia JWT)
+→ 200 {"success":true,"data":[],"total":0, ...}   ← antes daba 401 (ver paso 1)
+
+POST /api/v1/products/  (crear producto real, category="goods")
+→ 201, sin LookupError de enum
+
+POST /api/v1/customers  (crear cliente real)
+→ 201
+
+POST /api/v1/invoices/  (customer_id=6, 1 item: qty=2, unit_price=100, tax_rate=0.21)
+→ 201 {"subtotal":200.0,"tax_amount":0.42,"total":200.42, ...}
+  (subtotal y total NO son cero — confirma que el flush+expire hace que
+  calculate_invoice_totals() vea los items reales; nota: tax_amount=0.42 en
+  vez de 42 es porque el motor divide tax_rate/100 esperando un entero tipo
+  "21", no una fracción "0.21" — error de mi payload de prueba, no un bug
+  del código)
+
+GET /api/v1/invoices/  (con token2 — aislamiento multi-tenant)
+→ 200 {"success":true,"data":[],"total":0, ...}   ← tenant2 NO ve la factura de tenant1
+
+GET /api/v1/invoices/2  (con token2, factura creada por tenant1)
+→ 403 {"detail":"No tienes permiso para acceder a esta factura"}
+```
+
+**Qué NO se pudo verificar**: el envío real de email a la gestoría
+(SMTP/SendGrid/Resend) end-to-end, porque este entorno de pruebas no tiene
+ninguna credencial de email configurada (`SENDGRID_API_KEY`,
+`RESEND_API_KEY`, `SMTP_HOST`/`SMTP_USER` — todas `not set`). Se confirmó
+por lectura de código que `_send_to_advisor` comprueba la configuración
+antes de intentar enviar y devuelve un error honesto
+(`status: email_not_configured`) en vez de fingir éxito — pero no se pudo
+ejercer la ruta de éxito real contra un proveedor de email de verdad.
+
+**Commit de esta fusión**: `merge: feature/envio-gestoria + verificacion`

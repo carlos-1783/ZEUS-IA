@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -112,6 +112,28 @@ def list_pending_documents_grouped(db: Session, user: User) -> Dict[str, Any]:
     }
 
 
+_COMPLIANCE_EVENTS_RESTRICTED_NOTE = (
+    "Oculto para usuarios no superusuario: compliance_events es una tabla "
+    "global sin company_id (agrega señales de ThalosAlert/CompanyEmployee/"
+    "PerseoJob/Expense de TODAS las empresas). Mismo criterio de aislamiento "
+    "que GET /api/v1/justice/compliance-events (solo superusuario)."
+)
+
+
+def _compliance_events_count(db: Session, user: User) -> Tuple[Optional[int], Optional[str]]:
+    """Cuenta real de compliance_events, pero solo expuesta a superusuarios.
+
+    La tabla ComplianceEvent no tiene company_id/user_id (ver
+    app/models/compliance_event.py) -- no se puede filtrar por tenant a nivel
+    de query. Devolver el número crudo a cualquier usuario autenticado filtra
+    cuánta actividad de cumplimiento tienen OTRAS empresas en la plataforma.
+    """
+    count = int(db.query(func.count(ComplianceEvent.id)).scalar() or 0)
+    if getattr(user, "is_superuser", False):
+        return count, None
+    return None, _COMPLIANCE_EVENTS_RESTRICTED_NOTE
+
+
 def run_real_audit(db: Session, user: User) -> Dict[str, Any]:
     if not getattr(settings, "JUSTICE_REAL_AUDIT_ENABLED", False):
         return {
@@ -125,11 +147,13 @@ def run_real_audit(db: Session, user: User) -> Dict[str, Any]:
     gdpr = run_gdpr_check(db, user)
 
     legal_count = db.query(func.count(LegalDocument.id)).filter(LegalDocument.user_id == user.id).scalar() or 0
-    compliance_count = db.query(func.count(ComplianceEvent.id)).scalar() or 0
+    compliance_count, compliance_note = _compliance_events_count(db, user)
     pending = list_pending_documents_grouped(db, user)
 
     base["legal_documents_count"] = int(legal_count)
-    base["compliance_events_count"] = int(compliance_count)
+    base["compliance_events_count"] = compliance_count
+    if compliance_note:
+        base["compliance_events_note"] = compliance_note
     base["pending_documents"] = pending
     base["gdpr"] = gdpr
     base["real_execution"] = True
@@ -139,11 +163,15 @@ def run_real_audit(db: Session, user: User) -> Dict[str, Any]:
 
 
 def audit_status(db: Session, user: User) -> Dict[str, Any]:
-    return {
+    compliance_count, compliance_note = _compliance_events_count(db, user)
+    body: Dict[str, Any] = {
         "legal_documents": int(
             db.query(func.count(LegalDocument.id)).filter(LegalDocument.user_id == user.id).scalar() or 0
         ),
-        "compliance_events": int(db.query(func.count(ComplianceEvent.id)).scalar() or 0),
+        "compliance_events": compliance_count,
         "pending": list_pending_documents_grouped(db, user),
         "justice_real_audit_enabled": bool(getattr(settings, "JUSTICE_REAL_AUDIT_ENABLED", False)),
     }
+    if compliance_note:
+        body["compliance_events_note"] = compliance_note
+    return body

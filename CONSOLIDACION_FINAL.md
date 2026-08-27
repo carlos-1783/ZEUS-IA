@@ -836,3 +836,37 @@ desarrollo tampoco. Queda pendiente de verificación contra staging antes
 de producción, tal como el propio fichero recomienda.
 
 **Commit de esta fusión**: `merge: feature/fix-thalos-shield-real + verificacion`
+
+---
+
+## 9-12. `feature/vertical-seguros`, `feature/facturacion-tpv-real`, `feature/onboarding-facturacion`, `feature/rediseno-completo`
+
+Tal como advertía el propio encargo para el caso de `fix-thalos-shield-real`
+(y como se documentó explícitamente en los pasos 7 y 8 de este informe: la
+relación real de ancestría no coincidía con la suposición inicial, pero el
+resultado es el mismo), estas 4 ramas ya eran ancestros de
+`feature/consolidacion-final` antes de llegar a este punto — arrastradas
+como base común de `feature/fix-onboarding-wizard-real` (paso 7) y
+`feature/fix-thalos-shield-real` (paso 8), que divergieron cada una por su
+lado a partir de ellas.
+
+**Verificado explícitamente, no asumido**:
+```
+git merge-base --is-ancestor feature/vertical-seguros HEAD        → YA ES ANCESTRO
+git merge-base --is-ancestor feature/facturacion-tpv-real HEAD    → YA ES ANCESTRO
+git merge-base --is-ancestor feature/onboarding-facturacion HEAD  → YA ES ANCESTRO
+git merge-base --is-ancestor feature/rediseno-completo HEAD       → YA ES ANCESTRO
+```
+
+Y confirmado ejecutando `git merge --no-edit` real sobre cada una (tal como
+pedía el encargo, sin saltarlas por la sola inspección de ancestría):
+```
+git merge feature/vertical-seguros        → "Already up to date."
+git merge feature/facturacion-tpv-real    → "Already up to date."
+git merge feature/onboarding-facturacion  → "Already up to date."
+git merge feature/rediseno-completo       → "Already up to date."
+```
+
+Ningún commit nuevo, ningún conflicto, ninguna verificación adicional
+necesaria — su contenido ya quedó incorporado (y ya verificado donde
+aplicaba) al fusionar `feature/fix-onboarding-wizard-real` en el paso 7.

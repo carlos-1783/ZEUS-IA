@@ -82,9 +82,9 @@ export interface AfroditaWorkspacePlaybook {
 }
 
 export function executionModeLabel(mode: AfroditaExecutionMode | null | undefined): string {
-  if (mode === 'REAL') return 'REAL'
-  if (mode === 'ERROR') return 'SYSTEM ERROR'
-  return 'NO EXECUTION'
+  if (mode === 'REAL') return 'Real'
+  if (mode === 'ERROR') return 'Error del sistema'
+  return 'Sin ejecución real'
 }
 
 export async function fetchAfroditaStatus() {

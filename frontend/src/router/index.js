@@ -462,6 +462,21 @@ router.beforeEach(async (to, from, next) => {
     return
   }
 
+  // authStore.isAuthenticated solo comprueba que exista un token (ver
+  // isAuthenticated = computed(() => !!token.value) en stores/auth.ts) —
+  // NO implica que authStore.user esté cargado. user solo se rellena vía
+  // authStore.initialize(), que hoy solo llaman algunas vistas concretas
+  // en su onMounted (DashboardProfesional, TPV, OnboardingSetup, OfficeCrm).
+  // En una recarga directa / enlace profundo a una ruta protegida, este
+  // guard se ejecuta ANTES de que ese onMounted llegue a dispararse, así
+  // que authStore.isAdmin/isEmployee/modules se evaluaban con user=null
+  // (isAdmin siempre false), expulsando a superusuarios reales de /admin,
+  // /tpv, etc. Se fuerza aquí la hidratación antes de decidir nada que
+  // dependa del rol.
+  if (requiresAuth && authStore.isAuthenticated && !authStore.user && authStore.initialize) {
+    await authStore.initialize()
+  }
+
   // Empleado: solo TPV y control horario (resto de rutas protegidas → TPV)
   const employeeAllowedRoutes = new Set(['TPV', 'ControlHorario', 'ScanHub'])
   if (requiresAuth && authStore.isAuthenticated && authStore.isEmployee) {

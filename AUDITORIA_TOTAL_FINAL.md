@@ -203,3 +203,136 @@ separada (`feature/fix-onboarding-wizard-real`, ver Sección 5) que nunca se
 fusionó aquí. Severidad: medio/alto (afecta a la fiabilidad del estado de
 onboarding mostrado al usuario y a cualquier lógica que dependa de
 `setup_completed`), pero es un hallazgo ya conocido y esperado, no nuevo.
+
+---
+
+## 5. Comparación de ramas — fixes de seguridad ausentes en esta rama
+
+`git merge-base --is-ancestor <rama> HEAD` ejecutado contra todas las ramas
+`feature/*` de seguridad/tenant existentes en el repo (no solo las dos
+sugeridas):
+
+| Rama | ¿Ancestro de esta rama? |
+|---|---|
+| `feature/fix-seguridad-critica` | ❌ NO incluida |
+| `feature/multi-tenant-bd` | ❌ NO incluida |
+| `feature/fix-jwt-audience-y-tenant-invoices` | ❌ NO incluida |
+| `feature/auth-missing-endpoints` | ❌ NO incluida |
+| `feature/fix-onboarding-wizard-real` | ❌ NO incluida (esperado, ver Sección 4) |
+| `feature/thalos-real-activation` | ❌ NO incluida |
+| `feature/stripe-payment-verification` | ❌ NO incluida |
+| `feature/google-ads-fail-honesto` | ❌ NO incluida |
+| `feature/limpieza-simulacion` | ❌ NO incluida |
+| `feature/agents-status-real` | ❌ NO incluida |
+| `feature/fix-enum-serialization-erp` | ❌ NO incluida |
+| `feature/checkout-publico-fix` | ❌ NO incluida |
+| `feature/envio-gestoria` | ❌ NO incluida |
+| `feature/iva-duplicado` | ❌ NO incluida |
+| `feature/hallazgos-visuales` | ❌ NO incluida |
+| `feature/vertical-seguros` | ✅ incluida |
+| `feature/facturacion-tpv-real` | ✅ incluida |
+| `feature/onboarding-facturacion` | ✅ incluida |
+| `feature/rediseno-completo` | ✅ incluida |
+| `feature/auditoria-real-nucleo` | ✅ incluida |
+
+### 5.1 `GET /invoices/` — verificado en vivo, y es PEOR de lo esperado
+
+El hallazgo señalado por el usuario ("falta el fix de audiencia JWT de
+`/invoices/`") se confirma, pero la causa raíz encontrada en vivo es más
+grave que "falta aislamiento por tenant": **el endpoint está completamente
+roto para CUALQUIER usuario, con CUALQUIER token válido.**
+
+```
+$ curl -H "Authorization: Bearer <token_superusuario_recien_emitido>" \
+    http://127.0.0.1:8020/api/v1/invoices/?limit=5
+{"detail":"No se pudieron validar las credenciales"}   HTTP 401
+```
+
+El mismo token, en el mismo minuto, funciona correctamente contra
+`/api/v1/thalos/status` y `/api/v1/auth/onboarding/status`. Aislado el
+problema a nivel de código: `backend/app/api/v1/endpoints/invoices.py:15`
+importa `get_current_active_user` de `app.core.security` (no de
+`app.core.auth`, que es lo que usan el resto de endpoints funcionales como
+`tpv.py`/`control_horario.py`). Ese módulo (`app/core/security.py:272-287`)
+llama:
+
+```python
+payload = jwt.decode(
+    token, secret_key_str, algorithms=[settings.ALGORITHM],
+    audience=settings.JWT_AUDIENCE,   # <- settings.JWT_AUDIENCE es una LISTA
+    issuer=settings.JWT_ISSUER, ...)
+```
+
+y `settings.JWT_AUDIENCE` (`app/core/config.py:329`) es
+`["zeus-ia:auth", "zeus-ia:access", "zeus-ia:websocket"]` — una lista. La
+librería `python-jose` usada aquí (a diferencia de PyJWT) **no acepta una
+lista como `audience`**. Reproducido de forma aislada, fuera del servidor:
+
+```python
+>>> jwt.decode(token, SECRET_KEY, algorithms=["HS256"],
+...             audience=["zeus-ia:auth","zeus-ia:access","zeus-ia:websocket"],
+...             issuer="zeus-ia-backend")
+jose.exceptions.JWTError: audience must be a string or None
+```
+
+Esto rompe **todos** los endpoints que importan `get_current_active_user`
+desde `app.core.security`: confirmado que son exactamente 3 —
+`invoices.py`, `products.py`, `customers_fixed.py`. Verificado en vivo que
+`GET /api/v1/products/` también devuelve 401 con el mismo token válido.
+Es decir: hoy, en esta rama, **nadie puede listar facturas, productos o
+clientes vía estos 3 routers**, sea cual sea su tenant o rol — no es un fallo
+de aislamiento explotable, es una regresión de disponibilidad total.
+
+Además, revisando el propio `list_invoices` (líneas 99-152) se confirma que,
+si algún día se arregla el bug de audiencia sin tocar nada más, la fuga de
+aislamiento por tenant seguiría ahí: `query = db.query(Invoice)` **sin ningún
+filtro por `company_id`** en ningún punto de la función. El fix real de esto
+existe en otra rama (`feature/fix-jwt-audience-y-tenant-invoices`, commits
+`f3196ef`/`88fe637`, y `feature/fix-seguridad-critica`, commit `36b38fd`) y
+**no está mergeado aquí**.
+
+**Nota positiva de aislamiento**: el flujo de facturación real usado por TPV
+(`POST /api/v1/tpv/invoice`, `app/api/v1/endpoints/tpv.py:1274`) usa
+`app.core.auth` (el módulo que sí funciona) y no pasa por el router roto de
+`invoices.py` — confirmado que el flujo de venta+factura de TPV (Sección 7)
+no depende de este código roto.
+
+### 5.2 Otros fixes ausentes verificados en vivo (no solo por `git log`)
+
+- **`GET/POST /api/v1/google/*` sin autenticación** (`feature/fix-seguridad-critica`,
+  commit `61b87c6`, ausente aquí). Confirmado que `backend/app/api/v1/endpoints/google.py`
+  no importa ningún `Depends(get_current_active_user)` en ninguna de sus 9 rutas
+  (`grep` sobre el fichero). Probado en vivo sin token:
+  `GET /api/v1/google/drive/files?folder_id=abc` → HTTP 500
+  `{"detail":"Google Drive not configured"}` — ejecuta lógica real (llega hasta
+  el punto de fallo de configuración) **sin pedir ningún token**. Severidad:
+  crítico si algún día se configuran credenciales de Google, porque cualquier
+  visitante no autenticado podría leer/escribir Calendar, Gmail, Drive y Sheets
+  de la cuenta configurada.
+- **`POST /activities/log` SÍ exige auth en esta rama** (contraejemplo, por
+  transparencia): aunque el commit `b2f5423` que lo arregla en
+  `feature/multi-tenant-bd` no está mergeado, la prueba en vivo sin token
+  devolvió `401 {"detail":"No se pudieron validar las credenciales"}` —
+  no reproduce el problema aquí (puede estar cubierto por otro mecanismo). No
+  se marca como hallazgo.
+- **`GET /api/v1/agents/status` hardcodeado**: ya documentado en
+  `references/agentes.md` de la skill como hallazgo transversal preexistente
+  (no específico de esta rama); el fix (`feature/agents-status-real`, commit
+  `0cd7668`) tampoco está mergeado aquí. No se ha vuelto a verificar en vivo
+  en esta vuelta por no ser hallazgo nuevo, pero se deja constancia de que
+  sigue sin resolver en esta rama.
+- **Verificación de pago Stripe antes de activar cuenta** (`feature/fix-seguridad-critica`,
+  commit `207afba`) — commit ausente aquí. No verificado en vivo en esta
+  vuelta (requiere credenciales Stripe de test que no están confirmadas en
+  este entorno); se deja como pendiente de verificación explícito, no como
+  "aprobado".
+- **Botón Admin sin proteger en `OlymposDashboard.vue`** (`feature/multi-tenant-bd`,
+  commit `3430ec9`) — ausente aquí. Ver verificación de frontend en Sección 6.
+
+**Conclusión Sección 5**: la rama `feature/fix-thalos-shield-real` resuelve a
+fondo un problema estructural concreto (THALOS) pero deja fuera un número
+significativo de fixes de seguridad ya existentes en otras ramas del mismo
+repo — no solo el ya conocido de `/invoices/`. Antes de cualquier fusión a
+`main` hace falta una decisión explícita sobre cómo incorporar (rebase/cherry-pick/
+remerge) al menos: `feature/fix-seguridad-critica`, `feature/multi-tenant-bd`,
+`feature/fix-jwt-audience-y-tenant-invoices` y `feature/auth-missing-endpoints`.

@@ -628,3 +628,263 @@ PostgreSQL real sigue sin poder probarse en este entorno, limitacion ya
 conocida y ahora acotada con evidencia adicional (docstring oficial +
 compilacion de columna por dialecto) de que el fix no deberia alterar el
 comportamiento alli.
+
+---
+
+## 7. Verificacion independiente del fix de la seccion 6 y veredicto final de toda la consolidacion
+
+**Rol**: revisor-independiente (mismo rol que escribio las secciones 1-5 y el
+veredicto DEVUELTO original). **Metodologia**: cero confianza en lo escrito en
+la seccion 6 por ejecutor-produccion - cada afirmacion se repitio con
+herramientas propias, una base SQLite desechable nueva (nunca usada antes,
+creada y borrada en esta sesion, fuera del repositorio), un pytest propio y
+lectura directa del diff del commit 9fb22c2.
+
+### 7.1 Diff de las 8 migraciones - lectura completa, linea por linea
+
+Lei el diff completo de "git show 9fb22c2" para los 8 archivos
+(0012, 0016, 0018, 0021, 0023, 0043, 0048, 0050). Confirmado:
+
+- El patron es identico y consistente en los 8 archivos: toda llamada a
+  create_foreign_key / create_unique_constraint / drop_constraint /
+  drop_column que participa en una FK se movio dentro de
+  "with op.batch_alter_table(tabla) as batch_op:", sin cambiar tabla
+  origen, columnas, ondelete, ni nombres de constraint.
+- 0018 y 0050: el add_column con ForeignKey inline se separo en
+  batch_op.add_column(sa.Column(...)) (sin FK) + batch_op.create_foreign_key(...)
+  explicito - confirmado que el resultado final (columna + FK con el mismo
+  ondelete) es equivalente, solo cambia la sintaxis de creacion.
+- 0023: unico cambio es sa.text("now()") a sa.func.now() en la columna
+  created_at de chat_messages, ninguna otra linea tocada.
+- 0043 downgrade: se envolvio el drop_column/drop_constraint existente en
+  batch; la logica condicional "if bind.dialect.name != sqlite" para la FK ya
+  existia antes del fix (no se toco), confirmado leyendo el archivo completo
+  (no solo el diff).
+- 0050 downgrade: el try/except: pass que silenciaba errores de
+  constraints inexistentes se sustituyo por comprobacion real via
+  inspector.get_indexes()/get_unique_constraints()/get_foreign_keys() -
+  confirmado que el flujo de datos (que columnas/constraints se borran) es el
+  mismo, solo se elimino el manejo de errores por silenciamiento.
+- En ningun archivo se toco: nombre de tabla destino, tipo de columna,
+  ondelete, orden de operaciones de negocio (backfills, condicionales de
+  entorno sin create_all previo en 0043/0048/0050), ni ninguna otra
+  migracion fuera de estas 8. Veredicto: cambio puramente de sintaxis DDL,
+  sin alteracion de logica de negocio, confirmado.
+
+### 7.2 alembic upgrade head desde una base SQLite vacia - reproducido por mi
+
+Cree mi propia base desechable, con nombre distinto a cualquier archivo usado
+en rondas anteriores (reviewer2_migtest_1787856334.db, fuera del
+repositorio, en el directorio temporal de esta sesion), confirmando primero
+que el archivo NO existia:
+
+```
+DATABASE_URL=sqlite:///.../reviewer2_migtest_1787856334.db
+alembic upgrade head
+INFO  Running upgrade  -> 0001, Initial migration
+...
+INFO  Running upgrade 0011 -> 0012, ZEUS_MULTITENANT_MIGRATION_SAFE_001...
+...
+INFO  Running upgrade 0022 -> 0023, Persistencia de mensajes de chat.
+...
+INFO  Running upgrade 0052 -> 0053, Row Level Security (PostgreSQL) para las 4 tablas de logs de THALOS
+
+alembic current -> 0053 (head)
+alembic heads   -> 0053 (head)
+```
+
+Las 53 revisiones aplicaron sin ningun error, incluidas las dos que fallaban
+en la seccion 3 original (0012, 0023) y las 6 adicionales de la seccion 6
+(0016, 0018, 0021, 0043, 0048, 0050). Confirmado con mi propio entorno, no
+reutilizando ningun archivo de sesiones anteriores.
+
+### 7.3 Ciclo downgrade/upgrade - reproducido por mi (mismo punto de corte que el ejecutor, 0011)
+
+Sobre la misma base recien creada:
+
+```
+alembic downgrade 0011
+INFO  Running downgrade 0053 -> 0052, ...
+...
+INFO  Running downgrade 0012 -> 0011, ZEUS_MULTITENANT_MIGRATION_SAFE_001...
+alembic current -> 0011   (confirmado)
+
+alembic upgrade head
+INFO  Running upgrade 0011 -> 0012, ...
+...
+INFO  Running upgrade 0052 -> 0053, ...
+alembic current -> 0053 (head)   (confirmado)
+```
+
+Sin ningun error en ninguna direccion. Reversibilidad real confirmada de
+forma independiente.
+
+### 7.4 sa.func.now() dialecto-agnostico - verificado y ademas comparado directamente contra el sa.text("now()") original
+
+Compile la misma columna con SQLAlchemy contra ambos dialectos:
+
+```
+SQLite:     created_at DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL
+PostgreSQL: created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL
+```
+
+Fui un paso mas alla que el ejecutor: compile tambien una columna con el
+sa.text("now()") ORIGINAL (el que tenia 0023 antes del fix) contra
+PostgreSQL para comparar directamente:
+
+```
+PG con sa.func.now():      created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL
+PG con sa.text("now()"):   created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL
+```
+
+Salida SQL identica caracter por caracter en PostgreSQL entre la version
+anterior y la nueva. Esto es una confirmacion mas concluyente que la
+compilacion aislada: no solo "es dialecto-agnostico" en abstracto, sino que
+para este caso concreto el SQL emitido en produccion (Postgres) no cambia en
+absoluto. Cero riesgo de regresion silenciosa en Postgres por este cambio.
+
+Adicionalmente verifique el docstring oficial de
+alembic.operations.base.Operations.batch_alter_table (alembic 1.13.1,
+mismo venv) y confirme la cita textual: "The batch operation on other
+backends will proceed using standard ALTER TABLE operations." - coincide
+exactamente con lo afirmado en la seccion 6.2.
+
+### 7.5 Suite completa de tests - reproducida por mi, venv compartido, BD de desarrollo del worktree
+
+```
+cd backend && python -m pytest tests -q
+...
+FAILED tests/test_basic.py::test_config_loading
+FAILED tests/test_justicia_control_layer_v1.py::test_default_flags_simulated
+FAILED tests/test_perseo_autofix_v2.py::test_audit_includes_ai_modules
+FAILED tests/test_thalos_control_layer_v1.py::test_default_mode_is_simulation_for_heuristic_modules
+FAILED tests/test_thalos_control_layer_v1.py::test_backup_requires_execution_and_backup_flags
+FAILED tests/test_thalos_control_layer_v1.py::test_build_metadata_origin_mock
+FAILED tests/test_thalos_safe_v1.py::test_monitoring_cycle_respects_flags
+ERROR tests/test_app.py::test_health_check - NameError: name 'TestClient' is not defined
+ERROR tests/test_app.py::test_root_endpoint - NameError: name 'TestClient' is not defined
+ERROR tests/test_app.py::test_favicon - NameError: name 'TestClient' is not defined
+7 failed, 300 passed, 34 warnings, 3 errors in 154.98s (0:02:34)
+```
+
+Identico en numero y en cada nombre de fallo/error al baseline documentado en
+la seccion 4 y reconfirmado en la seccion 6.3.6. Sin regresion.
+
+### 7.6 Limpieza del worktree y estado de main/remoto
+
+- Borre mi propia base desechable (reviewer2_migtest_1787856334.db) al
+  terminar; confirmado que ya no existe.
+- git status --porcelain sobre el worktree: limpio (sin cambios sin
+  commitear).
+- Busque *.db en todo el worktree (excluyendo node_modules/venv): solo
+  aparecen backend/zeus.db (BD real de desarrollo, usada para el pytest de
+  7.5, intencionalmente conservada, ignorada por git) y los backups
+  automaticos de THALOS en backend/storage/backups/*.db (feature existente,
+  no relacionada con esta tarea, tambien ignorados por git). Ningun artefacto
+  .db huerfano de las rondas de revision/ejecucion anteriores
+  (zeus_reviewer_test.db, zeus_reviewer_frontend.db,
+  ejecutor_migtest_*.db, etc.) permanece en el worktree - confirmado que la
+  limpieza declarada en 6.3.7 es real.
+- main sigue en 97b949a (no se movio); feature/consolidacion-final sigue
+  178 commits por delante de main, sin upstream configurado (no se ha hecho
+  push); no se creo ninguna rama nueva.
+
+### 7.7 Veredicto de la seccion 6 (el fix de migraciones)
+
+CONFIRMADO. Las 8 migraciones ahora usan batch_alter_table de forma
+consistente y correcta, sin alterar ninguna logica de negocio; alembic
+upgrade head desde una base SQLite vacia aplica las 53 revisiones sin error
+(reproducido por mi con una base propia, nunca usada antes); el ciclo
+downgrade/upgrade completo funciona en ambas direcciones (reproducido por
+mi); sa.func.now() no cambia el SQL emitido en PostgreSQL respecto al
+sa.text("now()") anterior (confirmado por comparacion directa, no solo por
+compilacion aislada); la suite de tests no tiene regresion (7 failed, 300
+passed, 3 errors, identico al baseline). El motivo exacto de la devolucion en
+la seccion 3 (el alembic upgrade head real desde SQLite vacio fallaba en
+0012) queda resuelto de verdad, no solo aparentemente.
+
+### 7.8 Veredicto final de TODA la rama feature/consolidacion-final
+
+Con este cierre, los cinco puntos que exigia la revision independiente quedan
+todos CONFIRMADOS con pruebas propias, repetidas de cero en esta sesion y en
+la sesion anterior:
+
+1. Los 4 hallazgos criticos historicos (dashboard multi-tenant, invoices/
+   products/customers, endpoints Google, onboarding sin 500 de doble sesion):
+   confirmados con pruebas propias en la ronda anterior.
+2. Los 6 agentes (ZEUS, THALOS, RAFAEL, AFRODITA, PERSEO, JUSTICIA),
+   incluidas las correcciones nuevas de JUSTICIA (handler real + fuga
+   multi-tenant en compliance_events) y el fallo honesto de PERSEO Google
+   Ads: confirmados con pruebas propias en la ronda anterior.
+3. Migraciones Alembic: estructura correcta y, tras el fix de esta ronda,
+   ejecucion real alembic upgrade head desde cero TAMBIEN confirmada
+   (53/53 revisiones, sin error, reversibilidad completa) - punto que motivo
+   la devolucion, ahora cerrado con pruebas propias.
+4. Suite de tests: 7 failed, 300 passed, 34 warnings, 3 errors, reproducido
+   de forma identica en ambas rondas, sin regresion en ningun momento.
+5. Frontend: 4 pantallas verificadas con Playwright real en la ronda
+   anterior, sin errores de aplicacion en consola, con acciones reales contra
+   el backend.
+
+### VEREDICTO: APROBACION DEFINITIVA de feature/consolidacion-final
+
+No quedan puntos abiertos que bloqueen produccion. Se aprueba la rama
+completa (176+ commits originales, 9 ramas fusionadas, mas 3 commits de
+cierre puntuales de seguridad/migraciones posteriores, mas este commit de
+verificacion) para su fusion a main y despliegue.
+
+Resumen ejecutivo de que contiene esta rama:
+
+- Nucleo multi-tenant real: aislamiento por company_id verificado en
+  metrics/dashboard, invoices, products, customers, agent_activities,
+  compliance_events, con pruebas de fuga cruzada negativas en todos los
+  casos probados.
+- THALOS como middleware obligatorio: 401 real sin token en todos los
+  endpoints probados (metrics, invoices, products, customers, google/*,
+  justice/*), registro real de intentos de login (exito y fallo) en
+  thalos_login_attempts.
+- Los 6 agentes con logica real y logging verificable: ZEUS (orquestador),
+  THALOS (seguridad), RAFAEL (gastos/fiscal), AFRODITA (inventario/RRHH,
+  con su propio modo SIMULATED declarado honestamente donde el flag de
+  escritura real aun no esta activado), PERSEO (Google Ads con fallo
+  honesto 501/503, sin exito falso), JUSTICIA (automatizacion real +
+  aislamiento multi-tenant en compliance).
+- Onboarding sin el 500 de doble sesion historico, con ciclo completo
+  cuestionario -> setup_completed verificado.
+- 53 migraciones Alembic, una sola cabeza, sin duplicados, y ahora tambien
+  ejecutables de verdad desde cero en SQLite (antes solo se habia verificado
+  por analisis estatico) y reversibles.
+- Suite de tests estable: 300 passed, 7 failed y 3 errors preexistentes y
+  documentados (no relacionados con ningun cambio de esta consolidacion).
+- Frontend funcional en las 4 pantallas muestreadas (onboarding, dashboard,
+  TPV, seguros), con llamadas reales al backend, sin regresiones visuales
+  del bug historico shouldShowTPV.
+
+Pendiente como tareas separadas para el futuro (no bloqueante para este
+cierre, documentado explicitamente para que no se pierda):
+
+1. Ejecutar alembic upgrade head desde una base vacia contra una instancia
+   de PostgreSQL real (Railway staging descartable o Docker local) en cuanto
+   haya un entorno disponible, como confirmacion final independiente de que
+   el fix de la seccion 6 (y el resto de las 53 migraciones) aplica tambien
+   alli sin error - la evidencia actual (docstring oficial de alembic +
+   compilacion de columna identica en Postgres antes/despues del cambio) es
+   solida pero sigue siendo analisis, no ejecucion real contra Postgres.
+2. Verificar Row Level Security (migraciones 0047 y 0053, especificas de
+   PostgreSQL) contra una instancia Postgres real - en SQLite estas
+   migraciones son no-op por diseno (RLS no existe en SQLite), por lo que el
+   ciclo SQLite verificado en esta sesion no prueba nada sobre el
+   comportamiento real de RLS.
+3. Los 7 tests fallidos y 3 errores preexistentes (nombrados en la seccion
+   4/6.3.6/7.5 de este documento) siguen sin corregirse - documentados como
+   no relacionados con esta consolidacion, pero deberian resolverse en un
+   step propio en vez de arrastrarse indefinidamente.
+4. Credenciales AEAT y Google siguen pendientes de configurar en produccion
+   (ya documentado como conocido en la skill zeus-produccion, no es un
+   hallazgo nuevo).
+5. El 404 cosmetico del avatar de PERSEO observado durante el muestreo de
+   frontend (seccion 5) - no funcional, pero pendiente de arreglo visual.
+
+No se ha tocado main, no se ha hecho push, no se ha creado ninguna rama
+nueva. Este documento y el commit correspondiente se realizan en
+feature/consolidacion-final.

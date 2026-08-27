@@ -870,3 +870,224 @@ git merge feature/rediseno-completo       → "Already up to date."
 Ningún commit nuevo, ningún conflicto, ninguna verificación adicional
 necesaria — su contenido ya quedó incorporado (y ya verificado donde
 aplicaba) al fusionar `feature/fix-onboarding-wizard-real` en el paso 7.
+
+(`feature/iva-duplicado` es solo documentación, sin código — no se
+fusiona, según indicaba el propio encargo.)
+
+---
+
+# Cierre — verificación de los 4 hallazgos críticos
+
+Verificación final, en la rama consolidada completa (`feature/consolidacion-final`,
+tras las 12 fusiones), con servidor reiniciado desde cero, BD SQLite fresca
+y tenants nuevos creados en esta misma sesión de cierre. Cotejado contra la
+evidencia "antes" documentada en `AUDITORIA_TOTAL_FINAL.md` (auditoría
+independiente sobre `feature/fix-thalos-shield-real` en solitario, antes de
+esta consolidación) donde el código no ha cambiado desde entonces.
+
+## 1. `GET /api/v1/metrics/dashboard` — auth + aislamiento por tenant
+
+**Antes** (`AUDITORIA_TOTAL_FINAL.md`, sección 3, en `fix-thalos-shield-real`
+sin fusionar con `fix-seguridad-critica`/`multi-tenant-bd`): sin token → 200,
+`total_interactions:1995` (agregado global); con token de un tenant
+cualquiera → **la misma respuesta byte a byte**. Sin auth, sin aislamiento.
+
+**Después** (esta rama consolidada, verificado ahora):
+```
+GET /api/v1/metrics/dashboard  (sin token)
+→ 401 {"detail":"No se pudieron validar las credenciales"}
+
+GET /api/v1/metrics/dashboard  (token tenant1, company_id=1)
+→ 200 {"total_interactions":4, ...}
+
+GET /api/v1/metrics/dashboard  (token tenant2, company_id=2)
+→ 200 {"total_interactions":4, ...}
+```
+Verificado por SQL directo sobre `agent_activities` que NO es coincidencia
+de agregado global: la tabla tiene **13 filas totales**
+(`company_id=1` → 4 filas de tenant1; `company_id=2` → 4 filas de tenant2;
+5 filas de sistema/`admin@zeus-ia.com` sin company_id), y cada tenant ve
+únicamente sus propias 4, no las 13.
+
+**Veredicto: CERRADO.**
+
+## 2. `GET /api/v1/invoices/`, `/products/`, `/customers` — funcionan con token válido y filtran por tenant
+
+**Antes** (bug de audiencia JWT en `python-jose`, documentado en al menos 3
+ramas distintas — `multi-tenant-bd`, `envio-gestoria`,
+`checkout-publico-fix`/`fix-jwt-audience-y-tenant-invoices` — y confirmado
+en vivo por esta sesión en el paso 1 de esta consolidación, antes de que se
+fusionara el fix): `401 audience must be a string or None` con CUALQUIER
+token válido. `list_invoices` tampoco filtraba por `company_id` en absoluto
+(IDOR total).
+
+**Después** (esta rama consolidada, verificado ahora con dos tenants
+reales, `final.tenant1@gmail.com`→company_id 1,
+`final.tenant2@gmail.com`→company_id 2):
+```
+GET /api/v1/invoices/   (sin token) → 401
+GET /api/v1/invoices/   (token tenant1) → 200 {"data":[], "total":0}
+GET /api/v1/products/   (token tenant1) → 200 {"data":[], "total":0}
+GET /api/v1/customers   (token tenant1) → 200 {"data":[], "total":0}
+
+# Se crean producto+cliente+factura reales para tenant1 (POST reales, 201 cada uno)
+
+GET /api/v1/invoices/   (token tenant2) → 200 {"data":[], "total":0}   ← NO ve la factura de tenant1
+GET /api/v1/products/   (token tenant2) → 200 {"data":[], "total":0}   ← NO ve el producto de tenant1
+GET /api/v1/customers   (token tenant2) → 200 {"data":[], "total":0}   ← NO ve el cliente de tenant1
+GET /api/v1/invoices/   (token tenant1) → 200 {"data":[{...factura real, total:60.5...}], "total":1}
+```
+
+**Veredicto: CERRADO** (bug de audiencia JWT resuelto; aislamiento por
+`company_id` real y verificado en las 3 rutas).
+
+## 3. `GET/POST /api/v1/google/*` — autenticación real en los 9+1 endpoints
+
+**Antes**: ningún endpoint de `google.py` tenía `Depends` de autenticación
+— accesibles sin token por cualquiera.
+
+**Después** (los 9 endpoints del hallazgo original + `/status`, probados
+sin token):
+```
+GET  /api/v1/google/calendar/events  → 401
+POST /api/v1/google/calendar/event   → 401
+POST /api/v1/google/gmail/send       → 401
+GET  /api/v1/google/gmail/inbox      → 401
+POST /api/v1/google/drive/upload     → 401
+GET  /api/v1/google/drive/files      → 401
+POST /api/v1/google/sheets/create    → 401
+POST /api/v1/google/sheets/write     → 401
+POST /api/v1/google/sheets/read      → 401
+GET  /api/v1/google/status           → 401
+```
+Los 10 endpoints exigen autenticación real.
+
+**Veredicto: CERRADO.**
+
+## 4. Heurística de onboarding — falso positivo de `setup_completed`
+
+**Antes** (`AUDITORIA_TOTAL_FINAL.md`, sección 4, reproducido en vivo por
+el revisor independiente): registro nuevo (`business_type=restaurant`) →
+`GET /onboarding/status` inmediato da `setup_completed:true`,
+`setup_inferred:true`, pese a `questionnaire_completed:false` y
+`operational_profile_completed:false` — el usuario nunca respondió nada,
+pero el sistema ya lo consideraba "configurado" porque el propio registro
+auto-siembra productos TPV y un empleado placeholder.
+
+**Después** (esta rama consolidada, registro 100% nuevo en esta sesión de
+cierre, `final.onboard@gmail.com`, `business_type=restaurant`):
+```
+GET /api/v1/auth/onboarding/status  (inmediatamente tras registro)
+→ {"checks": {"tpv_products": 4, "has_tpv_profile": true,
+              "company_employees_count": 1, ...},
+   "questionnaire_completed": false,
+   "operational_profile_completed": false,
+   "setup_completed": false,
+   "setup_inferred": false}
+```
+Mismas señales que antes disparaban el falso positivo (4 productos TPV,
+perfil TPV activo, 1 empleado) — ahora correctamente excluidas del cálculo
+porque son auto-generadas por el registro, no evidencia real de onboarding
+completado. El falso positivo inmediato **ya no ocurre**.
+
+**Matiz que impide cerrar el hallazgo al 100%** (documentado también en el
+paso 7 de este informe, con su propia auditoría independiente en
+`AUDIT_FIX_ONBOARDING_WIZARD.md`): completar el cuestionario DE VERDAD vía
+`POST /api/v1/auth/onboarding/questionnaire` sigue dando **500** por un bug
+de doble sesión SQLAlchemy preexistente y ya documentado (`db.add(user)`
+sobre un `User` adjunto a otra sesión — mismo patrón que el ya corregido en
+`update-advisor-emails`/`toggle-authorization`, pero no aplicado aquí),
+confirmado de nuevo ahora mismo en esta rama consolidada:
+```
+POST /api/v1/auth/onboarding/questionnaire  (employees_count/uses_tpv/business_hours completos)
+→ 500 {"detail":"Error interno del servidor. El servicio sigue activo; reintenta."}
+```
+Es decir: el bloqueo original (falso positivo inmediato que impedía siquiera
+plantearse completar el cuestionario) está resuelto, pero el camino "feliz"
+de completarlo de verdad todavía no funciona por un bug distinto,
+preexistente y fuera del alcance de la tarea que se pidió corregir en
+`feature/fix-onboarding-wizard-real` (su propia auditoría lo señala
+explícitamente como pendiente para una tarea nueva, no como motivo de
+devolución de esa tarea).
+
+**Veredicto: PARCIALMENTE CERRADO.** El hallazgo original exacto (falso
+positivo inmediato, bloqueaba el acceso al cuestionario manual mostrando la
+cuenta como "ya configurada") está cerrado. Queda abierto un hallazgo
+distinto y ya documentado (bug de doble sesión en el endpoint del
+cuestionario) que impide validar end-to-end el camino de completar el
+onboarding manualmente vía API. Recomendación: nueva tarea dedicada a
+unificar el proveedor de `get_db` en `onboarding_engine.py`/`auth.py`
+(mismo patrón que ya se corrigió para `document_approval.py` en
+`ca2e7fe`), antes de dar este hallazgo por cerrado al 100%.
+
+---
+
+# Resumen ejecutivo de la consolidación
+
+**12 ramas fusionadas** en `feature/consolidacion-final` (partiendo de
+`main`@`97b949a`), en el orden especificado, con verificación real
+(curl/SQL, no solo lectura de código) después de cada una:
+
+1. `fix-seguridad-critica` — fast-forward, sin conflictos.
+2. `multi-tenant-bd` — 1 conflicto (metrics.py, se quedó la versión RLS).
+3. `limpieza-simulacion` — sin conflictos.
+4. `envio-gestoria` — 3 conflictos (bug JWT/enum ya resuelto por el paso 2,
+   consolidado en una sola versión).
+5. `hallazgos-visuales` — sin conflictos en backend; 1 conflicto de estilos
+   en frontend (paso 7).
+6. `checkout-publico-fix` — 6 conflictos + 1 colisión de migración Alembic
+   corregida (0043→0048).
+7. `fix-onboarding-wizard-real` (841 commits, trae como ancestros
+   `facturacion-tpv-real`/`onboarding-facturacion`/`rediseno-completo`) — 3
+   conflictos + 3 colisiones de migración corregidas (→0049-0051).
+8. `fix-thalos-shield-real` (7 vueltas de auditoría) — 4 conflictos + 2
+   colisiones de migración corregidas (→0052-0053) + 2 ficheros de test
+   rotos por depender de código muerto (uno eliminado, otro editado).
+9-12. `vertical-seguros`, `facturacion-tpv-real`, `onboarding-facturacion`,
+   `rediseno-completo` — confirmados como no-ops (ya ancestros vía el
+   paso 7), sin cambios.
+
+**Migraciones Alembic**: la cadena final tiene **53 revisiones, una sola
+cabeza (`0053`), cero IDs duplicados** — se encontraron y corrigieron
+**3 colisiones distintas de numeración** (6 pares de ficheros con el mismo
+`revision` generados por ramas paralelas que nunca se vieron entre sí),
+todas renumeradas preservando la lógica original y documentando el motivo
+del cambio en cada docstring.
+
+**Estado final de la suite de tests** (backend, SQLite local):
+```
+7 failed, 288 passed, 1 xfailed, 3 errors
+```
+Frente al baseline inicial (`7 failed, 214 passed, 2 skipped, 3 errors`):
++74 tests pasando netos, mismos 7 fallos preexistentes (mismos nombres en
+todo momento), mismos 3 errores preexistentes (`TestClient` no importado en
+`test_app.py`), 1 nuevo `xfail` explícito y documentado (bug de doble
+sesión del onboarding, hallazgo 4 de arriba). **Ninguna regresión real en
+ningún punto de la consolidación** — cada vez que apareció un fallo nuevo
+se investigó su causa (dos veces fue higiene del entorno de pruebas: datos
+de un esquema de enum anterior en el `zeus.db` compartido, y en otra un
+proceso de otro agente ocupando el mismo puerto — ninguna de las dos era
+una regresión real de código).
+
+**Multi-tenant**: verificado explícitamente con dos tenants reales en cada
+paso relevante (dashboard, invoices, products, customers, agents/status) —
+en todos los casos un tenant no ve datos del otro, confirmado con curl real
+y, donde hizo falta, con SQL directo sobre la base de datos.
+
+**RLS de Postgres**: implementado (multi-tenant-bd + fix-thalos-shield-real,
+diseño fail-open coherente en ambos) pero **no verificable en este
+entorno** — solo hay SQLite disponible aquí, ambas ramas lo documentan
+honestamente como pendiente de verificación contra un Postgres real antes
+de confiar en ello en producción.
+
+**Veredicto sobre los 4 hallazgos críticos**: 3 de 4 cerrados por completo
+(`metrics/dashboard`, `invoices/products/customers`, `google.py`). El
+cuarto (heurística de onboarding) está cerrado para el hallazgo exacto que
+se pidió corregir, pero descubre y documenta un hallazgo nuevo y distinto
+(bug de doble sesión SQLAlchemy en `POST /onboarding/questionnaire`) que
+impide considerar el flujo de onboarding manual 100% funcional end-to-end.
+
+**No me declaro "listo para producción"** — esto lo decide el usuario, y
+corresponde a una revisión independiente antes de tocar `main`. No se ha
+hecho ningún merge a `main` ni ningún push en ningún momento de esta
+consolidación.

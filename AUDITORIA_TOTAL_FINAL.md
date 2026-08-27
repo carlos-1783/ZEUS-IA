@@ -367,3 +367,96 @@ sesión (ver marcadores cruzados en cada punto).
 | ⚠️ Admin Panel — botón sin proteger, pero código muerto hoy | `frontend/src/views/OlymposDashboard.vue:208-211` | El botón `⚙️ ADMIN` (`<button @click="goToAdmin" class="admin-toggle">`) **no tiene ningún `v-if`** — a diferencia del botón TPV de la misma plantilla (línea 214-222, `v-if="authStore.isAuthenticated"`) y a diferencia de `DashboardProfesional.vue:27-34`, que sí protege su propio botón Admin con `v-if="!isEmployee && (authStore.isAdmin || authStore.user?.is_superuser)"`. Confirma que el fix de `feature/multi-tenant-bd` (commit `3430ec9`) sigue sin estar aplicado aquí. **Matiz importante verificado en el propio código**: este botón vive en la rama `v-else` de `firstPersonMode` (línea 10), y `firstPersonMode` está declarado como `const firstPersonMode = ref(true) // MODO 3D POR DEFECTO` (línea 299) **sin ningún punto del código que lo ponga nunca a `false`** (grep del proyecto completo). Es decir, hoy es código muerto inalcanzable por navegación normal — no se pudo, ni se debía, verificar como explotable en vivo. Si en el futuro se reintroduce un toggle a ese modo (p. ej. un ajuste de "vista clásica"), el botón sin proteger quedaría expuesto de inmediato. Se reporta como hallazgo de higiene/riesgo latente, no como vulnerabilidad activa hoy. |
 | ✅ Admin Panel — backend | `GET /api/v1/admin/stats` | Confirmado por API (ver Sección 7): 403 para Tenant A, 200 con datos reales para superusuario. |
 
+
+---
+
+## 7. Flujos funcionales clave — end to end, con evidencia real
+
+### 7.1 Seguros — crear póliza
+- Cliente propio creado (`POST /api/v1/crm/customers`, id 123, Tenant A).
+- Intento de spoof: crear póliza con `customer_id` de OTRO tenant (122, de
+  Tenant D) → `404 Customer with ID 122 not found` (aislamiento correcto).
+- Póliza real creada con el propio cliente → `201`, `policy_number`
+  autogenerado `POL-20260827-91BD94`, `company_id:1952` correcto.
+- Tenant D (`GET /insurance/policies`) → `total:0`, no ve la póliza de A.
+  Acceso directo `GET /insurance/policies/2` desde Tenant D → `404`.
+- Confirmado visualmente en `/insurance` (Sección 6) con los mismos datos.
+- **Veredicto: real, persistente, aislado por tenant.**
+
+### 7.2 TPV — venta + factura
+- Flujo completo por UI real (Playwright): añadir "Café" (1,65€, IVA 0,15€
+  calculado correctamente) → cobrar → `POST /api/v1/tpv/sale` (200) → botón
+  "Generar Factura" → `POST /api/v1/tpv/invoice` (200).
+- Verificado en `backend/zeus.db`: `tpv_sales` id=2, `company_id=1952`,
+  `total=1.65`; `invoices` id=25, `company_id=1952`, vinculada a la venta.
+- Este flujo usa `app.core.auth` (módulo de auth que SÍ funciona), no pasa
+  por el router roto `invoices.py` (Sección 5.1) — el bug de audiencia JWT
+  no afecta a la venta+factura real de TPV.
+- **Veredicto: real, persistente, aislado por tenant, no afectado por la
+  regresión de `GET /invoices/`.**
+
+### 7.3 Control Horario — fichaje
+- `POST /api/v1/control-horario/check-in` con `employee_id="U2449-OWNER"`
+  (código real del único empleado de Tenant A), `method="code"` → `200`,
+  `"message":"Entrada registrada correctamente"`.
+- Verificado en `time_tracking_records`: fila id=121,
+  `employee_id='U2449-OWNER'`, `user_id=2449` (Tenant A), `status='ACTIVE'`.
+- La propia pantalla de Control Horario mostró en tiempo real
+  `"Ventas ventana: 1.65 €"`, coincidiendo con la venta TPV recién hecha —
+  confirma integración cruzada real entre módulos del mismo tenant.
+- **Veredicto: real, persistente.**
+
+### 7.4 Nóminas
+- No existe endpoint POST directo desde el frontend para generar nómina; se
+  genera vía el handler de automatización `handle_payroll_draft_generate`
+  (`services/automation/handlers/zeus_payroll_draft.py`). Lo ejecuté
+  directamente contra la BD real (mismo patrón que el exploit de THALOS,
+  Sección 2.2) con datos de Tenant A: `gross_salary=1800`,
+  resultado `status:"executed_internal"`, `net_salary_estimated:1145.7`,
+  registro real en `payroll_drafts` (id=1).
+- `GET /api/v1/payroll/drafts` filtra por `PayrollDraft.company_id ==
+  current_user.id` (`app/api/v1/endpoints/payroll.py:39`) — el campo
+  `company_id` de esta tabla en realidad almacena el `user_id` del
+  propietario, no `companies.id`; es consistente en escritura y lectura
+  (mismo criterio en ambos lados) pero el nombre de columna es engañoso y
+  vale la pena renombrar en el futuro para evitar confusión con el resto del
+  esquema multi-tenant.
+- **Hallazgo de dependencia**: el log de generación mostró
+  `"reportlab no instalado. Generando archivo TXT en su lugar."` — en este
+  entorno el "borrador de nómina" NO es un PDF real sino un `.txt`, aunque la
+  UI dice literalmente *"Descarga el PDF para revisión"*. Puede ser solo un
+  problema del entorno de pruebas (dependencia no instalada en el venv
+  compartido) y no del código en sí, pero conviene confirmarlo en el entorno
+  de despliegue real antes de dar por bueno el formato de entrega.
+- Confirmado visualmente en `/payroll` (Sección 6) con los mismos importes.
+- **Veredicto: real y persistente, con una dependencia de PDF (`reportlab`)
+  no confirmada en este entorno.**
+
+### 7.5 CRM — cliente + aislamiento
+- Tenant D (`business_type=services`) crea cliente real (`POST
+  /api/v1/crm/customers`, id 122) → aparece en su propio listado.
+- Tenant A (`GET /api/v1/crm/customers`) → `data:[]`, no ve el cliente de D.
+- **Veredicto: real, aislado por tenant.**
+
+### 7.6 Admin Panel — con/sin empresa (superusuario vs tenant normal)
+- Tenant A (no superusuario) → `GET /api/v1/admin/stats` → `403 "El usuario
+  no tiene suficientes privilegios"`.
+- Superusuario → mismo endpoint → `200`, datos reales agregados
+  (`total_customers:2427`, coincide con el recuento real de usuarios en BD).
+- En frontend, Tenant A navegando a `/admin` es redirigido a `/dashboard`
+  automáticamente (gating de ruta correcto en este flujo concreto,
+  independientemente del botón sin proteger de la Sección 6).
+- **Veredicto: real, gateado correctamente por API; el hallazgo de UI de la
+  Sección 6 (botón sin `v-if`) es código muerto hoy, no explotable por este
+  camino.**
+
+### 7.7 Onboarding — cuestionario manual
+- **No se pudo completar el cuestionario manual porque la pantalla es
+  inalcanzable**: tanto Tenant A como un Tenant D nuevo (`services`) son
+  redirigidos automáticamente fuera de `/onboarding-setup` en cuanto se
+  autentican, porque `setup_completed` ya es `true` por el falso positivo de
+  la Sección 4 desde el mismo instante del registro. No es un fallo al
+  rellenar el formulario — es la imposibilidad de abrirlo.
+- **Veredicto: roto por la causa ya documentada en la Sección 4; ningún
+  tenant nuevo puede completar el cuestionario manualmente hoy en esta
+  rama.**

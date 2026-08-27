@@ -173,3 +173,68 @@ el botón Admin oculto para usuario no-admin (verificado solo por lectura de
 código: `v-if="authStore.isAdmin"`).
 
 **Commit de esta fusión**: `merge: feature/multi-tenant-bd + verificacion`
+
+---
+
+## 3. `feature/limpieza-simulacion`
+
+**Merge-base con HEAD antes del merge**: `97b949a` (parte de `main`,
+independiente de los bloques 1/2, tal como decía su propio doc) → **merge
+automático sin conflictos** (`git merge` usó estrategia `ort`, cero marcas de
+conflicto).
+
+**Qué trae** (`AUDIT_FIX_BLOQUE3.md`):
+- Eliminado el orquestador ZEUS legacy simulado y su UI muerta:
+  `backend/app/api/v1/endpoints/zeus_core.py` (-378 líneas),
+  `backend/app/core/zeus_agents.py` (-773 líneas),
+  `frontend/src/views/{Dashboard,DashboardHolographic,ZeusCore}.vue`,
+  `frontend/src/components/{DashboardMetric,SystemStatusBadge,Zeus3D,ZeusHologram3D}.vue`.
+- `GET /api/v1/agents/status` reescrito para devolver datos reales derivados
+  de `agent_activities` (uptime, `decisions_today`, `last_activity` por
+  agente) en vez de valores fijos.
+- `backend/app/middleware/thalos_login_audit_middleware.py`: el parseo del
+  body de login estaba roto — asumía JSON pero `/auth/login` usa
+  `application/x-www-form-urlencoded` (OAuth2PasswordRequestForm), así que
+  `json.loads()` fallaba silenciosamente y `email` quedaba siempre vacío;
+  ningún login real se auditaba nunca. Se añadió parseo con `parse_qs` para
+  form-urlencoded.
+- Ruta `/dashboard` duplicada eliminada de `frontend/src/router/index.js`
+  (había dos definiciones de rutas /dashboard y /zeus-core apuntando a
+  componentes legacy); `KpiAgentsView.vue` conectado a datos reales.
+
+**Suite de tests tras el merge (con `zeus.db` fresco)**:
+```
+7 failed, 214 passed, 2 skipped, 3 errors  (idéntico al baseline)
+```
+Mismos 7 nombres de fallo, mismos 3 errores. Sin regresión.
+
+**Prueba real (curl + SQL directo, servidor reiniciado con BD fresca,
+tenants recreados: `tenant1.consolidacion@gmail.com`→company_id 1,
+`tenant2.consolidacion@gmail.com`→company_id 2)**:
+
+```
+GET /api/v1/agents/status  (con token1)
+→ 200, payload real con 6 agentes, decisions_today/decisions_last_30d/
+  uptime/last_activity calculados de agent_activities (no valores fijos:
+  ZEUS CORE decisions_today=9, PERSEO=2, THALOS=2, RAFAEL/JUSTICIA/AFRODITA=0
+  porque no tuvieron actividad en esta sesión de pruebas)
+
+POST /api/v1/auth/login  con password incorrecta (tenant1)
+→ 401 {"detail":"Incorrect email or password"}
+
+SELECT * FROM thalos_login_attempts:
+(1, 'tenant1.consolidacion@gmail.com', '127.0.0.1', 1, '2026-08-27 05:20:09...')  [éxito]
+(2, 'tenant2.consolidacion@gmail.com', '127.0.0.1', 1, '2026-08-27 05:20:11...')  [éxito]
+(3, 'tenant1.consolidacion@gmail.com', '127.0.0.1', 0, '2026-08-27 05:20:20...')  [fallo]
+```
+Confirma que los 3 intentos de login reales (2 éxito + 1 fallo) quedaron
+auditados end-to-end por THALOS — antes de este fix quedaban en 0 filas
+porque el parseo del body fallaba siempre.
+
+**Router frontend**: confirmado por lectura de código que solo queda una
+definición de `/dashboard` en `frontend/src/router/index.js` (antes había
+dos, una a `Dashboard.vue` legacy y otra — vía `OlymposDashboard`). No se
+verificó con navegador/Playwright por límite de tiempo de esta sesión;
+verificación solo de código + grep.
+
+**Commit de esta fusión**: `merge: feature/limpieza-simulacion + verificacion`

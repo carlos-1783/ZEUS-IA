@@ -187,6 +187,26 @@ def primary_company_id_for_user(db: Session, user: User) -> Optional[int]:
     return int(row.company_id) if row else None
 
 
+def user_has_company_access(db: Session, user: User, company_id: int) -> bool:
+    """True si `user` puede operar de verdad sobre `company_id`.
+
+    Un superusuario (rol global, ver `UserCompany.__doc__`) puede operar sobre
+    cualquier empresa. Cualquier otro usuario solo puede operar sobre una
+    empresa de la que sea miembro real (`UserCompany.user_id == user.id`).
+    Esto existe para que ningún endpoint autorice acciones sensibles usando
+    un `company_id` que el propio cliente envía en el body sin verificar que
+    pertenezca de verdad al usuario autenticado.
+    """
+    if getattr(user, "is_superuser", False):
+        return True
+    return (
+        db.query(UserCompany)
+        .filter(UserCompany.user_id == user.id, UserCompany.company_id == int(company_id))
+        .first()
+        is not None
+    )
+
+
 def build_structured_payload(
     *,
     title: str,

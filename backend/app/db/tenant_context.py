@@ -21,7 +21,31 @@ se migraron en este bloque y cuáles quedan pendientes.
 
 No aplica nada en SQLite (RLS no existe ahí) — local/tests siguen exactamente
 igual que hoy, sin ningún cambio de comportamiento.
+
+Extensión (AUDIT_THALOS_ESTRUCTURAL.md, paso 2, consolidada aquí en el
+mismo módulo en vez de duplicarlo): las 4 tablas de logs de seguridad de
+THALOS (`thalos_events`, `thalos_alerts`, `thalos_security_events`,
+`thalos_login_attempts`) reutilizan exactamente este mismo mecanismo de
+`get_db_scoped`/`set_tenant_context` — ver
+`alembic/versions/0047_thalos_row_level_security.py` para sus policies
+específicas. Es responsabilidad de cada endpoint que lea esas 4 tablas usar
+`get_db_scoped`, ADEMÁS del gate de superusuario ya aplicado a nivel de
+aplicación en las 6 vueltas de `AUDIT_FIX_THALOS_SHIELD.md` (RLS es defensa
+en profundidad, no sustituye esos gates).
+
+IMPORTANTE (ver también el docstring de la migración 0047): este mecanismo
+NO se ha podido verificar contra un PostgreSQL real en esta sesión de
+consolidación (solo SQLite disponible aquí). El hallazgo crítico de
+`dec54c0` (rama `multi-tenant-bd`) fue que RLS queda completamente inerte
+si la conexión de la aplicación usa un rol superusuario de Postgres
+(Postgres exime siempre a los superusuarios de RLS, con independencia de
+`FORCE ROW LEVEL SECURITY`) -- antes de confiar en este mecanismo en
+producción, verificar explícitamente que la `DATABASE_URL` de runtime de
+la aplicación usa un rol sin `SUPERUSER` ni `BYPASSRLS` (ver recomendación
+de `zeus_app` en `dec54c0`).
 """
+from __future__ import annotations
+
 from typing import Optional
 
 from fastapi import Depends
@@ -64,9 +88,10 @@ def get_db_scoped(
     db: Session = Depends(get_db),
 ) -> Session:
     """Dependency drop-in para reemplazar `Depends(get_db)` en endpoints que
-    manejan datos por tenant. Además de dar la sesión, fija el contexto de
-    empresa/usuario para que las RLS policies (ver alembic/versions/
-    0047_row_level_security.py) filtren de verdad en Postgres."""
+    manejan datos por tenant, incluidas las 4 tablas de logs de seguridad de
+    THALOS. Además de dar la sesión, fija el contexto de empresa/usuario para
+    que las RLS policies (ver alembic/versions/0047_row_level_security.py y
+    0047_thalos_row_level_security.py) filtren de verdad en Postgres."""
     import services.crm_office_service as crm_svc
 
     if getattr(current_user, "is_superuser", False):
@@ -80,7 +105,10 @@ def get_db_scoped(
         # coincidencia (primary_company_id devolvía None); si en el futuro
         # se le asignara una empresa, habría quedado restringido a esa única
         # empresa como cualquier usuario normal. Con el check explícito, el
-        # acceso total del superusuario no depende de ese detalle.
+        # acceso total del superusuario no depende de ese detalle — y es
+        # coherente con que los 17+ gates de superusuario de
+        # AUDIT_FIX_THALOS_SHIELD.md ya asumen que un superusuario ve el
+        # subsistema de seguridad completo.
         set_tenant_context(db, None, user_id=current_user.id, user_email=current_user.email)
         return db
 

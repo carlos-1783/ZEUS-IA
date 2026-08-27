@@ -19,6 +19,27 @@ def _dump(obj: Any) -> str:
     return json.dumps(obj, ensure_ascii=False, default=str)
 
 
+def _resolve_company_id_for_email(db: Session, email: Optional[str]) -> Optional[int]:
+    """AUDIT_THALOS_ESTRUCTURAL.md, paso 1: best-effort, mismo criterio que
+    el backfill de 0046_thalos_tables_company_id.py -- solo resuelve si el
+    email corresponde a un usuario real registrado."""
+    if not email:
+        return None
+    from sqlalchemy import func
+
+    from app.models.company import UserCompany
+    from app.models.user import User as _User
+
+    row = (
+        db.query(UserCompany.company_id)
+        .join(_User, _User.id == UserCompany.user_id)
+        .filter(func.lower(_User.email) == str(email).strip().lower())
+        .order_by(UserCompany.id.asc())
+        .first()
+    )
+    return row[0] if row else None
+
+
 def create_alert(
     db: Session,
     *,
@@ -28,6 +49,7 @@ def create_alert(
     event_id: Optional[int] = None,
     rule_id: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
+    company_id: Optional[int] = None,
 ) -> ThalosAlert:
     row = ThalosAlert(
         event_id=event_id,
@@ -37,6 +59,7 @@ def create_alert(
         rule_id=rule_id,
         resolved=False,
         metadata_json=_dump(metadata or {}),
+        company_id=company_id,
     )
     db.add(row)
     db.flush()
@@ -82,6 +105,8 @@ def generate_alerts_from_engine(db: Session, *, window_minutes: int = 60) -> Lis
             )
             if existing:
                 continue
+        cand_meta = cand.get("metadata") or {}
+        company_id = _resolve_company_id_for_email(db, cand_meta.get("email"))
         row = create_alert(
             db,
             title=cand["title"],
@@ -89,7 +114,8 @@ def generate_alerts_from_engine(db: Session, *, window_minutes: int = 60) -> Lis
             message=cand.get("message"),
             event_id=cand.get("event_id"),
             rule_id=rule_id,
-            metadata=cand.get("metadata"),
+            metadata=cand_meta,
+            company_id=company_id,
         )
         created.append(
             {

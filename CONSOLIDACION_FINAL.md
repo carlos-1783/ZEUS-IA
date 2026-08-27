@@ -707,3 +707,132 @@ attached to session '31' (this is '30')`) — coincide exactamente con el
 diagnóstico de `AUDIT_FIX_ONBOARDING_WIZARD.md`.
 
 **Commit de esta fusión**: `merge: feature/fix-onboarding-wizard-real + verificacion`
+
+---
+
+## 8. `feature/fix-thalos-shield-real`
+
+**Merge-base con HEAD antes del merge**: `35b0d8e` (mismo punto de
+divergencia que `fix-onboarding-wizard-real`, confirmado que NO es
+ancestro ni descendiente de esa rama — son hermanas divergentes desde ese
+commit). 7 vueltas de fix documentadas en `AUDIT_FIX_THALOS_SHIELD.md`
+(2455 líneas) + `AUDIT_THALOS_ESTRUCTURAL.md` (fix de raíz, 1408 líneas) +
+`AUDITORIA_TOTAL_FINAL.md` (537 líneas, auditoría final independiente).
+
+**Merge real con 4 conflictos**:
+
+1. **`activities.py`** (mismo bloque que en el paso 6): ambas ramas
+   arreglaron independientemente el mismo endpoint `POST /activities/log`
+   sin auth. Se combinaron los dos docstrings de contexto de seguridad (el
+   de HEAD explica el gate de superusuario en el propio endpoint; el de
+   esta rama explica por qué el executor asíncrono de THALOS es la
+   superficie de ataque real) y se mantuvo la lógica de HEAD
+   (`effective_user_email` con excepción para superusuario), ya que la
+   defensa real contra el abuso vive en los handlers de THALOS v1 (gate de
+   superusuario ahí, no solo en este endpoint) — confirmado leyendo el
+   propio docstring de esta rama.
+2. **`zeus_core.py` / `zeus_agents.py`** (conflicto modify/delete): esta
+   rama invirtió trabajo real en estos ficheros legacy (delegar
+   THALOS.SHIELD/SCAN/BLOCK en servicios reales, gate de superusuario para
+   THALOS.SCAN) — pero `feature/limpieza-simulacion` (paso 3) ya los había
+   borrado por ser código muerto: **confirmado de nuevo aquí** que
+   `app/api/v1/__init__.py` NO registra `zeus_core.router` en ninguna
+   ruta (solo `zeus_core_v2.router` bajo `/zeus-core`, que no importa
+   `zeus_agents.py`). Es decir, ningún endpoint HTTP alcanzable ejecuta ese
+   código, con o sin el fix. **Se mantuvo el borrado** (`git rm`) — el
+   trabajo real de esta rama sobre código muerto no cambia el
+   comportamiento en producción.
+3. **`db/tenant_context.py`** (conflicto add/add): esta rama creó su
+   propia copia del mismo módulo (multi-tenant-bd, ya fusionado en el
+   paso 2, no estaba disponible cuando se escribió esta rama) para
+   extender RLS a las 4 tablas de logs de THALOS. Se mantuvo la
+   implementación de HEAD (`crm_svc.primary_company_id`, ya usada y
+   probada por `invoices.py`/`metrics.py`/`agents.py`) — verificado que
+   `services.workspace_deliverables.primary_company_id_for_user` (la
+   versión de esta rama) es **funcionalmente idéntica** (mismo query,
+   mismo `order_by`, solo difiere un `int()` de más) antes de descartarla,
+   para no perder ningún matiz de comportamiento. Se fusionaron ambos
+   docstrings (documentan el mismo mecanismo aplicado a dos familias de
+   tablas distintas: ERP/CRM y logs de THALOS).
+
+**Hallazgo de higiene de migraciones (bloqueante, corregido antes de
+commitear)**: la rama trae `0046_thalos_tables_company_id.py` y
+`0047_thalos_row_level_security.py`, colisionando con
+`0046_missing_tables_create_all_only.py` y `0047_row_level_security.py`
+(ya mergeados en el paso 2). **Renumerados** a `0052`/`0053`, encadenados
+tras el head real `0051` (paso 7). Verificado: **53 revisiones, una sola
+cabeza (`0053`), cero duplicados**.
+
+**Hallazgo de higiene de tests (corregido antes de correr la suite)**: dos
+ficheros de test nuevos de esta rama importan directamente de
+`app.core.zeus_agents` / `app.api.v1.endpoints.zeus_core` (los módulos
+muertos borrados en el punto 2) y rompían la RECOLECCIÓN completa de la
+suite (`2 errors during collection`, pytest se detiene sin ejecutar NADA):
+- `test_zeus_agents_thalos_real_v1.py` (254 líneas, 8 tests): el 100% de
+  sus tests ejercitan exclusivamente `zeus_agents.zeus_manager` (código
+  muerto). **Eliminado por completo** — no cubre ninguna ruta alcanzable.
+- `test_zeus_core_scan_superuser_gate_v1.py` (115 líneas, 5 tests): mezcla
+  3 tests del `zeus_core.py` muerto con 2 tests de
+  `thalos_v1.thalos_v1_execute` (endpoint REAL, montado). **Se editó** para
+  eliminar solo los 3 tests y el import de código muerto, conservando los
+  2 tests reales del gate de superusuario de `thalos_v1_execute`.
+
+Esta es una decisión de diseño explícita, no un intento de esconder una
+regresión: el código bajo test no es alcanzable por ningún cliente HTTP
+real en este estado del árbol (confirmado en el punto 2), así que un test
+que lo cubra no protege nada en producción.
+
+**Qué trae** (además de re-confirmar que `vertical-seguros`,
+`facturacion-tpv-real`, `onboarding-facturacion`, `rediseno-completo`,
+`rediseno-frontend-fase1` y `auditoria-real-nucleo` son ancestros — se
+comprobará explícitamente en los pasos 9-12 que ya no aportan nada nuevo):
+- 7 vueltas de mitigación de THALOS.SCAN/BLOCK/SHIELD: gates de
+  superusuario en `thalos_v1.py::thalos_v1_execute`,
+  `workspaces.py` (log_monitor), `justice.py` (compliance-events),
+  handlers de automatización (`services/automation/handlers/thalos*.py`).
+- Fix de raíz (no solo mitigación): migración `0052` añade `company_id`
+  real a `thalos_events`/`thalos_alerts`/`thalos_login_attempts` (con
+  backfill best-effort documentado con honestidad — reconoce
+  explícitamente qué filas NO se pueden atribuir a una empresa real, p.ej.
+  intentos de fuerza bruta con emails inventados) y `0053` añade RLS real
+  (Postgres) a las 4 tablas, reutilizando `get_db_scoped`.
+- `services/justice_cross_agent_v1.py::sync_cross_agent_events`: filtra
+  ahora por tenant (antes filtraba eventos de todas las empresas).
+
+**Suite de tests tras el merge (con `zeus.db` fresco, tras arreglar la
+recolección)**:
+```
+7 failed, 288 passed, 1 xfailed, 3 errors
+```
+Sube de 218→288 `passed` (+70, la mayoría de los tests nuevos de esta
+rama: `test_thalos_v5_exhaustive_sweep_v1.py`,
+`test_thalos_v6_estructural_v1.py`, `test_thalos_v7_legacy_gate_v1.py`,
+`test_workspaces_thalos_log_monitor_superuser_gate_v1.py`,
+`test_thalos_company_id_structural_v1.py`,
+`test_thalos_v1_execute_block_tenant.py`, y los 2 tests conservados de
+`test_zeus_core_scan_superuser_gate_v1.py`). Mismos 7 nombres de fallo,
+mismo xfail, mismos 3 errores del baseline. Sin regresión.
+
+**Prueba real (curl, servidor reiniciado con BD fresca, tenants
+`tenant1.consolidacion@gmail.com`→company_id 1,
+`tenant2.consolidacion@gmail.com`→company_id 2)**:
+
+```
+POST /api/v1/thalos/v1/execute  {"action":"detect_suspicious_activity"}  (usuario normal, no superusuario)
+→ 403 {"detail":"detect_suspicious_activity (THALOS.SCAN) requiere
+        privilegios de superusuario (mitigación interina: el motor
+        subyacente audita actividad global sin filtrar por empresa hasta
+        que se migre el esquema)."}
+```
+Confirma en vivo el gate de superusuario del hallazgo más grave de esta
+rama.
+
+**Qué NO se pudo verificar**: el fix de raíz completo (RLS real de las 4
+tablas de THALOS contra Postgres, migraciones 0052/0053) — mismo motivo
+que el resto de RLS de esta consolidación: solo hay SQLite disponible en
+este entorno, y el propio docstring de la migración ya advierte
+explícitamente que no se verificó contra Postgres real durante su
+desarrollo tampoco. Queda pendiente de verificación contra staging antes
+de producción, tal como el propio fichero recomienda.
+
+**Commit de esta fusión**: `merge: feature/fix-thalos-shield-real + verificacion`

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_active_user
 from app.core.config import settings
 from app.db.session import get_db
+from app.db.tenant_context import get_db_scoped
 from app.models.user import User
 from services.activity_logger import ActivityLogger
 from services.thalos_control_layer_v1 import log_execution_attempt, wrap_response as thalos_wrap
@@ -665,8 +666,31 @@ async def workspace_justicia_gdpr(
 async def workspace_thalos_logs(
     request: ThalosLogRequest,
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
 ):
+    # Mitigación interina (AUDIT_FIX_THALOS_SHIELD.md, sección 10.2/10.3):
+    # este endpoint invoca thalos_security_engine.scan_logs de forma
+    # incondicional (sin ningún flag THALOS_* que lo module) y persiste el
+    # resultado como ThalosWorkspaceItem del propio tenant llamante. Como
+    # `agent_activities`/`thalos_login_attempts` no tienen `company_id`,
+    # scan_logs audita actividad GLOBAL de todas las empresas — fuga
+    # cross-tenant confirmada en vivo por el revisor (activities_scanned,
+    # failed_login_candidates y pattern_alerts de OTRAS empresas, sin
+    # superusuario, sin flags, sin monkeypatch). Se aplica el mismo gate ya
+    # validado en la Vuelta 3 para THALOS.SCAN/detect_suspicious_activity
+    # (zeus_core.py y thalos_v1.py) mientras no exista `company_id` real en
+    # esas tablas.
+    if not getattr(current_user, "is_superuser", False):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "El monitor de logs THALOS con escaneo real requiere privilegios "
+                "de superusuario (mitigación interina: el motor subyacente audita "
+                "actividad global sin filtrar por empresa hasta que se migre el "
+                "esquema)."
+            ),
+        )
+
     log_execution_attempt(
         module="log_monitor",
         action="analyze_text",
@@ -721,8 +745,29 @@ async def workspace_thalos_logs(
 async def workspace_thalos_threat(
     request: ThalosThreatRequest,
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
 ):
+    # Mitigación interina (AUDIT_FIX_THALOS_SHIELD.md, sección 12.2/13):
+    # detect_threat_events() delega en services/thalos_threat_engine.py::evaluate_events(db)
+    # y services/thalos_monitor_service.py::audit_from_db(db), ambas consultas
+    # GLOBALES sin ningún filtro por company_id (ThalosEvent/ThalosSecurityEvent/
+    # ThalosLoginAttempt no tienen esa columna) — fuga cross-tenant confirmada en
+    # vivo por el revisor (candidates con emails de otros tenants, más un bloque
+    # `database` con event_count/security_event_count/recent_events globales),
+    # persistida además en el workspace del propio llamante. Mismo gate ya
+    # aplicado a workspace_thalos_logs, thalos_v1_audit y
+    # detect_suspicious_activity/THALOS.SCAN.
+    if not getattr(current_user, "is_superuser", False):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "El detector de amenazas THALOS con escaneo real requiere "
+                "privilegios de superusuario (mitigación interina: el motor "
+                "subyacente audita actividad global sin filtrar por empresa "
+                "hasta que se migre el esquema)."
+            ),
+        )
+
     log_execution_attempt(
         module="text_analysis",
         action="threat_detector",
@@ -743,7 +788,18 @@ async def workspace_thalos_threat(
         event_name="thalos_threat_detected",
         chain_steps=["trigger_security_followup"],
     )
-    return thalos_wrap(response, "text_analysis", data_origin="mock", real_execution=False)
+    # `detect_threat_events` ya declara `real_execution` según si pudo consultar
+    # la BD de verdad (True) o cayó al fallback heurístico sobre el payload
+    # recibido (False) — antes se etiquetaba siempre como `data_origin="mock"`,
+    # `real_execution=False`, lo cual es engañoso cuando sí hubo datos reales
+    # de BD (regla de no-simulación: no declarar datos reales como mock).
+    real = bool(result.get("real_execution"))
+    return thalos_wrap(
+        response,
+        "text_analysis",
+        data_origin="backend" if real else "mock",
+        real_execution=real,
+    )
 
 
 @router.post("/thalos/credential-revoker")

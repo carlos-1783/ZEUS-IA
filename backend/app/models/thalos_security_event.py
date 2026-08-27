@@ -33,4 +33,12 @@ class ThalosLoginAttempt(Base):
     email = Column(String(255), nullable=False, index=True)
     ip_address = Column(String(64), nullable=True, index=True)
     success = Column(Integer, nullable=False, default=0)  # 0 fail, 1 ok
+    # AUDIT_THALOS_ESTRUCTURAL.md, paso 1: aislamiento multi-tenant real.
+    # Nullable e irreductiblemente incompleto por diseño: los intentos de
+    # login con un email que no corresponde a ningún usuario real (el caso
+    # de uso central de esta tabla -- detectar fuerza bruta con emails
+    # inventados) nunca podrán atribuirse a una empresa. Ver
+    # 0046_thalos_tables_company_id.py (backfill best-effort) y
+    # 0047_thalos_row_level_security.py (RLS real).
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)

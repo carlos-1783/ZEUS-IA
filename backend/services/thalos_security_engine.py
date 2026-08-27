@@ -76,12 +76,36 @@ def record_login_attempt(
     ip_address: Optional[str],
     success: bool,
 ) -> None:
-    """Registro append-only de intentos de login (middleware opt-in)."""
+    """Registro append-only de intentos de login (middleware opt-in).
+
+    AUDIT_THALOS_ESTRUCTURAL.md, paso 1: resuelve `company_id` best-effort en
+    el momento de escribir, cuando el email corresponde a un usuario real
+    registrado (mismo criterio que el backfill de
+    `0046_thalos_tables_company_id.py`). Para emails que no existen como
+    usuario real (el caso de uso central de esta tabla: detectar fuerza
+    bruta con emails inventados) queda `NULL` honestamente -- no hay ninguna
+    empresa real a la que atribuirlo.
+    """
+    clean_email = (email or "").strip().lower()[:255]
+    company_id = None
+    if clean_email:
+        from app.models.company import UserCompany
+        from app.models.user import User as _User
+
+        row = (
+            db.query(UserCompany.company_id)
+            .join(_User, _User.id == UserCompany.user_id)
+            .filter(func.lower(_User.email) == clean_email)
+            .order_by(UserCompany.id.asc())
+            .first()
+        )
+        company_id = row[0] if row else None
     db.add(
         ThalosLoginAttempt(
-            email=(email or "").strip().lower()[:255],
+            email=clean_email,
             ip_address=(ip_address or "")[:64] or None,
             success=1 if success else 0,
+            company_id=company_id,
         )
     )
     db.flush()

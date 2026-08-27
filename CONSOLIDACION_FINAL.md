@@ -85,3 +85,91 @@ merge del paso 6, donde se repetirá la prueba con los mismos dos tenants.
 Mismos 7 nombres de fallo, mismos 3 errores. Sin regresión.
 
 **Commit de esta fusión**: `merge: feature/fix-seguridad-critica + verificacion`
+
+---
+
+## 2. `feature/multi-tenant-bd`
+
+**Merge-base con HEAD antes del merge**: `97b949a` (la rama parte de `main`
+directamente, no de `fix-seguridad-critica`) → **merge real con 1 conflicto**.
+
+**Conflicto**: `backend/app/api/v1/endpoints/metrics.py`, función
+`get_dashboard_metrics`. Ambas ramas tocaron el mismo bloque: la versión de
+`fix-seguridad-critica` (HEAD) filtraba por `user_email` únicamente; la de
+`multi-tenant-bd` añade `get_db_scoped` (RLS real vía sesión Postgres) +
+filtro por `company_id` con `crm_svc.company_ids_for_user` + bypass explícito
+de superusuario. **Se resolvió a favor de `multi-tenant-bd` íntegramente**
+(más completa: tenant real por empresa, no solo por email, y con capa RLS de
+más profundidad) — se eliminó la versión de `fix-seguridad-critica` como
+duplicada. `invoices.py` (también tocado por ambas) fusionó limpio en
+automático: cambia `Depends(get_db)` → `Depends(get_db_scoped)` en los 8
+endpoints del router.
+
+**Qué más trae** (`AUDIT_FIX_BLOQUE2.md`):
+- RLS real en Postgres (`alembic/versions/0047_row_level_security.py`):
+  `ENABLE ROW LEVEL SECURITY` + `CREATE POLICY` en `invoices`,
+  `agent_activities`, `companies`, `users`. Guardado por `_is_postgres()` —
+  no-op en SQLite (confirmado leyendo el migration file, líneas 55-119).
+- `app/db/tenant_context.py` (nuevo): `get_db_scoped` fija
+  `app.current_company_id` vía `set_config` a nivel de transacción Postgres;
+  no-op fuera de Postgres (`if db.bind.dialect.name != "postgresql": return`).
+- `values_callable=lambda x: [e.value for e in x]` en los `Enum` de
+  `app/models/erp.py` (Product.category/status, InventoryMovement.movement_type,
+  Invoice.invoice_type/status, Payment.payment_method/status) — corrige que
+  SQLAlchemy insertaba `.name` (mayúsculas) en vez de `.value` (minúsculas)
+  contra Postgres real. **Esta es una de las varias implementaciones
+  independientes del bug de enum ERP** que el encargo advertía — se mantiene
+  aquí y se comparará con la de `fix-enum-serialization-erp` en el paso 4.
+- Reordenado `inventory_movements`/`invoices` en
+  `0001_initial_migration.py` (la FK de movements a invoices se creaba antes
+  de que existiera la tabla `invoices`; nunca se había ejecutado
+  `upgrade()` completo contra una Postgres vacía hasta este bloque).
+- `POST /api/v1/activities/log` ahora exige `Depends(get_current_active_user)`
+  (antes: sin auth).
+- Botón "Admin" en `OlymposDashboard.vue` ahora condicionado a
+  `v-if="authStore.isAdmin"` (antes: visible para cualquier usuario).
+
+**Regresión detectada y su causa real (no es un bug del merge)**: al correr
+la suite justo después del merge, apareció una falla nueva,
+`tests/test_afrodita_ops_real_v1.py::test_warehouse_summary`, con
+`LookupError: 'GOODS' is not among the defined enum values`. Investigado:
+la causa NO es el código fusionado, sino que el fichero `backend/zeus.db`
+(sqlite local, no versionado, reutilizado durante toda la sesión de
+consolidación) ya tenía filas de `products` escritas por ejecuciones
+anteriores de la suite (baseline + merge 1) con el esquema ANTERIOR
+(`category` guardada como `'GOODS'`, mayúsculas, comportamiento por defecto
+de SQLAlchemy `Enum` sin `values_callable`). Al aplicar `values_callable`
+(minúsculas), esas filas antiguas dejan de ser legibles. Se confirmó
+borrando `backend/zeus.db` y volviendo a correr la suite completa desde
+cero: vuelve exactamente al baseline. **Se documenta como hallazgo de
+higiene de entorno de test, no como bug de producción** — en Postgres real
+la migración 0001 nunca se había ejecutado antes de este bloque (según su
+propio changelog), así que no hay datos preexistentes en mayúsculas que
+migrar.
+
+**Suite de tests tras el merge (con `zeus.db` fresco)**:
+```
+7 failed, 214 passed, 2 skipped, 3 errors  (idéntico al baseline)
+```
+Mismos 7 nombres de fallo, mismos 3 errores. Sin regresión real.
+
+**Prueba real (curl, servidor reiniciado con BD fresca, tenants recreados:
+`tenant1.consolidacion@gmail.com`→company_id 29,
+`tenant2.consolidacion@gmail.com`→company_id 30)**:
+
+```
+GET /api/v1/metrics/dashboard  (con token1)
+→ 200 {"success":true,"total_interactions":4, ...}
+
+POST /api/v1/activities/log  (sin token)
+→ 401 {"detail":"No se pudieron validar las credenciales"}
+```
+
+**Qué NO se pudo verificar**: las policies RLS de Postgres en vivo (este
+entorno solo tiene SQLite disponible localmente; el guard `_is_postgres()`
+hace que el código sea no-op aquí, así que no hay forma de ejercer la
+policy real sin una instancia Postgres). Tampoco se verificó con Playwright
+el botón Admin oculto para usuario no-admin (verificado solo por lectura de
+código: `v-if="authStore.isAdmin"`).
+
+**Commit de esta fusión**: `merge: feature/multi-tenant-bd + verificacion`

@@ -42,13 +42,16 @@ class Product(Base):
     low_stock_threshold = Column(Float, default=0.0)
     
     # Classification
-    # NOTA (Bloque 2 multi-tenant-bd): values_callable fuerza a SQLAlchemy a
-    # usar el .value (minúsculas) de cada PyEnum como representación en BD,
-    # en vez de su .name (mayúsculas, comportamiento por defecto). Sin esto,
-    # el endpoint (que asigna directamente el schema Pydantic, un str-Enum
-    # en minúsculas, al ORM) escribe valores en minúsculas que no coinciden
-    # con lo que SQLAlchemy espera leer de vuelta — rompía db.refresh() tras
-    # cada INSERT contra Postgres real. Ver alembic/versions/0001_initial_migration.py.
+    # NOTA (Bloque 2 multi-tenant-bd + envio-gestoria, fix duplicado
+    # descubierto en ambas ramas de forma independiente): values_callable
+    # fuerza a SQLAlchemy a usar el .value (minúsculas) de cada PyEnum como
+    # representación en BD, en vez de su .name (mayúsculas, comportamiento
+    # por defecto). Sin esto, el endpoint (que asigna directamente el schema
+    # Pydantic, un str-Enum en minúsculas, al ORM) escribe valores en
+    # minúsculas que no coinciden con lo que SQLAlchemy espera leer de
+    # vuelta — rompía db.refresh() tras cada INSERT tanto contra Postgres
+    # real (LookupError: 'invoice' no está entre INVOICE/CREDIT_NOTE/...)
+    # como contra SQLite local. Ver alembic/versions/0001_initial_migration.py.
     category = Column(Enum(ProductCategory, values_callable=lambda x: [e.value for e in x]), default=ProductCategory.GOODS)
     status = Column(Enum(ProductStatus, values_callable=lambda x: [e.value for e in x]), default=ProductStatus.ACTIVE)
     

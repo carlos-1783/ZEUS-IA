@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
@@ -17,20 +17,27 @@ from app.db.base import engine
 logger = logging.getLogger(__name__)
 
 
+def _effective_schema(schema: str) -> str | None:
+    """SQLite no tiene el concepto de schema de Postgres (no existe
+    information_schema con schema='public') — inspector.get_columns()/
+    get_table_names() de SQLAlchemy sí son dialect-agnostic, pero solo si
+    se les pasa schema=None en SQLite."""
+    return None if engine.dialect.name == "sqlite" else schema
+
+
 def table_column_names(table_name: str, schema: str = "public") -> set[str]:
+    """
+    Antes usaba SQL crudo contra information_schema.columns — solo existe
+    en Postgres. En SQLite (todo el desarrollo/tests locales) esto fallaba
+    siempre en silencio (except Exception -> set() vacío), haciendo que
+    insert_document_approval_row() creyera SIEMPRE que la tabla
+    document_approvals no existe, aunque sí exista con datos. Usa
+    sqlalchemy.inspect(), que sí es dialect-agnostic.
+    """
     try:
-        with engine.connect() as conn:
-            rows = conn.execute(
-                text(
-                    """
-                    SELECT column_name
-                    FROM information_schema.columns
-                    WHERE table_schema = :schema AND table_name = :table
-                    """
-                ),
-                {"schema": schema, "table": table_name},
-            ).fetchall()
-        return {str(r[0]) for r in rows}
+        insp = inspect(engine)
+        cols = insp.get_columns(table_name, schema=_effective_schema(schema))
+        return {str(c["name"]) for c in cols}
     except Exception as exc:
         logger.warning("table_column_names(%s): %s", table_name, exc)
         return set()
@@ -42,18 +49,8 @@ def table_exists(table_name: str, schema: str = "public") -> bool:
 
 def _table_names(schema: str = "public") -> set[str]:
     try:
-        with engine.connect() as conn:
-            rows = conn.execute(
-                text(
-                    """
-                    SELECT table_name
-                    FROM information_schema.tables
-                    WHERE table_schema = :schema
-                    """
-                ),
-                {"schema": schema},
-            ).fetchall()
-        return {str(r[0]) for r in rows}
+        insp = inspect(engine)
+        return set(insp.get_table_names(schema=_effective_schema(schema)))
     except Exception:
         return set()
 

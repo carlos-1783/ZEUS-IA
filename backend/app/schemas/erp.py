@@ -106,13 +106,14 @@ class InvoiceBase(BaseModel):
     customer_id: Optional[int] = Field(None, gt=0, description="Customer ID")
     invoice_type: InvoiceType = Field(InvoiceType.INVOICE, description="Type of invoice")
     status: InvoiceStatus = Field(InvoiceStatus.DRAFT, description="Invoice status")
-    # NOTA (Bloque 2 multi-tenant-bd): tipado como datetime (no date) porque
-    # la columna real en BD es DateTime (app/models/erp.py Invoice.issue_date/
-    # due_date) con default datetime.utcnow(). Con `date`, Pydantic v2 rechaza
-    # la respuesta (ResponseValidationError: date_from_datetime_inexact) en
-    # cuanto la hora no es exactamente medianoche — rompía SIEMPRE la creación
-    # de facturas contra Postgres real (nunca se detectó antes: en SQLite se
-    # devolvía en local sin pasar por este validador de forma consistente).
+    # NOTA (Bloque 2 multi-tenant-bd + envio-gestoria, fix duplicado
+    # descubierto en ambas ramas de forma independiente): tipado como
+    # datetime (no date) porque la columna real en BD es DateTime
+    # (app/models/erp.py Invoice.issue_date/due_date) con default
+    # datetime.utcnow(). Con `date`, Pydantic v2 rechaza la respuesta
+    # (ResponseValidationError: date_from_datetime_inexact) en cuanto la
+    # hora no es exactamente medianoche — rompía SIEMPRE la creación de
+    # facturas.
     issue_date: datetime = Field(default_factory=datetime.utcnow, description="Date the invoice was issued")
     due_date: Optional[datetime] = Field(None, description="Due date for payment")
     notes: Optional[str] = Field(None, description="Additional notes")

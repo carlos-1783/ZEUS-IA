@@ -460,3 +460,78 @@ sesión (ver marcadores cruzados en cada punto).
 - **Veredicto: roto por la causa ya documentada en la Sección 4; ningún
   tenant nuevo puede completar el cuestionario manualmente hoy en esta
   rama.**
+
+---
+
+## Tabla resumen de estado real por pieza
+
+| Pieza | Estado | Evidencia clave |
+|---|---|---|
+| ZEUS (orquestador real, `zeus-core`) | ✅ | Lead creado y persistido con scoring real (Sección 1) |
+| ZEUS legacy stub (`/api/v1/zeus/*`) | ❌ | Crashea 500 en vivo, expuesto en `/zeus-core` del frontend |
+| PERSEO | ✅ (con matiz) | `writes_enabled:false` falla honesto; placeholder de Google Ads sigue latente en el branch "configurado" (Sección 1) |
+| RAFAEL | ✅ | Modelo 303 consulta BD real y falla honesto sin datos |
+| THALOS — exploits estructurales | ✅ | 3 exploits repetidos en vivo, todos bloqueados (Sección 2) |
+| THALOS — RLS en Postgres | ⚠️ no verificable | Entorno solo SQLite |
+| JUSTICIA | ✅ | Contrato real generado y persistido (`db_id=1`) |
+| AFRODITA | ✅ | Estado real y honesto de flags |
+| `GET /api/v1/metrics/dashboard` | ❌ CRÍTICO | Expuesto sin token, sin filtrar por tenant, en vivo |
+| Heurística de onboarding | ❌ | Falso positivo reproducido en 2 tenants nuevos distintos; además bloquea el acceso al cuestionario manual |
+| `GET /api/v1/invoices/`, `/products/`, `/customers` (router `customers_fixed`) | ❌ CRÍTICO (disponibilidad) | Roto para TODO usuario por bug de audiencia JWT en `python-jose` (Sección 5.1); además sin filtro de tenant en el código subyacente |
+| `GET/POST /api/v1/google/*` | ❌ CRÍTICO (si se configura) | Sin ningún `Depends` de autenticación (Sección 5.2) |
+| Botón Admin sin proteger (`OlymposDashboard.vue`) | ⚠️ riesgo latente | Código sin `v-if`, pero hoy inalcanzable (`firstPersonMode` hardcodeado a `true`) |
+| TPV venta + factura | ✅ | Flujo E2E real por UI, persistencia y aislamiento confirmados |
+| Control Horario (fichaje) | ✅ | Persistencia real, integración cruzada con TPV confirmada |
+| Nóminas | ✅ (con matiz) | Real y persistente; PDF cae a TXT por falta de `reportlab` en este entorno |
+| CRM | ✅ | Aislamiento por tenant confirmado con 2 tenants nuevos |
+| Seguros (pólizas) | ✅ | Creación real, aislamiento confirmado, anti-spoof de `customer_id` funciona |
+| Admin Panel (API) | ✅ | 403 sin superusuario, 200 con datos reales para superusuario |
+| Comparación de ramas | ⚠️ | Al menos 4 ramas de seguridad relevantes (`fix-seguridad-critica`, `multi-tenant-bd`, `fix-jwt-audience-y-tenant-invoices`, `auth-missing-endpoints`) no están mergeadas aquí |
+
+## Resumen ejecutivo
+
+**Lo sólido**: el fix estructural de THALOS que da nombre a esta rama está
+bien hecho — repetí 3 exploits distintos con tenants 100% nuevos y los tres
+siguen bloqueados, la migración de esquema (`company_id` en las 3 tablas que
+no lo tenían) está generada y aplicada de verdad, y el propio commit de
+cierre documenta con honestidad sus propios límites (RLS no verificable en
+SQLite, higiene de backups). Los 6 agentes tienen lógica real verificable
+(BD, ficheros, logs), y los flujos funcionales de negocio que probé de
+extremo a extremo — TPV con venta y factura, control horario, nóminas,
+CRM y seguros — funcionan y aíslan correctamente por tenant en esta sesión,
+con datos que yo mismo generé y verifiqués cruzados entre pantalla, API y
+base de datos.
+
+**Lo que sigue roto**: esta rama es un fix quirúrgico de un problema
+concreto, no una rama de seguridad general, y eso se nota en lo que deja
+fuera. Confirmé en vivo tres problemas de severidad crítica que no estaban
+en el alcance original de esta tarea pero que un cierre a `main` no puede
+ignorar: (1) `GET /api/v1/metrics/dashboard` sigue devolviendo datos
+agregados reales sin pedir ningún token; (2) los routers `invoices.py`,
+`products.py` y `customers_fixed.py` están completamente inoperativos para
+cualquier usuario por un bug de la librería `python-jose` al no aceptar una
+lista como `audience` — y aun si se arreglara ese bug de raíz, el código
+subyacente de `list_invoices` no filtra por `company_id`; (3) los 9
+endpoints de `/api/v1/google/*` no tienen ningún guard de autenticación.
+Además, la heurística de onboarding no solo marca `setup_completed=true`
+antes de tiempo (ya conocido) sino que, verificado en esta vuelta, **impide
+por completo llegar al cuestionario manual** en cualquier alta nueva. La
+comparación de ramas muestra que al menos 4 ramas de seguridad
+(`feature/fix-seguridad-critica`, `feature/multi-tenant-bd`,
+`feature/fix-jwt-audience-y-tenant-invoices`, `feature/auth-missing-endpoints`)
+contienen fixes que no están incorporados aquí.
+
+**Prioridad más urgente antes de tocar `main`**: decidir explícitamente cómo
+incorporar los fixes de `feature/fix-seguridad-critica` y
+`feature/multi-tenant-bd` (rebase, cherry-pick selectivo, o remerge) — en
+particular el fix de autenticación de `metrics/dashboard` y `google.py`,
+y el fix de aislamiento + audiencia JWT de `invoices.py`. Sin eso,
+fusionar `feature/fix-thalos-shield-real` a `main` tal cual cerraría un
+problema (THALOS) mientras dejaría abiertos otros de severidad equivalente
+o mayor que ya tienen solución escrita en otra rama del mismo repositorio.
+
+Este documento es un diagnóstico de estado, no una re-aprobación de ciclos
+ya cerrados: la Vuelta 7 de THALOS documentada en el commit `e6c9717` queda
+confirmada de forma independiente; el resto de hallazgos aquí listados
+(Secciones 3, 4, 5, 6, 7) son nuevos para esta vuelta o amplían hallazgos ya
+conocidos con evidencia en vivo adicional, y ninguno se da por cerrado.

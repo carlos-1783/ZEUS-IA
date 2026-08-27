@@ -349,3 +349,75 @@ antes de intentar enviar y devuelve un error honesto
 ejercer la ruta de éxito real contra un proveedor de email de verdad.
 
 **Commit de esta fusión**: `merge: feature/envio-gestoria + verificacion`
+
+---
+
+## 5. `feature/hallazgos-visuales`
+
+**Merge-base con HEAD antes del merge**: `97b949a` (parte de `main`,
+independiente) → **merge automático sin conflictos** (estrategia `ort`).
+
+**Qué trae** (`AUDIT_FIX_VISUALES.md`):
+- `frontend/src/components/DashboardProfesional.vue`: el bloque de
+  reintentos (100ms/500ms/1000ms tras montar) referenciaba
+  `shouldShowTPV.value`/`shouldShowControlHorario.value`/`shouldShowAdmin.value`,
+  variables que no existían en ningún sitio del componente — lanzaba
+  `ReferenceError` en cuanto se construía el objeto del `console.log`, ANTES
+  de llegar a llamar a `updateModulesForSuperuser()`. Los 3 reintentos
+  llevaban muertos desde siempre. Se reemplazó por `showModule('tpv')` /
+  `showModule('control_horario')` / `showModule('admin')` (la función real
+  que decide visibilidad).
+- Mismo archivo: `onMounted` ahora comprueba `!authStore.user` (no
+  `!authStore.isAuthenticated`) antes de llamar a `initialize()` —
+  `isAuthenticated` solo indica que hay token, no que `user` esté cargado.
+- `frontend/src/router/index.js`: nuevo guard en `beforeEach` que fuerza
+  `await authStore.initialize()` si la ruta requiere auth y `authStore.user`
+  todavía no está poblado — antes, en una recarga directa a una ruta
+  protegida, el guard de rol (`isAdmin`/`isEmployee`/`modules`) se evaluaba
+  con `user=null` y expulsaba a superusuarios reales de `/admin`, `/tpv`, etc.
+- `AfroditaOpsPanel.vue` / `AfroditaToolsPanel.vue` /
+  `afrodita_workspace_api.ts`: mensajes de estado tipo `"SYSTEM ERROR — base
+  de datos no disponible."` / `"NO EXECUTION"` (debug técnico en inglés,
+  visible al usuario final) sustituidos por mensajes en español orientados
+  al usuario; el detalle técnico se mueve a `console.warn`.
+
+**Suite de tests tras el merge (backend, con `zeus.db` fresco)**:
+```
+7 failed, 214 passed, 2 skipped, 3 errors  (idéntico al baseline — esta rama es 100% frontend)
+```
+
+**Prueba real (navegador, Chrome vía Claude Browser)**: se detectó que el
+worktree no tenía `frontend/node_modules` instalado — se ejecutó
+`npm install` (901 paquetes, ~5 min) antes de poder arrancar el dev server.
+Al arrancar `npm run dev`, el puerto 5173 por defecto resultó estar ocupado
+por un proceso de **otra sesión de agente en paralelo** en este mismo host
+(`.claude/worktrees/agent-a9f8f12f24d0bc95c`, confirmado vía
+`wmic process ... get CommandLine`) — no se tocó ese proceso. Se sirvió el
+frontend de este worktree en un puerto aislado (5199) y, solo para esta
+verificación, se relajó temporalmente (sin commitear, revertido con
+`git checkout` después) la CSP de `frontend/index.html` y
+`BACKEND_CORS_ORIGINS` de `backend/app/core/config.py` para permitir ese
+puerto de prueba.
+
+- Login real con `tenant1.consolidacion@gmail.com` contra un backend en
+  `:8000` (mismo `zeus.db`) → dashboard carga correctamente.
+- `read_console_messages` tras cargar el dashboard: **sin ningún
+  `ReferenceError: shouldShowTPV is not defined`** (antes del fix, este
+  mismo flujo lo disparaba 3 veces, confirmado en un intento previo contra
+  el dev server equivocado — ver nota abajo). Único ruido en consola:
+  peticiones de "liveness check" hardcodeadas a `localhost:5173` (polling
+  de salud del backend, no relacionado con este fix) y un 404 puntual.
+- Nota metodológica: un primer intento de login se hizo por error contra el
+  proceso del OTRO agente en el puerto 5173 (código pre-merge de otro
+  worktree) y sí mostró el `ReferenceError` — eso confirmó que el bug
+  reproduce en código viejo y que la verificación real debía hacerse contra
+  ESTE worktree, no contra el puerto compartido.
+
+**Qué NO se pudo verificar**: el guard de rehidratación del router
+(`beforeEach`) en un escenario de recarga directa (F5) a una ruta protegida
+con superusuario — no se probó ese caso concreto por límite de tiempo; sí
+se confirmó por lectura de código que la condición
+`requiresAuth && authStore.isAuthenticated && !authStore.user` es correcta
+y coherente con `stores/auth.ts`.
+
+**Commit de esta fusión**: `merge: feature/hallazgos-visuales + verificacion`

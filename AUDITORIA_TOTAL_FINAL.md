@@ -143,3 +143,63 @@ Confirmo el cierre de la Vuelta 7 tal como está documentado en el commit
 `e6c9717`, con dos matices que NO son bloqueantes pero deben quedar
 explícitos: (a) el RLS de Postgres no se puede verificar sin una BD Postgres
 real; (b) persisten ficheros de backup huérfanos de pruebas anteriores.
+
+---
+
+## 3. `GET /api/v1/metrics/dashboard` — sigue expuesto sin auth ni tenant
+
+Petición real, sin cabecera `Authorization`, contra el backend en vivo:
+
+```
+$ curl -s -o resp.json -w "HTTP:%{http_code}\n" http://127.0.0.1:8020/api/v1/metrics/dashboard
+HTTP:200
+{"success":true,"total_interactions":1995,"avg_response_time":"177.7s",
+ "cost_savings":"€78,050","success_rate":"78.2%", ...}
+```
+
+Repetido con token de Tenant A autenticado: **misma respuesta byte a byte**
+(`total_interactions:1995`, `cost_savings:€78,050`) — confirma que ni siquiera
+diferencia entre "sin token" y "con token de un tenant concreto": es un
+agregado global, no filtrado, accesible por cualquiera.
+
+**Severidad: CRÍTICO.** Este es exactamente el hallazgo que el propio commit
+`e6c9717` de esta rama lista como pendiente ("metrics/dashboard" en la lista
+de tareas no resueltas). Confirmado en vivo, no solo por lectura de código o
+por el reporte previo. Existe un fix real para esto en otra rama
+(`feature/fix-seguridad-critica`, commit `9141c71 fix(security): exigir auth
+y aislar por usuario en GET /api/v1/metrics/dashboard`) que **no está
+mergeado en `feature/fix-thalos-shield-real`** (ver Sección 5).
+
+---
+
+## 4. Heurística de onboarding — falso positivo reproducido en vivo
+
+Se registró una empresa 100% nueva en esta sesión
+(`revisor.onb.c1@test.com`, `company_id=1957`, tipo `restaurant`) y se
+consultó `GET /api/v1/auth/onboarding/status` **inmediatamente después del
+registro, sin completar cuestionario ni perfil operativo**:
+
+```
+{"validation":{"checks":{"tpv_products":4,"has_tpv_profile":true,
+  "company_employees_count":1, ...}},
+ "questionnaire_completed":false,
+ "operational_profile_completed":false,
+ "setup_completed":true,
+ "setup_inferred":true, ...}
+```
+
+`setup_completed:true` aunque `questionnaire_completed:false` y
+`operational_profile_completed:false` — la empresa nunca respondió el
+cuestionario. La causa (leída en `backend/app/api/v1/endpoints/auth.py:594-618`)
+es la misma heurística ya documentada: si `company_employees_count >= 1` o
+hay productos TPV con perfil asociado, se infiere `setup_completed=True` sin
+que el usuario haya completado nada explícitamente. En este caso el registro
+con `business_type=restaurant` auto-sembró productos TPV y (al menos) un
+empleado, disparando el falso positivo de inmediato.
+
+**Confirmado, tal como se esperaba**: esta rama (`feature/fix-thalos-shield-real`)
+**no contiene** el fix de esta heurística — existe en una rama hermana
+separada (`feature/fix-onboarding-wizard-real`, ver Sección 5) que nunca se
+fusionó aquí. Severidad: medio/alto (afecta a la fiabilidad del estado de
+onboarding mostrado al usuario y a cualquier lógica que dependa de
+`setup_completed`), pero es un hallazgo ya conocido y esperado, no nuevo.

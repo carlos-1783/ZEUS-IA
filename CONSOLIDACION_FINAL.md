@@ -421,3 +421,165 @@ se confirmó por lectura de código que la condición
 y coherente con `stores/auth.ts`.
 
 **Commit de esta fusión**: `merge: feature/hallazgos-visuales + verificacion`
+
+---
+
+## 6. `feature/checkout-publico-fix`
+
+**Advertencia del encargo**: esta rama traía consigo `AUDIT_FIX_*` internos
+que solo constaban en un `CICLO_PRODUCCION.md` nunca comiteado a git, así
+que se trató con MENOS confianza — cada fix se re-verificó en vivo, no se
+asumió nada por el número de "ciclos aprobados".
+
+**Merge-base con HEAD antes del merge**: `97b949a` (parte de `main`,
+independiente de todo lo anterior) → **merge real con 6 conflictos** en
+`agents.py`, `google.py`, `invoices.py`, `metrics.py`, `onboarding.py` y
+`KpiAgentsView.vue`.
+
+**Conflictos y resolución** (criterio: versión más completa/robusta, nunca
+la más simple):
+
+1. **`metrics.py` (`get_dashboard_metrics`)**: HEAD (RLS vía `get_db_scoped`
+   + `company_ids_for_user` + bypass superusuario explícito) vs.
+   checkout-publico-fix (filtro simple por `user_email`, sin RLS). **Se
+   mantuvo HEAD íntegro** — ya incorpora todo lo que aportaba la versión más
+   simple y más.
+
+2. **`agents.py` (`GET /status`)**: aquí, al revés, **se adoptó la versión
+   de checkout-publico-fix**. HEAD (heredado de `limpieza-simulacion`)
+   calculaba el estado real pero SIN NINGÚN aislamiento por tenant/usuario
+   ("NO requiere autenticación... agregados a nivel de todo el sistema").
+   checkout-publico-fix exige auth y filtra por `user_email` (salvo
+   superusuario), documentando explícitamente la limitación de que
+   `agent_activities` no tiene `company_id` propio. Además añade un tercer
+   estado `"offline"` (HEAD solo distinguía online/idle) y el campo
+   `"scope"` en la respuesta. Esta fue la resolución más importante de
+   seguridad de este merge: sin ella, cualquier usuario autenticado habría
+   podido ver el conteo de actividad de TODAS las empresas del sistema.
+
+3. **`google.py`**: conflicto trivial de orden de imports — se mantuvo HEAD.
+
+4. **`invoices.py`**: se detectó que checkout-publico-fix ya había
+   introducido un helper `_invoice_tenant_scope()` (sin conflicto, mergeado
+   limpio) que HEAD todavía no usaba consistentemente. Se resolvió
+   reutilizando ese helper también en `list_invoices` (antes duplicaba la
+   misma condición `or_/and_` inline) y se eliminó un bloque de
+   comprobación de permisos redundante en `get_invoice_or_404` (la
+   comprobación ya la hace el filtro de la query — dejarla no aportaba
+   nada, solo dos formas de expresar lo mismo). **Cambio de comportamiento
+   verificado**: acceder a la factura de otro tenant por ID ahora responde
+   `404` en vez de `403` (el query ya no la encuentra) — es una postura de
+   seguridad más conservadora (no revela que el recurso existe), verificado
+   con curl real más abajo.
+
+5. **`onboarding.py` (verificación de pago Stripe)**: HEAD tenía
+   `_verify_stripe_payment_completed` (solo comprobaba `status ==
+   'succeeded'`). checkout-publico-fix trae `_verify_stripe_payment_intent`,
+   sustancialmente más completa: además de comprobar el estado, **compara
+   el importe realmente cobrado en Stripe contra el precio del plan
+   declarado** (`PRICING_PLANS`), rechazando con 402 si no coinciden —
+   cierra exactamente el fraude de "pagar el plan barato y declarar el
+   caro" que el PaymentIntent público (ver más abajo) hace posible si no
+   se comprobara. Manejo de errores más granular
+   (`stripe.error.InvalidRequestError` vs `StripeError` genérico) y logging
+   estructurado. **Se adoptó íntegramente la versión de
+   checkout-publico-fix**, eliminando la de HEAD.
+
+6. **`KpiAgentsView.vue`**: ninguna versión era estrictamente superior —
+   HEAD mostraba más métricas reales (uptime, decisiones de hoy, última
+   actividad) pero solo distinguía online/idle; checkout-publico-fix tenía
+   mejor UX de carga (6 agentes visibles desde el primer render con estado
+   "Cargando…" en vez de lista vacía) y manejaba el estado "offline". **Se
+   combinaron ambas**: lista inicial con placeholders + métricas reales de
+   HEAD + `statusLabel()` con los 4 estados de checkout-publico-fix.
+
+**Hallazgo de higiene de migraciones (bloqueante, corregido antes de
+commitear)**: el merge trajo `alembic/versions/0043_products_company_id_
+tenant_isolation.py` con `revision = "0043"`, **duplicando literalmente**
+el ID de `0043_agent_activities_company_id.py` (ya mergeado en el paso 2,
+con la cadena 0043→0044→0045→0046→0047 ya aplicada). Dos archivos con el
+mismo `revision` es un error duro de Alembic (colisión de identificador),
+no detectado por el merge automático de git porque son ficheros distintos.
+**Se renombró** el fichero y su cabecera a `0048`, con
+`down_revision = "0047"` (encadenado tras el head real de esta rama), sin
+tocar la lógica de `upgrade()`/`downgrade()` (ya era idempotente: comprueba
+columnas existentes antes de añadirlas). Verificado con un script de
+análisis estático de todo `alembic/versions/`: **48 revisiones, una sola
+cabeza (`0048`), cero IDs duplicados**.
+
+**Qué más trae**:
+- `POST /api/v1/integrations/stripe/checkout/payment-intent` (nuevo,
+  público, sin sesión): crea un PaymentIntent real en Stripe para el alta
+  de un cliente nuevo. El importe se calcula SIEMPRE en el servidor desde
+  `PRICING_PLANS` según el `plan` recibido — el cliente no puede mandar un
+  `amount` propio. Rate-limit dedicado y estricto en
+  `security_middleware.py` (`public_checkout_payment_intent`, 10
+  req/ventana) para esta ruta pública sensible.
+- `POST /api/v1/activities/log`: ahora ignora cualquier `user_email` del
+  payload que no coincida con `current_user.email`, salvo superusuario —
+  antes cualquier usuario podía registrar actividad falsamente atribuida a
+  otro email.
+- `create_payment` en `invoices.py`: corregido `payment_in.method` (atributo
+  inexistente en el schema, `AttributeError` garantizado) →
+  `payment_in.payment_method`.
+- `products.py`: mismo patrón de conversión explícita de Enum
+  (`ModelProductCategory[product_in.category.name]`) que en
+  `invoices.py`/`create_invoice`, mergeado limpio sin conflicto.
+
+**Suite de tests tras el merge (con `zeus.db` fresco)**:
+```
+7 failed, 214 passed, 2 skipped, 3 errors  (idéntico al baseline; esta rama tampoco añade tests backend nuevos)
+```
+
+**Prueba real (curl, servidor reiniciado con el código YA fusionado —
+nota: se detectó y corrigió un servidor de prueba obsoleto que seguía
+sirviendo el código de un merge anterior; ver "lección" abajo):**
+
+```
+POST /api/v1/integrations/stripe/checkout/payment-intent  (plan inválido)
+→ 400 {"detail":"Plan 'no-existe' no válido. Planes válidos: [...]"}
+
+POST /api/v1/integrations/stripe/checkout/payment-intent  (plan "startup", real Stripe API)
+→ 200 {"success":true,"payment_intent_id":"pi_3U8wi0RkVIjZaYJn1W10pAV4",
+        "client_secret":"...", "amount":394, "currency":"eur",
+        "status":"requires_payment_method"}
+  (PaymentIntent REAL en Stripe test-mode, amount=394€ = 197+197 del plan
+  startup — confirma que Stripe SÍ está configurado en este entorno y que
+  la llamada es real, no simulada)
+
+POST /api/v1/onboarding/create-account  (plan "enterprise", usando el
+payment_intent_id de arriba, que nunca se completó)
+→ 402 {"detail":"El pago no se ha completado (estado en Stripe:
+        'requires_payment_method'). No se puede crear la cuenta sin un
+        pago confirmado."}
+  (confirma que la verificación de pago real bloquea correctamente;
+  no se pudo completar un pago de prueba real con tarjeta en este
+  entorno para forzar además la rama específica de "importe no coincide
+  con el plan" — verificado solo por lectura de código para ese caso
+  concreto)
+
+GET /api/v1/invoices/{id}  (tenant2 pide la factura de tenant1 por ID)
+→ 404 {"detail":"Invoice with ID 2 not found"}   ← antes daba 403, ahora 404
+GET /api/v1/invoices/{id}  (tenant1 pide su propia factura)
+→ 200, datos completos correctos
+
+GET /api/v1/agents/status  (sin token) → 401
+GET /api/v1/agents/status  (con token tenant1) → 200, "scope":"company"
+GET /api/v1/agents/status  (con token tenant2) → 200, "scope":"company"
+Verificado por SQL directo sobre agent_activities: tenant1 y tenant2 tienen
+2 filas cada uno con su propio user_email (de su bootstrap de registro) —
+coincidencia de conteo (2 y 2), pero filas DISTINTAS; no hay fuga de datos
+entre tenants.
+```
+
+**Lección operativa de esta sesión (documentada para transparencia)**: al
+probar este merge, la primera ronda de curl contra `/checkout/payment-intent`
+devolvió `405 Method Not Allowed` — la causa no fue el código fusionado,
+sino que el servidor de pruebas en el puerto 8123 llevaba corriendo desde
+el paso 4 (código de ANTES de este merge) y nunca se había reiniciado. Se
+mató el proceso y se arrancó uno nuevo; con eso, la ruta apareció y
+respondió correctamente. Se deja constancia porque el mismo patrón podría
+inducir un falso negativo en cualquier verificación futura si no se
+reinicia el servidor tras cada merge.
+
+**Commit de esta fusión**: `merge: feature/checkout-publico-fix + verificacion`

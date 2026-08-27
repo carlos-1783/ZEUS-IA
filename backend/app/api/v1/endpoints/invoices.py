@@ -2,17 +2,21 @@ from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Path, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from app.db.tenant_context import get_db_scoped
-from app.models.erp import Invoice, InvoiceItem, Payment, Product, InventoryMovement, InventoryMovementType
+from app.models.erp import (
+    Invoice, InvoiceItem, Payment, Product, InventoryMovement, InventoryMovementType,
+    InvoiceType as ModelInvoiceType, InvoiceStatus as ModelInvoiceStatus,
+    PaymentMethod as ModelPaymentMethod, PaymentStatus as ModelPaymentStatus,
+)
 from app.schemas.erp import (
     InvoiceCreate, InvoiceUpdate, InvoiceInDB, InvoiceResponse, InvoiceListResponse,
     InvoiceItemCreate, InvoiceItemInDB,
     PaymentCreate, PaymentInDB, PaymentResponse,
     InvoiceStatus, InvoiceType, PaymentStatus, PaymentMethod
 )
-from app.core.security import get_current_active_user
+from app.core.auth import get_current_active_user
 from app.models.user import User
 from services.event_bus import emit_cashflow_updated, emit_payment_registered
 import services.crm_office_service as crm_svc
@@ -24,54 +28,65 @@ from services.zeus_office_mode import (
 
 router = APIRouter()
 
+def _invoice_tenant_scope(current_user: User, cids: List[int]):
+    """
+    Filtro de aislamiento multi-tenant para facturas.
+
+    - Si el usuario pertenece a una o más empresas, solo ve facturas de esas
+      empresas (o facturas legacy sin company_id que él mismo creó).
+    - Si el usuario no pertenece a ninguna empresa, solo ve las facturas que
+      él mismo creó (created_by), nunca las de otros.
+    """
+    if not cids:
+        return Invoice.created_by == current_user.id
+    return or_(
+        Invoice.company_id.in_(cids),
+        and_(Invoice.company_id.is_(None), Invoice.created_by == current_user.id),
+    )
+
 def get_invoice_or_404(
     db: Session,
     invoice_id: int,
     current_user: User
 ) -> InvoiceInDB:
     """
-    Obtiene una factura por ID o lanza una excepción 404 si no se encuentra.
-    
+    Obtiene una factura por ID (acotada a las empresas del usuario) o lanza
+    una excepción 404 si no se encuentra o no pertenece a su ámbito.
+
     Args:
         db: Sesión de base de datos
         invoice_id: ID de la factura a buscar
         current_user: Usuario autenticado
-        
+
     Returns:
         InvoiceInDB: El objeto de la factura en formato Pydantic si se encuentra
-        
+
     Raises:
-        HTTPException: 404 si la factura no existe
-        HTTPException: 403 si el usuario no tiene permisos
+        HTTPException: 404 si la factura no existe o no pertenece a la empresa del usuario
     """
     from fastapi import HTTPException, status
     from sqlalchemy.orm import joinedload
-    
-    # Optimizar la consulta cargando relaciones comunes
+
+    cids = crm_svc.company_ids_for_user(db, current_user)
+
+    # Optimizar la consulta cargando relaciones comunes.
+    # NOTA: Invoice.customer no se carga aquí porque esa relación está
+    # comentada en app/models/erp.py (bug preexistente, no introducido por
+    # este cambio) — usarla rompía este endpoint para CUALQUIER factura,
+    # independientemente del tenant.
     invoice = db.query(Invoice).options(
-        joinedload(Invoice.customer),
         joinedload(Invoice.items),
         joinedload(Invoice.payments)
     ).filter(
         Invoice.id == invoice_id
+    ).filter(
+        _invoice_tenant_scope(current_user, cids)
     ).first()
 
     if not invoice:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Invoice with ID {invoice_id} not found"
-        )
-
-    # Verificar que el usuario pertenece a la misma organización que la factura.
-    # Mismo patrón que services/crm_office_service.py: permitido si company_id
-    # de la factura está entre las empresas del usuario, o si es una factura
-    # legacy sin company_id creada por ese mismo usuario.
-    allowed_company_ids = crm_svc.company_ids_for_user(db, current_user)
-    is_owner_of_legacy_invoice = invoice.company_id is None and invoice.created_by == current_user.id
-    if invoice.company_id not in allowed_company_ids and not is_owner_of_legacy_invoice:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tienes permiso para acceder a esta factura"
         )
 
     # Convertir el modelo SQLAlchemy a Pydantic
@@ -117,20 +132,13 @@ def list_invoices(
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    List all invoices with optional filtering and pagination
+    List all invoices with optional filtering and pagination (tenant-scoped)
     """
-    query = db.query(Invoice)
-
     # Aislamiento de tenant: solo facturas de las empresas del usuario
     # autenticado (o facturas legacy sin company_id creadas por él mismo).
-    # Mismo patrón que services/crm_office_service.py.
-    allowed_company_ids = crm_svc.company_ids_for_user(db, current_user)
-    query = query.filter(
-        or_(
-            Invoice.company_id.in_(allowed_company_ids),
-            and_(Invoice.company_id.is_(None), Invoice.created_by == current_user.id),
-        )
-    )
+    # Usa el mismo helper que get_invoice_or_404 (_invoice_tenant_scope).
+    cids = crm_svc.company_ids_for_user(db, current_user)
+    query = db.query(Invoice).filter(_invoice_tenant_scope(current_user, cids))
 
     # Apply filters
     if customer_id:
@@ -180,16 +188,12 @@ def create_invoice(
     """
     Create a new invoice
     """
-    # Check if customer exists if specified
+    # Check if customer exists and belongs to the user's tenant scope.
+    # crm_svc.resolve_customer raises 404 if the customer isn't visible to
+    # this user (prevents referencing another company's customer by ID).
     if invoice_in.customer_id:
-        from app.models.customer import Customer
-        customer = db.query(Customer).filter(Customer.id == invoice_in.customer_id).first()
-        if not customer:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Customer with ID {invoice_in.customer_id} not found"
-            )
-    
+        crm_svc.resolve_customer(db, current_user, invoice_in.customer_id)
+
     company_id = crm_svc.primary_company_id(db, current_user)
     require_company_id(company_id, context="facturación")
 
@@ -198,13 +202,41 @@ def create_invoice(
     
     # Create invoice
     invoice_data = invoice_in.dict(exclude={"items"}, exclude_unset=True)
+    # Mismo bug de serializacion de Enum que en create_product (ver
+    # app/api/v1/endpoints/products.py): app.schemas.erp.InvoiceType/
+    # InvoiceStatus son Enum(str, Enum) cuyo .dict() emite el .value en
+    # minuscula ("invoice"/"draft"), pero la columna Column(Enum(...)) del
+    # modelo ERP espera el NOMBRE en mayuscula ("INVOICE"/"DRAFT"). Se
+    # convierte explicitamente aqui, usando siempre el valor real del
+    # atributo (no el resultado de .dict(), que puede faltar si el campo
+    # no fue enviado explicitamente por el cliente y exclude_unset lo omitio).
+    invoice_data["invoice_type"] = ModelInvoiceType[invoice_in.invoice_type.name]
+    invoice_data["status"] = ModelInvoiceStatus[invoice_in.status.name]
+    # Invoice.issue_date/due_date son columnas DateTime (Column(DateTime)),
+    # pero el schema las expone como `date` (medianoche exacta, sin hora).
+    # Si no se normalizan aqui, dos vias distintas pueden colar una hora
+    # "sucia" en la columna: (a) si el cliente no envia issue_date,
+    # exclude_unset lo omite de invoice_data y entra en juego el default
+    # del MODELO (datetime.utcnow(), que SI lleva hora); (b) si el cliente
+    # envia due_date, Pydantic ya lo valida como `date`, pero conviene
+    # forzar el mismo tipo exacto que espera la columna en vez de confiar
+    # en la coercion implicita de SQLAlchemy/SQLite. En ambos casos, la
+    # fila queda persistida con hora antes de que FastAPI intente
+    # serializar la respuesta con InvoiceInDB.issue_date: date -- y esa
+    # ResponseValidationError ocurre DESPUES del commit, fuera del alcance
+    # del try/except+rollback de abajo (que solo protege el flush/refresh
+    # previo al commit). Por eso se corrige en el origen, no "atajando" el
+    # fallo de serializacion despues del hecho.
+    invoice_data["issue_date"] = datetime.combine(invoice_in.issue_date, time.min)
+    if invoice_in.due_date is not None:
+        invoice_data["due_date"] = datetime.combine(invoice_in.due_date, time.min)
     invoice = Invoice(
         **invoice_data,
         invoice_number=invoice_number,
         company_id=company_id,
         created_by=current_user.id
     )
-    
+
     db.add(invoice)
     db.flush()  # Get the invoice ID for items
     
@@ -219,8 +251,12 @@ def create_invoice(
         # If this is a product, update inventory if needed
         if item.product_id and invoice_in.status == InvoiceStatus.PAID:
             # In a real app, you'd want to check if inventory tracking is enabled
-            # and handle variants properly
-            product = db.query(Product).filter(Product.id == item.product_id).first()
+            # and handle variants properly. Scoped to the invoice's own company
+            # so a product from another tenant can't be referenced/mutated here.
+            product = db.query(Product).filter(
+                Product.id == item.product_id,
+                Product.company_id == company_id,
+            ).first()
             if product and product.track_inventory:
                 movement = InventoryMovement(
                     product_id=product.id,
@@ -255,10 +291,20 @@ def create_invoice(
         total=float(totals["total"]),
         status_value=str(invoice.status.value if hasattr(invoice.status, "value") else invoice.status),
     )
-    
+
+    # Verificamos que la fila resultante es legible ANTES de confirmar la
+    # transaccion (mismo motivo que en create_product): si algo en el
+    # insert fuese invalido, hacemos rollback en vez de dejar una factura
+    # corrupta persistida mientras el cliente recibe un 500.
+    try:
+        db.flush()
+        db.refresh(invoice)
+    except Exception:
+        db.rollback()
+        raise
     db.commit()
     db.refresh(invoice)
-    
+
     return {"success": True, "data": invoice}
 
 @router.get("/{invoice_id}", response_model=InvoiceResponse)
@@ -325,33 +371,55 @@ def create_payment(
     validate_payment_logical(
         invoice_id=invoice_id,
         amount=float(payment_in.amount),
-        method=str(payment_in.method.value if hasattr(payment_in.method, "value") else payment_in.method),
+        # BUG PREEXISTENTE (no relacionado con el Enum, hallazgo de esta
+        # auditoria): el schema PaymentBase declara el campo como
+        # `payment_method`, no `method` -- `payment_in.method` no existe y
+        # esto hacia que create_payment lanzara AttributeError en el 100%
+        # de las llamadas, antes de llegar siquiera a construir el Payment.
+        # Se corrige aqui porque bloqueaba por completo la verificacion en
+        # vivo del bug de Enum pedido para este endpoint.
+        method=str(payment_in.payment_method.value if hasattr(payment_in.payment_method, "value") else payment_in.payment_method),
         payment_date=payment_in.payment_date or datetime.utcnow().date(),
     )
-    
+
     # Create payment
+    payment_data = payment_in.dict()
+    # Mismo bug de serializacion de Enum que en create_product/create_invoice:
+    # PaymentMethod/PaymentStatus del schema emiten su .value en minuscula,
+    # pero la columna del modelo espera el NOMBRE en mayuscula.
+    payment_data["payment_method"] = ModelPaymentMethod[payment_in.payment_method.name]
+    payment_data["status"] = ModelPaymentStatus[payment_in.status.name]
     payment = Payment(
-        **payment_in.dict(),
+        **payment_data,
         invoice_id=invoice_id,
         created_by=current_user.id
     )
-    
+
     db.add(payment)
     db.flush()
 
     # Update invoice status based on payment (payment now visible in totals)
     totals = calculate_invoice_totals(invoice, db)
-    
-    if payment.status == PaymentStatus.COMPLETED:
+
+    # `payment.status` es ahora el Enum del MODELO (ver conversion arriba),
+    # no el de schemas.erp -- se compara contra ModelPaymentStatus para que
+    # esta comprobacion siga funcionando tras el fix del bug de Enum.
+    if payment.status == ModelPaymentStatus.COMPLETED:
         if totals["amount_due"] <= 0:
             invoice.status = InvoiceStatus.PAID
         elif totals["amount_paid"] > 0:
             invoice.status = InvoiceStatus.PARTIALLY_PAID
-    
+
     # Update invoice amounts
     for key, value in totals.items():
         setattr(invoice, key, value)
-    
+
+    try:
+        db.flush()
+        db.refresh(payment)
+    except Exception:
+        db.rollback()
+        raise
     db.commit()
     db.refresh(payment)
     try:

@@ -29,7 +29,11 @@ class Product(Base):
     sku = Column(String(50), unique=True, index=True, nullable=False)
     name = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
-    
+
+    # Multi-tenant: empresa propietaria del producto
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
     # Pricing
     price = Column(Float(precision=2), nullable=False)  # Base price
     cost = Column(Float(precision=2), nullable=True)    # Cost price

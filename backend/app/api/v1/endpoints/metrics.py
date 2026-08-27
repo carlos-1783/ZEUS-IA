@@ -58,34 +58,35 @@ async def get_dashboard_metrics(
             AgentActivity.created_at <= end_date,
             tenant_filter,
         ).all()
-        
+
         # Calcular métricas
         total_interactions = len(activities)
         completed = len([a for a in activities if a.status == 'completed'])
         failed = len([a for a in activities if a.status == 'failed'])
-        
+
         success_rate = (completed / total_interactions * 100) if total_interactions > 0 else 0
-        
+
         # Calcular tiempo promedio de respuesta
         response_times = []
         for activity in activities:
             if activity.completed_at and activity.created_at:
                 delta = (activity.completed_at - activity.created_at).total_seconds()
                 response_times.append(delta)
-        
+
         avg_response = sum(response_times) / len(response_times) if response_times else 0
-        
+
         # Calcular ahorro de costos (estimado)
         # Cada interacción exitosa ahorra ~€50 en trabajo manual
         cost_savings = completed * 50
-        
+
         # Calcular tendencias (comparar con período anterior)
         prev_start = start_date - timedelta(days=days)
-        prev_activities = db.query(AgentActivity).filter(
+        prev_activities_query = db.query(AgentActivity).filter(
             AgentActivity.created_at >= prev_start,
             AgentActivity.created_at < start_date,
             tenant_filter,
-        ).count()
+        )
+        prev_activities = prev_activities_query.count()
 
         interactions_change = ((total_interactions - prev_activities) / prev_activities * 100) if prev_activities > 0 else 0
 

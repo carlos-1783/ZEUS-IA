@@ -137,6 +137,12 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         if path.startswith("/api/v1/auth/refresh"):
             return ("auth_refresh", 120)
 
+        # Checkout público (sin sesión): crea PaymentIntents reales en
+        # Stripe -- superficie sensible aunque no exija auth. Límite
+        # estricto, igual de severo que el registro de cuentas.
+        if path == "/api/v1/integrations/stripe/checkout/payment-intent" and method == "POST":
+            return ("public_checkout_payment_intent", 10)
+
         # Escrituras API: límite moderado
         if path.startswith("/api/") and method in ("POST", "PUT", "PATCH", "DELETE"):
             return ("api_write", 360 if is_auth else 120)

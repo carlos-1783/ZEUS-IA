@@ -8,14 +8,14 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.core.auth import get_current_active_user
 from app.models.user import User
+from app.models.agent_activity import AgentActivity
 
 router = APIRouter()
 
 # Metadata estática por agente: rol, dominio y capacidades declaradas del
-# producto — no son mediciones, así que no dependen de agent_activities y
-# no se tocan al hacer este endpoint "real" (Bloque 3, limpieza de
-# simulación). Lo que SÍ era simulado (status, uptime, last_activity,
-# decisions_today, avg_confidence) se calcula ahora contra la BD.
+# producto (no son mediciones, no dependen de la BD). Lo que antes era
+# simulado (status, uptime, last_activity, decisions_today, avg_confidence)
+# se calcula ahora contra agent_activities, igual que /api/v1/activities.
 AGENT_REGISTRY: Dict[str, Dict[str, Any]] = {
     "ZEUS CORE": {
         "role": "Orquestador Supremo",
@@ -95,10 +95,10 @@ AGENT_REGISTRY: Dict[str, Dict[str, Any]] = {
     },
 }
 
-# agent_activities.agent_name no siempre coincide literalmente con las
-# claves del registro de arriba — "ZEUS" (app/main.py, auth.py, webhooks.py,
-# email_service.py) y "ZEUS CORE" (chat.py, workspaces.py, teamflow.py,
-# integrations.py) alimentan el mismo agente. El resto son 1:1.
+# claves del registro de arriba: "ZEUS" (main.py, auth.py, webhooks.py,
+# email_service.py, scan_flow_service_v1.py, etc.) y "ZEUS CORE"
+# (chat.py, workspaces.py, teamflow.py, event_bus.py) alimentan el mismo
+# agente. El resto son 1:1.
 AGENT_NAME_ALIASES: Dict[str, str] = {
     "ZEUS": "ZEUS CORE",
     "ZEUS CORE": "ZEUS CORE",
@@ -109,32 +109,47 @@ AGENT_NAME_ALIASES: Dict[str, str] = {
     "AFRODITA": "AFRODITA",
 }
 
+# Criterio de estado: un agente se considera "online" si registró actividad
+# real en las últimas 24h (los agentes se disparan por acción de usuario,
+# no son procesos siempre-vivos, así que "online" = "usado recientemente").
+# "idle" = tiene actividad histórica dentro de la ventana de 30 días pero no
+# en las últimas 24h. "offline" = sin ninguna actividad registrada en 30 días.
 ONLINE_WINDOW = timedelta(hours=24)
-UPTIME_WINDOW = timedelta(days=30)
+LOOKBACK_WINDOW = timedelta(days=30)
 
 
 @router.get("/status")
 async def get_agents_status(
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
     Obtener estado real de todos los agentes del sistema, calculado a
-    partir de agent_activities (mismo patrón que /api/v1/metrics/dashboard).
-    NO requiere autenticación para permitir monitoreo público — sin cambios
-    respecto al comportamiento previo; los datos ya no son fijos, pero
-    siguen siendo agregados a nivel de todo el sistema, no por tenant.
-    """
-    from app.models.agent_activity import AgentActivity
+    partir de agent_activities (mismo patrón que /api/v1/activities).
 
+    Requiere autenticación: la respuesta expone actividad operativa real
+    (decisiones de hoy, últimos 30 días) y no debe quedar pública.
+
+    Aislamiento multiempresa: agent_activities NO tiene columna company_id
+    en esta rama (solo `user_email`, opcional). Se aplica el mismo patrón
+    ya usado en /api/v1/activities: un usuario normal solo ve actividad
+    asociada a su propio email; un superusuario ve el agregado global.
+    Esto es una limitación conocida del modelo actual, no un aislamiento
+    por empresa real — se documenta explícitamente, no se simula.
+    """
     now = datetime.utcnow()
     today_start = datetime(now.year, now.month, now.day)
-    uptime_start = now - UPTIME_WINDOW
+    lookback_start = now - LOOKBACK_WINDOW
 
-    rows = (
-        db.query(AgentActivity)
-        .filter(AgentActivity.created_at >= uptime_start, AgentActivity.created_at <= now)
-        .all()
+    effective_user_email: Optional[str] = None if getattr(current_user, "is_superuser", False) else current_user.email
+
+    query = db.query(AgentActivity).filter(
+        AgentActivity.created_at >= lookback_start,
+        AgentActivity.created_at <= now,
     )
+    if effective_user_email:
+        query = query.filter(AgentActivity.user_email == effective_user_email)
+    rows = query.all()
 
     per_agent: Dict[str, List[AgentActivity]] = {name: [] for name in AGENT_REGISTRY}
     for row in rows:
@@ -150,16 +165,21 @@ async def get_agents_status(
         completed = sum(1 for a in activities if a.status == "completed")
         decisions_today = sum(1 for a in activities if a.created_at >= today_start)
         last_activity = max((a.created_at for a in activities), default=None)
-        is_online = last_activity is not None and (now - last_activity) <= ONLINE_WINDOW
-        if is_online:
+
+        if last_activity is not None and (now - last_activity) <= ONLINE_WINDOW:
+            status = "online"
             online_count += 1
+        elif total > 0:
+            status = "idle"
+        else:
+            status = "offline"
 
         agents_status[name] = {
-            "status": "online" if is_online else "idle",
+            "status": status,
             "role": meta["role"],
             # % de actividades completadas (no fallidas) en los últimos 30
-            # días. None cuando no hay actividad registrada — no se inventa
-            # un porcentaje cuando no hay datos.
+            # días. None cuando no hay actividad registrada: no se inventa
+            # un porcentaje cuando no hay datos reales.
             "uptime": f"{(completed / total * 100):.2f}%" if total > 0 else None,
             "last_activity": last_activity.isoformat() if last_activity else None,
             "decisions_today": decisions_today,
@@ -179,6 +199,7 @@ async def get_agents_status(
         "total_agents": len(agents_status),
         "agents": agents_status,
         "system_health": system_health,
+        "scope": "company" if effective_user_email else "global_superuser",
     }
 
 @router.get("/stats")

@@ -156,15 +156,26 @@ async def log_activity(
 
     Returns:
         Actividad creada
+
+    Nota de seguridad: el campo `user_email` del payload es libremente
+    manipulable por el llamante y no puede usarse como fuente de verdad para
+    atribuir la actividad. Un usuario normal solo puede registrar actividad
+    a su propio nombre (se ignora cualquier `user_email` distinto en el
+    payload); solo un superusuario puede registrar actividad en nombre de
+    otro email (uso legítimo: procesos internos/administrativos).
     """
     try:
+        is_superuser = getattr(current_user, "is_superuser", False)
+        effective_user_email = (
+            activity.user_email if (is_superuser and activity.user_email) else current_user.email
+        )
         result = ActivityLogger.log_activity(
             agent_name=activity.agent_name.upper(),
             action_type=activity.action_type,
             action_description=activity.action_description,
             details=activity.details,
             metrics=activity.metrics,
-            user_email=activity.user_email,
+            user_email=effective_user_email,
             status=activity.status,
             priority=activity.priority
         )

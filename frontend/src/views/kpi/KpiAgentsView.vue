@@ -9,7 +9,7 @@
       <li v-for="agent in agents" :key="agent.name" class="kpi-list-item">
         <strong>{{ agent.name }}</strong>
         <span>{{ agent.role }}</span>
-        <span class="pill" :class="agent.status">{{ agent.status === 'online' ? 'Online' : 'Idle' }}</span>
+        <span class="pill" :class="agent.status">{{ statusLabel(agent.status) }}</span>
         <span class="metric">{{ agent.uptime || 'Sin datos' }}</span>
         <span class="metric">{{ agent.decisionsToday }} hoy</span>
         <span class="last-activity">{{ formatDate(agent.lastActivity) }}</span>
@@ -20,12 +20,36 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import KpiPageShell from '@/components/kpi/KpiPageShell.vue'
 
 const loading = ref(true)
 const error = ref('')
-const agents = ref([])
+
+// Metadata local solo para el nombre/rol mostrado mientras carga; el
+// estado real (status, uptime, decisiones, última actividad) llega siempre
+// del backend (GET /api/v1/agents/status), nunca queda fijo.
+const agents = ref([
+  { name: 'ZEUS CORE', role: 'Supreme Orchestrator', status: 'loading' },
+  { name: 'PERSEO', role: 'Growth Strategist', status: 'loading' },
+  { name: 'RAFAEL', role: 'Fiscal Guardian', status: 'loading' },
+  { name: 'THALOS', role: 'Cybersecurity Defender', status: 'loading' },
+  { name: 'JUSTICIA', role: 'Legal & GDPR Advisor', status: 'loading' },
+  { name: 'AFRODITA', role: 'HR & Logistics Manager', status: 'loading' },
+])
+
+const statusLabel = (status) => {
+  switch (status) {
+    case 'online':
+      return 'Online'
+    case 'idle':
+      return 'Inactivo'
+    case 'offline':
+      return 'Offline'
+    default:
+      return 'Cargando…'
+  }
+}
 
 const formatDate = (iso) => {
   if (!iso) return 'Sin actividad'
@@ -43,16 +67,22 @@ onMounted(async () => {
     // ahora calcula status/uptime/last_activity/decisions_today desde
     // agent_activities en vez de devolver valores fijos (Bloque 3, tarea 2).
     const data = await api.get('/api/v1/agents/status')
-    agents.value = Object.entries(data?.agents || {}).map(([name, info]) => ({
-      name,
-      role: info.role,
-      status: info.status,
-      uptime: info.uptime,
-      decisionsToday: info.decisions_today ?? 0,
-      lastActivity: info.last_activity,
-    }))
+    const backendAgents = data?.agents || {}
+
+    agents.value = agents.value.map((agent) => {
+      const info = backendAgents[agent.name]
+      if (!info) return { ...agent, status: 'offline' }
+      return {
+        ...agent,
+        role: info.role || agent.role,
+        status: info.status || 'offline',
+        uptime: info.uptime,
+        decisionsToday: info.decisions_today ?? 0,
+        lastActivity: info.last_activity,
+      }
+    })
   } catch (e) {
-    error.value = e?.message || 'Error cargando estado de agentes'
+    error.value = e?.message || 'Error cargando el estado de los agentes'
   } finally {
     loading.value = false
   }
@@ -90,7 +120,15 @@ onMounted(async () => {
 }
 
 .pill.idle {
-  color: rgba(255, 255, 255, 0.4);
+  color: #f59e0b;
+}
+
+.pill.offline {
+  color: #ef4444;
+}
+
+.pill.loading {
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .metric {

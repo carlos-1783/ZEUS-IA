@@ -117,7 +117,9 @@ class InvoiceBase(BaseModel):
     issue_date: datetime = Field(default_factory=datetime.utcnow, description="Date the invoice was issued")
     due_date: Optional[datetime] = Field(None, description="Due date for payment")
     notes: Optional[str] = Field(None, description="Additional notes")
-    
+
+    model_config = ConfigDict(from_attributes=True)
+
     @model_validator(mode='after')
     def validate_due_date(self) -> 'InvoiceBase':
         if self.due_date and self.due_date < self.issue_date:
@@ -131,7 +133,9 @@ class InvoiceItemBase(BaseModel):
     unit_price: float = Field(..., gt=0, description="Unit price")
     tax_rate: float = Field(0.0, ge=0, le=100, description="Tax rate in percentage")
     discount: float = Field(0.0, ge=0, description="Discount amount")
-    
+
+    model_config = ConfigDict(from_attributes=True)
+
     @field_validator('quantity')
     @classmethod
     def validate_quantity(cls, v: float) -> float:
@@ -147,6 +151,8 @@ class PaymentBase(BaseModel):
     reference: Optional[str] = Field(None, max_length=100, description="Reference number")
     notes: Optional[str] = Field(None, description="Additional notes")
     payment_date: datetime = Field(default_factory=datetime.utcnow, description="Date of payment")
+
+    model_config = ConfigDict(from_attributes=True)
 
 # Create schemas
 class ProductVariantCreate(ProductVariantBase):

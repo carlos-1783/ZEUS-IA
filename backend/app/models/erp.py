@@ -42,8 +42,15 @@ class Product(Base):
     low_stock_threshold = Column(Float, default=0.0)
     
     # Classification
-    category = Column(Enum(ProductCategory), default=ProductCategory.GOODS)
-    status = Column(Enum(ProductStatus), default=ProductStatus.ACTIVE)
+    # NOTA (Bloque 2 multi-tenant-bd): values_callable fuerza a SQLAlchemy a
+    # usar el .value (minúsculas) de cada PyEnum como representación en BD,
+    # en vez de su .name (mayúsculas, comportamiento por defecto). Sin esto,
+    # el endpoint (que asigna directamente el schema Pydantic, un str-Enum
+    # en minúsculas, al ORM) escribe valores en minúsculas que no coinciden
+    # con lo que SQLAlchemy espera leer de vuelta — rompía db.refresh() tras
+    # cada INSERT contra Postgres real. Ver alembic/versions/0001_initial_migration.py.
+    category = Column(Enum(ProductCategory, values_callable=lambda x: [e.value for e in x]), default=ProductCategory.GOODS)
+    status = Column(Enum(ProductStatus, values_callable=lambda x: [e.value for e in x]), default=ProductStatus.ACTIVE)
     
     # Relationships
     variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan")
@@ -103,7 +110,7 @@ class InventoryMovement(Base):
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True)
     
     # Movement details
-    movement_type = Column(Enum(InventoryMovementType), nullable=False)
+    movement_type = Column(Enum(InventoryMovementType, values_callable=lambda x: [e.value for e in x]), nullable=False)
     quantity = Column(Float, nullable=False)
     unit_cost = Column(Float(precision=2), nullable=True)
     
@@ -148,8 +155,8 @@ class Invoice(Base):
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
     
     # Invoice details
-    invoice_type = Column(Enum(InvoiceType), default=InvoiceType.INVOICE)
-    status = Column(Enum(InvoiceStatus), default=InvoiceStatus.DRAFT)
+    invoice_type = Column(Enum(InvoiceType, values_callable=lambda x: [e.value for e in x]), default=InvoiceType.INVOICE)
+    status = Column(Enum(InvoiceStatus, values_callable=lambda x: [e.value for e in x]), default=InvoiceStatus.DRAFT)
     issue_date = Column(DateTime, default=datetime.utcnow)
     due_date = Column(DateTime, nullable=True)
     
@@ -168,7 +175,14 @@ class Invoice(Base):
     electronic_invoice_status = Column(String(20), nullable=True)
     
     # Relationships
-    # customer = relationship("Customer", back_populates="invoices")  # TEMPORALMENTE COMENTADO PARA EVITAR ERROR DE IMPORTACIÓN CIRCULAR
+    # No hay import directo de app.models.customer aquí (ni falta hace: la
+    # referencia es un string, resuelta de forma perezosa por el registry de
+    # SQLAlchemy). El error de "importación circular" original no era tal —
+    # create_tables() en app/db/base.py ya importa tanto Customer como
+    # Invoice antes de configurar los mappers, así que el registry siempre
+    # tiene ambas clases disponibles cuando SQLAlchemy resuelve el string.
+    # Verificado: arranque completo + tests con la relación activa, sin error.
+    customer = relationship("Customer", back_populates="invoices")
     items = relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="invoice", cascade="all, delete-orphan")
     inventory_movements = relationship("InventoryMovement", back_populates="invoice")
@@ -232,8 +246,8 @@ class Payment(Base):
     
     # Payment details
     amount = Column(Float(precision=2), nullable=False)
-    payment_method = Column(Enum(PaymentMethod), nullable=False)
-    status = Column(Enum(PaymentStatus), default=PaymentStatus.PENDING)
+    payment_method = Column(Enum(PaymentMethod, values_callable=lambda x: [e.value for e in x]), nullable=False)
+    status = Column(Enum(PaymentStatus, values_callable=lambda x: [e.value for e in x]), default=PaymentStatus.PENDING)
     transaction_id = Column(String(100), nullable=True)
     
     # References

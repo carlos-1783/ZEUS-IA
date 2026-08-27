@@ -144,13 +144,16 @@ async def get_agent_metrics(
         )
 
 @router.post("/log")
-async def log_activity(activity: ActivityCreate):
+async def log_activity(
+    activity: ActivityCreate,
+    current_user: User = Depends(get_current_active_user),
+):
     """
     Registrar una nueva actividad de agente
-    
+
     Args:
         activity: Datos de la actividad
-        
+
     Returns:
         Actividad creada
     """

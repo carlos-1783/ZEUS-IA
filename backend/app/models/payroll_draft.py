@@ -12,7 +12,16 @@ class PayrollDraft(Base):
     __tablename__ = "payroll_drafts"
 
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    # Antes se llamaba "company_id" pero apuntaba a users.id (el usuario
+    # owner/empleador), no a companies.id — naming engañoso detectado en la
+    # auditoría feature/auditoria-real-nucleo. Este proyecto modela "empresa"
+    # como el propio User owner (diseño previo al modelo Company/UserCompany
+    # multi-tenant; confirmado en services/payroll_assistant_service.py y
+    # services/automation/handlers/zeus_payroll_draft.py, que resuelven este
+    # valor con `user.id`, nunca con un Company.id real). Se renombra a
+    # owner_user_id para reflejar lo que realmente es: mantiene el mismo
+    # apuntado a users.id.
+    owner_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     employee_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
 
     gross_salary = Column(Float, nullable=False)
@@ -28,4 +37,4 @@ class PayrollDraft(Base):
     generated_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     def __repr__(self):
-        return f"<PayrollDraft id={self.id} company={self.company_id} employee={self.employee_id} month={self.month}/{self.year}>"
+        return f"<PayrollDraft id={self.id} owner_user={self.owner_user_id} employee={self.employee_id} month={self.month}/{self.year}>"

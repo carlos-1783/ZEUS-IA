@@ -8,11 +8,16 @@ from app.db.base import Base
 
 
 class AutomationReadiness(Base):
-    """Modelo para evaluaciones de readiness de automatización por empresa/usuario"""
+    """Modelo para evaluaciones de readiness de automatización por usuario"""
     __tablename__ = "automation_readiness"
 
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    # Antes se llamaba "company_id" pero apuntaba a users.id — naming
+    # engañoso detectado en la auditoría feature/auditoria-real-nucleo.
+    # services/automation/handlers/zeus_automation_readiness.py ya lo
+    # documentaba en su propio comentario ("Resolver company_id (user_id)").
+    # Se renombra a user_id para reflejar lo que realmente es.
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
 
     leads_last_30_days = Column(Integer, default=0)
     avg_response_time_hours = Column(Float, default=0.0)
@@ -28,4 +33,4 @@ class AutomationReadiness(Base):
     evaluated_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     def __repr__(self):
-        return f"<AutomationReadiness company={self.company_id} score={self.score} status={self.status}>"
+        return f"<AutomationReadiness user={self.user_id} score={self.score} status={self.status}>"

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_
 from datetime import date, datetime
 
-from app.db.session import get_db
+from app.db.tenant_context import get_db_scoped
 from app.models.erp import Invoice, InvoiceItem, Payment, Product, InventoryMovement, InventoryMovementType
 from app.schemas.erp import (
     InvoiceCreate, InvoiceUpdate, InvoiceInDB, InvoiceResponse, InvoiceListResponse,
@@ -106,7 +106,7 @@ def calculate_invoice_totals(invoice: Invoice, db: Session) -> Dict[str, float]:
 
 @router.get("/", response_model=InvoiceListResponse)
 def list_invoices(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, le=1000, description="Maximum number of records to return"),
     customer_id: Optional[int] = Query(None, description="Filter by customer ID"),
@@ -174,7 +174,7 @@ def list_invoices(
 def create_invoice(
     *,
     invoice_in: InvoiceCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
     current_user: User = Depends(get_current_active_user)
 ):
     """
@@ -257,7 +257,7 @@ def create_invoice(
 @router.get("/{invoice_id}", response_model=InvoiceResponse)
 def get_invoice(
     invoice_id: int = Path(..., description="ID of the invoice to retrieve"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
     current_user: User = Depends(get_current_active_user)
 ):
     """
@@ -271,7 +271,7 @@ def update_invoice(
     *,
     invoice_id: int = Path(..., description="ID of the invoice to update"),
     invoice_in: dict = Body(..., description="Invoice fields to update"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
     current_user: User = Depends(get_current_active_user)
 ):
     """
@@ -307,7 +307,7 @@ def create_payment(
     *,
     invoice_id: int = Path(..., description="ID of the invoice to pay"),
     payment_in: PaymentCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
     current_user: User = Depends(get_current_active_user)
 ):
     """
@@ -385,7 +385,7 @@ def create_payment(
 @router.get("/{invoice_id}/payments", response_model=List[PaymentInDB])
 def list_invoice_payments(
     invoice_id: int = Path(..., description="ID of the invoice"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
     current_user: User = Depends(get_current_active_user)
 ):
     """
@@ -399,7 +399,7 @@ def list_invoice_payments(
 @router.post("/{invoice_id}/send", response_model=InvoiceResponse)
 def send_invoice(
     invoice_id: int = Path(..., description="ID of the invoice to send"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
     current_user: User = Depends(get_current_active_user)
 ):
     """
@@ -426,7 +426,7 @@ def send_invoice(
 @router.post("/{invoice_id}/void", response_model=InvoiceResponse)
 def void_invoice(
     invoice_id: int = Path(..., description="ID of the invoice to void"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
     current_user: User = Depends(get_current_active_user)
 ):
     """

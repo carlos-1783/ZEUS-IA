@@ -171,7 +171,7 @@ def _purge_user_rows(db: Session, user: User) -> Dict[str, int]:
         n = db.query(model).filter(model.user_id == uid).delete(synchronize_session=False)
         bump(label, n)
 
-    n = db.query(AutomationReadiness).filter(AutomationReadiness.company_id == uid).delete(
+    n = db.query(AutomationReadiness).filter(AutomationReadiness.user_id == uid).delete(
         synchronize_session=False
     )
     bump("automation_readiness", n)
@@ -208,7 +208,7 @@ def _purge_user_rows(db: Session, user: User) -> Dict[str, int]:
     n = (
         db.query(PayrollDraft)
         .filter(
-            (PayrollDraft.company_id == uid) | (PayrollDraft.employee_id == uid)
+            (PayrollDraft.owner_user_id == uid) | (PayrollDraft.employee_id == uid)
         )
         .delete(synchronize_session=False)
     )

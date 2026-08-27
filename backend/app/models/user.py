@@ -1,10 +1,19 @@
-from sqlalchemy import Boolean, Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Boolean, CheckConstraint, Column, Integer, String, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.base import Base
 
+# Valores válidos de User.role. Únicos dos valores que el código escribe o
+# valida en algún punto (confirmado por auditoría: app/api/v1/endpoints/
+# admin.py valida exactamente este conjunto antes de escribir el campo).
+USER_ROLE_VALUES = ("owner", "employee")
+
+
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint("role IN ('owner', 'employee')", name="ck_users_role"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)

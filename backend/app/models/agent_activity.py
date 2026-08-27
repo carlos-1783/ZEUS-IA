@@ -2,7 +2,7 @@
 📊 Agent Activity Model
 Registro de actividades de cada agente IA
 """
-from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Boolean
+from sqlalchemy import Column, ForeignKey, Integer, String, DateTime, Text, JSON, Boolean
 from sqlalchemy.sql import func
 from app.db.base import Base
 
@@ -11,7 +11,13 @@ class AgentActivity(Base):
     __tablename__ = "agent_activities"
 
     id = Column(Integer, primary_key=True, index=True)
-    
+
+    # Empresa/tenant propietaria de la actividad. Nullable para no romper filas
+    # legacy ya existentes (se aislan por user_email como fallback); toda
+    # actividad nueva registrada vía ActivityLogger.log_activity() la resuelve
+    # automáticamente a partir del usuario.
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True)
+
     # Agente que realizó la acción
     agent_name = Column(String, nullable=False, index=True)  # ZEUS, PERSEO, RAFAEL, etc.
     

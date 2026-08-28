@@ -51,26 +51,28 @@ onMounted(async () => {
 
 .metric-card {
   padding: 20px;
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.25);
-  border-radius: 12px;
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04));
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
 .label {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.55);
+  font-size: var(--zeus-text-xs, 12px);
+  color: var(--zeus-text-secondary, #52607a);
   text-transform: uppercase;
 }
 
 .value {
-  font-size: 28px;
-  font-weight: 700;
+  font-size: var(--zeus-text-2xl, 28px);
+  font-weight: var(--zeus-weight-bold, 700);
+  color: var(--zeus-text, #0f172a);
 }
 
 .value.small {
-  font-size: 16px;
+  font-size: var(--zeus-text-md, 16px);
 }
 </style>

@@ -6,9 +6,9 @@
       <div>
         <h2>Estado del sistema</h2>
         <p class="subtitle">Visibilidad Phase A — flags Railway y clasificación por agente</p>
-        <span class="system-badge">{{ status?.system_state || '…' }}</span>
+        <span class="system-badge">{{ systemStateLabel }}</span>
       </div>
-      <button class="refresh-btn" :disabled="loading" @click="load">
+      <button class="refresh-btn zeus-btn zeus-btn-accent" :disabled="loading" @click="load">
         {{ loading ? 'Actualizando…' : 'Refrescar' }}
       </button>
     </header>
@@ -19,8 +19,8 @@
       <h3>Flags Railway</h3>
       <ul class="flags-grid">
         <li v-for="(value, key) in status.flags" :key="key" :class="{ on: value, off: !value }">
-          <code>{{ key }}</code>
-          <span>{{ value ? 'ON' : 'OFF' }}</span>
+          <span class="flag-label">{{ flagLabel(key) }}</span>
+          <span>{{ value ? 'Activo' : 'Inactivo' }}</span>
         </li>
       </ul>
       <p v-if="status.zeus_core_orchestration_active" class="hint hint-ok">
@@ -38,9 +38,9 @@
         <thead>
           <tr>
             <th>Agente</th>
-            <th>Status</th>
-            <th>execution_mode</th>
-            <th>Ready</th>
+            <th>Estado</th>
+            <th>Modo de ejecución</th>
+            <th>Listo</th>
             <th>API</th>
           </tr>
         </thead>
@@ -79,8 +79,50 @@ const fixPass = ref<Record<string, unknown> | null>(null)
 const fixPassBlockers = computed(() => {
   const blockers = fixPass.value?.critical_blockers
   if (!Array.isArray(blockers) || !blockers.length) return ''
-  return `Blockers: ${blockers.join(' · ')}`
+  return `Bloqueos: ${blockers.join(' · ')}`
 })
+
+// El backend devuelve identificadores tecnicos crudos (system_state,
+// nombres de flags de Railway) -- se traducen aqui a espanol antes de
+// mostrarlos, con un formateo generico de fallback para cualquier
+// valor no mapeado (nunca se muestra el string crudo del backend).
+const SYSTEM_STATE_LABELS: Record<string, string> = {
+  CONTROLLED_UNTRUSTED: 'Controlado — pendiente de confianza total',
+  ORCHESTRATION_ACTIVE: 'Orquestación activa',
+}
+
+const systemStateLabel = computed(() => {
+  const raw = status.value?.system_state
+  if (!raw) return '…'
+  return SYSTEM_STATE_LABELS[raw] || humanizeFlagKey(raw)
+})
+
+const FLAG_LABELS: Record<string, string> = {
+  AFRODITA_EXECUTION_ENABLED: 'AFRODITA — ejecución real',
+  AFRODITA_READ_ONLY_MODE: 'AFRODITA — modo solo lectura',
+  THALOS_EXECUTION_ENABLED: 'THALOS — ejecución real',
+  THALOS_REAL_LOGS_ENABLED: 'THALOS — logs reales',
+  THALOS_BACKUP_ENABLED: 'THALOS — backup automático',
+  JUSTICE_REAL_AUDIT_ENABLED: 'JUSTICIA — auditoría real',
+  JUSTICE_READ_ONLY_MODE: 'JUSTICIA — modo solo lectura',
+  ZEUS_CORE_ENABLED: 'ZEUS CORE — activado',
+  ZEUS_AGENT_ENABLED: 'ZEUS — agente activado',
+  RAFAEL_EXECUTION_ENABLED: 'RAFAEL — ejecución real',
+  ZEUS_EVENT_BUS_ENABLED: 'ZEUS — bus de eventos',
+  ZEUS_AUTOMATION_ENGINE_ENABLED: 'ZEUS — motor de automatizaciones',
+}
+
+function humanizeFlagKey(key: string): string {
+  return key
+    .toLowerCase()
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
+
+function flagLabel(key: string): string {
+  return FLAG_LABELS[key] || humanizeFlagKey(key)
+}
 
 const load = async () => {
   error.value = ''
@@ -103,16 +145,42 @@ onMounted(load)
 </script>
 
 <style scoped>
+/* Fondo de bandas metalicas obligatorio en toda pagina (ver
+   zeus-light-system.css) -- este panel no tenia ningun token del
+   sistema nuevo. */
 .system-status-panel {
-  max-width: 960px;
-  margin: 0 auto;
+  position: relative;
+  min-height: 100vh;
+  max-width: none;
+  margin: 0;
   padding: 32px 24px 64px;
+  background-image: var(--zeus-bg);
+  font-family: var(--zeus-font-sans, 'Inter', sans-serif);
+  color: var(--zeus-text, #0f172a);
+  box-sizing: border-box;
+}
+
+.system-status-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+.system-status-panel > * {
+  position: relative;
+  max-width: 960px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .back-link {
   display: inline-block;
   margin-bottom: 16px;
-  color: #2563eb;
+  color: var(--zeus-accent, #4f46e5);
   text-decoration: none;
   font-size: 14px;
   font-weight: 600;
@@ -132,13 +200,13 @@ onMounted(load)
 
 .panel-header h2 {
   margin: 0 0 4px;
-  font-size: 26px;
-  color: #0f172a;
+  font-size: var(--zeus-text-xl, 26px);
+  color: var(--zeus-text, #0f172a);
 }
 
 .subtitle {
   margin: 0 0 8px;
-  color: #64748b;
+  color: var(--zeus-text-secondary, #52607a);
   font-size: 14px;
 }
 
@@ -147,25 +215,19 @@ onMounted(load)
   font-size: 11px;
   font-weight: 700;
   padding: 4px 10px;
-  border-radius: 6px;
-  background: #fef3c7;
+  border-radius: var(--zeus-radius-sm, 6px);
+  background: var(--zeus-warning-soft, #fef6e7);
   color: #b45309;
-  text-transform: uppercase;
 }
 
 .refresh-btn {
-  padding: 10px 16px;
-  border-radius: 8px;
-  border: 1px solid rgba(15, 23, 42, 0.2);
-  background: #fff;
-  cursor: pointer;
-  font-weight: 600;
+  white-space: nowrap;
 }
 
 .error-banner {
   padding: 12px;
-  border-radius: 8px;
-  background: #fee2e2;
+  border-radius: var(--zeus-radius-sm, 8px);
+  background: var(--zeus-danger-soft, #fdecec);
   color: #b91c1c;
   margin-bottom: 16px;
 }
@@ -174,15 +236,17 @@ onMounted(load)
 .agents-section {
   margin-bottom: 28px;
   padding: 20px;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  border-radius: 12px;
-  background: #fff;
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius, 12px);
+  background: var(--zeus-surface, #fff);
+  box-shadow: var(--zeus-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04));
 }
 
 .flags-section h3,
 .agents-section h3 {
   margin: 0 0 14px;
-  font-size: 16px;
+  font-size: var(--zeus-text-md, 16px);
+  color: var(--zeus-text, #0f172a);
 }
 
 .flags-grid {
@@ -198,28 +262,28 @@ onMounted(load)
   display: flex;
   justify-content: space-between;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--zeus-radius-sm, 8px);
   font-size: 12px;
 }
 
 .flags-grid li.on {
-  background: #dcfce7;
+  background: var(--zeus-success-soft, #e9faf3);
   color: #15803d;
 }
 
 .flags-grid li.off {
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--zeus-bg-subtle, #eef1f6);
+  color: var(--zeus-text-secondary, #52607a);
 }
 
-.flags-grid code {
-  font-size: 11px;
+.flag-label {
+  font-size: 12px;
 }
 
 .hint {
   margin: 12px 0 0;
   font-size: 13px;
-  color: #475569;
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .hint-ok {
@@ -237,13 +301,19 @@ table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  color: var(--zeus-text, #0f172a);
 }
 
 th,
 td {
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--zeus-border, #e1e5eb);
   padding: 10px 8px;
   text-align: left;
+}
+
+th {
+  color: var(--zeus-text-secondary, #52607a);
+  font-weight: var(--zeus-weight-semibold, 600);
 }
 
 .status-pill,
@@ -251,16 +321,16 @@ td {
   font-size: 11px;
   font-weight: 700;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: var(--zeus-radius-sm, 6px);
 }
 
-.status-pill.partial { background: #fef3c7; color: #b45309; }
-.status-pill.fake { background: #fee2e2; color: #b91c1c; }
-.status-pill.disconnected { background: #f1f5f9; color: #64748b; }
-.status-pill.real { background: #dcfce7; color: #15803d; }
+.status-pill.partial { background: var(--zeus-warning-soft, #fef6e7); color: #b45309; }
+.status-pill.fake { background: var(--zeus-danger-soft, #fdecec); color: #b91c1c; }
+.status-pill.disconnected { background: var(--zeus-bg-subtle, #eef1f6); color: var(--zeus-text-secondary, #52607a); }
+.status-pill.real { background: var(--zeus-success-soft, #e9faf3); color: #15803d; }
 
 .mode-pill {
-  background: #e0e7ff;
+  background: var(--zeus-accent-2-soft, #eef2ff);
   color: #3730a3;
 }
 
@@ -272,6 +342,6 @@ td {
   margin: 16px 0 0;
   padding-left: 18px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--zeus-text-secondary, #52607a);
 }
 </style>

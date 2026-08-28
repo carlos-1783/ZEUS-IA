@@ -64,17 +64,23 @@ onMounted(async () => {
   gap: 10px;
   align-items: center;
   padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 8px;
-  font-size: 13px;
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  color: var(--zeus-text, #0f172a);
+  border-radius: var(--zeus-radius-sm, 8px);
+  font-size: var(--zeus-text-sm, 13px);
+}
+
+.kpi-list-item code {
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .pill.success {
-  color: #10b981;
+  color: var(--zeus-success, #10b981);
 }
 
 .empty {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 @media (max-width: 768px) {

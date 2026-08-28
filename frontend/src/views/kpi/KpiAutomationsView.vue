@@ -64,31 +64,33 @@ onMounted(async () => {
   gap: 12px;
   align-items: center;
   padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 8px;
-  font-size: 13px;
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  color: var(--zeus-text, #0f172a);
+  border-radius: var(--zeus-radius-sm, 8px);
+  font-size: var(--zeus-text-sm, 13px);
 }
 
 .pill.active {
-  color: #10b981;
-  font-weight: 600;
-  font-size: 12px;
+  color: var(--zeus-success, #10b981);
+  font-weight: var(--zeus-weight-semibold, 600);
+  font-size: var(--zeus-text-xs, 12px);
 }
 
 .last {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 12px;
+  color: var(--zeus-text-secondary, #52607a);
+  font-size: var(--zeus-text-xs, 12px);
   text-align: right;
 }
 
 .empty {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .audit-link {
   display: inline-block;
   margin-top: 20px;
-  color: #3b82f6;
+  color: var(--zeus-accent, #4f46e5);
   text-decoration: none;
   font-size: 14px;
 }

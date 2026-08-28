@@ -385,6 +385,51 @@ const validateForm = () => {
   return isValid;
 };
 
+// Nombres de campo legibles para los mensajes de validación genéricos.
+const FIELD_LABELS = {
+  email: 'el correo electrónico',
+  password: 'la contraseña',
+  password_confirmation: 'la confirmación de contraseña',
+  first_name: 'el nombre',
+  last_name: 'los apellidos',
+  company_name: 'el nombre de la empresa',
+  phone: 'el teléfono',
+  terms: 'los términos y condiciones',
+}
+
+// Traducciones para fragmentos de mensajes tecnicos conocidos que el
+// backend (FastAPI/Pydantic/email-validator) puede devolver en ingles
+// crudo. Se busca coincidencia parcial (case-insensitive) sobre el
+// mensaje real; si no hay ninguna coincidencia, se usa el fallback
+// generico por campo — nunca se muestra el texto en ingles tal cual.
+const KNOWN_MESSAGE_TRANSLATIONS = [
+  { match: /domain name .* is reserved/i, es: 'no se permite usar un dominio de correo reservado para pruebas' },
+  { match: /is not valid.*@-sign|@-sign.*not valid/i, es: 'no tiene un formato válido' },
+  { match: /not a valid email address/i, es: 'no es una dirección de correo válida' },
+  { match: /field required/i, es: 'es obligatorio' },
+  { match: /already registered/i, es: 'ya está registrado' },
+  { match: /ensure this value has at least/i, es: 'es demasiado corto' },
+  { match: /string does not match/i, es: 'tiene un formato no válido' },
+]
+
+/**
+ * Traduce/reformula a español cualquier mensaje de validación crudo
+ * del backend para un campo concreto. Nunca devuelve el texto en
+ * inglés sin traducir — si no hay traducción específica, cae en un
+ * mensaje genérico razonable mencionando el campo afectado.
+ */
+function translateFieldMessage(field, rawMsg) {
+  const label = FIELD_LABELS[field] || (field ? `el campo "${field}"` : 'un campo del formulario')
+  if (field === 'password') {
+    return 'La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula y un número.'
+  }
+  const known = KNOWN_MESSAGE_TRANSLATIONS.find((entry) => entry.match.test(String(rawMsg || '')))
+  if (known) {
+    return `Revisa ${label}: ${known.es}.`
+  }
+  return `Revisa ${label}: el valor introducido no es válido.`
+}
+
 /** Mensaje real del backend (FastAPI: detail string o lista de errores de validación). */
 function parseRegisterError(err) {
   const data = err?.response?.data
@@ -401,7 +446,14 @@ function parseRegisterError(err) {
     if (detail === 'Email already registered') {
       return 'Este correo ya está registrado. Inicia sesión o usa otro email.'
     }
-    return detail
+    const known = KNOWN_MESSAGE_TRANSLATIONS.find((entry) => entry.match.test(detail))
+    if (known) return `No se pudo completar el registro: ${known.es}.`
+    // Si el mensaje ya viene redactado en español por el propio backend
+    // (heurística simple: contiene alguna tilde/ñ o palabras comunes en
+    // español), se muestra tal cual; si no, se usa un mensaje generico
+    // en español en vez de exponer texto tecnico en ingles.
+    const looksSpanish = /[áéíóúñÁÉÍÓÚÑ]/.test(detail) || /\b(el|la|los|las|correo|contraseña|cuenta)\b/i.test(detail)
+    return looksSpanish ? detail : 'No se pudo completar el registro. Revisa los datos introducidos e inténtalo de nuevo.'
   }
 
   if (Array.isArray(detail)) {
@@ -410,10 +462,7 @@ function parseRegisterError(err) {
         if (!item || typeof item !== 'object') return ''
         const field = Array.isArray(item.loc) ? item.loc.slice(-1)[0] : ''
         const msg = item.msg || item.message || ''
-        if (field === 'password') {
-          return 'La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula y un número.'
-        }
-        return msg
+        return translateFieldMessage(field, msg)
       })
       .filter(Boolean)
     if (parts.length) return parts.join(' ')

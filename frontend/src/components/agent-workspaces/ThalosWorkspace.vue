@@ -252,11 +252,28 @@ const selectDeliverable = (id: string) => {
   }
 };
 
+// Los ficheros de reporte de THALOS se nombran con el tipo de evento
+// crudo del backend (ver backend/services/automation/handlers/thalos.py)
+// seguido de una marca de tiempo, p.ej. "security_scan_20260101T120000Z".
+// Se traduce el prefijo conocido a una descripcion legible en espanol;
+// si aparece un tipo no mapeado, se usa un formateo generico (nunca el
+// identificador crudo en ingles).
+const EVENT_TITLE_LABELS: Record<string, string> = {
+  security_scan: 'Escaneo de seguridad',
+  task_assigned: 'Tarea asignada',
+  backup_created: 'Copia de seguridad creada',
+};
+
 const formatTitle = (item?: { id: string }) => {
   if (!item) return 'Reporte de seguridad';
   const parts = item.id.split('/');
   const filename = parts[parts.length - 1];
-  return filename.replace(/_/g, ' ').replace(/\d{8}T\d{6}Z$/, '').trim() || 'Reporte de seguridad';
+  const withoutTimestamp = filename.replace(/\d{8}T\d{6}Z$/, '').replace(/[_.]+$/, '').trim();
+  if (!withoutTimestamp) return 'Reporte de seguridad';
+  const prefix = withoutTimestamp.replace(/\.[a-z0-9]+$/i, '');
+  if (EVENT_TITLE_LABELS[prefix]) return EVENT_TITLE_LABELS[prefix];
+  const readable = prefix.replace(/_/g, ' ').trim();
+  return readable ? readable.charAt(0).toUpperCase() + readable.slice(1) : 'Reporte de seguridad';
 };
 
 const formatDate = (timestamp: number) =>

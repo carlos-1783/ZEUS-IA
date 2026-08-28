@@ -78,26 +78,40 @@ raw_env = [
 # certfile = "/etc/letsencrypt/live/zeus-ia.com/fullchain.pem"
 
 # Configuración de proxy
-# SEGURIDAD (parte del mismo hallazgo crítico corregido en
-# app/core/security_middleware.py::get_client_ip -- ver AUDIT_SEGURIDAD_ESTANDAR.md):
-# "*" le decía a UvicornWorker (que reenvía este valor a
-# uvicorn.middleware.proxy_headers.ProxyHeadersMiddleware, siempre activo)
-# que confiara en el X-Forwarded-For de CUALQUIER IP conectante, y con
-# "always_trust" esa clase toma el PRIMER valor de la lista -- exactamente
-# el mismo bypass explotado en get_client_ip (el cliente lo controla por
-# completo). Eso hacía que request.client.host (usado directamente, sin
-# pasar por get_client_ip, en app/middleware/thalos_login_audit_middleware.py
-# y app/api/v1/endpoints/checkin.py) también fuera falsificable.
-# No existe una lista pública fija de IPs del edge de Railway para
-# restringir esto a los hops reales, así que se deja en el default seguro
-# de uvicorn ("127.0.0.1"): la única IP conectante real en este despliegue
-# (el edge de Railway) casi nunca es 127.0.0.1, así que
-# ProxyHeadersMiddleware deja de reescribir request.client.host a partir de
-# una cabecera que no puede validar -- el valor queda como el peer TCP real,
-# no falsificable por header. La extracción segura de la IP "real" del
-# cliente para rate limiting vive únicamente en
-# SecurityMiddleware.get_client_ip(), que sí sabe cómo tratar
-# X-Forwarded-For de forma seleccionada (último valor, no el primero).
+# SEGURIDAD -- VUELTA 2 (ver AUDIT_SEGURIDAD_ESTANDAR.md sección 4). El
+# revisor-independiente señaló, sobre la vuelta 1 de este mismo comentario,
+# un efecto secundario no evaluado: con forwarded_allow_ips="127.0.0.1",
+# ProxyHeadersMiddleware NUNCA reescribe request.client.host en producción
+# (el peer TCP real -- el edge de Railway -- nunca es 127.0.0.1), así que
+# ese valor pasa a ser SIEMPRE el mismo para todos los usuarios reales en
+# vez de discriminar por IP -- correcto en el sentido de "no falsificable",
+# pero un dato que deja de distinguir usuarios si algo lo lee directamente.
+#
+# Confirmado (no asumido) en esta vuelta: ese efecto SOLO afecta a código
+# que lea `request.client.host` directamente. La extracción de IP para
+# seguridad (rate limiting, auditoría de login, fichajes) NO depende de
+# este ajuste ni de ProxyHeadersMiddleware -- vive únicamente en
+# app/core/security_middleware.py::get_real_client_ip(), que lee la
+# cabecera `X-Real-IP` cruda de `request.headers` (la única que Railway
+# documenta oficialmente para identificar al cliente real, ver
+# docs.railway.com/networking/public-networking/specs-and-limits) ANTES de
+# mirar `request.client.host`, y nunca X-Forwarded-For (no documentada por
+# Railway, cliente-controlable sin ninguna garantía). Esa misma función
+# ahora también la usan app/middleware/thalos_login_audit_middleware.py y
+# app/api/v1/endpoints/checkin.py (antes leían request.client.host sin
+# pasar por ella), así que el efecto "IP uniforme" que preocupaba al
+# revisor ya no aplica a esos dos archivos tampoco: si X-Real-IP llega
+# (comportamiento esperado según la documentación de Railway), discriminan
+# por IP real igual que el rate limiting; solo colapsan al valor uniforme
+# del edge si esa cabecera faltara.
+#
+# Con esto, "127.0.0.1" (el default seguro de uvicorn) sigue siendo la
+# opción correcta: sin una lista pública de IPs del edge de Railway para
+# restringir el hop de confianza de forma verificable, es preferible que
+# CUALQUIER código que en el futuro lea request.client.host directamente
+# (sin pasar por get_real_client_ip) reciba un valor no falsificable pero
+# uniforme, no uno falsificable por header ("*", el valor anterior a la
+# vuelta 1, permitía justo eso).
 forwarded_allow_ips = "127.0.0.1"
 secure_scheme_headers = {
     'X-FORWARDED-PROTOCOL': 'ssl',

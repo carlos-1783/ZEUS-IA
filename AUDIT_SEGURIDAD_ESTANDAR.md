@@ -686,3 +686,381 @@ Que falta para aprobar en la siguiente vuelta:
 
 No se ha modificado ningun archivo de codigo en esta revision. No se hace
 push ni merge a main.
+
+---
+
+## 4. Vuelta 2 — cierre real del bypass
+
+Ejecutor: ejecutor-produccion. Commit auditado por el revisor en la vuelta 1:
+`dbd0601`. Este commit corrige lo devuelto en la sección 3.
+
+### 4.1 Confirmación independiente de la documentación de Railway
+
+Se consultó en vivo, con `curl` (acceso a internet disponible en este
+entorno), `https://docs.railway.com/networking/public-networking/specs-and-limits`
+el 2026-08-28. La sección "Request Headers" de esa página dice literalmente:
+
+> Request Headers: `X-Real-IP` for identifying client's remote IP.
+> `X-Forwarded-Proto` always indicates `https`. `X-Forwarded-Host` for
+> identifying the original host header. `X-Railway-Edge` for identifying
+> the edge POP that handled the request. `X-Request-Start`...
+> `X-Railway-Request-Id`... `X-Railway-Debug`...
+
+**Confirmado, no asumido**: `X-Forwarded-For` NO aparece en ningún punto de
+esa página. `X-Real-IP` sí, documentada explícitamente como la cabecera
+"for identifying client's remote IP". Esto confirma punto por punto la cita
+del revisor-independiente en la sección 3 — la asunción arquitectónica del
+fix de la vuelta 1 (confiar en el último valor de `X-Forwarded-For`,
+descartando `X-Real-IP` por "falta de evidencia") era exactamente al revés
+de lo que dice la documentación oficial.
+
+**Limitación honesta que persiste incluso con esta confirmación**: la
+documentación dice que Railway usa `X-Real-IP` para identificar al cliente,
+pero no dice explícitamente si el edge la **sobrescribe siempre** (evitando
+que el cliente pueda fijar su propio valor) o si solo la **añade cuando no
+existe ya**. No se ha podido confirmar esto con tráfico real contra un
+despliegue de Railway (ninguna de las tres revisiones de este documento ha
+tenido acceso a un entorno de Railway real desplegado). El argumento para
+tratarla como confiable pese a esto: una cabecera cuyo propósito documentado
+es "identificar la IP real del cliente" solo cumple ese propósito si el
+edge la fija/sobrescribe él mismo -- si cualquier cliente pudiera fijarla
+libremente y Railway simplemente la reenviara tal cual, la cabecera no
+podría cumplir la función que la propia documentación le atribuye. Es una
+asunción bastante más razonable que la que hacía el fix anterior sobre
+`X-Forwarded-For` (que ni siquiera aparece documentada), pero se declara
+explícitamente que NO es una certeza al 100 %. Por eso el fix de esta
+vuelta no depende únicamente de acertar la cabecera correcta (ver 4.3).
+
+### 4.2 Rediseño de `get_client_ip()` / nueva función `get_real_client_ip()`
+
+`backend/app/core/security_middleware.py` — la lógica de `get_client_ip()`
+se movió a una función de módulo `get_real_client_ip(request)` (la clase
+`SecurityMiddleware.get_client_ip()` ahora es un delegado de una línea a
+esa función, para que **todo** el código que necesite "la IP real del
+cliente" use la misma fuente de verdad, incluidos `thalos_login_audit_middleware.py`
+y `checkin.py` -- ver 4.4).
+
+Nueva lógica:
+
+1. Si `X-Real-IP` está presente, se usa su valor (recortando espacios y
+   quedándose con el primer token si por lo que sea llegara una lista
+   separada por comas -- no se espera que llegue así según la
+   documentación, pero es una salvaguarda barata).
+2. `X-Forwarded-For` **deja de leerse por completo** para esta decisión de
+   seguridad. No hay ninguna garantía documentada de cómo la trata Railway
+   (ni que la añada, ni que la sustituya, ni que la respete de ninguna
+   forma concreta) -- confiar en ella, como hacía el fix de la vuelta 1, es
+   exactamente la misma asunción no verificada que ya falló una vez.
+3. Si `X-Real-IP` no está presente, se usa `request.client.host` (el peer
+   TCP real de la conexión ASGI) -- nunca se rellena a partir de una
+   cabecera no confiable.
+
+Esta función lee la cabecera **cruda** de `request.headers`, sin depender
+en ningún momento de que `uvicorn.middleware.proxy_headers.ProxyHeadersMiddleware`
+haya reescrito `request.client.host` -- ver 4.5 para la confirmación de por
+qué esto importa.
+
+### 4.3 Identidad compuesta: cuenta objetivo + IP para login/register/checkout
+
+Se revisó `_identity_key()` / `check_rate_limit()`: antes de este commit,
+la clave de rate limit para **todos** los buckets, incluidos `auth_login` y
+`auth_register`, era únicamente `{ip}:{anon|auth:<prefijo-token>}:{bucket}`
+-- pura IP (+ separación anónimo/autenticado), sin ningún componente de
+identidad de cuenta. Esto significaba que, si la IP detectada fuera
+falsificable por cualquier vía (la que fuera), no había ninguna otra señal
+que impidiera resetear el contador.
+
+**Cambio aplicado**: `SecurityMiddleware` ahora lee el body de los 3
+endpoints sensibles (reconstruyéndolo después para que siga siendo legible
+aguas abajo, mismo patrón que ya usaba `thalos_login_audit_middleware.py`)
+y extrae el identificador de cuenta/objetivo del intento:
+
+| Endpoint | Formato | Campo(s) leídos |
+|---|---|---|
+| `POST /api/v1/auth/login` | form-urlencoded | `username`, luego `email` |
+| `POST /api/v1/auth/register` | JSON | `email`, luego `username` |
+| `POST /api/v1/integrations/stripe/checkout/payment-intent` | JSON | `customer_email`, luego `email` |
+
+`check_rate_limit()` ahora comprueba **dos claves independientes** para los
+buckets `auth_login`, `auth_register` y `public_checkout_payment_intent`:
+la de siempre (`{identity}:{bucket}`, basada en IP) y una nueva
+(`acct:{bucket}:{email_normalizado}`), que NO depende en absoluto de qué IP
+se haya conseguido extraer. Si **cualquiera** de las dos supera el límite,
+la petición se bloquea. Esto cierra el bypass de fuerza bruta dirigido a UN
+objetivo concreto incluso si la IP reportada fuera perfectamente
+falsificable en cada petición, sin depender de ninguna asunción sobre cómo
+gestiona Railway sus cabeceras -- es la mitigación que "no depende de
+adivinar la cabecera correcta" pedida explícitamente para esta vuelta.
+
+**Alcance y honestidad sobre lo que esto NO cierra**: para `auth_register`
+y para el checkout público, el "objetivo" natural de un atacante realista
+no siempre es una única cuenta fija (a diferencia de login, donde
+"atacar la misma cuenta muchas veces" es el escenario de fuerza bruta por
+definición). Un atacante que varíe **tanto** la IP/cabecera reportada
+**como** el email en cada petición no queda cerrado por esta mitigación --
+ver 4.6 para la evidencia explícita de este caso, reproducido y confirmado
+como abierto, con las opciones de cierre completo (fuera de alcance de esta
+vuelta) documentadas honestamente.
+
+### 4.4 Unificación de `thalos_login_audit_middleware.py` y `checkin.py`
+
+El revisor señaló (punto 3 de la sección 3) que ninguno de los dos archivos
+pasaba por `get_client_ip()`, y que el cambio de `forwarded_allow_ips` en
+`gunicorn.conf.py` tenía un efecto secundario no evaluado sobre ellos: en
+producción, `request.client.host` pasaría a ser el mismo valor (la IP del
+edge de Railway) para todos los usuarios reales, en vez de una IP que
+discrimine por usuario.
+
+**Decisión tomada**: unificar ambos archivos con la nueva
+`get_real_client_ip()` (cambio de bajo riesgo -- ninguno de los dos usa la
+IP para tomar decisiones de autorización o bloqueo, solo para auditoría/
+registro, así que no hay superficie de seguridad nueva que introducir):
+
+- `backend/app/middleware/thalos_login_audit_middleware.py` línea ~76:
+  `ip = request.client.host if request.client else None` →
+  `ip = get_real_client_ip(request)`.
+- `backend/app/api/v1/endpoints/checkin.py` línea ~71:
+  `client_ip = http_req.client.host if http_req.client else None` →
+  `client_ip = get_real_client_ip(http_req)`.
+
+Con esto, si `X-Real-IP` llega correctamente desde Railway (comportamiento
+esperado según su documentación oficial), ambos archivos vuelven a
+discriminar por IP real de cada usuario en sus registros de auditoría/
+fichaje, en vez de colapsar siempre al mismo valor del edge -- el efecto
+secundario que preocupaba al revisor queda mitigado, no solo "fuera de
+alcance" como se dejó en la vuelta 1.
+
+**Nota honesta**: `get_real_client_ip()` puede devolver la cadena literal
+`"unknown"` si no hay `X-Real-IP` ni `request.client` (caso extremo, no
+observado en las pruebas de este documento) -- antes estos dos archivos
+guardaban `None` en ese caso. Se considera un cambio cosmético aceptable
+(un valor más informativo que `NULL` en los registros de auditoría), no un
+cambio de comportamiento de seguridad.
+
+### 4.5 Revisión de `gunicorn.conf.py`
+
+Se confirmó (no se asumió) leyendo el código fuente instalado de
+`uvicorn==0.29.0` en el venv compartido:
+
+- `uvicorn/workers.py::UvicornWorker.__init__` pasa
+  `forwarded_allow_ips=self.cfg.forwarded_allow_ips` (el valor de
+  `gunicorn.conf.py`) al `Config` de uvicorn que arranca cada worker.
+- `uvicorn/middleware/proxy_headers.py::ProxyHeadersMiddleware.__call__`
+  solo reescribe `scope["client"]` a partir de `X-Forwarded-For` -- **nunca
+  toca `X-Real-IP`, en ningún caso** -- y solo lo hace si el peer TCP
+  conectante (`client_host`) está en `trusted_hosts` (o `trusted_hosts`
+  contiene `"*"`).
+- Con `forwarded_allow_ips = "127.0.0.1"` (valor dejado por el fix de la
+  vuelta 1) y el edge de Railway como único peer TCP real en producción
+  (nunca `127.0.0.1`, confirmado en `railway.toml`/Dockerfile de la raíz,
+  igual que documentó la vuelta 1), `client_host in trusted_hosts` es
+  **siempre falso** en producción → `ProxyHeadersMiddleware` **nunca**
+  reescribe `scope["client"]` a partir de ninguna cabecera. Efecto
+  confirmado del revisor: correcto en el sentido de "no falsificable", pero
+  si algo leyera `request.client.host` directamente sin pasar por
+  `get_real_client_ip()`, vería siempre el mismo valor (el peer del edge)
+  para todos los usuarios reales.
+
+**Decisión**: no se revierte `forwarded_allow_ips` a `"*"` (eso reintroduce
+el bypass original: cualquier cliente podría fijar `X-Forwarded-For` y
+`ProxyHeadersMiddleware` lo tomaría como el peer real). En su lugar, tal
+como sugiere el propio enunciado de esta tarea, `get_real_client_ip()` **no
+depende de `ProxyHeadersMiddleware`** para nada: lee `X-Real-IP` directo de
+`request.headers`, nunca de `request.client.host` reescrito por ese
+middleware ASGI. Con la unificación del punto 4.4, los dos archivos que sí
+leían `request.client.host` directamente ahora tampoco dependen de ese
+middleware. `forwarded_allow_ips = "127.0.0.1"` se mantiene como red de
+seguridad para cualquier código futuro que lea `request.client.host` sin
+pasar por `get_real_client_ip()`: preferible que ese código vea un valor
+uniforme pero no falsificable, a que vuelva a ver un valor falsificable por
+cabecera (el problema original de la vuelta 0/1 con `"*"`).
+
+**Advertencia metodológica confirmada durante la verificación de esta
+vuelta** (afecta a cómo se deben leer TODAS las pruebas locales de este
+documento, incluidas las de las vueltas anteriores): al ejecutar
+`uvicorn app.main:app` **directamente** (sin gunicorn) para las pruebas
+locales, `uvicorn.Config` activa su propio `ProxyHeadersMiddleware` con
+`forwarded_allow_ips` por defecto `"127.0.0.1"` -- y como el peer TCP local
+de las pruebas con `curl` **es** `127.0.0.1`, ese middleware SÍ confía y
+reescribe `request.client.host` a partir de `X-Forwarded-For`, cosa que
+**nunca** ocurre en producción real bajo gunicorn (donde el peer jamás es
+`127.0.0.1`). Se detectó este artefacto durante la verificación de esta
+misma vuelta (un ataque de registro con emails distintos parecía bypassear
+el fix hasta darse cuenta de esto) y se corrigió arrancando el servidor de
+pruebas con `--no-proxy-headers` para replicar fielmente el comportamiento
+de producción (el peer nunca está en la lista de confianza). Todas las
+pruebas de la sección 4.6 se ejecutaron ya con este ajuste. Se deja
+documentado explícitamente porque **las pruebas de las vueltas 0 y 1 de
+este mismo documento no mencionan haber tenido en cuenta este matiz** --
+no se puede descartar que alguna de sus conclusiones locales se haya visto
+afectada por este mismo artefacto de `uvicorn` ejecutado en modo standalone
+sin `--no-proxy-headers`, aunque no cambia el veredicto final de ninguna de
+ellas (los ataques documentados como exitosos en la sección 3 lo eran por
+razones independientes de este matiz: single-value XFF list índex -1 == 0).
+
+### 4.6 Verificación en vivo (exigente, todos los ataques reproducidos)
+
+Backend local: `ENVIRONMENT=development DEBUG=true`,
+`python -m uvicorn app.main:app --host 127.0.0.1 --port 8031 --no-proxy-headers`
+(venv compartido) -- ver 4.5 para por qué `--no-proxy-headers` es necesario
+para que la prueba local sea representativa de producción. Confirmado vivo
+con `GET /health` → `200`.
+
+**1) Ataque MÁS SIMPLE (un único valor de `X-Forwarded-For`, sin lista de
+dos) — login, mismo email en las 35 peticiones:**
+```
+for i in $(seq 1 35); do
+  fakeip="10.$((RANDOM%255)).$((RANDOM%255)).$((RANDOM%255))"
+  curl -s -o /dev/null -w "%{http_code} " -X POST http://127.0.0.1:8031/api/v1/auth/login \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -H "X-Forwarded-For: $fakeip" \
+    -d "username=noexiste@test.com&password=wrongpass$i"
+done
+```
+Resultado: intentos 1-30 → `401`; **intentos 31-35 → `429`**. Bypass
+cerrado (antes: 35/35 `401`, cero `429`).
+
+**2) Mismo ataque contra register (email DISTINTO en cada intento, como
+haría un atacante real de spam de registro — 12 intentos):**
+Resultado: intentos 1-10 → `422`; **intentos 11-12 → `429`**. Cerrado por
+el fallback a `request.client.host` (constante, ya no influido por
+`X-Forwarded-For`), sin necesitar siquiera la clave de cuenta.
+
+**3) Mismo ataque contra checkout público (12 intentos, `customer_email`
+distinto cada vez):**
+Resultado: intentos 1-10 → `200` (PaymentIntent real creado); **intentos
+11-12 → `429`**. Cerrado.
+
+**4) Ataque con `X-Real-IP` falso y distinto en cada petición — login,
+MISMO email en las 35 peticiones (prueba explícita de que la identidad
+compuesta cierra el hueco incluso si la cabecera que SÍ se usa como fuente
+primaria fuera perfectamente falsificable):**
+```
+for i in $(seq 1 35); do
+  fakeip="172.16.$((RANDOM%255)).$((RANDOM%255))"
+  curl ... -H "X-Real-IP: $fakeip" -d "username=noexiste@test.com&password=wrongpass$i"
+done
+```
+Resultado: intentos 1-30 → `401`; **intentos 31-35 → `429`**. Bloqueado por
+la clave de cuenta (`acct:auth_login:noexiste@test.com`), no por IP --
+confirmado en los logs del servidor (`account_keyed=True` en las líneas de
+`Rate limited request`).
+
+**5) Mismo ataque de `X-Real-IP` falso, MISMO `customer_email` objetivo,
+contra checkout (12 intentos):** intentos 1-10 → `200`; **intentos 11-12 →
+`429`**. Cerrado por la misma clave de cuenta.
+
+**6) Límite residual reconocido explícitamente — `X-Real-IP` falso Y
+DISTINTO objetivo (email) en cada petición, register (12 intentos):**
+```
+for i in $(seq 1 12); do
+  fakeip="172.16.$((RANDOM%255)).$((RANDOM%255))"
+  curl ... -H "X-Real-IP: $fakeip" -d "{\"email\":\"residual$i@test.com\",...}"
+done
+```
+Resultado: **12/12 → `422`, CERO `429`**. Mismo patrón contra checkout
+público con `customer_email` distinto cada vez: **12/12 → `200`, CERO
+`429`**. **Este caso NO queda cerrado por el fix de esta vuelta** -- se
+reconoce explícitamente como limitación residual (ver 4.7).
+
+**7) Camino legítimo (sin ninguna cabecera falsa) — login, register y
+checkout, para confirmar que no hay regresión de comportamiento:**
+- Login, 35 intentos: 30×`401` + 5×`429` -- idéntico a las vueltas
+  anteriores.
+- Register, 12 intentos: 10×`422` + 2×`429` -- idéntico.
+- Checkout, 12 intentos: 10×`200` (PaymentIntent real en Stripe test) +
+  2×`429` -- idéntico.
+
+### 4.7 Limitaciones residuales reconocidas con total honestidad
+
+1. **No se puede confirmar al 100 %, sin tráfico real contra el edge de
+   Railway desplegado, que `X-Real-IP` sea efectivamente sobrescrito por
+   Railway y no simplemente reenviado tal cual si el cliente ya lo manda.**
+   Es la asunción más razonable disponible (coincide con la documentación
+   oficial, a diferencia de la vuelta anterior), pero sigue siendo una
+   asunción. Si resultara ser falsa, `get_real_client_ip()` seguiría siendo
+   falsificable vía `X-Real-IP` -- exactamente el mismo tipo de riesgo que
+   motivó añadir la identidad compuesta de cuenta (4.3), que no depende de
+   esta asunción para el caso de un objetivo repetido.
+2. **Un atacante que varíe SIMULTÁNEAMENTE la IP/cabecera reportada Y el
+   objetivo (email) en cada petición sigue sin poder distinguirse de
+   tráfico legítimo por identidad**, para `auth_register` y para el
+   checkout público (para `auth_login` esto es menos relevante en la
+   práctica: la única forma de que ese ataque "tenga sentido" contra login
+   sería probar contraseñas contra una lista de cuentas reales conocidas
+   variando también el email en cada intento, lo cual sigue estando
+   limitado por bucket normal de IP salvo que la IP también sea
+   perfectamente falsificable en cada petición). Reproducido y confirmado
+   explícitamente en 4.6.6 como abierto. Cerrar esto por completo
+   requeriría una de estas opciones, ninguna aplicada en esta vuelta por
+   quedar fuera del alcance pedido (compounding de identidad, no
+   infraestructura nueva):
+   - Confirmación verificada (no asumida) de qué IPs concretas puede tener
+     el edge de Railway, para validar criptográficamente el único hop de
+     confianza -- no existe públicamente, a diferencia de p. ej. los
+     rangos de Cloudflare.
+   - Un límite global no atado a identidad por bucket (p. ej. N peticiones
+     totales/minuto a `auth_register` o al checkout, sin importar IP/email)
+     -- instrumento más burdo, con riesgo de falsos positivos bajo picos de
+     tráfico legítimo reales, no añadido aquí para no introducir ese riesgo
+     sin que el usuario lo decida explícitamente.
+   - CAPTCHA / prueba de trabajo tras N intentos fallidos -- cambio de
+     producto, no solo de infraestructura, fuera del alcance de esta
+     tarea.
+3. **El store de rate limit sigue en memoria por proceso**, no compartido
+   entre réplicas/workers -- limitación ya documentada en la sección 1,
+   sin cambios en esta vuelta.
+4. **`get_real_client_ip()` puede devolver `"unknown"`** (antes `None` en
+   `thalos_login_audit_middleware.py`/`checkin.py`) si no hay `X-Real-IP`
+   ni `request.client` -- caso extremo no observado en las pruebas de este
+   documento, considerado cosmético (ver 4.4).
+5. **No se ha podido probar nada de esto contra el edge real de Railway
+   desplegado** -- limitación que comparten las tres vueltas de este mismo
+   documento. Toda la evidencia de 4.6 es contra un backend local, con la
+   salvedad metodológica de 4.5 (`--no-proxy-headers`) aplicada
+   explícitamente para que esa evidencia local sea representativa de la
+   arquitectura de producción real (gunicorn + `forwarded_allow_ips`
+   fijo + edge que nunca es el peer de confianza).
+
+### 4.8 Verificación de regresión
+
+```
+C:\Users\Acer\ZEUS-IA\backend\venv\Scripts\python.exe -m pytest tests -q
+```
+Ejecutado tras aplicar todos los cambios de esta vuelta (`security_middleware.py`,
+`thalos_login_audit_middleware.py`, `checkin.py`, `gunicorn.conf.py`).
+Resultado: **7 failed, 300 passed, 3 errors** -- idéntico al baseline citado
+en las secciones 0/3 de este documento, mismos 7 tests y 3 errores
+preexistentes (ninguno relacionado con rate limiting, extracción de IP, ni
+con los endpoints tocados). Sin regresión.
+
+### 4.9 Conclusión de esta vuelta
+
+- El bypass crítico de rate limiting está corregido para el ataque más
+  simple y más probable (un único valor de IP/cabecera falso por
+  petición, sin necesidad de simular un segundo hop), verificado en vivo
+  contra login, register y checkout, con `X-Forwarded-For` Y con
+  `X-Real-IP` como vector de ataque, y sin regresión del camino legítimo.
+- La identidad compuesta (cuenta/objetivo + IP) para `auth_login`,
+  `auth_register` y `public_checkout_payment_intent` cierra el caso más
+  realista y barato de ejecutar (repetir el ataque contra UN objetivo fijo)
+  de forma robusta, sin depender de acertar qué cabecera usa Railway.
+- Queda una limitación residual reconocida explícitamente y no cerrada en
+  esta vuelta (4.7.2): variar simultáneamente IP y objetivo en cada
+  petición contra `auth_register`/checkout. Se documenta con honestidad
+  total en vez de reclamarse como cerrada -- corresponde al usuario decidir
+  si esto bloquea el deploy o se acepta como riesgo residual conocido,
+  dado que cerrarlo del todo requiere infraestructura (Redis compartido,
+  límite global, CAPTCHA) fuera del alcance de esta tarea.
+- Se unificó `thalos_login_audit_middleware.py` y `checkin.py` con la
+  misma lógica de extracción de IP (cambio de bajo riesgo, sin superficie
+  de autorización nueva), resolviendo el efecto secundario que el revisor
+  señaló sobre `forwarded_allow_ips`.
+- Sin regresión de tests (`7 failed, 300 passed, 3 errors`, idéntico al
+  baseline).
+- No se ha hecho push ni merge a `main`. Rama:
+  `feature/consolidacion-final`. **Este es el tercer intento sobre el mismo
+  hallazgo** (vuelta 0 → vuelta 1 devuelta → esta vuelta 2). Dado el
+  historial de dos devoluciones previas, este commit necesita una TERCERA
+  revisión independiente antes de considerar el hallazgo cerrado -- el
+  propio ejecutor no se declara cerrado a sí mismo.

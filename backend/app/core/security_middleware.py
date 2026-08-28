@@ -65,16 +65,58 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         return response
     
     def get_client_ip(self, request: Request) -> str:
-        """Obtener IP real del cliente"""
-        # Verificar headers de proxy
+        """Obtener IP real del cliente para bucketing de rate limit / bloqueo.
+
+        SEGURIDAD (hallazgo crítico corregido, confirmado en vivo por
+        revisor-independiente): NUNCA tomar el primer valor de
+        `X-Forwarded-For`. Esa cabecera la escribe originalmente el propio
+        cliente que hace la petición -- cualquiera puede mandar
+        `X-Forwarded-For: <lo-que-quiera>` y, si tomamos el valor más a la
+        izquierda, controla por completo la "IP" que usamos como clave de
+        rate limit. Antes de este fix, bastaba con mandar un
+        `X-Forwarded-For` distinto en cada petición para resetear el
+        contador -- bypass total verificado con 35/35 intentos de login y
+        12/12 de registro sin ningún 429.
+
+        Arquitectura de despliegue asumida (ver `railway.toml` + `Dockerfile`
+        de la raíz): un ÚNICO servicio Railway, con el edge/proxy de Railway
+        como único hop de confianza delante de gunicorn/uvicorn -- el
+        cliente nunca conecta directo al proceso de la app. Igual que
+        cualquier reverse proxy estándar (nginx `$proxy_add_x_forwarded_for`,
+        patrón que ya existía en la config nginx legacy de este repo en
+        `backend/nginx/conf.d/zeus.conf`), asumimos que ese único proxy de
+        confianza AÑADE su propia percepción de la IP del cliente al FINAL
+        de la lista de `X-Forwarded-For` en vez de sustituir lo que venga
+        antes. Bajo esa asunción, el ÚLTIMO valor de la lista es el único
+        que el cliente no puede falsificar (todo lo que venga antes de ese
+        último valor lo controla quien hace la petición). Por eso tomamos el
+        valor MÁS A LA DERECHA, nunca el de la izquierda.
+
+        LIMITACIÓN EXPLÍCITA: no existe (o no se ha encontrado en este repo)
+        una lista pública y estable de rangos de IP del edge de Railway para
+        poder validar criptográficamente ese único hop (a diferencia de, por
+        ejemplo, los rangos publicados de Cloudflare). Si Railway cambiara su
+        forma de construir `X-Forwarded-For` (p. ej. sustituyendo en vez de
+        anteponer/añadir), o si se añadiera otro proxy delante de Railway,
+        esta asunción debe revisarse. Ver `AUDIT_SEGURIDAD_ESTANDAR.md` para
+        el detalle completo del hallazgo y la evidencia antes/después.
+
+        Por el mismo motivo, `X-Real-IP` tampoco se trata como cabecera de
+        confianza aquí: no hay evidencia de que Railway la establezca (es una
+        convención específica de nginx, y nginx no forma parte del árbol de
+        despliegue real -- ver Dockerfile raíz, que ejecuta gunicorn
+        directamente sin nginx delante). Si algún día se añade un proxy
+        propio que sí la fije de forma fiable, esta función debe actualizarse
+        explícitamente para reflejarlo.
+        """
         forwarded_for = request.headers.get("X-Forwarded-For")
         if forwarded_for:
-            return forwarded_for.split(",")[0].strip()
-        
-        real_ip = request.headers.get("X-Real-IP")
-        if real_ip:
-            return real_ip
-        
+            hosts = [h.strip() for h in forwarded_for.split(",") if h.strip()]
+            if hosts:
+                # Último valor = el que añadió el único proxy de confianza
+                # (Railway). Ver docstring: nunca el primero.
+                return hosts[-1]
+
         return request.client.host if request.client else "unknown"
     
     def is_ip_blocked(self, ip: str) -> bool:

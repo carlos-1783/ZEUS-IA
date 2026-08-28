@@ -5,12 +5,192 @@ Commit base auditado: `d864937` (aprobación definitiva de consolidación, pendi
 Fecha: 2026-08-28
 Ejecutor: ejecutor-produccion (skill `zeus-produccion`)
 
-Resultado global: **ambos puntos ya estaban correctamente implementados en el
-código heredado de esta rama.** No fue necesario ningún cambio de código. Este
-documento dejó evidencia real (no solo lectura de código) de que ambos
-controles funcionan en producción tal y como están, y documenta un hallazgo
-menor no bloqueante (archivos de configuración CORS duplicados/muertos) para
-que el usuario decida si se limpian en un step aparte.
+Resultado global: **la verificación inicial de este documento (commit
+`ee1f212`) fue incompleta.** Declaró el rate limiting como "ya correctamente
+implementado" probando el mecanismo de bucketing/límite en sí, pero **sin
+probar la extracción de la IP que se usa como clave de ese límite**. El
+revisor-independiente reprodujo en vivo, después de esa aprobación, un bypass
+total del rate limiting mandando un `X-Forwarded-For` distinto y falso en
+cada petición (35/35 intentos de login y 12/12 de registro sin ningún `429`).
+Ver la sección **"0. Hallazgo crítico: bypass de rate limiting vía
+X-Forwarded-For falsificado"** más abajo para la causa raíz, el fix aplicado
+y la evidencia completa antes/después. La conclusión general de este
+documento se actualiza en consecuencia: no se puede decir ya que "ambos
+puntos ya estaban correctamente implementados" sin matices — el mecanismo de
+límites (buckets/umbrales) sí era correcto, pero la pieza que lo hacía inútil
+en la práctica (identificación de IP) tenía un fallo real y explotable, ya
+corregido.
+
+---
+
+## 0. Hallazgo crítico: bypass de rate limiting vía X-Forwarded-For falsificado
+
+**Severidad: crítica. Estado: corregido en este mismo commit.**
+
+### Causa raíz
+
+`get_client_ip()` en `backend/app/core/security_middleware.py` (líneas
+~67-78 antes del fix) usaba directamente, sin ninguna validación, el header
+`X-Forwarded-For` que envía el propio cliente:
+
+```python
+forwarded_for = request.headers.get("X-Forwarded-For")
+if forwarded_for:
+    return forwarded_for.split(",")[0].strip()
+```
+
+Como la clave de rate limit (`check_rate_limit` → `_identity_key` →
+`f"{ip}:anon"` o `f"{ip}:auth:..."`) se construye a partir de esa IP,
+**bastaba con enviar un `X-Forwarded-For` distinto en cada petición para
+resetear el contador por completo**, porque el valor más a la izquierda de
+esa cabecera lo controla por completo quien hace la petición HTTP — no hay
+forma de distinguir, leyendo solo ese primer valor, entre un proxy legítimo y
+un atacante mintiendo sobre su propia IP.
+
+Contribuía al mismo problema `backend/gunicorn.conf.py`, que tenía
+`forwarded_allow_ips = "*"`. Ese valor se pasa a `UvicornWorker` y de ahí a
+`uvicorn.middleware.proxy_headers.ProxyHeadersMiddleware` (activo siempre,
+ver `uvicorn/config.py` línea 469), cuyo método `get_trusted_client_host`
+hace exactamente lo mismo con `"*"` (`always_trust=True` → toma
+`x_forwarded_for_hosts[0]`, el primer valor, controlado por el cliente).
+Esto significaba que **incluso el `request.client.host` que rellena esa
+middleware** — usado directamente, sin pasar por `get_client_ip()`, en
+`backend/app/middleware/thalos_login_audit_middleware.py` (línea 63, log de
+auditoría de intentos de login) y `backend/app/api/v1/endpoints/checkin.py`
+(línea 71, registro de fichajes) — también era falsificable vía cabecera,
+aunque esos dos archivos no fueron el foco de la explotación demostrada por
+el revisor y quedan fuera del alcance de este commit (ver "Pendiente" más
+abajo).
+
+### Prueba REAL ejecutada — ANTES del fix (reproducción propia, confirmando la del revisor)
+
+Backend local: `ENVIRONMENT=development DEBUG=true` +
+`python -m uvicorn app.main:app --host 127.0.0.1 --port 8010` (venv
+compartido).
+
+**Login — 35 intentos con `X-Forwarded-For` aleatorio y distinto en cada petición:**
+```bash
+for i in $(seq 1 35); do
+  fakeip="10.$((RANDOM%255)).$((RANDOM%255)).$((RANDOM%255))"
+  curl -s -o /dev/null -w "%{http_code} " -X POST http://127.0.0.1:8010/api/v1/auth/login \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -H "X-Forwarded-For: $fakeip" \
+    -d "username=noexiste@test.com&password=wrongpass$i"
+done
+```
+Resultado: **35/35 → `401`, ningún `429`** (debería haber bloqueado a partir
+del intento 31, límite configurado 30/min). Confirma exactamente el hallazgo
+del revisor.
+
+**Register — 12 intentos con `X-Forwarded-For` aleatorio y distinto en cada petición:**
+mismo patrón contra `/api/v1/auth/register`. Resultado: **12/12 → `422`,
+ningún `429`** (debería haber bloqueado a partir del intento 11, límite
+configurado 10/min).
+
+### Fix aplicado
+
+**1. `backend/app/core/security_middleware.py::get_client_ip()`** — reescrito
+para tomar el **último** valor de `X-Forwarded-For` (el más a la derecha),
+nunca el primero, y para dejar de confiar en `X-Real-IP` (cabecera que no
+hay evidencia de que Railway establezca).
+
+**Asunción arquitectónica explícita** (documentada también como docstring en
+el propio código): el despliegue real es un único servicio Railway
+(`railway.toml` + `Dockerfile` de la raíz: `gunicorn -c gunicorn.conf.py
+app.main:app`, sin nginx ni ningún otro proxy propio delante — se confirmó
+que `backend/nginx/conf.d/zeus.conf` no se referencia desde ningún
+Dockerfile/railway.toml real, es config muerta). El edge de Railway es el
+**único hop de confianza** delante de la app; el cliente nunca conecta
+directo al proceso. Igual que cualquier reverse proxy estándar (patrón
+`$proxy_add_x_forwarded_for` de nginx, que de hecho ya aparecía en esa misma
+config nginx muerta del repo), asumimos que ese proxy **añade** su propia
+percepción de la IP del cliente al final de la lista, en vez de sustituir lo
+que venga antes. Bajo esa asunción, el último valor es el único que el
+cliente no puede falsificar.
+
+**Limitación reconocida explícitamente**: no se encontró en este repo (ni es
+públicamente estable, a diferencia p. ej. de los rangos de Cloudflare) una
+lista de IPs del edge de Railway para poder restringir esto de forma
+criptográficamente verificable a "solo confiar si la conexión viene
+literalmente de Railway". Si Railway cambiara su forma de construir
+`X-Forwarded-For` (sustituir en vez de añadir) o se añadiera otro proxy
+delante, esta asunción debería revisarse. Se documenta explícitamente en el
+código y aquí en vez de asumirlo silenciosamente.
+
+**2. `backend/gunicorn.conf.py`** — `forwarded_allow_ips` cambiado de `"*"` a
+`"127.0.0.1"` (el default seguro de uvicorn). Esto hace que
+`ProxyHeadersMiddleware` deje de reescribir `request.client.host` a partir de
+una cabecera que no puede validar (la IP conectante real en este despliegue,
+el edge de Railway, no es `127.0.0.1`), cerrando también la vía de bypass a
+nivel ASGI que afectaba a `thalos_login_audit_middleware.py` y
+`checkin.py` sin tener que tocar esos archivos en este commit. La extracción
+segura de IP para rate limiting queda centralizada únicamente en
+`SecurityMiddleware.get_client_ip()`.
+
+### Prueba REAL ejecutada — DESPUÉS del fix
+
+Servidor reiniciado con el código corregido.
+
+**Ataque simulando la arquitectura real** (petición con `X-Forwarded-For`
+falso y distinto en cada intento, **más un valor estable al final simulando
+lo que el edge de Railway añadiría** — sin esto, una reproducción local sin
+proxy real por delante no puede distinguir "tomar el primero" de "tomar el
+último", porque solo hay un valor en la cabecera; con un proxy real por
+delante, el valor final SIEMPRE está presente y es estable):
+
+```bash
+for i in $(seq 1 35); do
+  fakeip="10.$((RANDOM%255)).$((RANDOM%255)).$((RANDOM%255))"
+  curl -s -o /dev/null -w "%{http_code} " -X POST http://127.0.0.1:8010/api/v1/auth/login \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -H "X-Forwarded-For: $fakeip, 203.0.113.77" \
+    -d "username=noexiste@test.com&password=wrongpass$i"
+done
+```
+Resultado: intentos 1-30 → `401`; **intentos 31-35 → `429`**. Bypass cerrado.
+
+Mismo patrón repetido contra `/api/v1/auth/register` (12 intentos, límite
+10/min): intentos 1-10 → `422`; **intentos 11-12 → `429`**.
+
+Mismo patrón repetido contra
+`/api/v1/integrations/stripe/checkout/payment-intent` (12 intentos, límite
+10/min): intentos 1-10 → `200` (PaymentIntent real creado en modo test de
+Stripe); **intentos 11-12 → `429`**.
+
+**Camino legítimo (sin ninguna cabecera `X-Forwarded-For`, IP consistente vía
+`request.client.host` real de la conexión TCP)** — para confirmar que no se
+rompió el comportamiento correcto:
+```bash
+for i in $(seq 1 35); do
+  curl -s -o /dev/null -w "%{http_code} " -X POST http://127.0.0.1:8010/api/v1/auth/login \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "username=noexiste@test.com&password=wrongpass$i"
+done
+```
+Resultado: intentos 1-30 → `401`; intentos 31-35 → `429` — **idéntico al
+comportamiento documentado en la sección 1 antes de este fix**, sin
+regresión.
+
+### Pendiente / limitación conocida
+
+- No se pudo confirmar contra el edge real de Railway desplegado (misma
+  limitación que el resto de este documento: solo se probó contra el backend
+  local). La asunción de que Railway *añade* en vez de *sustituir* el valor
+  de `X-Forwarded-For` es la práctica estándar de cualquier reverse proxy y
+  la que ya asumía la config nginx (muerta) de este mismo repo, pero no se
+  pudo verificar con tráfico real contra Railway en este entorno.
+- `thalos_login_audit_middleware.py` (línea 63) y `checkin.py` (línea 71)
+  siguen leyendo `request.client.host` directamente en vez de pasar por
+  `SecurityMiddleware.get_client_ip()`. El cambio de `forwarded_allow_ips` en
+  `gunicorn.conf.py` los protege igualmente del bypass por cabecera (ya no se
+  reescribe `request.client.host` a partir de un header no confiable), pero
+  no se unificó su lectura de IP con `get_client_ip()` en este commit por ser
+  un cambio de alcance distinto (dos archivos de dominios distintos —
+  auditoría de login y fichajes — no relacionados con el hallazgo de rate
+  limiting reportado). Se deja como hallazgo para que el auditor/usuario
+  decida si merece una tarea propia de unificación.
+- Persiste la limitación ya documentada en la sección 1: el store de rate
+  limit es en memoria por proceso, no compartido entre réplicas/workers.
 
 ---
 
@@ -263,18 +443,16 @@ correctamente.
 
 ## Verificación de regresión
 
-Suite completa ejecutada ANTES de iniciar esta verificación (no se tocó
-código de producción en este step, por lo que este resultado es también el
-resultado DESPUÉS):
+Suite completa ejecutada ANTES de iniciar la verificación original de este
+documento (commit `ee1f212`):
 
 ```
 C:\Users\Acer\ZEUS-IA\backend\venv\Scripts\python.exe -m pytest tests -q
 ```
-Resultado: **7 failed, 300 passed, 3 errors** (idéntico al baseline documentado
-en el commit `d864937` de aprobación definitiva). Sin regresión.
+Resultado: **7 failed, 300 passed, 3 errors**.
 
-Fallos preexistentes (ya documentados como no bloqueantes en la aprobación
-anterior, no relacionados con este step):
+Fallos preexistentes (no relacionados con este documento ni con el fix de la
+sección 0):
 `test_basic.py::test_config_loading`,
 `test_justicia_control_layer_v1.py::test_default_flags_simulated`,
 `test_perseo_autofix_v2.py::test_audit_includes_ai_modules`,
@@ -284,21 +462,49 @@ anterior, no relacionados con este step):
 `test_thalos_safe_v1.py::test_monitoring_cycle_respects_flags`,
 y 3 errores en `test_app.py` (`NameError: name 'TestClient' is not defined`).
 
+**Re-ejecutada de nuevo tras aplicar el fix de la sección 0** (cambios en
+`backend/app/core/security_middleware.py` y `backend/gunicorn.conf.py`):
+mismo resultado, **7 failed, 300 passed, 3 errors**, con exactamente los
+mismos 7 tests y 3 errores fallando (ninguno relacionado con rate limiting
+ni con extracción de IP — no hay tests existentes que cubrieran
+`get_client_ip()` antes de este commit). Sin regresión.
+
 ---
 
 ## Conclusión
 
-- **Rate limiting**: ya implementado y verificado en vivo (429 real) en los 3
-  endpoints pedidos (login 30/min, register 10/min, checkout público
-  payment-intent 10/min). No se requirió instalar `slowapi` ni cambiar código.
-  Limitación conocida: contador en memoria por proceso, no compartido entre
-  réplicas/workers — pendiente si el despliegue usa más de una instancia.
+- **Rate limiting**: el mecanismo de buckets/umbrales (login 30/min, register
+  10/min, checkout público payment-intent 10/min) era correcto, pero la
+  verificación original de este documento (commit `ee1f212`) NO era
+  suficiente: no probó la extracción de IP que alimenta la clave de ese
+  límite. El revisor-independiente demostró en vivo un **bypass total**
+  (sección 0) explotando que `get_client_ip()` confiaba sin validar en el
+  primer valor de `X-Forwarded-For`, cabecera que controla el propio
+  cliente. **Corregido en este commit**: `get_client_ip()` ahora toma el
+  último valor de la lista (el añadido por el único proxy de confianza,
+  Railway, bajo la asunción arquitectónica documentada en la sección 0), y
+  `gunicorn.conf.py` ya no confía en `X-Forwarded-For` de cualquier IP
+  (`forwarded_allow_ips` de `"*"` a `"127.0.0.1"`). Re-verificado en vivo:
+  el mismo ataque que antes daba 35/35 y 12/12 sin ningún `429` ahora
+  bloquea correctamente a partir del intento correspondiente en los 3
+  endpoints, sin romper el camino legítimo (IP consistente sin spoofing).
+  Limitación conocida sin cambios: contador en memoria por proceso, no
+  compartido entre réplicas/workers.
 - **CORS**: ya restringido a lista explícita de orígenes (nunca `"*"`),
   verificado en vivo que un origen no autorizado no se refleja y es
   rechazado en preflight (`400`), mientras que localhost de desarrollo y los
-  3 dominios de producción configurados sí funcionan.
-- **No se hizo ningún commit de código** porque no se encontró nada que
-  arreglar en el alcance pedido. Este documento en sí es el artefacto a
-  commitear.
+  3 dominios de producción configurados sí funcionan. Sin cambios en este
+  commit.
+- **Se hizo un commit de código** en este step (a diferencia de la
+  verificación original): el fix del hallazgo crítico de la sección 0 en
+  `backend/app/core/security_middleware.py` y `backend/gunicorn.conf.py`,
+  junto con esta actualización del documento.
+- Pendiente explícito para otra revisión: unificar `thalos_login_audit_middleware.py`
+  y `checkin.py` (que leen `request.client.host` directamente en vez de vía
+  `get_client_ip()`) si se decide que también deben beneficiarse de la
+  misma lógica de "último hop de confianza" de forma explícita en su propio
+  código, en vez de depender solo de que `gunicorn.conf.py` ya no reescriba
+  `request.client.host` a partir de cabeceras no confiables.
 - No se ha hecho push ni merge a `main`. Rama de trabajo:
-  `feature/consolidacion-final`.
+  `feature/consolidacion-final`. Este commit necesita otra revisión
+  independiente antes de considerar la consolidación lista para deploy.

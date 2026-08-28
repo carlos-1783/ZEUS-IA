@@ -1064,3 +1064,231 @@ con los endpoints tocados). Sin regresión.
   historial de dos devoluciones previas, este commit necesita una TERCERA
   revisión independiente antes de considerar el hallazgo cerrado -- el
   propio ejecutor no se declara cerrado a sí mismo.
+
+---
+
+## 5. Tercera revision independiente (commit 5798be0) - VEREDICTO: APROBADO CON SALVEDAD EXPLICITA
+
+Revisor: revisor-independiente. Commit auditado: 5798be0b88d71786e29dff60fd4dba7039df0dec
+("fix(security): vuelta 2 - cerrar bypass real de rate limiting via IP
+falsificada"). Este es el TERCER intento sobre el mismo hallazgo (vuelta 0
+ee1f212 devuelta, vuelta 1 dbd0601 devuelta, esta es la vuelta 2). Dado el
+historial, esta revision se hizo con el nivel de exigencia mas alto de las
+tres: cada afirmacion del reporte se reprodujo de forma independiente contra
+un backend levantado por mi propia cuenta (no se reutilizo ningun output
+pegado en el documento), con datos propios y, en varios casos, con ataques
+adicionales no descritos explicitamente por el ejecutor.
+
+### 5.1 Reproduccion del "artefacto metodologico" (uvicorn sin --no-proxy-headers)
+
+Confirmado como REAL, no como excusa. Levante dos servidores propios con el
+venv compartido, mismo commit 5798be0:
+
+- Puerto 8091: python -m uvicorn app.main:app --host 127.0.0.1 --port 8091
+  (SIN --no-proxy-headers, el comportamiento por defecto).
+- Puerto 8092/8093: mismo comando CON --no-proxy-headers.
+
+Ataque: 12 intentos de POST /api/v1/auth/register, un X-Forwarded-For
+aleatorio distinto por peticion (un solo valor, sin lista), email DISTINTO
+en cada intento.
+
+- Puerto 8091 (sin --no-proxy-headers): 12/12 -> 422, CERO 429. Bypass
+  aparente.
+- Puerto 8092 (con --no-proxy-headers): 10x422 + 2x429. Bloqueado
+  correctamente.
+
+Causa confirmada leyendo el codigo fuente instalado de uvicorn==0.29.0
+(uvicorn/middleware/proxy_headers.py, ProxyHeadersMiddleware.__init__):
+trusted_hosts por defecto es 127.0.0.1. Cuando el peer TCP de la prueba
+local (curl contra 127.0.0.1) coincide con ese default, la propia libreria
+de uvicorn reescribe scope client a partir de X-Forwarded-For incluso
+aunque la aplicacion nunca lea esa cabecera -- y como get_real_client_ip()
+cae a request.client.host cuando no hay X-Real-IP, ese valor reescrito se
+filtra igualmente. En produccion (gunicorn, forwarded_allow_ips igual a
+127.0.0.1, peer real = edge de Railway, nunca 127.0.0.1, confirmado en
+railway.toml/Dockerfile raiz) esta reescritura nunca ocurre, asi que la
+prueba con --no-proxy-headers es la que replica fielmente produccion, no la
+que se ejecuto sin ese flag. Confirmo la advertencia del ejecutor: es
+plausible que las vueltas 0 y 1 de este documento arrastraran este mismo
+artefacto sin saberlo (no mencionan el flag en ninguna de sus pruebas), pero
+no cambia sus veredictos: los bypasses que demostraron entonces eran reales
+por una razon independiente de este matiz.
+
+### 5.2 Ataque IP falsa mas objetivo FIJO en los 3 endpoints -- CONFIRMADO BLOQUEADO
+
+Contra el servidor propio con --no-proxy-headers (puerto 8092/8093, replica
+fiel de produccion), con datos 100 por ciento propios (nunca reutilice los
+que aparecen en el documento):
+
+- Login, X-Real-IP aleatorio distinto en cada peticion, MISMO
+  username fixedtarget en las 35 peticiones: 30x401 + 5x429 (bloqueo en el
+  intento 31, exactamente el limite configurado). Confirmado tambien con
+  X-Forwarded-For de un solo valor en vez de X-Real-IP (servidor 8093,
+  arrancado limpio): 30x401 + 5x429.
+- Checkout publico, X-Real-IP aleatorio distinto, MISMO customer_email
+  fijo: 10x200 + 2x429.
+
+Ambos casos bloqueados por la clave de cuenta, no por IP -- consistente con
+lo que reporta el ejecutor.
+
+### 5.3 Ataque IP falsa mas objetivo DISTINTO cada vez -- CONFIRMADO ABIERTO y mas amplio de lo que enfatiza el reporte
+
+Reproducido de forma independiente, servidor propio limpio,
+--no-proxy-headers:
+
+- Register, X-Real-IP aleatorio distinto mas email distinto en cada una de
+  12 peticiones: 12/12 -> 422, CERO 429. Abierto, tal como admite el
+  ejecutor.
+- Checkout publico, mismo patron con customer_email distinto cada vez (12
+  peticiones): 12/12 -> 200, PaymentIntent real creado cada vez, CERO 429.
+  Abierto, tal como admite el ejecutor.
+- Login (hallazgo adicional, no verificado explicitamente por el ejecutor
+  con esta combinacion exacta pero coherente con su propio razonamiento en
+  4.7.2): X-Real-IP aleatorio distinto mas username distinto en cada una de
+  35 peticiones: 35/35 -> 401, CERO 429. Tambien abierto. El reporte de la
+  vuelta 2 caracteriza este caso para login como menos relevante en la
+  practica porque, segun su propio razonamiento, solo importa si la IP
+  tambien fuera perfectamente falsificable en cada peticion -- mi prueba
+  confirma exactamente esa condicion y el resultado es bypass total tambien
+  en login, no solo en register/checkout. No cambia mi veredicto (ver 5.7)
+  pero corrige la impresion de que login queda a salvo de esta variante: no
+  queda a salvo, queda protegido solo mientras la IP reportada no sea
+  trivialmente falsificable por peticion.
+
+### 5.4 Verificacion independiente de la documentacion de Railway
+
+Repeti la consulta del ejecutor con mi propio curl contra
+https://docs.railway.com/networking/public-networking/specs-and-limits
+(HTTP 200, 2026-08-28). Confirmado, no solo citado: la fila Request Headers
+de la tabla Technical specifications documenta explicitamente X-Real-IP
+para identificar la IP remota del cliente, junto con X-Forwarded-Proto,
+X-Forwarded-Host, X-Railway-Edge, X-Request-Start, X-Railway-Request-Id,
+X-Railway-Debug. X-Forwarded-For no aparece en ningun punto del documento
+(busque el literal X-Forwarded-For sobre el HTML descargado: cero
+coincidencias). Coincide exactamente con la cita del ejecutor en la
+seccion 4.1. La limitacion honesta que el propio ejecutor reconoce (no hay
+confirmacion de que Railway sobrescriba X-Real-IP en vez de solo anadirla
+si falta) sigue sin poder verificarse sin trafico real contra el edge
+desplegado -- no lo pude cerrar yo tampoco en este entorno.
+
+### 5.5 Camino legitimo y regresion -- SIN CAMBIOS RESPECTO A LO REPORTADO
+
+Contra el servidor propio (--no-proxy-headers, sin ninguna cabecera
+falsa): Login 30x401 + 5x429, Register 10x422 + 2x429, Checkout 10x200 +
+2x429 -- identico al comportamiento documentado en las secciones 0/1/3/4,
+sin regresion de UX para trafico legitimo.
+
+Suite completa, ejecutada por mi cuenta, no reutilizada del reporte, con el
+venv compartido (backend/venv/Scripts/python.exe -m pytest tests -q).
+Resultado obtenido: 7 failed, 300 passed, 34 warnings, 3 errors en 329.58s
+-- mismos 7 tests y 3 errores citados en las secciones 0/3/4
+(test_config_loading, test_default_flags_simulated,
+test_audit_includes_ai_modules,
+test_default_mode_is_simulation_for_heuristic_modules,
+test_backup_requires_execution_and_backup_flags,
+test_build_metadata_origin_mock, test_monitoring_cycle_respects_flags, y 3
+NameError en test_app.py). Coincide exactamente con el baseline citado.
+Sin regresion.
+
+### 5.6 Codigo: confirmacion linea a linea
+
+- security_middleware.py::get_real_client_ip() (lineas 39-131): confirmado
+  que ya NO lee X-Forwarded-For en ningun punto de la funcion. Usa
+  X-Real-IP primero, fallback a request.client.host, nunca None silencioso
+  (fallback final unknown).
+- check_rate_limit() (lineas 330-390): confirmado que construye una lista
+  de claves con la de IP+identidad de siempre, y anade una clave de cuenta
+  solo si hay account_key y el bucket esta en _ACCOUNT_KEYED_BUCKETS;
+  bloquea si CUALQUIERA de las claves supera el limite y solo registra el
+  intento actual en todas las claves si ninguna bloqueo -- logica
+  correcta, sin ramas muertas del comportamiento anterior.
+- thalos_login_audit_middleware.py linea 76 y checkin.py linea 77:
+  confirmado que ambos usan get_real_client_ip() con el import correcto, y
+  que ninguno sigue leyendo request.client.host directamente.
+- gunicorn.conf.py linea 115: forwarded_allow_ips sigue en 127.0.0.1, sin
+  cambios respecto a la vuelta 1 (correcto, no se revirtio al valor
+  inseguro anterior). workers por defecto es 1 si no se fija
+  WEB_CONCURRENCY -- la limitacion ya documentada de store en memoria por
+  proceso no se agrava ni se resuelve en esta vuelta.
+
+### 5.7 Criterio sobre la limitacion residual (punto 3 de la tarea de esta revision)
+
+Se reproduce y se acepta como real la limitacion residual: un atacante que
+varie simultaneamente la IP/cabecera reportada y el objetivo
+(email/username) en cada peticion no queda bloqueado en ninguno de los 3
+endpoints (incluido login, ver 5.3). Mi criterio, aplicado con el nivel de
+exigencia maximo que pide esta tercera vuelta:
+
+No es una vulnerabilidad critica que deba bloquear el cierre de este
+hallazgo, y no se exige una Vuelta 3 solo por esto. Razones:
+
+1. No viola ninguna regla no negociable de la skill (THALOS, aislamiento
+   multi-tenant, logging real, migraciones) -- es un limite de defensa en
+   profundidad adicional sobre una mitigacion que ya cierra el vector de
+   ataque mas barato y mas probable (repetir contra un objetivo fijo).
+2. El precondicionante de la limitacion residual es materialmente mas caro
+   que el bypass original. Los bypasses de las vueltas 0 y 1 eran
+   explotables con un solo proceso curl en un bucle, sin coste, dando
+   bypass total del 100 por ciento. El residual de esta vuelta exige
+   ademas que la cabecera de IP reportada sea realmente indistinguible de
+   trafico legitimo peticion a peticion -- es decir, o bien la asuncion
+   sobre X-Real-IP documentada por Railway resulta ser falsa (Railway
+   reenvia sin sobrescribir), algo que contradice el proposito que la
+   propia documentacion le atribuye a esa cabecera, o el atacante dispone
+   de diversidad real de IPs de origen (botnet o proxies), un salto de
+   sofisticacion cualitativo respecto a un curl en un bucle.
+3. El impacto del residual es de tipo spam o ruido, no de fuga de datos ni
+   de fraude directo. El endpoint de checkout no adjunta datos de tarjeta
+   en esta llamada (create_payment_intent solo recibe amount,
+   customer_email, description y metadata, confirmado en
+   services/stripe_service.py lineas 65-100); un PaymentIntent creado sin
+   confirmar no cobra nada y no es un vector de card testing por si mismo,
+   aunque si genera objetos huerfanos en el dashboard de Stripe y consume
+   cuota de API. El de register solo permite crear cuentas basura en la BD
+   propia, sin acceso a datos de otros tenants.
+4. Cerrar el residual del todo exige una decision de producto o infra
+   ajena al alcance de corregir el bypass: un limite global no atado a
+   identidad implica elegir un umbral con riesgo real de falsos positivos
+   bajo picos legitimos (por ejemplo una campana de marketing generando
+   altas reales en poco tiempo), decision que corresponde al usuario, no a
+   un umbral arbitrario impuesto en una revision de seguridad.
+
+Salvedad explicita de esta aprobacion: se recomienda, sin exigirse como
+bloqueante, anadir en una tarea futura, no ligada a este mismo hallazgo
+critico ya cerrado, un backstop global de baja prioridad -- por ejemplo un
+techo de peticiones totales por minuto a auth_register y a
+public_checkout_payment_intent sin depender de IP ni de cuenta (umbral
+holgado, pensado solo para frenar rafagas masivas de bots, no trafico
+humano normal) -- y, si el usuario tiene forma de confirmarlo, verificar
+con trafico real contra el Railway desplegado si X-Real-IP es
+efectivamente sobrescrito por el edge (la unica asuncion de todo este fix
+que ninguna de las tres vueltas ha podido verificar con el entorno real).
+
+### 5.8 Estado del repositorio
+
+git status --short sobre el working tree: limpio, nada pendiente antes de
+este commit de revision. Rama actual: feature/consolidacion-final, HEAD en
+5798be0. main local y origin/main en 97b949a, sin tocar. No se ha hecho
+push ni merge a main en esta revision.
+
+### Veredicto: APROBADO, con salvedad explicita documentada (no bloqueante)
+
+El hallazgo critico de bypass de rate limiting (bypass total explotable
+con un solo proceso curl, sin ninguna precondicion, verificado en las
+vueltas 0 y 1) esta corregido y verificado de forma independiente para el
+ataque mas simple y mas probable (IP o cabecera falsa variando por
+peticion contra un objetivo fijo, y tambien contra un objetivo variable
+cuando la IP reportada permanece estable, que es el comportamiento real
+esperado en produccion bajo gunicorn). Persiste una limitacion residual,
+tambien verificada de forma independiente y confirmada mas amplia de lo
+que el propio reporte enfatiza (afecta tambien a login, no solo a
+register o checkout, bajo la misma precondicion), pero se acepta como
+riesgo residual de menor severidad, no critico, dado que exige un salto
+de sofisticacion del atacante cualitativamente mayor que el bypass
+original y su impacto es de tipo spam o ruido, no de fuga de datos,
+fraude directo, ni bypass de THALOS o de aislamiento multi-tenant. Se
+recomienda, sin bloquear el cierre de este hallazgo, un backstop global
+de baja prioridad como tarea de hardening futura independiente. Sin
+regresion de tests (7 failed, 300 passed, 3 errors, verificado por mi
+cuenta, identico al baseline). Repositorio limpio, sin push ni merge a
+main.

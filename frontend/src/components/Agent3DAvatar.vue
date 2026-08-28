@@ -62,7 +62,7 @@ const initThreeJS = () => {
   
   // Textura - Cargar imagen del agente
   const textureLoader = new THREE.TextureLoader()
-  const texture = textureLoader.load(props.imagePath || '/images/avatars/perseo-avatar.jpg')
+  const texture = textureLoader.load(props.imagePath || '/images/avatars/Perseo-avatar.jpg')
   
   // Material con la imagen
   const material = new THREE.MeshStandardMaterial({

@@ -1,5 +1,6 @@
 <template>
   <div class="office-crm">
+   <div class="office-crm-content">
     <header class="crm-header">
       <router-link to="/dashboard" class="back-link">← {{ t('officeCrm.backToDashboard') }}</router-link>
       <h1>{{ t('officeCrm.title') }}</h1>
@@ -207,6 +208,7 @@
     <p v-if="activeSession?.minimized" class="minimized-hint">{{ t('officeCrm.minimizedHint') }}</p>
 
     <CrmCustomerImport v-if="showImport" @close="showImport = false" @imported="loadAll" />
+   </div>
   </div>
 </template>
 
@@ -710,6 +712,40 @@ onMounted(bootstrapPage)
 </script>
 
 <style scoped>
+/* Fondo de bandas metalicas obligatorio en toda pagina (ver
+   zeus-light-system.css). Mismo patron de "breakout" ya usado en
+   InsuranceView.vue/PayrollDrafts.vue: el contenedor raiz rompe el
+   max-width de #app para que el fondo cubra todo el ancho de la
+   ventana, y .office-crm-content mantiene el contenido centrado. */
+.office-crm {
+  position: relative;
+  left: 50%;
+  right: 50%;
+  width: 100vw;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  min-height: 100vh;
+  overflow: hidden;
+  background-image: var(--zeus-bg);
+  font-family: var(--zeus-font-sans, 'Inter', sans-serif);
+  color: var(--zeus-text, #0f172a);
+  box-sizing: border-box;
+}
+.office-crm::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+.office-crm-content {
+  position: relative;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
 .toolbar {
   display: flex;
   align-items: center;

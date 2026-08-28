@@ -182,8 +182,8 @@ onBeforeUnmount(stopCamera)
     </div>
     <p class="status">{{ status }}</p>
     <div class="actions">
-      <button v-if="cameraAvailable" type="button" class="btn" @click="switchCamera">Cambiar cámara</button>
-      <button v-if="cameraAvailable" type="button" class="btn secondary" @click="startCamera">Reiniciar</button>
+      <button v-if="cameraAvailable" type="button" class="zeus-btn zeus-btn-secondary" @click="switchCamera">Cambiar cámara</button>
+      <button v-if="cameraAvailable" type="button" class="zeus-btn zeus-btn-secondary" @click="startCamera">Reiniciar</button>
     </div>
     <div class="fallback">
       <label>Contenido QR (manual o demo)</label>
@@ -193,7 +193,7 @@ onBeforeUnmount(stopCamera)
         placeholder="ZEUS|Cliente Demo|120.00|EUR|cliente@empresa.com"
         spellcheck="false"
       />
-      <button type="button" class="btn manual" @click="submitManualQr">Procesar QR manual</button>
+      <button type="button" class="zeus-btn zeus-btn-accent" @click="submitManualQr">Procesar QR manual</button>
       <small class="hint">Útil en escritorio sin cámara o para probar el flujo fiscal sin escanear.</small>
     </div>
     <pre v-if="lastResult" class="result">{{ JSON.stringify(lastResult, null, 2) }}</pre>
@@ -202,29 +202,27 @@ onBeforeUnmount(stopCamera)
 
 <style scoped>
 .scanner-qr { display: flex; flex-direction: column; gap: 0.75rem; }
-.preview-wrap { position: relative; background: #111; border-radius: 12px; overflow: hidden; }
+/* El recuadro de vídeo se mantiene oscuro a propósito (visor de cámara
+   real, no "tema oscuro" de la app) — igual que cualquier previsualización
+   de cámara nativa. */
+.preview-wrap { position: relative; background: #111; border-radius: var(--zeus-radius, 12px); overflow: hidden; }
 .preview { width: 100%; max-height: 360px; object-fit: cover; display: block; }
 .hidden-canvas { display: none; }
 .overlay {
-  position: absolute; inset: 20% 15%; border: 2px solid #22d3ee; border-radius: 8px;
+  position: absolute; inset: 20% 15%; border: 2px solid var(--zeus-accent-2, #6366f1); border-radius: 8px;
   pointer-events: none; box-shadow: 0 0 0 9999px rgba(0,0,0,0.35);
 }
-.status { margin: 0; color: #cbd5e1; font-size: 0.95rem; }
+.status { margin: 0; color: var(--zeus-text-secondary, #52607a); font-size: 0.95rem; }
 .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-.btn {
-  background: #0ea5e9; color: #fff; border: none; padding: 0.5rem 1rem;
-  border-radius: 8px; cursor: pointer; font-weight: 600;
-}
-.btn.secondary { background: #334155; }
-.btn.manual { background: #10b981; }
 .fallback { display: flex; flex-direction: column; gap: 0.4rem; }
 .input {
-  padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid #334155;
-  background: #0f172a; color: #f8fafc; font-family: ui-monospace, monospace; font-size: 0.85rem;
+  padding: 0.5rem 0.75rem; border-radius: var(--zeus-radius-sm, 8px); border: 1px solid var(--zeus-border-strong, #cdd3db);
+  background: var(--zeus-surface, #fff); color: var(--zeus-text, #0f172a); font-family: ui-monospace, monospace; font-size: 0.85rem;
 }
-.hint { color: #94a3b8; font-size: 0.8rem; margin: 0; }
+.hint { color: var(--zeus-text-muted, #8792a6); font-size: 0.8rem; margin: 0; }
 .result {
-  background: #0f172a; color: #e2e8f0; padding: 0.75rem; border-radius: 8px;
+  background: var(--zeus-bg-subtle, #eef1f6); color: var(--zeus-text, #0f172a); padding: 0.75rem; border-radius: var(--zeus-radius-sm, 8px);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   font-size: 0.75rem; overflow: auto; max-height: 200px;
 }
 </style>

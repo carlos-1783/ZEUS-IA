@@ -155,16 +155,16 @@ onBeforeUnmount(stopScan)
     <div v-if="!supported" class="fallback">
       <label>Contenido NFC (fallback)</label>
       <input v-model="fallbackText" class="input" placeholder="ZEUSCHECK|W001|2026-05-29T10:00:00Z" />
-      <button type="button" class="btn" @click="submitFallback">Procesar etiqueta</button>
+      <button type="button" class="zeus-btn zeus-btn-accent" @click="submitFallback">Procesar etiqueta</button>
     </div>
     <div v-else class="fallback">
       <label>Contenido NFC (manual)</label>
       <input v-model="fallbackText" class="input" placeholder="ZEUSCHECK|W001|2026-05-29T10:00:00Z" />
-      <button type="button" class="btn" @click="submitFallback">Procesar sin lector</button>
+      <button type="button" class="zeus-btn zeus-btn-accent" @click="submitFallback">Procesar sin lector</button>
     </div>
     <div class="actions">
-      <button v-if="supported" type="button" class="btn" @click="startNfcScan">Escanear NFC</button>
-      <button type="button" class="btn secondary" @click="stopScan">Detener</button>
+      <button v-if="supported" type="button" class="zeus-btn zeus-btn-secondary" @click="startNfcScan">Escanear NFC</button>
+      <button type="button" class="zeus-btn zeus-btn-secondary" @click="stopScan">Detener</button>
     </div>
     <p v-if="!supported" class="hint">Web NFC solo en Android/Chrome. En escritorio usa el fallback con el texto de la etiqueta.</p>
     <pre v-if="lastResult" class="result">{{ JSON.stringify(lastResult, null, 2) }}</pre>
@@ -173,21 +173,17 @@ onBeforeUnmount(stopScan)
 
 <style scoped>
 .scanner-nfc { display: flex; flex-direction: column; gap: 0.75rem; }
-.status { margin: 0; color: #cbd5e1; }
+.status { margin: 0; color: var(--zeus-text-secondary, #52607a); }
 .field, .fallback { display: flex; flex-direction: column; gap: 0.35rem; }
 .input {
-  padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid #334155;
-  background: #0f172a; color: #f8fafc;
+  padding: 0.5rem 0.75rem; border-radius: var(--zeus-radius-sm, 8px); border: 1px solid var(--zeus-border-strong, #cdd3db);
+  background: var(--zeus-surface, #fff); color: var(--zeus-text, #0f172a);
 }
 .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-.btn {
-  background: #8b5cf6; color: #fff; border: none; padding: 0.5rem 1rem;
-  border-radius: 8px; cursor: pointer; font-weight: 600;
-}
-.btn.secondary { background: #334155; }
-.hint { font-size: 0.85rem; color: #94a3b8; margin: 0; }
+.hint { font-size: 0.85rem; color: var(--zeus-text-muted, #8792a6); margin: 0; }
 .result {
-  background: #0f172a; color: #e2e8f0; padding: 0.75rem; border-radius: 8px;
+  background: var(--zeus-bg-subtle, #eef1f6); color: var(--zeus-text, #0f172a); padding: 0.75rem; border-radius: var(--zeus-radius-sm, 8px);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   font-size: 0.75rem; overflow: auto; max-height: 200px;
 }
 </style>

@@ -150,33 +150,31 @@ onMounted(startNfc)
         placeholder="ZEUS|Cliente Demo|120.00|EUR|cliente@empresa.com"
         spellcheck="false"
       />
-      <button type="button" class="btn" @click="submitText">Procesar NFC fiscal manual</button>
+      <button type="button" class="zeus-btn zeus-btn-accent" @click="submitText">Procesar NFC fiscal manual</button>
     </div>
     <div v-if="!supported" class="fallback">
       <label>Payload HEX (fallback)</label>
       <input v-model="fallbackHex" class="input" placeholder="5a4555537c436c69656e74657c313230" />
-      <button type="button" class="btn" @click="submitHex">Procesar NFC fiscal</button>
+      <button type="button" class="zeus-btn zeus-btn-accent" @click="submitHex">Procesar NFC fiscal</button>
     </div>
-    <button v-else type="button" class="btn" @click="startNfc">Reintentar lectura NFC</button>
+    <button v-else type="button" class="zeus-btn zeus-btn-secondary" @click="startNfc">Reintentar lectura NFC</button>
     <pre v-if="lastResult" class="result">{{ JSON.stringify(lastResult, null, 2) }}</pre>
   </div>
 </template>
 
 <style scoped>
-.rafael-nfc { display: flex; flex-direction: column; gap: 0.6rem; color: #e2e8f0; }
+.rafael-nfc { display: flex; flex-direction: column; gap: 0.6rem; color: var(--zeus-text, #0f172a); }
 .status { margin: 0; }
-.hint { margin: 0; font-size: 0.85rem; color: #94a3b8; }
+.hint { margin: 0; font-size: 0.85rem; color: var(--zeus-text-muted, #8792a6); }
 .fallback { display: flex; flex-direction: column; gap: 0.4rem; }
 .input {
-  padding: 0.5rem; border-radius: 8px; border: 1px solid #334155;
-  background: #0f172a; color: #f8fafc; font-family: monospace; font-size: 0.85rem;
+  padding: 0.5rem; border-radius: var(--zeus-radius-sm, 8px); border: 1px solid var(--zeus-border-strong, #cdd3db);
+  background: var(--zeus-surface, #fff); color: var(--zeus-text, #0f172a); font-family: monospace; font-size: 0.85rem;
 }
-.btn {
-  align-self: flex-start; background: #d97706; color: #fff; border: none;
-  padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-weight: 600;
-}
+.zeus-btn { align-self: flex-start; }
 .result {
-  background: #020617; padding: 0.6rem; border-radius: 8px;
+  background: var(--zeus-bg-subtle, #eef1f6); color: var(--zeus-text, #0f172a); padding: 0.6rem; border-radius: var(--zeus-radius-sm, 8px);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   font-size: 0.75rem; overflow: auto; max-height: 160px;
 }
 </style>

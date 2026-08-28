@@ -191,8 +191,8 @@ onBeforeUnmount(stopCamera)
         spellcheck="false"
       />
       <small class="hint">El texto gris no cuenta como MRZ. Pega las líneas o carga el ejemplo.</small>
-      <button type="button" class="btn demo" @click="fillDemoMrz">Cargar MRZ de ejemplo</button>
-      <button type="button" class="btn" :disabled="loading" @click="submitMrz">
+      <button type="button" class="zeus-btn zeus-btn-secondary" @click="fillDemoMrz">Cargar MRZ de ejemplo</button>
+      <button type="button" class="zeus-btn zeus-btn-accent" :disabled="loading" @click="submitMrz">
         {{ loading ? 'Procesando…' : 'Crear cliente desde DNI' }}
       </button>
     </template>
@@ -204,8 +204,8 @@ onBeforeUnmount(stopCamera)
         <div class="mrz-guide">Zona MRZ (reverso)</div>
       </div>
       <small class="hint">Consejo: apoya el DNI, evita reflejos y captura solo el reverso con las 3 líneas.</small>
-      <button type="button" class="btn secondary" @click="startCamera">Reiniciar cámara</button>
-      <button type="button" class="btn" :disabled="loading || !cameraActive" @click="submitCameraMrz">
+      <button type="button" class="zeus-btn zeus-btn-secondary" @click="startCamera">Reiniciar cámara</button>
+      <button type="button" class="zeus-btn zeus-btn-accent" :disabled="loading || !cameraActive" @click="submitCameraMrz">
         {{ loading ? 'OCR en curso…' : 'Capturar reverso y crear cliente' }}
       </button>
     </template>
@@ -227,42 +227,37 @@ onBeforeUnmount(stopCamera)
 
 <style scoped>
 .parser-dni { display: flex; flex-direction: column; gap: 0.75rem; }
-.status { margin: 0; color: #cbd5e1; }
-.runtime { margin: 0; color: #64748b; font-size: 0.8rem; }
+.status { margin: 0; color: var(--zeus-text-secondary, #52607a); }
+.runtime { margin: 0; color: var(--zeus-text-muted, #8792a6); font-size: 0.8rem; }
 .mode-tabs { display: flex; gap: 0.5rem; }
 .mode-tabs button {
-  border: 1px solid #334155; background: #1e293b; color: #cbd5e1;
-  border-radius: 999px; padding: 0.35rem 0.85rem; cursor: pointer;
+  border: 1px solid #D1D5DB; background: #ffffff; color: var(--zeus-text, #0f172a);
+  border-radius: var(--zeus-radius-full, 999px); padding: 0.35rem 0.85rem; cursor: pointer;
+  font-weight: var(--zeus-weight-medium, 500);
 }
-.mode-tabs button.active { background: #10b981; color: #fff; border-color: #10b981; }
-.hint { color: #94a3b8; font-size: 0.8rem; margin-top: -0.25rem; }
+.mode-tabs button.active { font-weight: var(--zeus-weight-bold, 700); border-color: var(--zeus-border-strong, #cdd3db); }
+.hint { color: var(--zeus-text-muted, #8792a6); font-size: 0.8rem; margin-top: -0.25rem; }
 .mrz-input, .input {
-  width: 100%; padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid #334155;
-  background: #0f172a; color: #f8fafc; font-family: ui-monospace, monospace; font-size: 0.85rem;
+  width: 100%; padding: 0.5rem 0.75rem; border-radius: var(--zeus-radius-sm, 8px); border: 1px solid var(--zeus-border-strong, #cdd3db);
+  background: var(--zeus-surface, #fff); color: var(--zeus-text, #0f172a); font-family: ui-monospace, monospace; font-size: 0.85rem;
 }
-.camera-wrap { position: relative; background: #111; border-radius: 12px; overflow: hidden; }
+/* El recuadro de vídeo se mantiene oscuro a propósito (visor de cámara
+   real, no "tema oscuro" de la app). */
+.camera-wrap { position: relative; background: #111; border-radius: var(--zeus-radius, 12px); overflow: hidden; }
 .preview { width: 100%; max-height: 280px; object-fit: cover; display: block; }
 .mrz-guide {
   position: absolute; left: 8%; right: 8%; bottom: 8%; height: 34%;
-  border: 2px dashed #22d3ee; border-radius: 8px;
-  color: #7dd3fc; font-size: 0.75rem; display: flex; align-items: flex-end; justify-content: center;
+  border: 2px dashed var(--zeus-accent-2, #6366f1); border-radius: 8px;
+  color: #e0e7ff; font-size: 0.75rem; display: flex; align-items: flex-end; justify-content: center;
   padding-bottom: 6px; pointer-events: none;
 }
 .hidden-canvas { display: none; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
 .field { display: flex; flex-direction: column; gap: 0.35rem; }
-.btn {
-  align-self: flex-start; background: #10b981; color: #fff; border: none;
-  padding: 0.55rem 1.1rem; border-radius: 8px; cursor: pointer; font-weight: 600;
-}
-.btn.secondary { background: #334155; }
-.btn:disabled { opacity: 0.6; cursor: not-allowed; }
-.btn.demo {
-  align-self: flex-start; background: #334155; color: #fff; border: none;
-  padding: 0.45rem 0.9rem; border-radius: 8px; cursor: pointer; font-weight: 600;
-}
+.zeus-btn { align-self: flex-start; }
 .result {
-  background: #0f172a; color: #e2e8f0; padding: 0.75rem; border-radius: 8px;
+  background: var(--zeus-bg-subtle, #eef1f6); color: var(--zeus-text, #0f172a); padding: 0.75rem; border-radius: var(--zeus-radius-sm, 8px);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   font-size: 0.75rem; overflow: auto; max-height: 240px;
 }
 @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }

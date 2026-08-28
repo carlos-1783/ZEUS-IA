@@ -102,19 +102,25 @@ const runForms = async () => {
 </script>
 
 <style scoped>
+/* El unico acento de la vista ya vive en la cabecera del modal --
+   aqui todo queda en tokens neutros (antes: fondo/borde ambar en el
+   panel, tabs y boton "Generar Excel 303" ambar solido, recuadro de
+   escaneo en navy solido -- este ultimo es propio de este archivo, no
+   viene de ScanHub.vue/los componentes de escaneo compartidos, que ya
+   se corrigieron aparte). */
 .tools-panel {
   margin-top: 28px;
   padding: 24px;
-  border: 1px solid rgba(248, 196, 113, 0.4);
-  border-radius: 18px;
-  background: #fffaf4;
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius-lg, 18px);
+  background: var(--zeus-surface, #fff);
 }
 
-header p { margin: 4px 0 0; color: #64748b; font-size: 14px; }
+header p { margin: 4px 0 0; color: var(--zeus-text-secondary, #52607a); font-size: 14px; }
 .scan-link {
   display: inline-block;
   margin-top: 8px;
-  color: #1d4ed8;
+  color: var(--zeus-accent, #4f46e5);
   font-weight: 600;
   font-size: 13px;
   text-decoration: none;
@@ -127,34 +133,37 @@ header p { margin: 4px 0 0; color: #64748b; font-size: 14px; }
   flex-wrap: wrap;
 }
 .scan-tabs button {
-  border: 1px solid rgba(245, 158, 11, 0.5);
-  background: #fff;
-  color: #92400e;
-  border-radius: 999px;
+  border: 1px solid #D1D5DB;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  border-radius: var(--zeus-radius-full, 999px);
   padding: 6px 14px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: var(--zeus-weight-medium, 500);
   font-size: 13px;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+.scan-tabs button:hover {
+  border-color: #9aa2af;
 }
 .scan-tabs button.active {
-  background: #d97706;
-  color: #fff;
-  border-color: #d97706;
+  font-weight: var(--zeus-weight-bold, 700);
+  border-color: var(--zeus-border-strong, #cdd3db);
 }
 
 .scan-panel {
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  border-radius: 14px;
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius, 14px);
   padding: 12px;
-  background: #0f172a;
+  background: var(--zeus-surface, #fff);
   margin-bottom: 14px;
 }
 
 .tool-success {
   margin: 0 0 8px;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: #ecfdf5;
+  border-radius: var(--zeus-radius-sm, 8px);
+  background: var(--zeus-success-soft, #e9faf3);
   color: #065f46;
   font-size: 13px;
   font-weight: 600;
@@ -162,9 +171,9 @@ header p { margin: 4px 0 0; color: #64748b; font-size: 14px; }
 .tool-detail {
   margin: 0 0 14px;
   padding: 10px;
-  border-radius: 8px;
-  background: #f8fafc;
-  color: #0f172a;
+  border-radius: var(--zeus-radius-sm, 8px);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  color: var(--zeus-text, #0f172a);
   font-size: 11px;
   overflow: auto;
   max-height: 180px;
@@ -173,9 +182,9 @@ header p { margin: 4px 0 0; color: #64748b; font-size: 14px; }
 .forms-section {
   margin-top: 8px;
   padding-top: 14px;
-  border-top: 1px dashed rgba(245, 158, 11, 0.4);
+  border-top: 1px dashed var(--zeus-border, #e1e5eb);
 }
-.forms-section h5 { margin: 0 0 8px; }
+.forms-section h5 { margin: 0 0 8px; color: var(--zeus-text, #0f172a); }
 .forms-row {
   display: flex;
   gap: 8px;
@@ -183,34 +192,41 @@ header p { margin: 4px 0 0; color: #64748b; font-size: 14px; }
   align-items: center;
 }
 .forms-row input {
-  border: 1px solid rgba(148, 163, 184, 0.5);
-  border-radius: 8px;
+  border: 1px solid var(--zeus-border-strong, #cdd3db);
+  border-radius: var(--zeus-radius-sm, 8px);
   padding: 8px;
   font-size: 13px;
   width: 100px;
+  color: var(--zeus-text, #0f172a);
+  background: var(--zeus-surface, #fff);
 }
 .forms-row button {
-  border: none;
-  border-radius: 8px;
-  background: #d97706;
-  color: white;
+  border: 1px solid #D1D5DB;
+  border-radius: var(--zeus-radius-sm, 8px);
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
   padding: 8px 12px;
   cursor: pointer;
+  font-weight: var(--zeus-weight-medium, 500);
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+.forms-row button:hover:not(:disabled) {
+  border-color: #9aa2af;
 }
 
 .tool-text {
   margin: 8px 0 0;
   padding: 10px;
-  border-radius: 8px;
-  background: #fff7ed;
-  color: #0f172a;
+  border-radius: var(--zeus-radius-sm, 8px);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  color: var(--zeus-text, #0f172a);
   font-size: 13px;
 }
-.tool-error { margin-top: 12px; color: #991b1b; }
+.tool-error { margin-top: 12px; color: var(--zeus-danger, #ef4444); }
 .download-link {
   display: inline-block;
   margin-top: 8px;
-  color: #1d4ed8;
+  color: var(--zeus-accent, #4f46e5);
   font-weight: 600;
   font-size: 13px;
 }

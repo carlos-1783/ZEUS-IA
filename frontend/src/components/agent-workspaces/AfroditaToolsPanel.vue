@@ -388,12 +388,16 @@ const runContract = async () => {
 </script>
 
 <style scoped>
+/* El unico acento de la vista ya vive en la cabecera del modal --
+   aqui todo queda en tokens neutros (antes: fondo/borde rosa en el
+   panel, tarjeta "highlight" con borde magenta, botones magenta
+   solidos). */
 .tools-panel {
   margin-top: 24px;
   padding: 22px;
-  border-radius: 16px;
-  border: 1px solid rgba(219, 39, 119, 0.3);
-  background: #fff0f6;
+  border-radius: var(--zeus-radius-lg, 16px);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  background: var(--zeus-surface, #fff);
 }
 .header-row {
   display: flex;
@@ -415,76 +419,79 @@ const runContract = async () => {
   gap: 14px;
 }
 .tool-card {
-  background: white;
-  border: 1px solid rgba(219, 39, 119, 0.4);
-  border-radius: 12px;
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius, 12px);
   padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.tool-card.highlight {
-  border-color: #db2777;
-  box-shadow: 0 0 0 1px rgba(219, 39, 119, 0.15);
-}
 .tool-card.disabled {
   opacity: 0.75;
-  background: #f8fafc;
+  background: var(--zeus-bg-subtle, #eef1f6);
 }
 .hint.muted {
-  color: #94a3b8;
+  color: var(--zeus-text-muted, #8792a6);
 }
 .hint {
   margin: 0;
   font-size: 12px;
-  color: #64748b;
+  color: var(--zeus-text-secondary, #52607a);
 }
 .status-note {
   margin-top: 8px;
   font-size: 12px;
-  color: #475569;
+  color: var(--zeus-text-secondary, #52607a);
 }
 .tool-card textarea,
 .tool-card input,
 .tool-card select {
-  border: 1px solid rgba(148, 163, 184, 0.5);
-  border-radius: 8px;
+  border: 1px solid var(--zeus-border-strong, #cdd3db);
+  border-radius: var(--zeus-radius-sm, 8px);
   padding: 8px;
   font-size: 13px;
+  color: var(--zeus-text, #0f172a);
+  background: var(--zeus-surface, #fff);
 }
 .tool-card button {
-  border: none;
-  border-radius: 8px;
-  background: #db2777;
-  color: #fff;
+  border: 1px solid #D1D5DB;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  border-radius: var(--zeus-radius-sm, 8px);
   padding: 8px 10px;
   cursor: pointer;
+  font-weight: var(--zeus-weight-medium, 500);
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+.tool-card button:hover:not(:disabled) {
+  border-color: #9aa2af;
 }
 .emp-list {
   margin: 0;
   padding-left: 18px;
   font-size: 12px;
-  color: #334155;
+  color: var(--zeus-text-secondary, #52607a);
 }
 .emp-list li {
   margin-bottom: 4px;
 }
 .emp-list span {
   display: block;
-  color: #64748b;
+  color: var(--zeus-text-secondary, #52607a);
 }
 .tool-text {
   margin: 8px 0 0;
   padding: 10px;
-  border-radius: 8px;
-  background: #fdf2f8;
-  color: #0f172a;
+  border-radius: var(--zeus-radius-sm, 8px);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  color: var(--zeus-text, #0f172a);
   font-size: 13px;
   line-height: 1.4;
 }
 .tool-error {
   margin-top: 10px;
-  color: #b91c1c;
+  color: var(--zeus-danger, #ef4444);
 }
 .contract-preview {
   margin-top: 12px;
@@ -492,15 +499,16 @@ const runContract = async () => {
 .workspace-hint {
   margin-top: 8px;
   font-size: 12px;
-  color: #047857;
+  color: var(--zeus-success, #10b981);
 }
 .pipeline-result {
   margin-top: 12px;
   padding: 12px;
-  border-radius: 10px;
-  background: rgba(99, 102, 241, 0.08);
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: var(--zeus-radius, 10px);
+  background: var(--zeus-accent-2-soft, #eef2ff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   font-size: 12px;
+  color: var(--zeus-text, #0f172a);
 }
 .pipeline-result h6 { margin: 0 0 8px; font-size: 13px; }
 .pipeline-result ul { margin: 0; padding-left: 18px; }

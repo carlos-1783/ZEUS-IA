@@ -206,23 +206,26 @@ onMounted(load)
 </script>
 
 <style scoped>
+/* Mismo criterio que PerseoToolsPanel.vue: el unico acento de la vista
+   ya vive en la cabecera del modal -- aqui todo queda en tokens
+   neutros (antes: borde rosa en el panel, boton magenta solido). */
 .marketing-integrations {
   margin-top: 24px;
   padding: 20px;
-  border: 1px solid rgba(236, 72, 153, 0.35);
-  border-radius: 16px;
-  background: #fff;
-  color: #0f172a;
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius-lg, 16px);
+  background: var(--zeus-surface, #fff);
+  color: var(--zeus-text, #0f172a);
 }
 
 .marketing-integrations header h4 {
   margin: 0 0 4px;
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
 }
 
 .marketing-integrations header p {
   margin: 0;
-  color: #475569;
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .block {
@@ -233,12 +236,12 @@ onMounted(load)
 
 .block legend {
   font-weight: 600;
-  color: #334155;
+  color: var(--zeus-text-secondary, #52607a);
   padding: 0 4px;
 }
 
 .block label {
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
 }
 
 .platform-row {
@@ -253,28 +256,26 @@ onMounted(load)
   align-items: center;
   gap: 8px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
 }
 .platform-row input[type='text'],
 .platform-row input:not([type='checkbox']) {
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
+  border: 1px solid var(--zeus-border-strong, #cdd3db);
+  border-radius: var(--zeus-radius-sm, 8px);
   padding: 8px;
-  color: #0f172a;
-  background: #fff;
-  caret-color: #0f172a;
-  -webkit-text-fill-color: #0f172a;
+  color: var(--zeus-text, #0f172a);
+  background: var(--zeus-surface, #fff);
+  caret-color: var(--zeus-text, #0f172a);
 }
 
 .platform-row input:not([type='checkbox'])::placeholder {
-  color: #64748b;
+  color: var(--zeus-text-muted, #8792a6);
   opacity: 1;
 }
 
 .platform-row input:not([type='checkbox']):disabled {
-  background: #f1f5f9;
-  color: #64748b;
-  -webkit-text-fill-color: #64748b;
+  background: var(--zeus-bg-subtle, #eef1f6);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .inline-check {
@@ -282,56 +283,55 @@ onMounted(load)
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #334155;
+  color: var(--zeus-text-secondary, #52607a);
 }
 .actions {
   display: flex;
   gap: 10px;
   margin-top: 16px;
 }
-.btn-primary {
-  background: #db2777;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  padding: 10px 16px;
-  cursor: pointer;
-}
+.btn-primary,
 .btn-secondary {
-  border: 1px solid #cbd5e1;
-  background: #fff;
-  color: #334155;
-  border-radius: 8px;
+  border: 1px solid #D1D5DB;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  border-radius: var(--zeus-radius-sm, 8px);
   padding: 10px 16px;
   cursor: pointer;
+  font-weight: var(--zeus-weight-medium, 500);
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+.btn-primary:hover:not(:disabled),
+.btn-secondary:hover:not(:disabled) {
+  border-color: #9aa2af;
 }
 .error {
-  color: #b91c1c;
+  color: var(--zeus-danger, #ef4444);
 }
 .success {
-  color: #047857;
+  color: var(--zeus-success, #10b981);
 }
 .muted {
-  color: #64748b;
+  color: var(--zeus-text-secondary, #52607a);
   font-size: 14px;
 }
 .metrics-box {
-  background: #fdf2f8;
-  border-radius: 10px;
+  background: var(--zeus-bg-subtle, #eef1f6);
+  border-radius: var(--zeus-radius, 10px);
   padding: 12px;
   margin-top: 12px;
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
 }
 
 .metrics-box h5 {
   margin: 0 0 8px;
-  color: #831843;
+  color: var(--zeus-text, #0f172a);
 }
 
 .metrics-box ul {
   margin: 0;
   padding-left: 1.1rem;
-  color: #334155;
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .metrics-box li {
@@ -339,6 +339,6 @@ onMounted(load)
 }
 
 .metrics-box .muted {
-  color: #64748b;
+  color: var(--zeus-text-secondary, #52607a);
 }
 </style>

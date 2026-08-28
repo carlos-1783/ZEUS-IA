@@ -359,13 +359,19 @@ const runAdsBuilder = async () => {
 </script>
 
 <style scoped>
+/* El unico acento de la vista (gradiente de 3 paradas) ya vive en la
+   cabecera del modal (boton "Actualizar" de PerseoWorkspace.vue). Aqui
+   dentro, todo queda en tokens neutros -- ninguna tarjeta/boton compite
+   con ese acento (antes: verde para 'real', negro/azul marino en
+   botones). El estado REAL/SIMULADO ya lo comunica el badge pequeno de
+   ThalosExecutionBadge, no hace falta repetirlo con color de fondo. */
 .tools-panel {
   margin-top: 28px;
   padding: 24px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  border-radius: 18px;
-  background: #ffffff;
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius-lg, 18px);
+  background: var(--zeus-surface, #fff);
+  box-shadow: var(--zeus-shadow-md, 0 4px 16px rgba(15, 23, 42, 0.06));
 }
 
 .header-row {
@@ -377,14 +383,18 @@ const runAdsBuilder = async () => {
 }
 
 .retry-btn {
-  border: 1px solid rgba(99, 102, 241, 0.45);
-  background: #fff;
-  color: #4338ca;
-  border-radius: 8px;
+  border: 1px solid #D1D5DB;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  border-radius: var(--zeus-radius-sm, 8px);
   padding: 6px 10px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: var(--zeus-weight-semibold, 600);
   cursor: pointer;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+.retry-btn:hover {
+  border-color: #9aa2af;
 }
 
 .card-title-row {
@@ -397,7 +407,7 @@ const runAdsBuilder = async () => {
 .sim-note {
   margin: 4px 0 0;
   font-size: 12px;
-  color: #64748b;
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .tools-grid {
@@ -407,31 +417,29 @@ const runAdsBuilder = async () => {
 }
 
 .tool-card {
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  border-radius: 14px;
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius, 14px);
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.tool-card.real {
-  border-color: rgba(16, 185, 129, 0.45);
-  background: rgba(16, 185, 129, 0.04);
+  background: var(--zeus-surface, #fff);
 }
 
 .tool-card.legacy {
   opacity: 0.95;
-  background: #fafafa;
+  background: var(--zeus-bg-subtle, #eef1f6);
 }
 
 .tool-card input,
 .tool-card textarea,
 .tool-card select {
-  border: 1px solid rgba(148, 163, 184, 0.5);
-  border-radius: 8px;
+  border: 1px solid var(--zeus-border-strong, #cdd3db);
+  border-radius: var(--zeus-radius-sm, 8px);
   padding: 8px;
   font-size: 13px;
+  color: var(--zeus-text, #0f172a);
+  background: var(--zeus-surface, #fff);
 }
 
 .tool-card textarea {
@@ -440,16 +448,17 @@ const runAdsBuilder = async () => {
 
 .tool-card button {
   margin-top: 6px;
-  border: none;
-  border-radius: 8px;
-  background: #64748b;
-  color: #fff;
+  border: 1px solid #D1D5DB;
+  border-radius: var(--zeus-radius-sm, 8px);
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
   padding: 8px 12px;
   cursor: pointer;
+  font-weight: var(--zeus-weight-medium, 500);
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
-
-.tool-card.real button {
-  background: #059669;
+.tool-card button:hover:not(:disabled) {
+  border-color: #9aa2af;
 }
 
 .tool-card button:disabled {
@@ -460,9 +469,9 @@ const runAdsBuilder = async () => {
 .tool-text {
   margin: 8px 0 0;
   padding: 10px;
-  border-radius: 10px;
-  background: #f1f5f9;
-  color: #0f172a;
+  border-radius: var(--zeus-radius, 10px);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  color: var(--zeus-text, #0f172a);
   font-size: 13px;
   line-height: 1.4;
 }
@@ -470,12 +479,12 @@ const runAdsBuilder = async () => {
 .tool-error,
 .tool-error-inline {
   margin-top: 8px;
-  color: #dc2626;
+  color: var(--zeus-danger, #ef4444);
   font-size: 13px;
 }
 
 .video-link {
-  color: #059669;
+  color: var(--zeus-accent, #4f46e5);
   font-weight: 600;
   font-size: 13px;
 }

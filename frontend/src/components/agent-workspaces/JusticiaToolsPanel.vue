@@ -216,12 +216,15 @@ const runGdpr = async () => {
 </script>
 
 <style scoped>
+/* El unico acento de la vista ya vive en la cabecera del modal --
+   aqui todo queda en tokens neutros (antes: botones negro/azul marino
+   solido, tarjeta de auditoria con borde negro). */
 .tools-panel {
   margin-top: 24px;
   padding: 20px;
-  border: 1px solid rgba(71, 85, 105, 0.25);
-  border-radius: 16px;
-  background: #ffffff;
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius-lg, 16px);
+  background: var(--zeus-surface, #fff);
 }
 .header-row {
   display: flex;
@@ -239,12 +242,9 @@ const runGdpr = async () => {
 .audit-card {
   margin-bottom: 16px;
   padding: 14px;
-  border: 1px solid rgba(15, 23, 42, 0.2);
-  border-radius: 12px;
-}
-.audit-card.highlight {
-  border-color: #0f172a;
-  background: #f8fafc;
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius, 12px);
+  background: var(--zeus-bg-subtle, #eef1f6);
 }
 .tools-grid {
   display: grid;
@@ -252,48 +252,57 @@ const runGdpr = async () => {
   gap: 16px;
 }
 .tool-card {
-  border: 1px solid rgba(71, 85, 105, 0.35);
-  border-radius: 12px;
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius, 12px);
   padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  background: var(--zeus-surface, #fff);
 }
-.tool-card.real { border-color: #0f172a; }
-.hint { margin: 0; font-size: 12px; color: #64748b; }
-.status-note { margin-top: 8px; font-size: 12px; color: #475569; }
+.hint { margin: 0; font-size: 12px; color: var(--zeus-text-secondary, #52607a); }
+.status-note { margin-top: 8px; font-size: 12px; color: var(--zeus-text-secondary, #52607a); }
 .tool-card input,
 .tool-card textarea {
-  border: 1px solid rgba(148, 163, 184, 0.5);
-  border-radius: 8px;
+  border: 1px solid var(--zeus-border-strong, #cdd3db);
+  border-radius: var(--zeus-radius-sm, 8px);
   padding: 8px;
   font-size: 13px;
+  color: var(--zeus-text, #0f172a);
+  background: var(--zeus-surface, #fff);
 }
 .tool-card button,
 .audit-card button {
-  border: none;
-  background: #0f172a;
-  color: #fff;
-  border-radius: 8px;
+  border: 1px solid #D1D5DB;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  border-radius: var(--zeus-radius-sm, 8px);
   padding: 8px 10px;
   cursor: pointer;
+  font-weight: var(--zeus-weight-medium, 500);
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+.tool-card button:hover:not(:disabled),
+.audit-card button:hover:not(:disabled) {
+  border-color: #9aa2af;
 }
 .audit-list {
   margin: 8px 0 0;
   padding-left: 18px;
   font-size: 12px;
 }
-.audit-list .pass { color: #15803d; }
-.audit-list .gap { color: #b45309; }
-.audit-list .warn { color: #b45309; }
-.audit-list .fail { color: #b91c1c; }
-.audit-list em { color: #64748b; font-style: normal; }
+.audit-list .pass { color: var(--zeus-success, #10b981); }
+.audit-list .gap { color: var(--zeus-warning, #f59e0b); }
+.audit-list .warn { color: var(--zeus-warning, #f59e0b); }
+.audit-list .fail { color: var(--zeus-danger, #ef4444); }
+.audit-list em { color: var(--zeus-text-muted, #8792a6); font-style: normal; }
 .tool-text {
   margin: 8px 0 0;
   padding: 10px;
-  border-radius: 8px;
-  background: #f8fafc;
+  border-radius: var(--zeus-radius-sm, 8px);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  color: var(--zeus-text, #0f172a);
   font-size: 13px;
 }
-.tool-error { margin-top: 10px; color: #b91c1c; }
+.tool-error { margin-top: 10px; color: var(--zeus-danger, #ef4444); }
 </style>

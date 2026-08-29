@@ -252,12 +252,15 @@ const selectDeliverable = (id: string) => {
   }
 };
 
-// Los ficheros de reporte de THALOS se nombran con el tipo de evento
-// crudo del backend (ver backend/services/automation/handlers/thalos.py)
-// seguido de una marca de tiempo, p.ej. "security_scan_20260101T120000Z".
-// Se traduce el prefijo conocido a una descripcion legible en espanol;
-// si aparece un tipo no mapeado, se usa un formateo generico (nunca el
-// identificador crudo en ingles).
+// Los ficheros de reporte de THALOS se nombran con un id numerico de
+// actividad, el tipo de evento crudo del backend (ver
+// backend/services/automation/handlers/thalos.py) y una marca de tiempo,
+// p.ej. "2673_task_assigned_20260828T152934Z" (confirmado en produccion
+// via /api/v1/automation/outputs/thalos/*.json -- el id numerico antes
+// del tipo de evento es real, no un caso hipotetico). Se ignora ese id
+// para el mapeo de traduccion y se traduce el tipo de evento conocido a
+// una descripcion legible en espanol; si aparece un tipo no mapeado, se
+// usa un formateo generico (nunca el identificador crudo en ingles).
 const EVENT_TITLE_LABELS: Record<string, string> = {
   security_scan: 'Escaneo de seguridad',
   task_assigned: 'Tarea asignada',
@@ -270,7 +273,13 @@ const formatTitle = (item?: { id: string }) => {
   const filename = parts[parts.length - 1];
   const withoutTimestamp = filename.replace(/\d{8}T\d{6}Z$/, '').replace(/[_.]+$/, '').trim();
   if (!withoutTimestamp) return 'Reporte de seguridad';
-  const prefix = withoutTimestamp.replace(/\.[a-z0-9]+$/i, '');
+  let prefix = withoutTimestamp.replace(/\.[a-z0-9]+$/i, '');
+  // Descarta un id numerico inicial ("2673_task_assigned" -> "task_assigned")
+  // antes de buscar en el mapa de traducciones conocidas.
+  const prefixParts = prefix.split('_');
+  if (prefixParts.length > 1 && /^\d+$/.test(prefixParts[0])) {
+    prefix = prefixParts.slice(1).join('_');
+  }
   if (EVENT_TITLE_LABELS[prefix]) return EVENT_TITLE_LABELS[prefix];
   const readable = prefix.replace(/_/g, ' ').trim();
   return readable ? readable.charAt(0).toUpperCase() + readable.slice(1) : 'Reporte de seguridad';

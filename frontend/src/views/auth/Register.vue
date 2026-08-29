@@ -430,9 +430,26 @@ function translateFieldMessage(field, rawMsg) {
   return `Revisa ${label}: el valor introducido no es válido.`
 }
 
+/**
+ * El cliente API (src/api/index.ts) normaliza los errores de axios a un
+ * Error plano sin `.response` (usa `.details` con el body del backend y
+ * `.originalError` con el error de axios original) — sin esto,
+ * parseRegisterError nunca encontraba el detail real y caía siempre en
+ * el `err.message` genérico en inglés ("Validation error", "Bad request",
+ * etc.), sin importar cuántas traducciones se añadieran más abajo.
+ * Se comprueban las tres formas posibles para cubrir ambos casos.
+ */
+function extractResponseData(err) {
+  return err?.response?.data ?? err?.details ?? err?.originalError?.response?.data
+}
+
+function extractResponseStatus(err) {
+  return err?.response?.status ?? err?.status ?? err?.originalError?.response?.status
+}
+
 /** Mensaje real del backend (FastAPI: detail string o lista de errores de validación). */
 function parseRegisterError(err) {
-  const data = err?.response?.data
+  const data = extractResponseData(err)
   const detail = data?.detail ?? data?.message
 
   if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
@@ -468,7 +485,7 @@ function parseRegisterError(err) {
     if (parts.length) return parts.join(' ')
   }
 
-  const status = err?.response?.status
+  const status = extractResponseStatus(err)
   if (status === 400) {
     return 'No se pudo completar el registro. Revisa los datos o prueba con otro correo.'
   }
@@ -527,8 +544,8 @@ const handleSubmit = async () => {
   } catch (err) {
     console.error('Registration error:', err);
     const parsed = parseRegisterError(err);
-    const status = err?.response?.status;
-    const detail = err?.response?.data?.detail;
+    const status = extractResponseStatus(err);
+    const detail = extractResponseData(err)?.detail;
     const accountLikelyCreated =
       status === 500 &&
       typeof detail === 'string' &&

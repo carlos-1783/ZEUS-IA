@@ -350,9 +350,16 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* Migrado a los tokens del sistema de diseno (--zeus-*): este panel es
+   compartido por RAFAEL y JUSTICIA dentro del modal "Interactuar" y
+   fijaba una paleta propia (azul solido, badges rosa/indigo/amarillo por
+   agente) que competia con el gradiente de acento ya establecido en la
+   cabecera del mismo modal. Los estados semanticos reales (pendiente/
+   aprobado/rechazado) mantienen color con los tokens semanticos del
+   sistema (--zeus-warning/-success/-danger), que ya existian para eso. */
 .document-approval-panel {
-  background: white;
-  border-radius: 8px;
+  background: var(--zeus-surface, #fff);
+  border-radius: var(--zeus-radius, 12px);
   padding: 20px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
@@ -363,26 +370,28 @@ onMounted(() => {
   align-items: center;
   margin-bottom: 20px;
   padding-bottom: 15px;
-  border-bottom: 2px solid #e5e7eb;
+  border-bottom: 2px solid var(--zeus-border, #e1e5eb);
 }
 
 .panel-header h3 {
   margin: 0;
-  color: #1f2937;
+  color: var(--zeus-text, #0f172a);
 }
 
 .btn-refresh {
   padding: 8px 16px;
-  background: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: 6px;
+  background: var(--zeus-surface, #fff);
+  color: var(--zeus-text, #0f172a);
+  border: 1px solid #D1D5DB;
+  border-radius: var(--zeus-radius-sm, 8px);
   cursor: pointer;
   font-size: 14px;
+  font-weight: var(--zeus-weight-medium, 500);
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn-refresh:hover:not(:disabled) {
-  background: #2563eb;
+  border-color: #9aa2af;
 }
 
 .btn-refresh:disabled {
@@ -391,18 +400,18 @@ onMounted(() => {
 }
 
 .error-message {
-  background: #fef2f2;
-  color: #dc2626;
+  background: var(--zeus-danger-soft, #fdecec);
+  color: var(--zeus-danger, #ef4444);
   padding: 12px;
-  border-radius: 6px;
+  border-radius: var(--zeus-radius-sm, 8px);
   margin-bottom: 20px;
-  border-left: 4px solid #dc2626;
+  border-left: 4px solid var(--zeus-danger, #ef4444);
 }
 
 .loading, .empty-state {
   text-align: center;
   padding: 40px;
-  color: #6b7280;
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .documents-list {
@@ -412,8 +421,8 @@ onMounted(() => {
 }
 
 .document-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius-sm, 8px);
   overflow: hidden;
   transition: all 0.2s;
 }
@@ -428,7 +437,7 @@ onMounted(() => {
   align-items: center;
   padding: 16px;
   cursor: pointer;
-  background: #f9fafb;
+  background: var(--zeus-bg-subtle, #eef1f6);
 }
 
 .document-info {
@@ -438,51 +447,27 @@ onMounted(() => {
   flex: 1;
 }
 
+/* Un unico estilo neutro para el badge de agente en los 6 casos: el
+   nombre del agente ya es texto legible, no necesita un acento de color
+   distinto por agente compitiendo con el gradiente del modal. */
 .agent-badge {
   padding: 4px 12px;
-  border-radius: 12px;
+  border-radius: var(--zeus-radius-full, 999px);
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
-}
-
-.agent-badge.rafael {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.agent-badge.justicia {
-  background: #fce7f3;
-  color: #9f1239;
-}
-
-.agent-badge.perseo {
-  background: #e0e7ff;
-  color: #3730a3;
-}
-
-.agent-badge.afrodita {
-  background: #fce7f3;
-  color: #831843;
-}
-
-.agent-badge.thalos {
-  background: #f3f4f6;
-  color: #374151;
-}
-
-.agent-badge.zeus-core {
-  background: #fef9c3;
-  color: #854d0e;
+  background: var(--zeus-bg-subtle, #eef1f6);
+  color: var(--zeus-text-secondary, #52607a);
+  border: 1px solid var(--zeus-border, #e1e5eb);
 }
 
 .workspace-deliverable-note {
   margin-top: 12px;
   padding: 12px;
-  background: #f3f4f6;
-  border-radius: 8px;
+  background: var(--zeus-bg-subtle, #eef1f6);
+  border-radius: var(--zeus-radius-sm, 8px);
   font-size: 13px;
-  color: #4b5563;
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .workspace-deliverable-note p {
@@ -491,12 +476,12 @@ onMounted(() => {
 
 .document-type {
   font-weight: 500;
-  color: #374151;
+  color: var(--zeus-text, #0f172a);
 }
 
 .document-date {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .document-actions {
@@ -507,38 +492,38 @@ onMounted(() => {
 
 .status-badge {
   padding: 4px 10px;
-  border-radius: 12px;
+  border-radius: var(--zeus-radius-full, 999px);
   font-size: 11px;
   font-weight: 600;
 }
 
 .status-badge.draft,
 .status-badge.pending_approval {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--zeus-warning-soft, #fef6e7);
+  color: var(--zeus-warning, #f59e0b);
 }
 
 .status-badge.approved,
 .status-badge.sent_to_advisor {
-  background: #d1fae5;
-  color: #065f46;
+  background: var(--zeus-success-soft, #e9faf3);
+  color: var(--zeus-success, #10b981);
 }
 
 .status-badge.rejected,
 .status-badge.failed {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--zeus-danger-soft, #fdecec);
+  color: var(--zeus-danger, #ef4444);
 }
 
 .expand-icon {
-  color: #6b7280;
+  color: var(--zeus-text-muted, #8792a6);
   font-size: 12px;
 }
 
 .document-details {
   padding: 20px;
-  background: white;
-  border-top: 1px solid #e5e7eb;
+  background: var(--zeus-surface, #fff);
+  border-top: 1px solid var(--zeus-border, #e1e5eb);
 }
 
 .document-content {
@@ -547,7 +532,7 @@ onMounted(() => {
 
 .document-content h4 {
   margin: 0 0 8px;
-  color: #374151;
+  color: var(--zeus-text, #0f172a);
   font-size: 14px;
 }
 
@@ -558,14 +543,14 @@ onMounted(() => {
 
 .raw-json-toggle summary {
   cursor: pointer;
-  color: #6b7280;
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .document-preview {
-  background: #f9fafb;
-  color: #111827;
+  background: var(--zeus-bg-subtle, #eef1f6);
+  color: var(--zeus-text, #0f172a);
   padding: 12px;
-  border-radius: 6px;
+  border-radius: var(--zeus-radius-sm, 8px);
   font-size: 12px;
   line-height: 1.45;
   max-height: 300px;
@@ -577,18 +562,18 @@ onMounted(() => {
 
 .advisor-info {
   padding: 12px;
-  background: #eff6ff;
-  border-radius: 6px;
+  background: var(--zeus-info-soft, #eaf2ff);
+  border-radius: var(--zeus-radius-sm, 8px);
   margin-bottom: 16px;
-  color: #1e40af;
+  color: var(--zeus-info, #3b82f6);
 }
 
 .advisor-warning {
   padding: 12px;
-  background: #fef3c7;
-  border-radius: 6px;
+  background: var(--zeus-warning-soft, #fef6e7);
+  border-radius: var(--zeus-radius-sm, 8px);
   margin-bottom: 16px;
-  color: #92400e;
+  color: var(--zeus-warning, #f59e0b);
 }
 
 .approval-actions {
@@ -600,10 +585,10 @@ onMounted(() => {
 .btn-approve {
   flex: 1;
   padding: 12px 24px;
-  background: #10b981;
-  color: white;
+  background: var(--zeus-success, #10b981);
+  color: var(--zeus-text-on-accent, #fff);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--zeus-radius-sm, 8px);
   font-weight: 600;
   cursor: pointer;
   transition: background 0.2s;
@@ -620,10 +605,10 @@ onMounted(() => {
 
 .btn-reject {
   padding: 12px 24px;
-  background: #ef4444;
-  color: white;
+  background: var(--zeus-danger, #ef4444);
+  color: var(--zeus-text-on-accent, #fff);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--zeus-radius-sm, 8px);
   font-weight: 600;
   cursor: pointer;
   transition: background 0.2s;
@@ -641,13 +626,13 @@ onMounted(() => {
 .audit-log {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--zeus-border, #e1e5eb);
 }
 
 .audit-log h4 {
   margin: 0 0 8px 0;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .audit-log ul {
@@ -658,7 +643,7 @@ onMounted(() => {
 
 .audit-log li {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--zeus-text-muted, #8792a6);
   margin-bottom: 4px;
 }
 </style>

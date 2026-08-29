@@ -33,7 +33,6 @@
 .tools-panel,
 .tool-card,
 .workspace-playbooks,
-.system-status-panel,
 .activity-panel .workspace-content,
 [class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace):not(.afrodita-workspace):not(.thalos-workspace):not(.justicia-workspace):not(.zeus-workspace),
 .agent-panel-container .workspace-content,
@@ -44,7 +43,18 @@
   border-radius: 12px;
 }
 
-.system-status-panel,
+/* .system-status-panel queda fuera de las dos reglas de arriba a
+   proposito (ver AUDIT_FRONTEND_CIERRE.md, Hallazgo 3): esta regla
+   fijaba background:transparent !important sobre el MISMO elemento que
+   en SystemStatusPanel.vue (rediseño claro) declara
+   background-image: var(--zeus-bg) para el fondo de bandas metalicas.
+   Al no llevar !important esa declaracion scoped, este enforcer la
+   anulaba siempre, dejando ver el body plano de detras (navy en tema
+   oscuro -- el default de cuenta nueva -- o gris azulado en claro),
+   exactamente el bug que el fix de tokens de SystemStatusPanel.vue
+   intentaba resolver. Las tarjetas internas (.flags-section/
+   .agents-section) ya declaran su propio fondo claro mas abajo, no
+   dependen de esta regla. */
 [class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace):not(.afrodita-workspace):not(.thalos-workspace):not(.justicia-workspace):not(.zeus-workspace) {
   border: none;
   background: transparent !important;
@@ -125,18 +135,18 @@
 .tool-card button,
 .workspace-playbooks button,
 [class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace):not(.afrodita-workspace):not(.thalos-workspace):not(.justicia-workspace):not(.zeus-workspace) button,
-.system-status-panel .refresh-btn,
 .action-button {
   color: #ffffff !important;
   background: #111827 !important;
   border-radius: 8px;
 }
 
-.system-status-panel .refresh-btn {
-  color: var(--text-primary) !important;
-  background: #ffffff !important;
-  border: 1px solid var(--border-soft);
-}
+/* .system-status-panel .refresh-btn ya no se fuerza aqui (ver
+   AUDIT_FRONTEND_CIERRE.md, Hallazgo 3): este boton es la unica accion
+   de la vista y en el template ya lleva las clases
+   "zeus-btn zeus-btn-accent" (gradiente de acento del sistema, mismo
+   patron que "Nueva poliza" en InsuranceView.vue) -- esta regla lo
+   forzaba a blanco piano, quitandole el unico acento que deberia tener. */
 
 .tools-panel .tool-card button:not(:disabled),
 [class$='-workspace']:not(.rafael-workspace):not(.perseo-workspace):not(.afrodita-workspace):not(.thalos-workspace):not(.justicia-workspace):not(.zeus-workspace) .domain-tabs button.active {

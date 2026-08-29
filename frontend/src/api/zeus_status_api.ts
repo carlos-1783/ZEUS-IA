@@ -46,12 +46,17 @@ export async function fetchZeusExecutionStatus() {
   return api.get('/api/v1/zeus-core/status') as Promise<ZeusExecutionStatus>
 }
 
+// Mismo vocabulario en espanol ya usado por ThalosExecutionBadge.vue
+// (GLOBAL_MODE_LABELS / MODULE_BADGE_LABELS) para las etiquetas de
+// estado de modulo -- esta funcion devolvia los identificadores crudos
+// en ingles (UNKNOWN, SIMULATED, SYSTEM ERROR...), visibles sin traducir
+// en las pestanas de dominio de AfroditaWorkspace.vue (RRHH/OPERACIONES).
 export function moduleStatusLabel(status?: ZeusModuleStatus | string): string {
-  if (!status) return 'UNKNOWN'
-  if (status === 'REAL' || status === 'REAL_WITH_OUTPUT') return 'REAL'
-  if (status === 'EMPTY_REAL') return 'CONNECTED'
-  if (status === 'PARTIAL_REAL') return 'PARTIAL'
-  if (status === 'ERROR') return 'SYSTEM ERROR'
-  if (status === 'SIMULATED') return 'SIMULATED'
-  return 'UNKNOWN'
+  if (!status) return 'Desconocido'
+  if (status === 'REAL' || status === 'REAL_WITH_OUTPUT') return 'Real'
+  if (status === 'EMPTY_REAL') return 'Conectado'
+  if (status === 'PARTIAL_REAL') return 'Parcial'
+  if (status === 'ERROR') return 'Error del sistema'
+  if (status === 'SIMULATED') return 'Simulado'
+  return 'Desconocido'
 }

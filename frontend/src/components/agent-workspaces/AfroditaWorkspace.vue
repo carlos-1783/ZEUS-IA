@@ -78,10 +78,10 @@ const workspaceTabLabel = computed(() => {
   const wsMod = zeusStatus.value?.modules?.workspace
   if (wsMod?.status) return moduleStatusLabel(wsMod.status)
   const ws = globalStatus.value?.workspace
-  if (!ws?.enabled) return 'UNKNOWN'
-  if (ws.connected) return wsMod?.status ? moduleStatusLabel(wsMod.status) : 'UNKNOWN'
-  if (ws.status === 'ERROR') return 'ERROR'
-  return 'UNKNOWN'
+  if (!ws?.enabled) return 'Desconocido'
+  if (ws.connected) return wsMod?.status ? moduleStatusLabel(wsMod.status) : 'Desconocido'
+  if (ws.status === 'ERROR') return 'Error'
+  return 'Desconocido'
 })
 
 const tabModuleStatus = (tabId: TabId): ZeusModuleStatus | AfroditaExecutionMode | undefined => {

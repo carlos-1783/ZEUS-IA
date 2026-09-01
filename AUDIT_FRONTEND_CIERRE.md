@@ -472,3 +472,175 @@ office-crm-theme.scss, lineas aproximadas 525 a 558, que rompe el
 contraste del titulo. Repetir despues la verificacion de ambos puntos con
 una cuenta nueva sin tocar Ajustes, es decir con el tema oscuro por
 defecto.
+
+## Vuelta 2 — cierre de los 2 hallazgos devueltos
+
+Ejecutor-frontend, rama `feature/consolidacion-final`, commits
+`d8df9f0` (Hallazgo 6) y `2707736` (Hallazgo 2). Entorno: backend y
+frontend propios de este worktree, arrancados desde cero para esta
+ronda (backend `uvicorn app.main:app` en `127.0.0.1:8000`, confirmado
+con `/debug` -> `static_dir` apuntando a
+`...\.claude\worktrees\consolidacion-final\backend\static`; frontend
+`npx vite --port 5190 --strictPort` desde `frontend/` de este mismo
+worktree). Puerto 5173 estaba ocupado por otro checkout ajeno a este
+worktree, igual que en la ronda anterior.
+
+Nota de entorno (no commiteada): con el frontend en el puerto no
+estandar 5190, aparecieron los mismos dos problemas ya documentados en
+la ronda anterior — CSP/HMR de Vite codificados a 5173 en
+`index.html`/`vite.config.ts`, y preflight CORS del backend sin el
+origen 5190 en la lista. Se aplicaron temporalmente: (1) edicion de
+`frontend/index.html` (anadir `ws://localhost:5190`/`ws://127.0.0.1:5190`
+a `connect-src`) y `frontend/vite.config.ts` (`hmr.port: 5190`), (2) la
+variable de entorno `ZEUS_ADDITIONAL_CORS_ORIGINS=http://localhost:5190,
+http://127.0.0.1:5190` al arrancar el backend (mecanismo ya existente en
+`app/core/config.py`, sin tocar codigo). Los dos archivos se revirtieron
+con `git checkout --` antes de cualquier commit — confirmado con
+`git status` limpio salvo los archivos de las dos correcciones reales.
+La variable de entorno no persiste al cerrar el proceso, no requiere
+revertir codigo.
+
+### Hallazgo 6 — traduccion de errores en OnboardingSetup.vue
+
+**CERRADO — verificado en vivo con cuenta nueva.** Cuenta de prueba
+creada de cero por el flujo publico de registro
+(`ejecutor.vuelta2b.1788280710@example.com`, tipo restauracion). En el
+paso "2. Canales" del onboarding, campo "Email del gestor fiscal
+(RAFAEL)", se introdujo `gestor@doble@dominio.com` (pasa la validacion
+laxa del frontend `/\S+@\S+\.\S+/` pero es invalido para el validador
+de email real del backend por tener dos arrobas) y se llego hasta
+"Finalizar configuracion".
+
+Evidencia de red (`read_network_requests`): `POST
+.../api/v1/auth/onboarding/profile` -> 422, body real devuelto por el
+backend:
+
+```
+{"detail":[{"type":"value_error","loc":["body","email_gestor_fiscal"],
+"msg":"value is not a valid email address: The email address is not
+valid. It must have exactly one @-sign.","input":"gestor@doble@dominio.com",
+...}]}
+```
+
+La UI mostro: **"Revisa el email del gestor fiscal: no tiene un formato
+valido."** — en espanol, sin ningun fragmento del mensaje tecnico en
+ingles. Corrigiendo el email a `gestor@dominio-valido.com` y repitiendo
+el envio, `POST .../onboarding/profile` devolvio 200 OK, el onboarding
+se marco completado y la app redirigio al dashboard (`Panel`), con
+datos reales de auto-bootstrap (6 agentes, 140 alertas, 6
+automatizaciones) — confirma que la traduccion no rompe el camino feliz.
+
+Causa y fix: la tabla de traduccion (`KNOWN_MESSAGE_TRANSLATIONS`,
+`translateFieldMessage`) vivia solo dentro de `Register.vue`, sin
+exportar. Se extrajo tal cual a
+`frontend/src/utils/apiErrorTranslation.ts` (mismas regex, mismo
+comportamiento) y `Register.vue` pasa a importarla en vez de tener su
+propia copia — no se creo una tercera implementacion. `OnboardingSetup.vue`
+usa la nueva `translateValidationDetail()` con sus propias etiquetas de
+campo (`ONBOARDING_FIELD_LABELS`) en el `catch` de `finishSetup()`.
+
+Regresion en `Register.vue` (mismo modulo, ahora importado en vez de
+copiado): revisado por codigo — la extraccion es un mover-no-reescribir,
+mismas regex y mismo orden de comprobacion; `npx vue-tsc --noEmit` no
+reporta errores nuevos en `Register.vue` ni en los archivos tocados (los
+unicos errores de tsc en el repo son preexistentes, en archivos no
+tocados por este fix). No se repitio la interaccion completa de
+`Register.vue` en el navegador en esta vuelta (cubierta en la ronda
+anterior, `AUDIT_FRONTEND_CIERRE.md` original, Hallazgo 6 parcial) — ver
+seccion "No verificado" mas abajo.
+
+### Hallazgo 2 — contraste de OfficeCrm.vue en tema oscuro
+
+**CERRADO — verificado en vivo, 3 alternancias completas de tema.**
+Para poder abrir `/office-crm` (el guard de rutas por modulos exige
+`company_type=office`, y la cuenta de prueba de este flujo de
+onboarding es `bar_restaurant`) se actualizo temporalmente
+`company_type` a `'office'` directamente en la fila de `companies` del
+`zeus.db` de este worktree para la cuenta de prueba (dato, no codigo;
+revertido a `'bar_restaurant'` inmediatamente despues de la
+verificacion visual, confirmado con una consulta posterior).
+
+Con el tema por defecto de la cuenta nueva (Oscuro, confirmado por
+consola `[settingsStore] GET /api/v1/settings {..., theme: dark}`), el
+titulo "CRM de oficina" se ve en texto oscuro sobre el fondo claro de
+bandas metalicas — legible, mismo tratamiento que el resto de la app.
+Se alterno el tema en Ajustes tres veces seguidas (Oscuro -> Claro ->
+Oscuro -> Claro -> Oscuro, confirmado en consola con los `PATCH
+/api/v1/settings {theme: ...}` de cada cambio) navegando a `/office-crm`
+despues de cada cambio: el titulo se mantuvo legible en las 5
+comprobaciones, sin ninguna vuelta al gris casi invisible del hallazgo
+original.
+
+Causa y fix: se elimino el bloque `[data-theme='dark'] .office-crm h1,
+...` (linea 525 en adelante) y un segundo bloque menor equivalente para
+`.import-modal`/`.mapping-row select`/`.preview-table` (linea ~721),
+ambos remanentes de un tema oscuro anterior al sistema de diseno
+unificado, con mayor especificidad que la regla correcta
+(`.office-crm h1 { color: var(--zeus-text) }`, linea 63) — mismo patron
+que `cd01889` para `SystemStatusPanel.vue`. Se elimino el bloque entero,
+no solo la regla del titulo, porque todos los selectores base
+(`.panel`, `.form-card`, `.data-table`, `.dock-tab`, `.toolbar`,
+`.import-modal`, `.mapping-row`) ya declaran su propio color con tokens
+`--zeus-*` mas arriba en el mismo archivo, identicos en ambos temas.
+
+Busqueda de un tercer caso del mismo patron (punto 3 del encargo):
+`grep` de `[data-theme='dark']` (y variantes `data-theme="dark"`,
+`.dark-theme`, `html.dark`) en todo `frontend/src` — antes del fix
+aparecia en 3 archivos: `office-crm-theme.scss` (ya corregido),
+`_variables.scss` (solo redefine `--color-light`/`--color-dark`, no
+usados por ninguna pantalla migrada al sistema `--zeus-*`) y
+`_mixins.scss` (mixin `dark-mode`, confirmado sin ningun `@include
+dark-mode` en todo el repo — codigo muerto pero no conflictivo, no
+sobrescribe nada). No se encontro un tercer caso activo del patron; no
+se toco `_variables.scss` ni `_mixins.scss` por no ser parte de este
+hallazgo y no tener efecto visible.
+
+Regresion: `ScanHub.vue` no usa `office-crm-theme.scss` (confirmado por
+grep, solo `OfficeCrm.vue` lo importa via `main.scss`) por lo que no
+hay riesgo de regresion cruzada en ese archivo. Se revisó igualmente
+`InsuranceView.vue` (pantalla de referencia) en tema Oscuro tras el
+fix: titulo "Seguros — Multirriesgo" y boton "Nueva poliza" con
+gradiente de acento, sin cambios respecto a como se veia antes de este
+fix — confirma que tocar `office-crm-theme.scss` no afecto al sistema
+de diseno compartido.
+
+### Consola
+
+Revisada tras cada verificacion (`read_console_messages`,
+`onlyErrors`): sin errores nuevos atribuibles a estos dos fixes. Los
+unicos errores presentes en el log de la sesion son de intentos previos
+de registro contra el backend antes de aplicar el ajuste temporal de
+CORS del entorno (ver nota de entorno arriba) — no reaparecieron tras
+el arranque correcto del backend, y no estan relacionados con el codigo
+de estos dos commits.
+
+### Que NO se verifico en esta vuelta
+
+- No se repitio en el navegador el flujo completo de `Register.vue`
+  (registro con email invalido) tras la extraccion a
+  `apiErrorTranslation.ts` — se confirmo por codigo (mismas regex,
+  mismo comportamiento) y por `vue-tsc` sin errores nuevos, pero no se
+  reprodujo visualmente en esta sesion. Riesgo estimado bajo: es un
+  mover literal de la logica, sin reescritura.
+- No se probo el flujo de `OnboardingSetup.vue` con una cuenta cuyo
+  `company_type` real fuera `office` desde el registro (se uso una
+  cuenta `bar_restaurant` para el Hallazgo 6 y se forzo `company_type`
+  por base de datos solo para el Hallazgo 2, en un momento distinto de
+  la sesion) — ambos hallazgos se verificaron correctamente pero no en
+  la misma cuenta ni en la misma pasada.
+- Paneles de JUSTICIA/AFRODITA y el resto de hallazgos 1/3/4/5: fuera
+  del alcance de esta vuelta, no se tocaron ni se revisaron de nuevo.
+
+### Pendiente / hallazgos nuevos
+
+Ninguno nuevo encontrado durante esta vuelta. Queda pendiente, si se
+quiere blindar del todo el patron del Hallazgo 6, decidir si
+`services/api.ts` (el cliente fetch generico usado por ~24 archivos)
+deberia normalizar y traducir errores de forma centralizada igual que
+`api/index.ts` (axios) — se opto por no tocar ese archivo compartido en
+esta vuelta por ser una superficie de cambio mucho mayor (usado por 24
+componentes) para un hallazgo puntual, y en su lugar se corrigio el
+punto exacto senalado por el revisor en `OnboardingSetup.vue`.
+
+Esta vuelta no se declara cerrada por el propio ejecutor — pendiente de
+revision independiente de `revisor-frontend`.

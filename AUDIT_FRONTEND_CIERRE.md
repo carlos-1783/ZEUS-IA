@@ -229,3 +229,246 @@ Rama: `feature/consolidacion-final`. Commits de esta ronda de verificacion (adem
 - No se audito de forma exhaustiva toda la aplicacion en busca de otros puntos con el mismo patron de Hallazgo 6 (cliente API que envuelve errores de axios sin preservar `.response`).
 
 **Pendiente para una proxima ronda:** los "hallazgos nuevos" listados arriba (copy en ingles suelto en `automations`/`alerts`/`system-health`/THALOS), y una auditoria dirigida del patron de Hallazgo 6 en el resto de formularios que usen `axiosInstance` de `src/api/index.ts`.
+
+---
+
+## Revision independiente (revisor-frontend, verificacion desde cero)
+
+Rol: revisor-frontend (solo lectura, sin cambios de codigo). Entorno propio de
+este worktree, levantado desde cero para esta revision (no reutilizado de
+rondas anteriores): backend uvicorn en 127.0.0.1:8010 (confirmado con
+GET /debug -> static_dir apuntando exactamente a
+C:\Users\Acer\ZEUS-IA\.claude\worktrees\consolidacion-final\backend\static)
+y frontend npx vite --port 5185 --strictPort lanzado desde
+frontend/ de este mismo worktree. Rama confirmada:
+feature/consolidacion-final, commit 32b7926 (verificado con
+git log -1 antes de empezar). Arbol limpio salvo .claude/ sin trackear al
+inicio (confirmado con git status).
+
+Nota de entorno: el puerto 5173 estaba ocupado por otro checkout; se uso
+5185/8010 en su lugar. Para reproducir el flujo de alta y navegar sin el
+overlay de Error de Conexion que bloquea el onboarding con puertos no
+estandar (mismo problema que ya documento el ejecutor), se ajustaron
+temporalmente frontend/vite.config.ts (proxy /api y /ws de 8000 a 8010)
+y frontend/index.html (anadir localhost:8010/5185 a connect-src de la
+CSP). Ambos cambios se revirtieron con git checkout -- antes de terminar
+esta revision; git status confirma el arbol limpio salvo .claude/ al
+cierre.
+
+Cuenta de prueba: registrada de cero con el flujo publico de alta, tipo
+Servicios profesionales, email revisor.qa.consolidacion.final@zeusqarevisor.com,
+sin reutilizar ninguna cuenta de rondas anteriores.
+
+### Lo que SI coincide con el reporte del ejecutor (verificado por mi mismo)
+
+- Avatar de PERSEO (Hallazgo 1): read_network_requests filtrado por
+  avatar en el dashboard muestra GET .../images/avatars/Perseo-avatar.jpg
+  a 200 OK (y 304 en cargas posteriores), igual que los otros 5 agentes.
+  Confirmado tambien dentro del modal Interactuar de PERSEO. Sin icono de
+  imagen rota.
+- Hallazgo 6, causa raiz y fix en Register.vue commit 2951f19: revise
+  frontend/src/api/index.ts linea por linea. Confirme que
+  createErrorResponse en el interceptor de respuesta construye un Error
+  plano con error.details igual al body real del backend y
+  error.status igual al status de la respuesta original, sin exponer nunca
+  la propiedad response en el objeto que le llega a Register.vue. Esto
+  valida que el diagnostico del ejecutor es correcto y no una coincidencia:
+  sin las funciones extractResponseData y extractResponseStatus,
+  parseRegisterError nunca podia leer el detalle real. Reproduje el caso
+  exacto, un email con dominio reservado tipo zeus-qa-revisor.local, contra
+  mi propio backend: la peticion POST a auth/register devolvio 422 con el
+  mensaje tecnico de Pydantic sobre dominio reservado, y el banner del
+  formulario mostro Revisa el correo electronico, no es una direccion de
+  correo valida, en espanol. Fix confirmado como real, no cosmetico.
+- Paneles de herramientas anidados (Hallazgo 4): abri el modal Interactuar,
+  pestana Workspace, de PERSEO, THALOS y RAFAEL, con scroll completo hasta
+  el fondo en cada uno. PERSEO: Analizar imagen y Generar plan en tono
+  oscuro neutro consistente, badges REAL en gris neutro, sin borde rosa en
+  Integraciones de marketing, Guardar integraciones neutro (no magenta).
+  THALOS: badges DESCONOCIDO en gris, Ejecutar auditoria, Trigger backup e
+  Ingestar logs en BD en el mismo tono oscuro, sin borde celeste. RAFAEL:
+  Documentos Pendientes de Aprobacion en espanol y legible, Procesar QR
+  manual ya en el mismo tono oscuro que Generar Excel 303 (ya no destaca en
+  navy). Consistente con lo reportado.
+- Hallazgo 5, badges y Reportes de THALOS: badges DESCONOCIDO confirmados
+  junto a Auditoria real, Backup del sistema y Monitor de logs. Reportes de
+  THALOS con datos reales del auto-bootstrap muestran titulos en espanol
+  como Tarea asignada, Escaneo de seguridad y Copia de seguridad creada,
+  sin ids numericos crudos.
+- Hallazgo 3, seis de las siete pantallas: analytics/tasks,
+  analytics/efficiency, automations/audit y alerts verificadas navegando
+  directamente: texto legible, un unico acento de color (gradiente en Test
+  flujo RRHH, boton neutro en Test Payment Risk), Modo observabilidad solo
+  lectura y Modo auditoria solo lectura en espanol, tipos de evento de
+  alertas traducidos como Falta un requisito de cumplimiento en RRHH, Falta
+  el consentimiento de proteccion de datos y Alerta de seguridad detectada.
+  SystemStatusPanel: fondo de bandas visible, boton Refrescar con
+  gradiente, texto Controlado, pendiente de confianza total en vez del
+  valor tecnico crudo, flags Railway traducidos con Activo e Inactivo.
+- Hallazgos nuevos documentados como pendientes: confirme independientemente
+  que siguen sin corregir, tal como el ejecutor los dejo documentados (no
+  los cuento como discrepancia porque nunca se afirmo que estuvieran
+  arreglados): estado active en ingles crudo en automations, badges de
+  severidad en ingles en alerts, tabla Agentes con valores tecnicos crudos
+  en system status, etiquetas de Sentry y Stripe en ingles crudo en la
+  tarjeta de Configuracion de Alertas de THALOS, Trigger backup en ingles,
+  y el mensaje mixto de permiso de camara denegado en ScanHub.
+- Consola: sin errores de JavaScript propios de la app en ninguna pantalla
+  recorrida. El unico ruido son los errores de politica de seguridad de
+  contenido hacia localhost puerto 5173, artefacto del entorno con puertos
+  no estandar ya documentado por el ejecutor, no relacionado con el codigo.
+
+### Discrepancias encontradas (motivo de devolucion)
+
+1. Hallazgo 6 no esta resuelto en el escenario original que lo motivo:
+regresion visible en OnboardingSetup.vue.
+
+- Que se afirmo: el resumen final dice literalmente que el paso especifico
+  citado originalmente por auditor-frontend, el email del gestor fiscal en
+  el paso de onboarding, usa un cliente HTTP distinto que no reproduce el
+  bug, y por eso el fix se marca PARCIAL solo por falta de auditoria
+  exhaustiva en otras pantallas, no por un problema ya visto en esta.
+- Que encontre yo: complete el registro con exito y llegue al asistente
+  Configuracion inicial ZEUS. En el paso 2, Canales, rellene el campo Email
+  del gestor fiscal RAFAEL con el mismo tipo de dominio reservado del
+  hallazgo original, gestor.fiscal.revision arroba zeus-qa-revisor.local, y
+  pulse Finalizar configuracion en el paso 3. La peticion POST a
+  auth/onboarding/profile devolvio 422, y el banner rojo del formulario
+  mostro literalmente, en ingles, tal cual lo devuelve Pydantic, el mensaje
+  tecnico completo sobre dominio de correo reservado, exactamente el tipo
+  de mensaje que el Hallazgo 6 original describe como el problema a
+  resolver, en la pantalla exacta que el auditor-frontend cito como origen
+  del hallazgo.
+- Causa raiz que confirme por codigo: la funcion finishSetup dentro de
+  OnboardingSetup.vue usa el cliente fetch propio de src/services/api.ts,
+  no el axiosInstance de src/api/index.ts, y en su bloque catch construye
+  el mensaje leyendo detail de varias formas posibles y lo muestra tal
+  cual, sin pasar nunca por ninguna tabla de traduccion equivalente a
+  parseRegisterError o translateFieldMessage de Register.vue. Es decir: es
+  un tercer punto de fallo del mismo patron general, un mensaje de
+  validacion del backend mostrado crudo, en un cliente HTTP distinto del
+  que arreglo el commit 2951f19, y nunca se toco.
+- Discrepancia exacta: el documento afirma que este paso especifico no
+  reprodujo el bug cuando en realidad si lo reproduce, de forma consistente
+  y con el mismo tipo de entrada que motivo el hallazgo original. Esto no
+  es una regresion de funcionalidad, el guardado en si sigue funcionando
+  con datos validos, confirmado corrigiendo el email y completando el
+  onboarding con exito hasta llegar al dashboard, pero es un hallazgo de
+  copy y experiencia de usuario sin resolver, mal caracterizado como no
+  reproducido en la pantalla exacta que motivo el Hallazgo 6.
+- Que falta: aplicar la misma logica de traduccion de translateFieldMessage
+  y parseRegisterError, o extraerla a un helper compartido, al catch de
+  finishSetup en OnboardingSetup.vue, y revisar si src/services/api.ts
+  tiene el mismo patron en otros metodos usados por otras pantallas.
+
+2. Hallazgo 2 tiene una regresion de contraste no detectada: el titulo de
+OfficeCrm.vue es casi invisible en el tema por defecto de cualquier cuenta
+nueva.
+
+- Que se afirmo: CORREGIDO, verificado en vivo, sin cambios adicionales
+  necesarios, en los cuatro casos, dos pantallas por dos temas, se ve el
+  mismo fondo de bandas metalicas que InsuranceView.vue, sin color plano de
+  fondo.
+- Que encontre yo: con mi cuenta de prueba, nueva, con tema Oscuro por
+  defecto, confirmado en Ajustes y reproduciendo exactamente el problema de
+  base del Hallazgo 2 que el propio ejecutor decidio no tocar, el titulo
+  CRM de oficina en la ruta office-crm se renderiza en un gris muy claro
+  casi fundido con el fondo de bandas metalicas, practicamente ilegible a
+  primera vista, con captura tomada. Cambiando el tema a Claro en Ajustes,
+  el mismo titulo pasa a texto oscuro completamente legible. Confirme el
+  mismo patron dos veces, oscuro ilegible y claro legible y oscuro ilegible
+  otra vez, aislando el problema al tema oscuro, que es el que trae
+  cualquier cuenta nueva sin tocar Ajustes. Comparado con la pantalla de
+  referencia InsuranceView.vue en el mismo tema, donde el titulo Seguros,
+  Multirriesgo, es siempre oscuro y legible.
+- Causa raiz encontrada por codigo: el archivo
+  frontend/src/assets/styles/office-crm-theme.scss, importado en main.scss
+  antes que css_system_enforcer_v1.css, contiene, a partir de la linea 525,
+  un bloque de tema oscuro antiguo sin eliminar que fija el color del
+  titulo h1, del h2 de panel y de cust-name a un tono casi blanco cuando el
+  atributo data-theme del documento vale dark. Esa regla tiene mas
+  especificidad, por el selector de atributo mas clase mas elemento, que la
+  regla nueva del mismo fichero que fija el color del titulo a la variable
+  de texto del sistema, que solo tiene clase mas elemento, asi que en tema
+  oscuro gana la regla vieja y pinta el titulo casi blanco sobre el fondo
+  claro de bandas. Es el mismo tipo de conflicto de CSS viejo de tema
+  oscuro contra el wrapper nuevo de bandas sin reconciliar que ya causo el
+  bug de SystemStatusPanel.vue resuelto en el commit cd01889, pero sin
+  detectar ni corregir aqui. El mismo bloque tambien redefine el fondo del
+  contenedor a un degradado solido de azul marino para tema oscuro, que en
+  mis pruebas no gano visualmente sobre la capa de bandas, pero sigue
+  siendo codigo muerto conflictivo que deberia eliminarse igual que se hizo
+  para SystemStatusPanel.vue.
+- Discrepancia exacta: el ejecutor probo el cambio de tema en Ajustes entre
+  Oscuro y Claro y afirmo ver en los cuatro casos el mismo fondo de bandas
+  sin color plano de fondo, y confirmo el FONDO, pero no reparo en la
+  legibilidad del TITULO en tema oscuro. El criterio de hecho original del
+  Hallazgo 2 no se limita al fondo, implicitamente exige que el contenido
+  sea usable, y un titulo casi invisible en el tema por defecto de
+  cualquier cuenta nueva es precisamente el tipo de regresion de sistema de
+  diseno que motivo este hallazgo.
+- Que falta: eliminar o corregir el bloque de tema oscuro de
+  office-crm-theme.scss, aproximadamente lineas 525 a 558 y siguientes,
+  igual que se hizo con el important de SystemStatusPanel.vue en el commit
+  cd01889, y volver a probar el cambio de tema mirando explicitamente el
+  contraste del titulo y no solo el fondo. ScanHub.vue no tiene este
+  problema, confirmado legible en ambos temas, asi que el defecto es
+  especifico de OfficeCrm.vue y de office-crm-theme.scss.
+
+### DocumentApprovalPanel.vue, commit 66bba13, fuera de la lista original
+
+Adicion razonable: es un componente compartido, usado por RAFAEL y por
+JUSTICIA, que forma parte del mismo patron de paneles de herramientas del
+Hallazgo 4, paneles anidados dentro del modal Interactuar, y no es logica
+especifica de una vertical. Revise su CSS del boton de refresco: fondo con
+la superficie del sistema, texto con el color de texto del sistema, borde
+neutro, y confirmo que usa tokens del sistema correctamente, sin un tercer
+acento de color compitiendo. El tono azulado que parecia verse en capturas
+es el icono emoji de refresco, no el boton en si. No requiere una
+verificacion separada mas alla de lo ya cubierto en Hallazgo 4.
+
+### Comparacion visual final contra Seguros
+
+Comparadas explicitamente contra InsuranceView.vue, en la misma sesion y
+mismo tema: Eficiencia operativa, con tarjetas blancas solidas y mismo
+radio y sombra del sistema; Auditoria de automatizaciones, con el mismo
+patron de un unico gradiente de tres paradas para la accion principal;
+Estado del sistema, con el mismo fondo de bandas y el mismo boton con
+gradiente para la accion principal, Refrescar frente a Nueva poliza. Todas
+consistentes con la referencia. CRM de oficina es la unica que difiere de
+forma visible, y solo en tema oscuro, ver discrepancia 2 arriba.
+
+### Veredicto
+
+DEVUELTO.
+
+Dos de los seis hallazgos originales tienen problemas reales sin resolver
+que el resumen final del ejecutor presenta como cerrados o correctamente
+acotados:
+
+1. El Hallazgo 6 reproduce el mensaje de validacion en ingles crudo en la
+   pantalla exacta, email del gestor fiscal en el onboarding, que el
+   auditor-frontend original cito como motivo del hallazgo, contradiciendo
+   la afirmacion de que ese paso especifico no reprodujo el bug.
+2. El Hallazgo 2 tiene una regresion de contraste, titulo casi invisible,
+   en OfficeCrm.vue en el tema oscuro, que es el tema por defecto de
+   cualquier cuenta nueva sin tocar Ajustes, visible de inmediato sin
+   herramientas de desarrollador, en la pantalla exacta que el hallazgo
+   original senalaba.
+
+Ninguna de las dos es una regresion de funcionalidad, ambas pantallas
+siguen operando correctamente con datos validos, pero ambas incumplen el
+criterio de hecho explicito de sus respectivos hallazgos: cualquier error
+de validacion debe traducirse a un mensaje en espanol sin exponer nunca
+texto de validacion en ingles, y el texto debe ser legible en cualquier
+tema del usuario. El resto de hallazgos, uno, tres, cuatro y cinco, y los
+hallazgos nuevos documentados como pendientes, si coinciden con lo
+reportado y quedan aprobados en esta revision.
+
+Para la siguiente vuelta: aplicar la traduccion de errores de validacion
+tambien en la funcion finishSetup de OnboardingSetup.vue, con el mismo
+patron que Register.vue, y eliminar el bloque de tema oscuro obsoleto en
+office-crm-theme.scss, lineas aproximadas 525 a 558, que rompe el
+contraste del titulo. Repetir despues la verificacion de ambos puntos con
+una cuenta nueva sin tocar Ajustes, es decir con el tema oscuro por
+defecto.

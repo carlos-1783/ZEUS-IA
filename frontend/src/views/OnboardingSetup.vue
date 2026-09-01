@@ -156,6 +156,19 @@ import api from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { markOnboardingSetupDone } from '@/utils/postAuthRedirect'
 import { validarNifCif, validarIban, maskIban } from '@/utils/validatorsEs'
+import { translateValidationDetail } from '@/utils/apiErrorTranslation'
+
+// Etiquetas legibles para los mensajes de validación genéricos de este
+// formulario (mismo patrón que FIELD_LABELS en Register.vue).
+const ONBOARDING_FIELD_LABELS: Record<string, string> = {
+  email_gestor_fiscal: 'el email del gestor fiscal',
+  legal_name: 'el nombre / razón social de la empresa',
+  tax_id: 'el CIF/NIF de la empresa',
+  iban: 'el IBAN de cobro',
+  business_hours: 'el horario del negocio',
+  whatsapp_number: 'el número de WhatsApp',
+  employees_count: 'el número de empleados',
+}
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -426,11 +439,13 @@ const finishSetup = async () => {
       /* ignore recovery probe */
     }
     const detail = e?.detail ?? e?.data?.detail ?? e?.response?.data?.detail
-    const msg = typeof detail === 'string'
-      ? detail
-      : Array.isArray(detail)
-        ? detail.map((x) => x?.msg || x?.message || '').filter(Boolean).join(' ')
-        : String(e?.message || '')
+    // Traduce errores de validación crudos del backend (FastAPI/Pydantic)
+    // igual que Register.vue — ver Hallazgo 6 de AUDIT_FRONTEND_CIERRE.md:
+    // este flujo usa services/api.ts (fetch), que nunca traducía el
+    // `detail` y dejaba pasar mensajes en inglés tal cual (ej. email del
+    // gestor fiscal inválido: "value is not a valid email address: ...").
+    const translated = translateValidationDetail(detail, ONBOARDING_FIELD_LABELS)
+    const msg = translated ?? String(e?.message || '')
     if (msg.toLowerCase().includes('unauthorized')) {
       error.value = 'Sesión expirada o inválida. Inicia sesión de nuevo.'
       setTimeout(() => {

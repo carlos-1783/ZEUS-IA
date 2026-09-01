@@ -271,6 +271,11 @@ import { useRouter, useRoute } from 'vue-router';
 import api from '@/api';
 import { useAuthStore } from '@/stores/auth';
 import { resolvePostAuthPath } from '@/utils/postAuthRedirect';
+import {
+  KNOWN_MESSAGE_TRANSLATIONS,
+  translateFieldMessage as translateFieldMessageShared,
+  looksSpanish,
+} from '@/utils/apiErrorTranslation';
 
 const router = useRouter();
 const route = useRoute();
@@ -397,37 +402,11 @@ const FIELD_LABELS = {
   terms: 'los términos y condiciones',
 }
 
-// Traducciones para fragmentos de mensajes tecnicos conocidos que el
-// backend (FastAPI/Pydantic/email-validator) puede devolver en ingles
-// crudo. Se busca coincidencia parcial (case-insensitive) sobre el
-// mensaje real; si no hay ninguna coincidencia, se usa el fallback
-// generico por campo — nunca se muestra el texto en ingles tal cual.
-const KNOWN_MESSAGE_TRANSLATIONS = [
-  { match: /domain name .* is reserved/i, es: 'no se permite usar un dominio de correo reservado para pruebas' },
-  { match: /is not valid.*@-sign|@-sign.*not valid/i, es: 'no tiene un formato válido' },
-  { match: /not a valid email address/i, es: 'no es una dirección de correo válida' },
-  { match: /field required/i, es: 'es obligatorio' },
-  { match: /already registered/i, es: 'ya está registrado' },
-  { match: /ensure this value has at least/i, es: 'es demasiado corto' },
-  { match: /string does not match/i, es: 'tiene un formato no válido' },
-]
-
-/**
- * Traduce/reformula a español cualquier mensaje de validación crudo
- * del backend para un campo concreto. Nunca devuelve el texto en
- * inglés sin traducir — si no hay traducción específica, cae en un
- * mensaje genérico razonable mencionando el campo afectado.
- */
+// Tabla de traducciones y helper de mensajes por campo: compartidos con
+// OnboardingSetup.vue en frontend/src/utils/apiErrorTranslation.ts para
+// no duplicar esta lógica (ver Hallazgo 6 de AUDIT_FRONTEND_CIERRE.md).
 function translateFieldMessage(field, rawMsg) {
-  const label = FIELD_LABELS[field] || (field ? `el campo "${field}"` : 'un campo del formulario')
-  if (field === 'password') {
-    return 'La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula y un número.'
-  }
-  const known = KNOWN_MESSAGE_TRANSLATIONS.find((entry) => entry.match.test(String(rawMsg || '')))
-  if (known) {
-    return `Revisa ${label}: ${known.es}.`
-  }
-  return `Revisa ${label}: el valor introducido no es válido.`
+  return translateFieldMessageShared(field, rawMsg, FIELD_LABELS)
 }
 
 /**
@@ -466,11 +445,10 @@ function parseRegisterError(err) {
     const known = KNOWN_MESSAGE_TRANSLATIONS.find((entry) => entry.match.test(detail))
     if (known) return `No se pudo completar el registro: ${known.es}.`
     // Si el mensaje ya viene redactado en español por el propio backend
-    // (heurística simple: contiene alguna tilde/ñ o palabras comunes en
-    // español), se muestra tal cual; si no, se usa un mensaje generico
+    // (heurística compartida: contiene alguna tilde/ñ o palabras comunes
+    // en español), se muestra tal cual; si no, se usa un mensaje generico
     // en español en vez de exponer texto tecnico en ingles.
-    const looksSpanish = /[áéíóúñÁÉÍÓÚÑ]/.test(detail) || /\b(el|la|los|las|correo|contraseña|cuenta)\b/i.test(detail)
-    return looksSpanish ? detail : 'No se pudo completar el registro. Revisa los datos introducidos e inténtalo de nuevo.'
+    return looksSpanish(detail) ? detail : 'No se pudo completar el registro. Revisa los datos introducidos e inténtalo de nuevo.'
   }
 
   if (Array.isArray(detail)) {

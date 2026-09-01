@@ -644,3 +644,230 @@ punto exacto senalado por el revisor en `OnboardingSetup.vue`.
 
 Esta vuelta no se declara cerrada por el propio ejecutor — pendiente de
 revision independiente de `revisor-frontend`.
+
+---
+
+## Revisión independiente — Vuelta 2 (revisor-frontend, verificación desde cero)
+
+Rol: revisor-frontend (solo lectura, sin cambios de código). Rama confirmada
+`feature/consolidacion-final`, commit `6b20bf5` (verificado con `git log -1`
+antes de empezar). Worktree limpio al inicio y al cierre (`git status`
+solo muestra `.claude/` sin trackear, sin diffs).
+
+Entorno propio, levantado desde cero, sin reutilizar nada de rondas
+anteriores: backend `uvicorn app.main:app` en `127.0.0.1:8000` (confirmado
+con `GET /debug` → `static_dir` apuntando exactamente a
+`...\.claude\worktrees\consolidacion-final\backend\static`) y frontend
+`npx vite --port 5199 --strictPort` desde `frontend/` de este mismo
+worktree. Puerto 5173 estaba ocupado por el checkout compartido ajeno a
+este worktree (proceso PID distinto, confirmado con `netstat`) — se evitó
+por completo, sin usar `preview_start`/`launch.json` (que apunta a ese
+mismo puerto 5173). Para permitir peticiones del frontend en el puerto
+5199 al backend en 8000 (axios llama a `http://localhost:8000/...` en
+absoluto, no vía proxy de Vite) se reinició el backend una vez con
+`ZEUS_ADDITIONAL_CORS_ORIGINS=http://localhost:5199,http://127.0.0.1:5199`
+— mecanismo ya existente en `app/core/config.py`, sin tocar código ni
+archivos del repo. No se editó `vite.config.ts` ni `index.html` en ningún
+momento de esta revisión (a diferencia de rondas anteriores, no hizo
+falta). Procesos de backend/frontend de esta revisión terminados al
+finalizar.
+
+### Hallazgo 6 — verificado de extremo a extremo, en ambas pantallas, con cuenta 100% nueva
+
+Cuenta registrada de cero por el flujo público de alta
+(`revisor.vuelta2b.1793635700@example.com`, tipo "Servicios
+profesionales"), sin reutilizar ninguna cuenta de rondas anteriores.
+`POST /api/v1/auth/register → 201 Created`.
+
+**OnboardingSetup.vue (el caso exacto del Hallazgo 6 original):** en el
+paso "2. Canales", campo "Email del gestor fiscal (RAFAEL)", introduje
+`gestor@doble@dominio.com`. Al pulsar "Finalizar configuración" en el
+paso 3, `read_network_requests` confirmó `POST
+.../api/v1/auth/onboarding/profile → 422`, y la UI mostró **"Revisa el
+email del gestor fiscal: no tiene un formato válido."** en español, sin
+ningún fragmento del mensaje técnico de Pydantic. Corregí el email a
+`gestor@dominio-valido.com`, repetí el envío y `POST
+.../onboarding/profile → 200 OK`, con redirección real a `Panel`
+(dashboard) — confirma que la traducción no rompe el camino feliz.
+
+**Register.vue (la regresión que el ejecutor admitió no haber repetido
+visualmente tras la extracción a `apiErrorTranslation.ts`):** repetí yo
+mismo el flujo completo de registro en el navegador (no solo por código).
+Leí también `apiErrorTranslation.ts` completo y el diff de `Register.vue`
+en el commit `d8df9f0`: la extracción es un mover literal —mismas regex
+de `KNOWN_MESSAGE_TRANSLATIONS`, misma firma de `translateFieldMessage`,
+mismo `looksSpanish`— sin reescritura de lógica. El registro con datos
+válidos completó con éxito (201 Created) y avanzó al onboarding sin
+ningún error de consola ni de tipos atribuible a este cambio.
+
+**Módulo compartido:** `apiErrorTranslation.ts` no introduce
+comportamiento nuevo respecto a lo ya aprobado en `Register.vue`;
+`OnboardingSetup.vue` lo consume correctamente vía
+`translateValidationDetail()` con sus propias `ONBOARDING_FIELD_LABELS`.
+
+### Hallazgo 2 — verificado en cuenta propia, sin forzar company_type por base de datos
+
+A diferencia del ejecutor (que tuvo que editar company_type directamente
+en zeus.db porque su cuenta de prueba era bar_restaurant), la cuenta
+de "Servicios profesionales" que registré para el Hallazgo 6 tiene acceso
+nativo a "CRM oficina" en el menú — no fue necesario tocar la base de
+datos para reproducir este hallazgo.
+
+Confirmé en Ajustes que el tema Oscuro es el valor por defecto de esta
+cuenta nueva, sin haberlo tocado. Con ese tema por defecto, navegué a
+/office-crm: el título "CRM de oficina" se ve en texto oscuro,
+perfectamente legible sobre el fondo claro de bandas metálicas — sin
+rastro del gris casi blanco que motivó la devolución de la vuelta 1.
+Alterné el tema en Ajustes tres veces (Oscuro, Claro, Oscuro,
+confirmando cada PATCH /api/v1/settings con read_network_requests) y
+recargué /office-crm después de cada cambio: el título se mantuvo
+legible en las tres comprobaciones, en ambos temas.
+
+Comparé explícitamente con InsuranceView.vue (referencia aprobada) en
+el mismo tema Oscuro: mismo fondo de bandas, mismo patrón de texto oscuro
+legible, mismo gradiente de tres paradas en el botón de acción principal
+("Nueva póliza" vs el equivalente de CRM oficina). Revisé también
+ScanHub.vue (pantalla hermana citada en el mismo Hallazgo 2 original):
+sigue con el fondo de bandas correcto en ambos temas, sin regresión — el
+único pendiente ya documentado y no tocado en esta vuelta (mensaje mixto
+inglés/español al denegar permiso de cámara) sigue presente tal cual, sin
+empeorar.
+
+Revisé el diff de office-crm-theme.scss en el commit 2707736 línea a
+línea: se eliminaron exactamente los dos bloques data-theme=dark
+identificados en la devolución de la vuelta 1 (el bloque grande desde la
+línea ~525 y el bloque menor de import-modal/mapping-row/preview-table
+desde la línea ~721), y ningún otro. Confirmé que los selectores base que
+quedan (office-crm h1, panel, form-card, data-table,
+dock-tab, toolbar, import-modal, mapping-row) usan tokens
+zeus-* válidos en ambos temas.
+
+### Búsqueda independiente de un tercer caso del mismo patrón
+
+Repetí, sin depender del grep del ejecutor, la búsqueda de
+data-theme='dark' (y variantes data-theme="dark", .dark-theme,
+html.dark) en frontend/src/assets/styles/ y en cualquier .vue con
+bloque <style>:
+
+- .vue con <style>: cero coincidencias en todo frontend/src.
+- office-crm-theme.scss: cero bloques activos — solo queda el
+  comentario que documenta el fix (línea 530).
+- _variables.scss (línea 166): redefine --color-light/--color-dark,
+  usados únicamente por body en main.scss (no por ningún token
+  --zeus-* ni por ninguna pantalla migrada al sistema unificado) —
+  confirmado con grep de var(--color-light)/var(--color-dark), un único
+  resultado (main.scss, la propia definición del body). No es el mismo
+  patrón de conflicto (no compite con --zeus-*), y no se toca por no ser
+  parte de este hallazgo.
+- _mixins.scss (línea 234): mixin dark-mode, confirmado con grep de
+  @include dark-mode sin ningún uso en todo el repo — código muerto, sin
+  efecto.
+
+Encontré, adicionalmente y por cuenta propia, un archivo con el patrón
+inverso que el grep del ejecutor no cubría (buscaba solo
+data-theme='dark', no data-theme='light'):
+dashboard-profesional-theme.scss tiene ~40 reglas
+[data-theme='light'] .dashboard-profesional con colores hardcodeados
+(no tokens --zeus-*). Revisado en detalle: no es el mismo bug.
+DashboardProfesional.vue usa un mecanismo de theming propio y
+autocontenido, anterior al sistema --zeus-* — colores oscuros fijos por
+defecto en su CSS con scope, con este archivo aportando los overrides
+necesarios para tema Claro; no hay una regla vieja de mayor
+especificidad peleando contra una regla nueva del sistema unificado,
+como sí ocurría en office-crm-theme.scss y en el caso ya corregido de
+SystemStatusPanel.vue. Verificado visualmente en /dashboard: sin
+problemas de contraste en el tema por defecto. No es un hallazgo nuevo,
+se documenta aquí solo para constancia de que la búsqueda fue exhaustiva
+en ambas direcciones (dark y light).
+
+### vue-tsc --noEmit
+
+Ejecutado por mí mismo: la lista de errores preexistentes
+(AfroditaOpsPanel.vue, AfroditaWorkspacePanel.vue, TeamFlowPanel.vue,
+WorkspacePlaybooks.vue, BackendError.vue, ZeusDocumentRenderer.vue,
+deduplicateDoc.ts, mediaUploadPolicy.test.ts, normalizeZeusDocument.ts)
+no incluye ninguno de los archivos tocados en esta vuelta. Grep del
+output completo por apiErrorTranslation, OnboardingSetup, Register.vue
+y office-crm: cero coincidencias. Cero errores nuevos.
+
+### Consola
+
+Revisada en cada pantalla recorrida (read_console_messages,
+onlyErrors): sin Uncaught/TypeError/ReferenceError en ninguna. El único
+ruido son los mismos errores de CSP hacia localhost:5173 (chequeo de
+liveness del backend hardcodeado a ese puerto en modo dev), artefacto de
+entorno ya documentado en las dos rondas anteriores, no relacionado con
+el código de estos dos fixes.
+
+### Limpieza del worktree
+
+git status antes y después de esta revisión: limpio, solo .claude/ sin
+trackear (preexistente, ajeno a este rol). No quedaron cambios sin
+revertir en vite.config.ts, index.html, ni en ningún archivo de datos de
+prueba — no hizo falta tocar ninguno en esta vuelta. main y origin/main
+verificados sin cambios (97b949a, igual que al inicio).
+
+### Veredicto
+
+Aprobado — cierre definitivo de la auditoría frontend.
+
+Los dos motivos concretos de la devolución de la vuelta 1 quedan resueltos
+y verificados de forma independiente:
+
+1. Hallazgo 6: el mensaje de validación del backend se traduce a
+   español tanto en Register.vue (sin regresión, repetido visualmente
+   en el navegador) como en OnboardingSetup.vue::finishSetup() (el caso
+   exacto que motivó la devolución), usando el módulo compartido
+   apiErrorTranslation.ts.
+2. Hallazgo 2: el título "CRM de oficina" es legible en tema Oscuro
+   (el que trae cualquier cuenta nueva sin tocar Ajustes) y en tema
+   Claro, confirmado con 3 alternancias en una cuenta que nunca requirió
+   modificar la base de datos. Los dos bloques CSS obsoletos que causaban
+   el conflicto de especificidad fueron eliminados sin dejar un tercer
+   caso del mismo patrón en el resto del repo (verificado con búsqueda
+   propia, en ambas direcciones dark/light).
+
+### Resumen ejecutivo de las 2 vueltas (cierre de la auditoría frontend)
+
+Vuelta 1 (6 hallazgos originales de auditor-frontend): avatar de PERSEO
+roto (Hallazgo 1), fondo de bandas ausente en OfficeCrm/ScanHub
+(Hallazgo 2), 7 pantallas KPI/sistema sin tokens de diseño (Hallazgo 3),
+salto visual en 5 paneles de herramientas anidados (Hallazgo 4), strings
+crudos del backend sin traducir (Hallazgo 5), errores de validación en
+inglés técnico crudo (Hallazgo 6) — los 6 corregidos y verificados en
+vivo; la revisión independiente de esa vuelta aprobó 4 de los 6
+(1, 3, 4, 5) y devolvió 2 (Hallazgo 6 sin cubrir en OnboardingSetup.vue,
+Hallazgo 2 con regresión de contraste no detectada en OfficeCrm.vue).
+
+Vuelta 2 (esta vuelta): los 2 hallazgos devueltos, cerrados con commits
+atómicos (d8df9f0, 2707736) y verificados de forma independiente y
+desde cero, con cuenta nueva, sin reutilizar nada de rondas anteriores.
+
+Pendiente no bloqueante para una futura ronda (documentado, no
+corregido, no forma parte del alcance de los 6 hallazgos originales):
+
+- services/api.ts (cliente fetch genérico usado por ~24 componentes)
+  no centraliza la traducción de errores de validación como sí lo hace
+  ahora api/index.ts (axios) + apiErrorTranslation.ts — se optó
+  deliberadamente por corregir solo el punto exacto señalado
+  (OnboardingSetup.vue) en vez de refactorizar una superficie de cambio
+  mucho mayor sin un hallazgo puntual que lo motive.
+- Copy en inglés suelto sin traducir: estado active en automations,
+  badges de severidad MEDIUM/HIGH en alerts, tabla "Agentes" con
+  valores técnicos crudos (PARTIAL/SIMULATED/REAL/READ_ONLY/DISCONNECTED)
+  en system-health, etiquetas "SENTRY ENABLED"/"STRIPE MODE" en THALOS,
+  "Trigger backup" en THALOS.
+- ScanHub.vue: mensaje mixto inglés/español al denegar permiso de
+  cámara ("Permission denied. Usa el campo manual debajo.").
+- TPV, Control Horario, Nóminas y Admin Panel: nunca verificados
+  visualmente en ninguna de las dos vueltas por falta de credenciales de
+  tipo de cuenta/superusuario adecuadas en la base de datos local; solo
+  confirmados por código (referencian el fondo de bandas del sistema
+  nuevo).
+- Paneles de herramientas de JUSTICIA y AFRODITA: confirmados
+  visualmente en la vuelta 1, no se repitieron en esta vuelta 2 por no
+  formar parte del alcance de los 2 hallazgos devueltos.
+
+Con esta vuelta, los 6 hallazgos originales de auditor-frontend quedan
+cerrados y verificados de forma independiente. Se da por cerrada la
+auditoría frontend de esta rama.

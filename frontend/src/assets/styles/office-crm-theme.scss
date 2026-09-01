@@ -522,110 +522,21 @@
   font-size: 0.9rem;
 }
 
-[data-theme='dark'] .office-crm {
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-  color: #f1f5f9;
-}
-
-[data-theme='dark'] .office-crm h1,
-[data-theme='dark'] .office-crm .panel h2,
-[data-theme='dark'] .office-crm .cust-name {
-  color: #f1f5f9;
-}
-
-[data-theme='dark'] .office-crm .subtitle,
-[data-theme='dark'] .office-crm .meta-line,
-[data-theme='dark'] .office-crm .muted {
-  color: #94a3b8;
-}
-
-[data-theme='dark'] .office-crm .panel {
-  background: #1e293b;
-  border-color: rgba(148, 163, 184, 0.2);
-}
-
-[data-theme='dark'] .office-crm .form-card {
-  background: #0f172a;
-  border-color: rgba(148, 163, 184, 0.15);
-}
-
-[data-theme='dark'] .office-crm .form-card input,
-[data-theme='dark'] .office-crm .form-card select,
-[data-theme='dark'] .office-crm .form-card textarea {
-  background: #1e293b;
-  border-color: #475569;
-  color: #f1f5f9;
-}
-
-[data-theme='dark'] .office-crm .customer-list li:hover {
-  background: #334155;
-}
-
-[data-theme='dark'] .office-crm .records-table th,
-[data-theme='dark'] .office-crm .records-table td {
-  border-color: #334155;
-}
-
-[data-theme='dark'] .office-crm .toolbar h2 {
-  color: #f1f5f9;
-}
-
-[data-theme='dark'] .office-crm .client-dock {
-  background: #0f172a;
-  border-color: #334155;
-}
-
-[data-theme='dark'] .office-crm .dock-tab {
-  background: #1e293b;
-  border-color: #475569;
-  color: #f1f5f9;
-}
-
-[data-theme='dark'] .office-crm .dock-tab--active {
-  background: #1e3a5f;
-  border-color: #3b82f6;
-}
-
-[data-theme='dark'] .office-crm .dock-tab-badge {
-  background: #334155;
-  color: #cbd5e1;
-}
-
-[data-theme='dark'] .office-crm .minimized-hint {
-  background: rgba(245, 158, 11, 0.15);
-  border-color: rgba(245, 158, 11, 0.45);
-  color: #fcd34d;
-}
-
-[data-theme='dark'] .office-crm .data-table th,
-[data-theme='dark'] .office-crm .data-table td {
-  border-color: #334155;
-}
-
-[data-theme='dark'] .office-crm .data-table th {
-  color: #334155 !important;
-  background: #f8fafc !important;
-}
-
-[data-theme='dark'] .office-crm .data-table td {
-  color: #e2e8f0;
-}
-
-[data-theme='dark'] .office-crm .toolbar input,
-[data-theme='dark'] .office-crm .data-table input,
-[data-theme='dark'] .office-crm .data-table select,
-[data-theme='dark'] .office-crm .inline-form input,
-[data-theme='dark'] .office-crm .inline-form select,
-[data-theme='dark'] .office-crm .charge-box input,
-[data-theme='dark'] .office-crm .charge-box select {
-  color: #0f172a !important;
-  background-color: #ffffff !important;
-  -webkit-text-fill-color: #0f172a;
-}
-
-[data-theme='dark'] .office-crm .charge-box label {
-  color: #cbd5e1;
-}
+/* Bloque de tema oscuro obsoleto eliminado (ver AUDIT_FRONTEND_CIERRE.md,
+   Hallazgo 2, Vuelta 2): este archivo asume desde la línea 15 el sistema
+   de diseño unificado "Fase 1" (fondo de bandas metálico + tokens
+   --zeus-*), que es el MISMO en ambos temas — igual que
+   InsuranceView.vue y SystemStatusPanel.vue, que no llevan overrides de
+   [data-theme='dark']. El bloque que había aquí fijaba `color: #f1f5f9`
+   (casi blanco) sobre el título h1 con mayor especificidad que la regla
+   correcta de la línea 63 (`.office-crm h1 { color: var(--zeus-text) }`),
+   dejando el título casi invisible sobre el fondo claro de bandas en
+   tema Oscuro — el tema por defecto de cualquier cuenta nueva. El resto
+   del bloque (fondo navy sólido, paneles/inputs con paleta oscura)
+   era del mismo tipo: código muerto que contradice el sistema unificado,
+   igual que el caso ya corregido en SystemStatusPanel.vue (commit
+   cd01889). Se elimina entero en vez de solo el h1 para no dejar más
+   overrides del mismo patrón agazapados. */
 
 .office-crm .clients-toolbar {
   display: flex;
@@ -807,19 +718,7 @@
   color: #b45309;
 }
 
-[data-theme='dark'] .office-crm .import-modal {
-  background: #1e293b;
-  border-color: #334155;
-  color: #f1f5f9;
-}
-
-[data-theme='dark'] .office-crm .mapping-row select {
-  background: #0f172a;
-  border-color: #475569;
-  color: #f1f5f9;
-}
-
-[data-theme='dark'] .office-crm .preview-table th,
-[data-theme='dark'] .office-crm .preview-table td {
-  border-color: #334155;
-}
+/* Segundo bloque de tema oscuro obsoleto eliminado (mismo motivo que el
+   bloque grande de más arriba, ver AUDIT_FRONTEND_CIERRE.md, Hallazgo 2,
+   Vuelta 2): .import-modal ya usa var(--zeus-surface)/var(--zeus-text)
+   en su regla base (línea ~648), válidos en ambos temas. */

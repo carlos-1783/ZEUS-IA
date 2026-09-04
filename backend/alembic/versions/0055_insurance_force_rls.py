@@ -15,13 +15,17 @@ SECURITY` + `FORCE ROW LEVEL SECURITY` en `invoices`, `agent_activities`,
 Solo PostgreSQL: no-op completo en SQLite (`_is_postgres()`), igual que el
 resto del bloque RLS de 0043.
 
-Revision ID: 0045
-Revises: 0044
+Revision ID: 0055
+Revises: 0054
+
+Renumerada de 0045→0055 al fusionar feature/ramos-seguros-mati dentro de
+feature/consolidacion-final: 0045 ya estaba ocupado en esta rama por
+0045_fix_misleading_company_id_naming.py.
 """
 from alembic import op
 
-revision = "0045"
-down_revision = "0044"
+revision = "0055"
+down_revision = "0054"
 branch_labels = None
 depends_on = None
 

@@ -21,14 +21,19 @@ downtime); el valor por defecto no se usa nunca en la práctica porque la
 API siempre exige `branch` explícito en la creación de la póliza
 (InsurancePolicyCreate.branch es obligatorio, sin default).
 
-Revision ID: 0044
-Revises: 0043
+Revision ID: 0054
+Revises: 0053
+
+Renumerada de 0044→0054 al fusionar feature/ramos-seguros-mati dentro de
+feature/consolidacion-final: 0044 ya estaba ocupado en esta rama por
+0044_role_check_constraints.py (misma colisión de numeración entre ramas
+paralelas ya vista y corregida varias veces durante la consolidación).
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0044"
-down_revision = "0043"
+revision = "0054"
+down_revision = "0053"
 branch_labels = None
 depends_on = None
 

@@ -16,9 +16,10 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user
+from app.core.validators_es import validar_nif_cif
 from app.db.session import get_db
 from app.models.customer import Customer
-from app.models.insurance import ClaimStatus, InsuranceClaim, InsurancePolicy, PolicyStatus
+from app.models.insurance import ClaimStatus, InsuranceClaim, InsurancePolicy, PolicyBranch, PolicyStatus
 from app.models.user import User
 from app.schemas.insurance import (
     InsuranceClaimCreate,
@@ -89,6 +90,7 @@ def list_policies(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, le=1000),
     status_filter: Optional[str] = Query(None, alias="status"),
+    branch_filter: Optional[str] = Query(None, alias="branch"),
     customer_id: Optional[int] = Query(None),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -101,6 +103,11 @@ def list_policies(
             query = query.filter(InsurancePolicy.status == PolicyStatus(status_filter))
         except ValueError:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Invalid status: {status_filter}")
+    if branch_filter:
+        try:
+            query = query.filter(InsurancePolicy.branch == PolicyBranch(branch_filter))
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Invalid branch: {branch_filter}")
     if customer_id:
         query = query.filter(InsurancePolicy.customer_id == customer_id)
 
@@ -142,12 +149,27 @@ def create_policy(
             detail=f"Customer with ID {policy_in.customer_id} not found",
         )
 
+    # DNI/NIF/CIF real y obligatorio para emitir una póliza (validación
+    # server-side no negociable, no solo del frontend). `policy_in.customer_tax_id`
+    # ya viene con checksum validado por el schema si se informó; si no se
+    # informó, exige que el cliente ya tenga uno válido registrado.
+    tax_id_input = policy_in.customer_tax_id
+    effective_tax_id = tax_id_input or (customer.tax_id or "").strip().upper() or None
+    if not effective_tax_id or not validar_nif_cif(effective_tax_id):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El cliente necesita un DNI/NIF/CIF válido para emitir una póliza",
+        )
+    if tax_id_input and tax_id_input != (customer.tax_id or ""):
+        customer.tax_id = tax_id_input
+
     policy_number = _generate_policy_number(db)
 
     policy = InsurancePolicy(
         company_id=company_id,
         customer_id=policy_in.customer_id,
         policy_number=policy_number,
+        branch=PolicyBranch(policy_in.branch.value),
         coverages=policy_in.coverages or {},
         insured_risk=policy_in.insured_risk or {},
         premium_amount=policy_in.premium_amount,
@@ -168,8 +190,8 @@ def create_policy(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="No se pudo crear la póliza")
 
     logger.info(
-        "insurance_policy_created policy_id=%s policy_number=%s company_id=%s user_id=%s",
-        policy.id, policy.policy_number, company_id, current_user.id,
+        "insurance_policy_created policy_id=%s policy_number=%s branch=%s company_id=%s user_id=%s",
+        policy.id, policy.policy_number, policy.branch.value, company_id, current_user.id,
     )
 
     return {"success": True, "data": policy}

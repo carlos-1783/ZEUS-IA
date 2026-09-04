@@ -3,8 +3,8 @@
    <div class="insurance-content">
     <header class="ins-header">
       <router-link to="/dashboard" class="back-link">&larr; Volver al panel</router-link>
-      <h1>Seguros — Multirriesgo</h1>
-      <p class="subtitle">Pólizas y siniestros de tu empresa.</p>
+      <h1>Seguros</h1>
+      <p class="subtitle">Pólizas (Hogar, Comunidad, Coche, Vida, Decesos, Salud) y siniestros de tu empresa.</p>
     </header>
 
     <p v-if="globalError" class="global-error">{{ globalError }}</p>
@@ -21,9 +21,32 @@
       <form v-if="showNewPolicy" class="inline-form" @submit.prevent="createPolicy">
         <label>
           Cliente *
-          <select v-model.number="newPolicy.customer_id" required>
+          <select v-model.number="newPolicy.customer_id" required @change="onCustomerChange">
             <option disabled value="">Selecciona un cliente</option>
             <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.name }}</option>
+          </select>
+        </label>
+        <label>
+          DNI/NIF/CIF del cliente *
+          <input
+            v-model="newPolicy.customer_tax_id"
+            type="text"
+            placeholder="12345678A"
+            required
+            :class="{ 'field-invalid': newPolicy.customer_tax_id && !taxIdValid }"
+          />
+          <span v-if="newPolicy.customer_tax_id && !taxIdValid" class="field-error">DNI/NIF/CIF no válido</span>
+        </label>
+        <label>
+          Ramo *
+          <select v-model="newPolicy.branch" required>
+            <option disabled value="">Selecciona un ramo</option>
+            <option value="hogar">Hogar</option>
+            <option value="comunidad">Comunidad</option>
+            <option value="coche">Coche</option>
+            <option value="vida">Vida</option>
+            <option value="decesos">Decesos</option>
+            <option value="salud">Salud</option>
           </select>
         </label>
         <label>
@@ -44,8 +67,8 @@
           </select>
         </label>
 
-        <fieldset class="coverages-fieldset">
-          <legend>Coberturas (Multirriesgo)</legend>
+        <fieldset v-if="newPolicy.branch === 'hogar' || newPolicy.branch === 'comunidad'" class="coverages-fieldset">
+          <legend>Coberturas</legend>
           <label class="checkbox-label"><input v-model="newPolicy.coverages.hogar" type="checkbox" /> Hogar</label>
           <label class="checkbox-label"><input v-model="newPolicy.coverages.incendio" type="checkbox" /> Incendio</label>
           <label class="checkbox-label"><input v-model="newPolicy.coverages.robo" type="checkbox" /> Robo</label>
@@ -55,7 +78,7 @@
           </label>
         </fieldset>
 
-        <fieldset class="coverages-fieldset">
+        <fieldset v-if="newPolicy.branch === 'hogar' || newPolicy.branch === 'comunidad'" class="coverages-fieldset">
           <legend>Bien asegurado</legend>
           <label>
             Dirección
@@ -67,12 +90,52 @@
           </label>
         </fieldset>
 
+        <fieldset v-if="newPolicy.branch === 'coche'" class="coverages-fieldset">
+          <legend>Datos del vehículo</legend>
+          <label>
+            Matrícula *
+            <input v-model="newPolicy.insured_risk.matricula" type="text" placeholder="1234ABC" required />
+          </label>
+          <label>
+            Conductor habitual *
+            <input v-model="newPolicy.insured_risk.conductor_habitual" type="text" required />
+          </label>
+          <label>
+            Marca / modelo *
+            <input v-model="newPolicy.insured_risk.marca_modelo" type="text" placeholder="Seat León" required />
+          </label>
+        </fieldset>
+
+        <fieldset v-if="newPolicy.branch === 'vida'" class="coverages-fieldset">
+          <legend>Datos de la póliza de vida</legend>
+          <label>
+            Beneficiario *
+            <input v-model="newPolicy.insured_risk.beneficiario" type="text" required />
+          </label>
+          <label>
+            Capital asegurado (€) *
+            <input v-model.number="newPolicy.insured_risk.capital_asegurado" type="number" step="1" min="0" required />
+          </label>
+        </fieldset>
+
+        <fieldset v-if="newPolicy.branch === 'salud'" class="coverages-fieldset">
+          <legend>Datos de la póliza de salud</legend>
+          <label>
+            Nº de asegurados *
+            <input v-model.number="newPolicy.insured_risk.numero_asegurados" type="number" step="1" min="1" required />
+          </label>
+          <label class="full-width">
+            Cuadro médico *
+            <textarea v-model="newPolicy.insured_risk.cuadro_medico" rows="2" placeholder="Centros/médicos incluidos" required></textarea>
+          </label>
+        </fieldset>
+
         <label class="full-width">
           Notas
           <textarea v-model="newPolicy.notes" rows="2"></textarea>
         </label>
 
-        <button type="submit" class="btn-small" :disabled="creatingPolicy">
+        <button type="submit" class="btn-small" :disabled="creatingPolicy || !taxIdValid || !newPolicy.branch">
           {{ creatingPolicy ? 'Creando…' : 'Crear póliza' }}
         </button>
       </form>
@@ -81,6 +144,7 @@
         <thead>
           <tr>
             <th>Nº póliza</th>
+            <th>Ramo</th>
             <th>Cliente</th>
             <th>Prima</th>
             <th>Estado</th>
@@ -91,6 +155,7 @@
         <tbody>
           <tr v-for="p in policies" :key="p.id">
             <td>{{ p.policy_number }}</td>
+            <td><span class="tag">{{ branchLabel(p.branch) }}</span></td>
             <td>{{ customerName(p.customer_id) }}</td>
             <td>{{ formatMoney(p.premium_amount) }}</td>
             <td><span class="status-pill" :class="'status-' + p.status">{{ statusLabel(p.status) }}</span></td>
@@ -110,11 +175,25 @@
       </div>
 
       <div class="policy-detail">
+        <p><strong>Ramo:</strong> <span class="tag">{{ branchLabel(selectedPolicy.branch) }}</span></p>
         <p><strong>Cliente:</strong> {{ customerName(selectedPolicy.customer_id) }}</p>
         <p><strong>Prima:</strong> {{ formatMoney(selectedPolicy.premium_amount) }}</p>
         <p><strong>Estado:</strong> <span class="status-pill" :class="'status-' + selectedPolicy.status">{{ statusLabel(selectedPolicy.status) }}</span></p>
         <p><strong>Inicio:</strong> {{ selectedPolicy.start_date }} <strong>· Renovación:</strong> {{ selectedPolicy.renewal_date || '—' }}</p>
         <p v-if="selectedPolicy.insured_risk?.direccion"><strong>Bien asegurado:</strong> {{ selectedPolicy.insured_risk.direccion }}</p>
+        <template v-if="selectedPolicy.branch === 'coche'">
+          <p><strong>Matrícula:</strong> {{ selectedPolicy.insured_risk?.matricula || '—' }}
+             <strong>· Conductor habitual:</strong> {{ selectedPolicy.insured_risk?.conductor_habitual || '—' }}
+             <strong>· Marca/modelo:</strong> {{ selectedPolicy.insured_risk?.marca_modelo || '—' }}</p>
+        </template>
+        <template v-else-if="selectedPolicy.branch === 'vida'">
+          <p><strong>Beneficiario:</strong> {{ selectedPolicy.insured_risk?.beneficiario || '—' }}
+             <strong>· Capital asegurado:</strong> {{ selectedPolicy.insured_risk?.capital_asegurado != null ? formatMoney(selectedPolicy.insured_risk.capital_asegurado) : '—' }}</p>
+        </template>
+        <template v-else-if="selectedPolicy.branch === 'salud'">
+          <p><strong>Nº asegurados:</strong> {{ selectedPolicy.insured_risk?.numero_asegurados || '—' }}
+             <strong>· Cuadro médico:</strong> {{ selectedPolicy.insured_risk?.cuadro_medico || '—' }}</p>
+        </template>
         <p><strong>Coberturas:</strong>
           <span v-if="selectedPolicy.coverages?.hogar" class="tag">Hogar</span>
           <span v-if="selectedPolicy.coverages?.incendio" class="tag">Incendio</span>
@@ -195,15 +274,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import api from '@/services/api'
+import { validarNifCif } from '@/utils/validatorsEs'
 
-type Customer = { id: number; name: string }
+type Customer = { id: number; name: string; tax_id?: string | null }
 
 type Policy = {
   id: number
   policy_number: string
   customer_id: number
+  branch: string
   premium_amount: number | string
   status: string
   start_date: string
@@ -238,13 +319,27 @@ const showNewPolicy = ref(false)
 const creatingPolicy = ref(false)
 const newPolicy = reactive<any>({
   customer_id: '',
+  customer_tax_id: '',
+  branch: '',
   premium_amount: null,
   renewal_date: '',
   status: 'active',
   notes: '',
   coverages: { hogar: true, incendio: true, robo: false, responsabilidad_civil_capital: null },
-  insured_risk: { direccion: '', m2: null },
+  insured_risk: {
+    direccion: '', m2: null,
+    matricula: '', conductor_habitual: '', marca_modelo: '',
+    beneficiario: '', capital_asegurado: null,
+    numero_asegurados: null, cuadro_medico: '',
+  },
 })
+
+const taxIdValid = computed(() => !!newPolicy.customer_tax_id && validarNifCif(newPolicy.customer_tax_id))
+
+function onCustomerChange() {
+  const c = customers.value.find((x) => x.id === newPolicy.customer_id)
+  newPolicy.customer_tax_id = c?.tax_id || ''
+}
 
 const showNewClaim = ref(false)
 const creatingClaim = ref(false)
@@ -254,6 +349,9 @@ const newClaim = reactive<any>({ description: '', estimated_amount: null })
 
 function statusLabel(s: string) {
   return { draft: 'Borrador', active: 'Activa', cancelled: 'Cancelada', expired: 'Vencida' }[s] || s
+}
+function branchLabel(b: string) {
+  return { hogar: 'Hogar', comunidad: 'Comunidad', coche: 'Coche', vida: 'Vida', decesos: 'Decesos', salud: 'Salud' }[b] || b
 }
 function claimStatusLabel(s: string) {
   return { open: 'Abierto', investigating: 'En investigación', resolved: 'Resuelto', rejected: 'Rechazado' }[s] || s
@@ -284,13 +382,34 @@ async function loadPolicies() {
   }
 }
 
+function buildInsuredRiskPayload(): Record<string, any> {
+  const r = newPolicy.insured_risk
+  const branch = newPolicy.branch
+  const base: Record<string, any> = {
+    ...(r.direccion ? { direccion: r.direccion } : {}),
+    ...(r.m2 ? { m2: r.m2 } : {}),
+  }
+  if (branch === 'coche') {
+    return { ...base, matricula: r.matricula, conductor_habitual: r.conductor_habitual, marca_modelo: r.marca_modelo }
+  }
+  if (branch === 'vida') {
+    return { ...base, beneficiario: r.beneficiario, capital_asegurado: r.capital_asegurado }
+  }
+  if (branch === 'salud') {
+    return { ...base, numero_asegurados: r.numero_asegurados, cuadro_medico: r.cuadro_medico }
+  }
+  return base
+}
+
 async function createPolicy() {
   globalError.value = ''
-  if (!newPolicy.customer_id || !newPolicy.premium_amount) return
+  if (!newPolicy.customer_id || !newPolicy.premium_amount || !newPolicy.branch || !taxIdValid.value) return
   creatingPolicy.value = true
   try {
     const payload = {
       customer_id: newPolicy.customer_id,
+      customer_tax_id: newPolicy.customer_tax_id,
+      branch: newPolicy.branch,
       premium_amount: newPolicy.premium_amount,
       renewal_date: newPolicy.renewal_date || null,
       status: newPolicy.status,
@@ -303,17 +422,19 @@ async function createPolicy() {
           ? { responsabilidad_civil_capital: newPolicy.coverages.responsabilidad_civil_capital }
           : {}),
       },
-      insured_risk: {
-        ...(newPolicy.insured_risk.direccion ? { direccion: newPolicy.insured_risk.direccion } : {}),
-        ...(newPolicy.insured_risk.m2 ? { m2: newPolicy.insured_risk.m2 } : {}),
-      },
+      insured_risk: buildInsuredRiskPayload(),
     }
     await api.post('/api/v1/insurance/policies', payload)
     showNewPolicy.value = false
     Object.assign(newPolicy, {
-      customer_id: '', premium_amount: null, renewal_date: '', status: 'active', notes: '',
+      customer_id: '', customer_tax_id: '', branch: '', premium_amount: null, renewal_date: '', status: 'active', notes: '',
       coverages: { hogar: true, incendio: true, robo: false, responsabilidad_civil_capital: null },
-      insured_risk: { direccion: '', m2: null },
+      insured_risk: {
+        direccion: '', m2: null,
+        matricula: '', conductor_habitual: '', marca_modelo: '',
+        beneficiario: '', capital_asegurado: null,
+        numero_asegurados: null, cuadro_medico: '',
+      },
     })
     await loadPolicies()
   } catch (e: any) {
@@ -584,6 +705,8 @@ onMounted(async () => {
 }
 .checkbox-label { flex-direction: row !important; align-items: center; gap: 6px !important; }
 .muted { color: var(--zeus-text-muted, #8792a6); font-size: 14px; }
+.field-invalid { border-color: #b71c1c !important; }
+.field-error { color: #b71c1c; font-size: 12px; }
 .policy-detail p { margin: 4px 0; }
 .actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .status-select { padding: 4px 6px; font-size: 13px; border: 1px solid var(--zeus-border-strong, #ccc); border-radius: var(--zeus-radius-sm, 4px); }

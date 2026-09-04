@@ -335,16 +335,11 @@ async function errMessage(e: any): Promise<string> {
   if (e?.status === 403) {
     return t('officeCrm.accessDenied')
   }
-  if (e?.response) {
-    try {
-      const body = await e.response.clone().json()
-      if (body?.detail) {
-        return typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
-      }
-    } catch {
-      /* ignore */
-    }
-  }
+  // `e.message` ya viene traducido a español por `services/api.ts`
+  // (ver Hallazgo 6 de AUDIT_FRONTEND_CIERRE.md / apiErrorTranslation.ts).
+  // No releer `e.response` a mano: eso pasaba por alto la traduccion
+  // centralizada y mostraba el `detail` crudo del backend (a veces incluso
+  // el array de Pydantic sin procesar via `JSON.stringify`).
   return e?.message || t('officeCrm.errorGeneric')
 }
 

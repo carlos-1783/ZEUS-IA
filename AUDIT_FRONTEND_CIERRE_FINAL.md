@@ -400,3 +400,275 @@ sesion.
 
 Esta sesion no se declara cerrada por el propio ejecutor — pendiente de
 revision independiente de `revisor-frontend`.
+
+---
+
+## Veredicto revisor-frontend (revision independiente, cierre definitivo de la rama)
+
+Rol: revisor-frontend (solo lectura/verificacion, sin permiso de Edit/Write
+sobre el codigo revisado). Worktree: consolidacion-final.
+Confirmado con git branch --show-current -> feature/consolidacion-final,
+git log -1 -> 43e37d5 antes de empezar la revision. No se creo rama
+nueva, no se toco main ni el remoto (confirmado al final con
+git log main -1 -> 97b949a, distinto y no adelantado por esta rama).
+
+### Entorno de verificacion (100% propio, sin reutilizar nada de rondas anteriores)
+
+Se detecto y evito el problema de checkout compartido ya documentado:
+preview_start/launch.json no se usaron. Se lanzaron procesos propios
+desde este worktree exacto:
+- Backend: uvicorn app.main:app en 127.0.0.1:8000, confirmado con
+  GET /debug con static_dir apuntando exactamente a este worktree
+  (backend/static).
+- Frontend: npx vite --port 5230 --strictPort desde frontend/ de este
+  mismo worktree.
+- Hallazgo de entorno propio (no documentado en rondas anteriores): el
+  proxy de Vite (vite.config.ts linea 106) tiene el target de /api
+  hardcodeado a http://localhost:8000, y getBackendLivenessUrl()
+  (utils/backendLivenessUrl.ts) siempre pide /api/v1/health relativo en
+  DEV. Arrancar el backend en un puerto distinto de 8000 (se probo primero
+  con 8010) rompe el healthcheck de arranque con error HTTP 500 visible en
+  el propio formulario de registro. Se corrigio arrancando el backend
+  directamente en el puerto 8000 (libre en esta sesion) con
+  ZEUS_ADDITIONAL_CORS_ORIGINS igual a los dos origenes localhost y
+  127.0.0.1 puerto 5230, para el resto de llamadas absolutas de
+  services/api.ts (que si usan API_BASE_URL absoluto incluso en dev,
+  http://localhost:8000/api/v1 por defecto, y por tanto son cross-origin
+  reales desde el puerto 5230 del frontend).
+- Cuenta de prueba propia, registrada desde cero por el flujo publico:
+  revisor.qa.final2 arroba zeusqarevisor.com (id de usuario 2377, empresa
+  id 1903 Bar Revisor QA Final 2, company_type=bar_restaurant), sin
+  reutilizar ninguna cuenta de rondas anteriores.
+- Elevaciones temporales de datos, reversibles, mismo patron ya usado y
+  documentado por auditor-frontend y ejecutor-frontend: company_type a
+  office para probar OfficeCrm (revertido a bar_restaurant despues,
+  confirmado por consulta), is_superuser a 1 para probar Admin Panel
+  (revertido a 0 despues, confirmado por consulta). Filas de prueba
+  insertadas directamente en time_control_alerts para las 2 alertas de
+  Control Horario, borradas inmediatamente despues (confirmado por conteo
+  igual a 0). Cliente CRM duplicado creado en la prueba del Flujo 2,
+  borrado despues de la verificacion (customers.id=93).
+  zeus.db esta en .gitignore (confirmado con git check-ignore -v), por
+  lo que ninguno de estos datos de prueba afecta al estado de git del
+  worktree en ningun caso.
+
+### 1. Diff completo de los 3 commits (f6e4eaa, 35fd8dd, 43e37d5), linea por linea
+
+Confirmado leyendo git show de cada commit:
+- services/api.ts (funcion request, bloque de manejo de respuesta no ok,
+  linea aproximada 155 a 169): importa translateValidationDetail de
+  utils/apiErrorTranslation.ts, es el mismo modulo real, no una
+  copia (confirmado leyendo el archivo completo: exporta
+  KNOWN_MESSAGE_TRANSLATIONS, translateFieldMessage,
+  translateValidationDetail, ya usado por Register.vue y
+  OnboardingSetup.vue desde la Vuelta 2 de AUDIT_FRONTEND_CIERRE.md).
+  Solo reescribe la variable local errorMessage (el Error.message que se
+  lanza); los campos error.data y error.detail se mantienen exactamente
+  igual que antes del diff, sin tocar.
+- Matiz no reportado por el ejecutor, verificado por mi cuenta y que NO es
+  una regresion: translateValidationDetail solo traduce si el mensaje
+  crudo coincide con una de las entradas de KNOWN_MESSAGE_TRANSLATIONS
+  (7 patrones fijos) o si es un array de errores Pydantic (traducido campo a
+  campo); si el detail es un string suelto en ingles que no coincide con
+  ningun patron conocido, translateValidationDetail devuelve null y
+  errorMessage conserva el string crudo ya asignado antes (sin cambio
+  respecto al comportamiento anterior al fix). Es decir, la centralizacion
+  no traduce el 100% de los mensajes en ingles posibles, solo reutiliza la
+  misma cobertura parcial que ya tenian Register.vue y OnboardingSetup.vue.
+  Coherente con lo que el propio modulo documenta en su cabecera y con el
+  alcance declarado por el ejecutor (reutilizar la tabla existente, no crear
+  una traduccion exhaustiva nueva): no es una regresion, es una limitacion
+  preexistente heredada por diseno.
+- AdminPanel.vue y ControlHorario.vue (commit 35fd8dd): diffs minimos y
+  exactamente como se describen: getPlanName anade una entrada none
+  igual a Sin plan y usa como clave el plan normalizado a minusculas
+  (con fallback a none si viniera vacio); ademas corrige un crash
+  latente: el codigo anterior llamaba a toUpperCase directamente sobre
+  plan sin guardas si plan fuera null; ALERT_KIND_LABELS cubre los 3
+  valores reales de alert_kind que emite el backend.
+- Verificado independientemente contra el backend real
+  (backend/services/smart_time_control_service.py, grep de asignaciones
+  de alert_kind): solo existen 3 valores (empleado_no_ficha,
+  exceso_horas, turno_sin_cubrir), los 3 cubiertos.
+
+Verificacion de que no rompe a los llamadores de los campos data y detail:
+leidos 3 consumidores reales que usan esos campos, no solo los mencionados
+por el ejecutor:
+1. OnboardingSetup.vue linea 441: construye la variable detail encadenando
+   e.detail, e.data.detail y e.response.data.detail con encadenamiento
+   opcional -- sigue recibiendo el detail crudo intacto (confirmado tambien
+   en vivo, ver Flujo 1 abajo).
+2. AdminPanel.vue lineas 926 a 940 (fetchCustomerDetail): usa err.detail
+   pero sobre un objeto que viene de su propio fetch directo (no de
+   services/api.ts), por lo que no puede verse afectado por este cambio en
+   ningun caso -- confirmado leyendo el codigo completo de la funcion.
+3. InsuranceView.vue (7 sitios) y TPV.vue (1 sitio, linea 2246): usan
+   el patron de priorizar detail antes que message, documentado como fuera
+   de alcance; confirmado que siguen exactamente igual, sin tocar en este
+   diff.
+
+### 2. Reproduccion independiente de 2 de los 3 flujos de error (datos propios)
+
+Flujo 1 (OnboardingSetup.vue, paso 2 Canales): con mi cuenta nueva, un
+email de gestor fiscal con doble arroba (formato invalido a proposito).
+El POST a auth/onboarding/profile devolvio 422 real (confirmado con
+read_network_requests). La UI mostro exactamente: Revisa el email del
+gestor fiscal, no tiene un formato valido -- en espanol. Corregido el
+email a uno valido, el mismo POST devolvio 200 OK y el onboarding se
+completo, redirigiendo al dashboard (confirmado por el cambio de titulo de
+pestana a Panel). Camino feliz no roto.
+
+Flujo 2 (OfficeCrm.vue, bypass corregido): con company_type elevado
+temporalmente a office, cree un cliente con un email de prueba (POST a
+crm/customers devolvio 201 Created) y despues intente crear un segundo
+cliente con el mismo email (POST devolvio 400 real). La UI mostro
+exactamente: Ya existe un cliente con ese email en tu empresa -- en
+espanol, via e.message tras el fix. Confirmado leyendo el codigo de
+errMessage (OfficeCrm.vue) y parseError (CrmCustomerImport.vue): ya no
+reimplementan el parseo manual del response crudo, ambas funciones
+devuelven directamente e.message con fallback al texto generico.
+
+No se reprodujo el Flujo 3 (UserAppSettings.vue) por no ser estrictamente
+necesario dado que ya se verificaron 2 de los 3 pedidos y el mecanismo
+subyacente (services/api.ts) es el mismo punto de integracion unico para
+los 3 flujos; se confio en la lectura de codigo para ese caso.
+
+### 3. Fix de copy de Control Horario y Admin Panel (verificado visualmente, datos propios)
+
+- Control Horario: insertadas 2 filas de prueba en time_control_alerts
+  (mismos alert_kind y message literales que emite el backend real) para
+  mi propio usuario. Recargada la pantalla de control horario: panel de
+  Alertas inteligentes mostro SIN FICHAR y TURNO SIN CUBRIR, no los codigos
+  crudos EMPLEADO_NO_FICHA y TURNO_SIN_CUBRIR. Filas borradas inmediatamente
+  despues.
+- Admin Panel: con mi cuenta elevada temporalmente a superusuario (plan es
+  NULL en BD, normalizado a none por el backend), pestana Clientes mostro
+  Sin plan en la fila de mi propia empresa, no NONE. Pestana Ingresos
+  mostro Cuotas de alta total, no Setup fees total. Flags revertidos
+  despues.
+
+### 4. Busqueda independiente de logica dependiente del string exacto en ingles
+
+Metodo propio, distinto al del ejecutor (regex mas amplia, sin restringir a
+services/api.ts de antemano): grep de patrones de comparacion sobre
+message (igualdad estricta, includes, startsWith, match, indexOf) en todo
+frontend/src. Resultado: mismas 2 coincidencias reales que reporto el
+ejecutor: stores/auth.ts (usa el cliente axios de api/index, distinto de
+services/api.ts, y compara contra sentinelas tecnicos como 401 o
+invalid_grant, no contra texto traducido) y components/scan/ParserDNI.vue
+(usa api/scanFlow, compara contra un sentinel propio USE_INLINE_CAMERA que
+lanza el mismo componente, no un mensaje del backend) -- ambos confirmados
+por lectura de codigo, ninguno usa services/api.ts ni depende de la
+traduccion. Tambien se reviso TPV.vue linea 2069 (variable msg calculada a
+partir de e.message): el branching real de esa funcion usa e.status
+(403/400), no el texto de msg -- sin dependencia real. Coincide con la
+conclusion del ejecutor: cero logica de negocio en los 33 consumidores de
+services/api.ts depende del string exacto en ingles.
+
+### 5. Regresion en pantallas hermanas
+
+Ademas de tpv y payroll (ya mencionadas por el ejecutor), se recargo
+office-crm (pantalla que si se toco en el diff, la mas expuesta a
+regresion) tras revertir los datos de prueba: la tabla de clientes, el
+formulario inline de nuevo cliente y el resto de la UI se comportan igual
+que en la Vuelta 2 ya aprobada, sin bloques de tema oscuro obsoletos ni
+errores nuevos en consola.
+
+### 6. Criterio sobre dejar InsuranceView.vue y TPV.vue fuera de alcance
+
+Confirmado como razonable, con matices:
+- A favor de dejarlo fuera: InsuranceView.vue es la pantalla de referencia
+  del sistema de diseno visual, pero su logica de negocio (no su CSS o
+  tokens) pertenece al vertical Seguros, marcado explicitamente en
+  construccion y fuera de alcance por la skill zeus-produccion para el
+  nucleo. El propio patron de priorizar detail sobre message es
+  preexistente al diff revisado, no una regresion introducida por esta
+  sesion, y tocar 7 sitios de una vista de un vertical distinto en el mismo
+  commit que un fix puntual de services/api.ts habria mezclado dos causas
+  raiz y dos alcances distintos en un solo commit, contrario a la regla de
+  un cambio, una rama, un commit atomico de la skill.
+- En contra (matiz que el ejecutor no menciona pero que corresponde
+  documentar aqui): es el mismo tipo exacto de bug (mensaje tecnico del
+  backend en ingles mostrado sin traducir) que motivo el Hallazgo 6
+  original, ya cerrado dos veces en esta sesion de auditoria frontend
+  (Vuelta 2 y esta centralizacion). Seria trivial de arreglar invirtiendo
+  el orden de prioridad entre message y detail, sin tocar ninguna logica de
+  negocio de Seguros, y TPV.vue (linea 2246) no es vertical Seguros, es una
+  pantalla de restauracion o nucleo compartido, y el argumento de no
+  mezclar con Seguros no aplica a esa linea concreta.
+- Conclusion: la decision de no tocar InsuranceView.vue en esta sesion es
+  correcta (vertical fuera de alcance mas causa raiz distinta a la
+  encargada). La decision de agrupar TPV.vue bajo el mismo paraguas de
+  fuera de alcance por Seguros es la unica parte del razonamiento del
+  ejecutor que no se sostiene del todo (TPV no es Seguros), pero como el
+  propio ejecutor ya lo deja documentado explicitamente como hallazgo nuevo
+  pendiente para una ronda dirigida futura (no lo oculta, no lo da por
+  cerrado), esto no es motivo de devolucion: es una acotacion de alcance
+  razonable de una correccion puntual de 3 hallazgos concretos, no una
+  auditoria general de todos los usos de detail. Se recomienda que la
+  proxima ronda que toque TPV.vue incluya este punto explicitamente.
+
+### 7. Ejecucion de vue-tsc noEmit (ejecutado por mi cuenta, arbol completo)
+
+Mismos 9 archivos con errores preexistentes que reporto el ejecutor
+(AfroditaOpsPanel.vue, AfroditaWorkspacePanel.vue, TeamFlowPanel.vue,
+WorkspacePlaybooks.vue, BackendError.vue, ZeusDocumentRenderer.vue,
+utils/deduplicateDoc.ts, utils/mediaUploadPolicy.test.ts,
+utils/normalizeZeusDocument.ts) -- cero errores en los 5 archivos tocados
+por esta sesion (services/api.ts, AdminPanel.vue, ControlHorario.vue,
+OfficeCrm.vue, CrmCustomerImport.vue). Cero errores nuevos.
+
+### 8. Consola y estado final del worktree
+
+Revision de mensajes de consola con filtro de errores en cada pantalla
+visitada: unicos errores presentes son el ruido de CSP hacia el puerto 5173
+(artefacto de entorno ya documentado, HMR de Vite hardcodeado), los 422 y
+400 de mis propias pruebas deliberadas, y los avisos preexistentes de
+canvas de graficos nunca disponible en Admin Panel (no relacionados con los
+archivos tocados). Cero errores nuevos atribuibles al codigo de esta
+sesion.
+
+Procesos de backend y frontend de esta sesion de revision detenidos al
+finalizar. Estado de git final: solo el directorio .claude sin seguimiento
+(ya presente antes de empezar esta revision, no generado por mi). zeus.db
+gitignored. Rama main sin tocar ni adelantar. No se hizo push ni merge.
+
+## Veredicto: APROBADO
+
+Cierre definitivo de todo el trabajo de auditor-frontend, ejecutor-frontend
+y revisor-frontend en la rama feature/consolidacion-final para el frontend,
+sujeto al alcance explicito de esta sesion (los 3 hallazgos de copy de
+AUDIT_FRONTEND_CIERRE_FINAL.md mas la centralizacion de services/api.ts y
+el bypass de CrmCustomerImport.vue y OfficeCrm.vue).
+
+Resumen ejecutivo de las 3 rondas completas de auditoria frontend en esta
+rama:
+1. AUDIT_FRONTEND_CIERRE.md: 6 hallazgos originales sobre dashboard,
+   workspaces de agentes, CRM, KPIs y sistema, cerrados en 2 vueltas (la
+   primera dejo 2 hallazgos sin resolver del todo, bloque de tema oscuro
+   obsoleto en OfficeCrm y traduccion de errores en OnboardingSetup,
+   devueltos por revisor-frontend y corregidos en la Vuelta 2, aprobada
+   como cierre definitivo en el commit dd775a7).
+2. AUDIT_FRONTEND_CIERRE_FINAL.md, primera mitad: auditoria visual con
+   Playwright real de las 4 pantallas que solo se habian verificado por
+   lectura de codigo, TPV, Control Horario, Nominas, Admin Panel, sin
+   fallos de sistema de diseno, contraste ni control de acceso; 3 hallazgos
+   nuevos de copy (codigos crudos en Control Horario, NONE y Setup fees en
+   ingles en Admin Panel).
+3. Esta sesion: centralizacion de la traduccion de errores en
+   services/api.ts reutilizando el modulo ya existente
+   apiErrorTranslation.ts (sin duplicar logica, sin romper a los llamadores
+   que dependen de los campos crudos data o detail), correccion del bypass
+   real encontrado en CrmCustomerImport.vue y OfficeCrm.vue, y cierre de los
+   3 hallazgos de copy de la auditoria anterior. Todo verificado de forma
+   independiente en esta revision, con datos y entorno 100% propios,
+   coincidiendo en cada punto con lo reportado por ejecutor-frontend.
+
+Queda pendiente, correctamente documentado y fuera del alcance de esta
+sesion (no bloquea el cierre): el patron de priorizar detail sobre message
+en InsuranceView.vue (vertical Seguros, fuera de alcance de la skill
+zeus-produccion para el nucleo) y en TPV.vue (nucleo, pero fuera del
+encargo puntual de esta sesion). Hallazgo nuevo, no regresion, para una
+ronda dirigida futura.
+
+Revisado por: revisor-frontend (sesion independiente).

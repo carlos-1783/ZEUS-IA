@@ -350,3 +350,44 @@ renderizado real.
 - Este documento no se autodeclara cerrado — puede requerir revisión
   independiente si el usuario lo considera necesario antes de dar por
   cerrada la consolidación completa de `feature/consolidacion-final`.
+
+---
+
+## 8. Veredicto del revisor independiente
+
+**APROBADO** — cierre definitivo de la incorporación del piloto de seguros de
+Mati (`feature/ramos-seguros-mati`) a `feature/consolidacion-final`.
+
+Verificación repetida de forma 100% independiente (comandos propios, tenants
+propios `reviewer.tenantX@zeustest.com`/`company_id=1` y
+`reviewer.tenantY@zeustest.com`/`company_id=2`, backend propio en :8010 contra
+SQLite `reviewer_e2e.db`, nunca reutilizando datos del ejecutor):
+
+- Resolución de conflicto en `InsuranceView.vue` confirmada por `git show
+  6b3e917`: token `--zeus-text-muted` conservado, `.field-invalid`/
+  `.field-error` presentes, sin marcadores de conflicto residuales.
+- `alembic heads` → `0055` único; revisión/down_revision de `0044`/`0045`/
+  `0054`/`0055` confirmada por lectura directa de los 4 archivos, sin IDs
+  duplicados en `versions/`. `alembic upgrade head` desde SQLite nueva propia
+  aplica las 55 revisiones sin error; downgrade `0055→0053` también limpio.
+- Suite completa ejecutada de nuevo: `7 failed, 300 passed, 34 warnings, 3
+  errors`, mismos nombres — sin regresión confirmado por mí, no solo citado.
+- Alta de los 6 ramos con NIF propio validado, persistencia confirmada por SQL
+  directo contra el `.db`, campos de coche/vida/salud recuperables por API,
+  NIF inválido y campos de ramo faltantes rechazados con `422` reales.
+- Aislamiento multi-tenant confirmado en ambas direcciones con dos tenants
+  nuevos: `401` sin token, `404` cruzado en ambos sentidos, listas no
+  contaminadas tras alta cruzada.
+- Logs reales verificados en el propio `stdout` del servidor
+  (`insurance_policy_created ... branch=... company_id=... user_id=...`) con
+  valores correctos por tenant.
+- Diseño: mismo token `--zeus-text-muted` confirmado también en `AdminPanel.vue`
+  y `TPV.vue`. Nota menor: la cita a `DashboardProfesional.vue` en la sección 3.4
+  de este documento referencia un archivo que no existe en el árbol (el
+  dashboard real es `OlymposDashboard.vue`, que no usa ese token) — imprecisión
+  de nomenclatura sin impacto en la conclusión, dado que el resto de archivos
+  citados sí sostienen la comparación.
+- Árbol limpio, `main` sin tocar (`97b949a`), sin `push`, sin rama nueva.
+
+No se encontraron discrepancias sustantivas entre lo reportado por el ejecutor
+y lo observado de forma independiente.

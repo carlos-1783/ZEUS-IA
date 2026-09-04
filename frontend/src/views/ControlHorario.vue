@@ -148,7 +148,7 @@
         <h3>{{ $t('controlHorario.smartAlerts') }}</h3>
         <ul class="alerts-list">
           <li v-for="a in smartAlerts" :key="a.id" :class="'sev-' + (a.severity || 'warning')">
-            <span class="alert-kind">{{ a.kind }}</span>
+            <span class="alert-kind">{{ alertKindLabel(a.kind) }}</span>
             {{ a.message }}
           </li>
         </ul>
@@ -346,6 +346,21 @@ const employeePin = ref('')
 let refreshTimer = null
 
 const V1_METHOD_MAP = { qr: 'qr', code: 'pin', location: 'geo', remote: 'device', face: 'device' }
+
+// Traduce el código crudo de alerta (backend: smart_time_control_service.py,
+// alert_kind en minúsculas, mostrado en mayúsculas por CSS text-transform)
+// a una etiqueta corta en español. Mismo criterio que ya se aplicó a los
+// badges UNKNOWN/CONTROLLED_UNTRUSTED — nunca se muestra el código crudo.
+const ALERT_KIND_LABELS = {
+  empleado_no_ficha: 'Sin fichar',
+  exceso_horas: 'Exceso de horas',
+  turno_sin_cubrir: 'Turno sin cubrir',
+}
+function alertKindLabel(kind) {
+  if (!kind) return ''
+  const key = String(kind).toLowerCase()
+  return ALERT_KIND_LABELS[key] || key.replace(/_/g, ' ')
+}
 
 // Métodos disponibles
 const availableMethods = computed(() => [

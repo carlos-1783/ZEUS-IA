@@ -309,7 +309,7 @@
           </div>
           
           <div class="revenue-card">
-            <h3>Setup fees (total)</h3>
+            <h3>Cuotas de alta (total)</h3>
             <p class="amount">€{{ formatCurrency(stats.totalSetupFees) }}</p>
             <p class="detail">Pagos únicos de instalación</p>
           </div>
@@ -903,9 +903,11 @@ const getPlanName = (plan) => {
     startup: 'STARTUP',
     growth: 'GROWTH',
     business: 'BUSINESS',
-    enterprise: 'ENTERPRISE'
+    enterprise: 'ENTERPRISE',
+    none: 'Sin plan'
   }
-  return names[plan] || plan.toUpperCase()
+  const key = String(plan || 'none').toLowerCase()
+  return names[key] || String(plan).toUpperCase()
 }
 
 const formatDate = (date) => {

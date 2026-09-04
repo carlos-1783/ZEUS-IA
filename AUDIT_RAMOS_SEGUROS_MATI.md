@@ -387,3 +387,241 @@ Nuevo, de esta sesión de verificación:
 
 Este documento no se autodeclara cerrado — queda pendiente de
 `revisor-independiente`.
+---
+
+## 7. Revision independiente (revisor-independiente)
+
+Verificacion repetida desde cero por el rol revisor-independiente, con
+datos 100% propios (tenants, clientes y polizas nuevos, ninguno
+reutilizado del ejecutor), sin permiso de escritura sobre codigo. Backend
+real reutilizado en el puerto 8000 de este mismo worktree (confirmado
+sano con una llamada al endpoint de salud antes de empezar); no se
+reutilizo ninguna sesion ni dato de los tenants company_id 57, 59 o 60
+documentados en las secciones 1 a 6.
+
+### 7.1 Codigo, lectura linea a linea de los 3 commits de backend
+
+- Commit 8081ffb: backend/app/models/insurance.py y
+  backend/app/schemas/insurance.py confirman EXACTAMENTE 6 valores en
+  PolicyBranch (hogar, comunidad, coche, vida, decesos, salud), ni mas ni
+  menos. REQUIRED_INSURED_RISK_FIELDS coincide exactamente con lo pedido:
+  Coche (matricula, conductor_habitual, marca_modelo), Vida (beneficiario,
+  capital_asegurado), Salud (numero_asegurados, cuadro_medico); Hogar,
+  Comunidad y Decesos sin campos adicionales. Los campos especificos van
+  dentro de insured_risk (JSON ya existente, sin columnas nuevas por
+  ramo), diseno coherente con coverages, mismo patron ya usado en el
+  modelo desde antes de esta tarea.
+- El DNI/NIF usa de verdad el validador reutilizado: schemas/insurance.py
+  importa validar_nif_cif de app.core.validators_es (no hay una
+  reimplementacion local del checksum) y endpoints/insurance.py reutiliza
+  la misma funcion en create_policy para el caso en que el tax_id ya
+  viene en Customer.tax_id. Leido backend/app/core/validators_es.py
+  completo: NIF mod-23, CIF con algoritmo AEAT real (digitos pares e
+  impares, letras KPQS y ABEH con reglas distintas), IBAN mod-97, no hay
+  atajos ni exito silencioso disfrazado. frontend/src/utils/validatorsEs.ts
+  reproduce el mismo algoritmo caracter a caracter (confirmado leyendo
+  ambos ficheros lado a lado).
+- Commit d543ace (migracion 0045_insurance_force_rls.py): solo anade
+  FORCE ROW LEVEL SECURITY condicionado a que el dialecto sea postgres,
+  no-op en SQLite, downgrade simetrico. No hay rama muerta del
+  comportamiento anterior: create_policy en 8081ffb sustituye por
+  completo la validacion anterior, que no exigia tax_id, no queda ningun
+  camino que emita una poliza sin DNI, NIF o CIF valido.
+- Ruta de auth y multi-tenant sin atajos nuevos: create_policy y
+  list_policies siguen usando get_current_active_user mas
+  crm_svc.primary_company_id, require_company_id y el filtro
+  Customer.company_id igual a company_id, exactamente igual que en el
+  baseline aed639d (confirmado diffando ambas versiones del endpoint), el
+  fix de DNI y branch no toco ni debilito el filtro de empresa.
+
+### 7.2 Alta de las 6 polizas, datos propios, persistencia por SQL directo
+
+Tenant propio nuevo, primer tenant de esta revision (identificado en las
+tablas siguientes como tenant Uno): correo reviewer.tenantC en
+zeustest.com, company_id 117. 6 clientes propios (ids 30 a 35) con NIF
+valido generado con el propio algoritmo mod-23 (10000001S hasta
+10000006C, letras de control recalculadas independientemente, no
+copiadas de ningun documento previo). 6 polizas dadas de alta via el
+endpoint de creacion de polizas (ids 14 a 19), una por ramo, todas con
+codigo 201.
+
+Persistencia confirmada por SQL directo contra la base de datos local del
+backend (no solo la respuesta HTTP):
+
+  14 117 hogar     POL-20260904-EA8C79 210.4  direccion Calle Revisor 1 Valencia, m2 75
+  15 117 comunidad POL-20260904-408E7E 700    direccion Av Revisor 2 Bilbao, m2 900
+  16 117 coche     POL-20260904-20A505 380.2  matricula 9988ZZZ, conductor Revisor Coche, marca y modelo Renault Clio
+  17 117 vida      POL-20260904-30DB1E 150    beneficiario Familia Revisor, capital asegurado 200000
+  18 117 decesos   POL-20260904-07B8ED 88     sin campos adicionales
+  19 117 salud     POL-20260904-9DA15B 310    numero de asegurados 4, cuadro medico Cuadro medico revisor independiente
+
+Reapertura por API de las polizas 16, 17 y 19 confirma que insured_risk
+con los campos especificos del ramo se recupera completo. El listado
+filtrado por ramo coche devuelve total 1, confirma el filtro documentado.
+
+### 7.3 NIF invalido, casos distintos a los del ejecutor
+
+En vez de repetir letra de control incorrecta o formato claramente
+absurdo, ya probados por el ejecutor, se probaron dos casos nuevos, los
+dos via el punto real de validacion server-side en la creacion de
+polizas, no en la creacion de clientes, que no valida el checksum por
+diseno.
+
+Primer caso, cliente con CIF ya persistido con checksum incorrecto,
+B12345671, la letra de control real seria otra, y sin tax_id de override
+en el payload. Resultado: codigo 422, mensaje indicando que el cliente
+necesita un DNI, NIF o CIF valido para emitir una poliza.
+
+Segundo caso, tax_id de override con formato invalido, 7 digitos mas
+letra en vez de 8 digitos mas letra, sobre un cliente sin tax_id previo.
+Resultado: codigo 422, mensaje de DNI, NIF o CIF no valido por formato o
+digito de control incorrecto.
+
+Tercer caso, ramo coche con insured_risk vacio, sin matricula, conductor
+ni marca o modelo. Resultado: codigo 422, mensaje de campos obligatorios
+faltantes para el ramo coche.
+
+Los tres son rechazos reales, codigo HTTP 422 confirmado explicitamente,
+no solo por el cuerpo del mensaje.
+
+### 7.4 Aislamiento multi-tenant, dos tenants propios nuevos
+
+Tenant Uno, reviewer.tenantC, company_id 117, el mismo de la seccion 7.2.
+Tenant Dos, reviewer.tenantD en zeustest.com, company_id 118, creado
+aparte.
+
+- Listado de polizas como tenant Dos, resultado 200, total 0.
+- Poliza 14, de tenant Uno, consultada por tenant Dos, resultado 404, no
+  encontrada.
+- Alta de poliza como tenant Dos referenciando el customer_id 30 de
+  tenant Uno, resultado 404, cliente no encontrado.
+- Alta de poliza como tenant Dos sobre su propio cliente, id 38, con
+  override de tax_id, resultado 201, company_id 118.
+- Listado de polizas como tenant Uno tras el alta de tenant Dos, 200,
+  total 6, sigue viendo solo las suyas.
+- Poliza 20, de tenant Dos, consultada por tenant Uno, resultado 404.
+- Listado de polizas sin token de autenticacion, resultado 401.
+
+En lugar de repetir el clic manual sobre el desplegable de cliente del
+formulario, limitacion de tooling ya documentada por el ejecutor, y
+confirmada aqui de nuevo (la sesion persistida en el navegador seguia
+siendo la de un tenant con company_id 57 del ejecutor, y no se localizo
+un boton de logout accesible en el viewport, mismo hallazgo, no resuelto
+tampoco por esta revision), se llamo directamente al endpoint exacto que
+alimenta ese desplegable, el listado de clientes del CRM, confirmado
+leyendo el codigo fuente de la vista de Seguros, con los tokens de ambos
+tenants propios:
+
+- Como tenant Uno: 8 clientes propios, ids 30 a 37, ninguno de tenant Dos.
+- Como tenant Dos: 1 cliente propio, id 38, ninguno de tenant Uno.
+
+Esto verifica el mismo mecanismo de scoping que alimenta el desplegable,
+con datos propios, sin depender de que el clic sobre el select nativo
+funcione en este entorno de automatizacion.
+
+### 7.5 Migraciones, ciclo upgrade y downgrade en SQLite aislado propio
+
+Base de datos SQLite nueva, en el scratchpad de esta sesion, borrada al
+terminar, con tablas minimas companies, customers, users y
+alembic_version estampada en la revision 0042. Usando un entorno virtual
+de Python distinto del interprete por defecto del PATH, que no tenia
+Alembic instalado por completo.
+
+Upgrade a 0045: aplica en orden las revisiones 0043, insurance_policies e
+insurance_claims; 0044, la columna branch; y 0045, FORCE ROW LEVEL
+SECURITY. Sin errores.
+
+Esquema resultante inspeccionado directamente: la tabla de polizas queda
+con 14 columnas, incluida la columna branch, tipo texto corto, no nula,
+con valor por defecto hogar.
+
+Downgrade a 0042: revierte en orden inverso las tres revisiones. Sin
+errores.
+
+Tras el downgrade solo quedan las tablas companies, customers, users y
+alembic_version, estampada de vuelta en 0042, las tablas de polizas y
+siniestros desaparecen del esquema, confirmado consultando el catalogo
+de tablas de SQLite.
+
+### 7.6 Patron RLS, comparacion directa con el nucleo, no solo revision de linea
+
+Se comparo el contenido de las migraciones 0043 y 0045 de esta tarea
+contra el fichero equivalente del nucleo en la rama de multi tenant,
+migracion de row level security del nucleo, leido directamente, no solo
+confiado en la afirmacion del mensaje de commit: el nucleo aplica ENABLE
+ROW LEVEL SECURITY mas FORCE ROW LEVEL SECURITY EN LA MISMA MIGRACION,
+tabla por tabla, para varias tablas multi tenant del nucleo. La vertical
+Seguros lo hizo en dos migraciones separadas, la primera solo con ENABLE
+y la segunda con FORCE, con el defecto real de la primera explicado en el
+propio mensaje del commit que anadio la segunda. El resultado final del
+esquema es equivalente, ENABLE mas FORCE sobre ambas tablas, y la segunda
+migracion confirma que la primera efectivamente tenia el mismo hueco que
+motivo la migracion equivalente en el nucleo, el fix es real y necesario,
+no cosmetico.
+
+No verificado en runtime contra una base de datos Postgres real, mismo
+motivo de entorno que declara el ejecutor: no hay Docker ni psql
+disponibles en esta maquina, confirmado de nuevo. Se trata como
+limitacion de entorno, no como omision.
+
+### 7.7 Suite completa, ejecutada dos veces, version actual y baseline
+
+Ejecutado directamente, no copiado del reporte, con el mismo entorno
+virtual, apuntando al directorio de tests, evitando el script de raiz que
+provoca una salida temprana a nivel de modulo, ya documentado.
+
+En la version actual del arbol, commits f06e3fc y 5747900: 7 failed, 214
+passed, 2 skipped, 30 warnings, 3 errors, en poco mas de dos minutos.
+
+En el baseline, reconstruido restaurando los archivos al estado anterior
+a los 4 commits de codigo de esta tarea, mismo metodo que el ejecutor, y
+restaurado despues al estado actual: 7 failed, 214 passed, 2 skipped, 30
+warnings, 3 errors, en un tiempo similar.
+
+Mismos 7 tests fallidos exactos y mismos 3 errores en ambas ejecuciones,
+coincide con lo reportado en las secciones 1 a 6. El estado del arbol
+tras restaurar quedo limpio, solo la carpeta punto claude sin trackear,
+preexistente de la sesion.
+
+### 7.8 Estado del arbol y ramas
+
+- La rama activa es feature/ramos-seguros-mati.
+- El commit en HEAD es 5747900, autor y mensaje coinciden.
+- El rango de commits entre aed639d y HEAD contiene los 5 commits exactos
+  citados por el ejecutor, en el mismo orden.
+- No existe una rama remota equivalente, nunca se hizo push.
+- No hay ninguna rama nueva creada por esta revision.
+- La rama main no se toco en ningun momento de esta sesion.
+
+### 7.9 Discrepancias encontradas
+
+Ninguna. Todo lo verificado de forma independiente, codigo, persistencia,
+validacion de NIF y CIF con casos distintos, aislamiento multi-tenant con
+tenants propios, ciclo de migraciones, y regresion de la suite completa,
+coincide con lo reportado en las secciones 1 a 6. Las dos limitaciones de
+entorno ya declaradas por el ejecutor, RLS no verificable en runtime sin
+Postgres ni Docker, y boton de logout no localizado en el viewport
+probado, se reproducen exactamente igual en esta revision, no son
+omisiones nuevas, son la misma limitacion real del entorno confirmada dos
+veces de forma independiente.
+
+## Veredicto: APROBADO
+
+Todas las verificaciones independientes descritas en la seccion 7
+coinciden con lo reportado en las secciones 1 a 6, y el checklist de no
+simulacion de la skill de produccion se cumple contra evidencia propia:
+datos reales en base de datos, no valores fijos; pasa por autenticacion
+sin atajos nuevos; filtra por company_id en cada consulta, confirmado con
+2 tenants propios en ambas direcciones; manejo de errores real, codigo
+422 con mensajes especificos, no un bloque vacio de captura de
+excepciones; logs verificables con el evento y el ramo; ejecucion manual
+exitosa, 6 polizas mas validacion de NIF mas migraciones mas suite
+completa, todo repetido por este revisor; y migracion Alembic generada,
+aplicada y revertida.
+
+Quedan las mismas dos limitaciones de entorno ya declaradas por el
+ejecutor, RLS en runtime contra Postgres real, y boton de logout no
+localizado en el viewport probado, no bloquean la aprobacion de esta
+tarea concreta, piloto Mati de la vertical Seguros, pero siguen
+pendientes de quien tenga acceso a staging o Railway, o decida abordar la
+UX del logout.

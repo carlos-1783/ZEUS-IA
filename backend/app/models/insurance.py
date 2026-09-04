@@ -20,6 +20,14 @@ Decisiones de diseño:
   ficheros ya subidos vía el endpoint real de subida unificada del
   proyecto (`POST /api/v1/upload`) — no se construye un sistema de storage
   nuevo.
+- `branch` (piloto Mati/Catalana Occidente, feature/ramos-seguros-mati):
+  enum real con los 6 ramos que gestiona Mati (hogar, comunidad, coche,
+  vida, decesos, salud). Sin columna de aseguradora emisora: Mati es agente
+  exclusiva de una sola compañía. Los campos específicos de Coche/Vida/Salud
+  (matrícula, conductor habitual, marca/modelo; beneficiario, capital
+  asegurado; nº asegurados, cuadro médico) se guardan dentro de
+  `insured_risk` (ya JSON libre) en vez de columnas nuevas por ramo —
+  Hogar/Comunidad/Decesos no necesitan campos adicionales.
 """
 
 from datetime import datetime, date
@@ -49,6 +57,18 @@ class PolicyStatus(PyEnum):
     EXPIRED = "expired"
 
 
+class PolicyBranch(PyEnum):
+    """Ramo de la póliza. Piloto Mati (agente exclusiva Catalana Occidente,
+    sin campo de aseguradora emisora): los 6 ramos que gestiona."""
+
+    HOGAR = "hogar"
+    COMUNIDAD = "comunidad"
+    COCHE = "coche"
+    VIDA = "vida"
+    DECESOS = "decesos"
+    SALUD = "salud"
+
+
 class ClaimStatus(PyEnum):
     OPEN = "open"
     INVESTIGATING = "investigating"
@@ -70,12 +90,28 @@ class InsurancePolicy(Base):
 
     policy_number = Column(String(50), unique=True, index=True, nullable=False)
 
+    # Ramo de la póliza (piloto Mati / Catalana Occidente): hogar, comunidad,
+    # coche, vida, decesos, salud. Sin campo de aseguradora emisora — Mati es
+    # agente exclusiva de una sola compañía.
+    branch = Column(
+        SAEnum(
+            PolicyBranch,
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+            name="insurance_policy_branch",
+        ),
+        nullable=False,
+        index=True,
+    )
+
     # Estructura flexible: hoy Multirriesgo (cobertura_hogar, cobertura_incendio,
     # cobertura_robo, capitales asegurados...), mañana otro ramo, sin migración nueva.
     coverages = Column(JSON, nullable=False, default=dict)
 
-    # Descripción del bien/riesgo asegurado (dirección, tipo de inmueble, m2,
-    # año de construcción...) — también flexible, mismo motivo que `coverages`.
+    # Descripción del bien/riesgo asegurado y campos específicos por ramo
+    # (dirección, m2, matrícula/conductor/marca-modelo en Coche, beneficiario/
+    # capital asegurado en Vida, nº asegurados/cuadro médico en Salud...) —
+    # JSON libre, mismo motivo que `coverages`: sin migración de esquema nueva
+    # por cada ramo.
     insured_risk = Column(JSON, nullable=True, default=dict)
 
     premium_amount = Column(Numeric(10, 2), nullable=False)

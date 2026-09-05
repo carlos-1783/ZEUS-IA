@@ -52,11 +52,21 @@ def upgrade() -> None:
     if "branch" in columns:
         return
 
+    branch_enum = sa.Enum(*_BRANCH_VALUES, name="insurance_policy_branch")
+    if _is_postgres():
+        # `op.add_column` (ALTER TABLE) no crea el tipo ENUM de Postgres por
+        # su cuenta -- a diferencia de `op.create_table`, donde SQLAlchemy sí
+        # emite el `CREATE TYPE` automáticamente como parte del DDL de
+        # creación de tabla. Sin este paso explícito, el ALTER TABLE falla
+        # con "type insurance_policy_branch does not exist" (encontrado
+        # ejecutando esta migración por primera vez contra un Postgres real).
+        branch_enum.create(bind, checkfirst=True)
+
     op.add_column(
         "insurance_policies",
         sa.Column(
             "branch",
-            sa.Enum(*_BRANCH_VALUES, name="insurance_policy_branch"),
+            branch_enum,
             nullable=False,
             server_default="hogar",
         ),

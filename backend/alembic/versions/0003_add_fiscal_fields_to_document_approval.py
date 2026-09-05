@@ -59,9 +59,42 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(op.f('ix_document_approvals_ticket_id'), table_name='document_approvals')
-    op.drop_column('document_approvals', 'filed_external_at')
-    op.drop_column('document_approvals', 'exported_at')
-    op.drop_column('document_approvals', 'export_format')
-    op.drop_column('document_approvals', 'fiscal_document_type')
-    op.drop_column('document_approvals', 'ticket_id')
+    # Guardas de existencia (mismo criterio que
+    # 0015_document_approvals_missing_columns.py::downgrade, que revierte
+    # estas mismas columnas/índice y corre DESPUÉS de esta migración en el
+    # sentido de upgrade -> ANTES en el sentido de downgrade): sin esto, un
+    # `alembic downgrade base` completo falla aquí con "index does not
+    # exist" porque 0015 ya los eliminó al bajar. Encontrado ejecutando el
+    # ciclo downgrade/upgrade completo contra un Postgres real por primera
+    # vez.
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if not inspector.has_table('document_approvals'):
+        return
+    existing_indexes = {ix['name'] for ix in inspector.get_indexes('document_approvals')}
+    existing_columns = {c['name'] for c in inspector.get_columns('document_approvals')}
+
+    if 'ix_document_approvals_ticket_id' in existing_indexes:
+        op.drop_index(op.f('ix_document_approvals_ticket_id'), table_name='document_approvals')
+    for column in (
+        'filed_external_at',
+        'exported_at',
+        'export_format',
+        'fiscal_document_type',
+        'ticket_id',
+    ):
+        if column in existing_columns:
+            op.drop_column('document_approvals', column)
+
+    # Simétrico con la rama "Postgres limpio" de upgrade() (que crea la
+    # tabla completa si no existía): si esta migración fue la que la creó,
+    # el downgrade debe eliminarla — si no, un `alembic downgrade base`
+    # completo se rompe después en 0001 ("cannot drop table users because
+    # other objects depend on it", la FK de document_approvals.user_id).
+    # Guarda de seguridad: solo se elimina si está vacía (nunca se borra una
+    # tabla con datos reales de una instalación existente vía create_all()).
+    # Encontrado ejecutando el ciclo downgrade/upgrade completo contra un
+    # Postgres real por primera vez.
+    row_count = bind.execute(sa.text('SELECT count(*) FROM document_approvals')).scalar()
+    if row_count == 0:
+        op.drop_table('document_approvals')

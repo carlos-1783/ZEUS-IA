@@ -104,6 +104,23 @@ def downgrade() -> None:
     cols = {c["name"] for c in inspector.get_columns("agent_activities")}
     if "company_id" in cols:
         op.drop_index("ix_agent_activities_company_id", table_name="agent_activities")
+        # El nombre real de la FK depende de qué rama de upgrade() se ejecutó:
+        # "Postgres limpio" (op.create_table con sa.ForeignKey inline) deja a
+        # Postgres autogenerar el nombre (típicamente
+        # "agent_activities_company_id_fkey"), mientras que la rama "tabla ya
+        # existente" (op.create_foreign_key explícito) sí usa el nombre fijo
+        # "fk_agent_activities_company_id". Asumir el nombre fijo sin comprobar
+        # cuál existe de verdad rompe el downgrade en la primera rama (bug real
+        # encontrado ejecutando este downgrade contra un Postgres real recién
+        # creado desde cero, exactamente el escenario "Postgres limpio" que el
+        # comentario de upgrade() ya anticipaba). Se resuelve el nombre real vía
+        # el inspector en vez de asumirlo.
+        fk_name = None
+        if bind.dialect.name != "sqlite":
+            for fk in inspector.get_foreign_keys("agent_activities"):
+                if fk.get("constrained_columns") == ["company_id"]:
+                    fk_name = fk.get("name")
+                    break
         # batch_alter_table: en SQLite el FK puede haber quedado embebido en el
         # CREATE TABLE original (rama sin create_all previo, arriba), por lo que
         # un DROP COLUMN directo falla ("unknown column in foreign key
@@ -111,6 +128,6 @@ def downgrade() -> None:
         # batch recrea la tabla sin esa columna/constraint y es un no-op
         # equivalente a un ALTER directo en Postgres.
         with op.batch_alter_table("agent_activities") as batch_op:
-            if bind.dialect.name != "sqlite":
-                batch_op.drop_constraint("fk_agent_activities_company_id", type_="foreignkey")
+            if fk_name:
+                batch_op.drop_constraint(fk_name, type_="foreignkey")
             batch_op.drop_column("company_id")

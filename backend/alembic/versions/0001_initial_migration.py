@@ -272,3 +272,25 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_users_email'), table_name='users')
     op.drop_table('users')
     # ### end Alembic commands ###
+
+    # `op.drop_table(nombre)` con solo el nombre (sin las columnas) NO sabe
+    # que hay tipos ENUM de Postgres asociados a esas columnas, así que nunca
+    # emite el `DROP TYPE` correspondiente (a diferencia de `op.create_table`,
+    # que sí crea el tipo automáticamente porque recibe las columnas
+    # completas). Sin esto, los 7 ENUM de esta migración quedan huérfanos en
+    # el catálogo tras el downgrade, y el siguiente `alembic upgrade head`
+    # rompe con "type ... already exists" al intentar recrear la tabla que
+    # los usa. No-op en SQLite (no tiene tipos ENUM nativos). Encontrado
+    # ejecutando el ciclo downgrade/upgrade completo contra un Postgres real
+    # por primera vez.
+    if op.get_bind().dialect.name == "postgresql":
+        for enum_name in (
+            "inventorymovementtype",
+            "paymentstatus",
+            "paymentmethod",
+            "invoicestatus",
+            "invoicetype",
+            "productstatus",
+            "productcategory",
+        ):
+            op.execute(f"DROP TYPE IF EXISTS {enum_name}")

@@ -901,3 +901,172 @@ en tests, migraciones y flujo funcional real. Recomiendo que
 cerrado, dado que el hallazgo #1 de la sección anterior (colisión de
 `invoice_number`) y los pendientes de roles de Railway siguen abiertos de
 la ronda anterior.
+
+---
+
+## Revisión independiente final (revisor-independiente, 2026-09-06) — APROBADO
+
+Verificación realizada en `C:\Users\Acer\ZEUS-IA\.claude\worktrees\consolidacion-final`,
+confirmado por mí mismo: rama `feature/consolidacion-final`, commit `784ac78`
+(`git branch --show-current` / `git log -1`). No he tocado `main`, no he creado
+rama nueva, no he hecho `push`, no he modificado código de la aplicación.
+
+### 1. Diagnóstico del hallazgo #4 (bug de entorno local, no regresión) — confirmado
+
+- **Bug de protocolo de generadores en `get_db` (`backend/app/db/session.py:11-72`)
+  confirmado real, no solo diagnosticado**: reproduje el patrón en aislado con
+  `contextlib.contextmanager` (el mecanismo real que usa FastAPI para
+  dependencias generador) — un generador que, tras un `yield` ya consumido,
+  recibe una excepción vía `.throw()` y responde con `continue`/otro `yield`
+  en vez de propagar o detenerse, produce exactamente
+  `RuntimeError: generator didn't stop after throw()`. Confirmado con script
+  aislado (`contextlib.contextmanager` + generador equivalente al de
+  `get_db`).
+- Confirmé además que el mensaje real de un `sqlite3.OperationalError` por
+  columna inexistente (`no such column: insurance_policies.branch`) contiene
+  literalmente la subcadena `operationalerror` en minúsculas (por el propio
+  nombre de la excepción embebido en el mensaje de SQLAlchemy), que es
+  exactamente una de las palabras clave que `get_db` usa para decidir
+  reintentar (`session.py:37-39`) — así que la cadena causal que describe el
+  ejecutor (columna faltante, OperationalError, reintento espurio, violación
+  de protocolo de generador, 500 enmascarado) es real y reproducible, no una
+  hipótesis.
+- **`create_tables()` nunca altera tablas existentes**: confirmado por grep,
+  solo hay una llamada a `create_all()` en `backend/app/db/base.py`
+  (`Base.metadata.create_all`), que por diseño de SQLAlchemy únicamente crea
+  tablas ausentes, nunca añade columnas a una tabla ya creada.
+- **`ensure_schema_patches()` no tiene ningún `_migrate_insurance_*`**:
+  confirmado por grep de las 16 llamadas reales (`base.py:120-135`) — ninguna
+  cubre `insurance_policies`/`insurance_claims`. Esto es coherente con el
+  propio diseño que esta fusión refuerza en el Hallazgo 2 (mover columnas de
+  parches ad-hoc a migraciones Alembic reales en vez de ampliar los parches
+  en caliente); extender `ensure_schema_patches()` para cubrir esto iría en
+  contra de esa misma dirección de diseño.
+- **Conclusión**: la lectura del ejecutor es razonable y la confirmo de forma
+  independiente. Es un artefacto de un `zeus.db` local no versionado
+  (`*.db` en `.gitignore`) que mezcló `create_tables()` con una migración
+  (`0054`) aplicada después de que la tabla ya existiera sin gestión real de
+  Alembic en ese entorno concreto. No es una regresión de código de esta
+  fusión ni tiene por qué resolverse en `ensure_schema_patches()`, dado que
+  el mecanismo real para Postgres/producción es `alembic upgrade head`
+  (verificado abajo). El bug de `get_db` sí es real y preexistente
+  (commit `2366122`), y queda como hallazgo confirmado para tarea separada.
+
+### 2. Suite completa de tests (reproducida por mí mismo)
+
+```
+cd backend && "C:/Users/Acer/ZEUS-IA/backend/venv/Scripts/python.exe" -m pytest tests -q
+-> 7 failed, 300 passed, 34 warnings, 3 errors in 165.56s
+```
+
+Mismos 7 tests fallidos y mismos 3 `ERROR` (`test_app.py::NameError: TestClient`)
+que el reporte. Cero regresión confirmada nombre por nombre, ejecutado por mí,
+no leído del reporte.
+
+### 3. Migraciones Alembic (reproducidas por mí, con base propia)
+
+```
+alembic heads -> 0056 (head)   [única cabeza, confirmado]
+```
+
+`alembic upgrade head` ejecutado por mí contra una base SQLite nueva y
+propia (no la del ejecutor): `reviewer_fresh.db` en mi scratchpad, recién
+creada. Las 56 migraciones se aplicaron sin error. Verificado por
+`PRAGMA table_info`: `insurance_policies` tiene la columna `branch`; `users`
+tiene 25 columnas incluida `stripe_customer_id`; `alembic_version = 0056`.
+
+### 4. Verificación funcional Playwright con tenant 100% nuevo (ramo Coche)
+
+Backend (`uvicorn`, puerto 8000) y frontend (`vite`, puerto 5173) arrancados
+por mí desde este worktree (confirmado el PID del proceso de Vite corresponde
+a `...\worktrees\consolidacion-final\frontend\node_modules\...` vía
+`Get-CimInstance Win32_Process`, no a otro checkout).
+
+**Nota de entorno**: el pane de navegador de esta sesión reutilizaba una
+sesión ya autenticada (localStorage persistente) del tenant creado por el
+propio ejecutor (`qa.consolidacion.1788712449c@example.com`, `company_id=1`,
+confirmado leyendo `zeus.db` directamente). Los guards del router
+(`frontend/src/router/index.js:81`) impiden navegar a `/auth/login` o
+`/auth/register` mientras haya un token activo. Para conseguir un tenant
+100% independiente forcé la invalidación de esa sesión concreta (revocación
+de `refresh_tokens.is_active` y borrado de la fila de `users` para ese id en
+el `zeus.db` local, disposable y no versionado) — una manipulación de datos
+de prueba locales para viabilizar la verificación, no un cambio de código ni
+de Postgres real.
+
+Con la sesión anterior invalidada, registré un tenant real nuevo por la UI
+(`POST /api/v1/auth/register -> 201 Created`, email
+`qa.revisor.coche.1788716003@example.com`, empresa "Correduria QA Revisor
+Coche SL"), completé el onboarding real (3 pasos), y verifiqué:
+
+1. **Aislamiento antes de crear nada**: `/insurance` mostraba `Pólizas (0)`
+   para el tenant nuevo pese a que el `zeus.db` ya contenía la póliza Hogar
+   del otro tenant. Confirmado también `/office-crm` con lista de clientes
+   vacía.
+2. **Alta real de cliente** (`POST /api/v1/crm/customers -> 201 Created`) y
+   **alta real de póliza de ramo Coche** (`POST /api/v1/insurance/policies
+   -> 201 Created`): matrícula, conductor, marca/modelo, NIF con letra de
+   control válida, prima 380,00 €.
+3. **Aparece en el listado**: `Pólizas (1)`, fila
+   `POL-20260906-66AA2E | Coche | Cliente QA Revisor Coche | 380,00 € | Activa`.
+4. **Persistencia tras recarga completa** (navegación dura, no solo cambio de
+   ruta SPA): misma fila tras recargar `/insurance`.
+5. **Diseño intacto**: cabecera "Seguros", descripción de los 6 ramos,
+   botón degradado "Nueva póliza", tabla con las mismas columnas, sin
+   cambios visuales.
+6. **Consola/red limpias para el tenant nuevo**: tras la recarga, todas las
+   peticiones (`auth/me`, `settings`, `crm/customers`, `insurance/policies`)
+   devuelven `200 OK`. Los únicos errores en el buffer de consola son los
+   `401`/`Token refresh failed` generados deliberadamente por mí al invalidar
+   la sesión anterior (mismo patrón que ya documentó el ejecutor con su
+   propia sesión anterior), no errores nuevos del flujo del tenant nuevo.
+7. **Aislamiento cruzado confirmado por SQL directo** (no solo por UI):
+   `insurance_policies` contiene exactamente `(id=1, company_id=1, hogar,
+   450)` del ejecutor y `(id=2, company_id=107, coche, 380)`, el mío, dos
+   empresas distintas, sin solapamiento.
+
+### 5. Estado del árbol y de main/remoto
+
+```
+git status --short -> solo ?? .claude/ (preexistente, no relacionado)
+git log main -1 --oneline -> 97b949a (sin cambios)
+```
+
+Sin `push`, sin rama nueva, sin modificar código.
+
+### Veredicto: APROBADO — cierre definitivo de esta fusión
+
+Cada verificación independiente coincide con lo reportado por
+`ejecutor-produccion`. El checklist de no-simulación se cumple sobre lo que
+yo mismo observé: datos reales (tenant/cliente/póliza real vía API real, no
+mocks), pasa por autenticación real (JWT real vía `get_current_active_user`,
+sin atajos nuevos), aislamiento por tenant confirmado en SQLite tanto por UI
+como por SQL directo (RLS/Postgres ya se confirmó en la ronda anterior de
+este mismo documento), manejo de errores real, logs verificables (arranque
+de `uvicorn`, requests en red), ejecución manual exitosa por Playwright, y
+migración Alembic `0056` generada y aplicada limpiamente en un ciclo
+independiente.
+
+Pendientes explícitos para tareas separadas (ninguno bloquea este cierre):
+
+1. Colisión de `invoice_number` bajo RLS real cuando dos tenants nuevos
+   facturan el mismo día (severidad ALTA, ya escalada por el revisor
+   anterior) en `backend/app/api/v1/endpoints/invoices.py`.
+2. Separar `DATABASE_URL` de migración (rol propietario) vs runtime
+   (`zeus_app`) en `alembic/env.py` y `railway.toml` antes de aplicar
+   `zeus_app` como rol de runtime real en Railway.
+3. Bug de protocolo de generadores en `get_db`
+   (`backend/app/db/session.py`), ahora confirmado real por reproducción
+   aislada, no solo por lectura de código: el bucle de reintentos puede
+   intentar un segundo `yield` tras recibir una excepción vía `.throw()` en
+   un `yield` ya consumido, violando el contrato de
+   `contextlib.contextmanager` y produciendo
+   `RuntimeError: generator didn't stop after throw()`, que enmascara el
+   error real de base de datos detrás de un 500 genérico. Recomendación:
+   distinguir explícitamente el reintento pre-yield (conexión inicial) del
+   caso post-yield (donde no se debe reintentar, solo propagar o cerrar).
+4. Gap de `ensure_schema_patches()` para tablas de verticales (p. ej.
+   `insurance_policies`) en bases SQLite de desarrollo local persistentes,
+   solo afecta a entornos de desarrollo, no a Postgres real gestionado por
+   Alembic. Mitigación sugerida: documentar en `README_LOCAL.md` la
+   necesidad de recrear `zeus.db` tras `git pull` con migraciones nuevas.

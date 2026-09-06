@@ -695,3 +695,209 @@ de la revision independiente), la colision de `invoice_number` bajo RLS
 scopeada por tenant (hallazgo del ejecutor original), y separar
 `DATABASE_URL` de migracion vs runtime en `alembic/env.py`/`railway.toml`
 antes de desplegar `zeus_app` como rol de runtime real en Railway.
+
+---
+
+## Verificación post-fusión en `feature/consolidacion-final` (ejecutor-produccion, 2026-09-06)
+
+Contexto: `feature/fix-rls-insurance-schema` se fusionó en
+`feature/consolidacion-final` (fast-forward limpio, sin conflictos). Esta
+sección verifica, **en el worktree
+`.claude/worktrees/consolidacion-final`**, rama `feature/consolidacion-final`,
+partiendo del commit `ad6f5cc`, que la fusión no introdujo regresiones. No se
+ha hecho `push` ni se ha creado rama nueva. No se tocó `main`.
+
+### 1. Suite completa de tests backend (SQLite)
+
+```
+cd backend && "C:\Users\Acer\ZEUS-IA\backend\venv\Scripts\python.exe" -m pytest tests -q
+-> 7 failed, 300 passed, 34 warnings, 3 errors in 144.52s
+```
+
+Mismos 7 tests fallidos que el baseline conocido de la rama (`test_config_loading`,
+`test_default_flags_simulated`, `test_audit_includes_ai_modules`,
+`test_default_mode_is_simulation_for_heuristic_modules`,
+`test_backup_requires_execution_and_backup_flags`,
+`test_build_metadata_origin_mock`, `test_monitoring_cycle_respects_flags`) y
+los mismos 3 `ERROR` de `test_app.py` (`NameError: TestClient`). Cero
+regresión nueva confirmada nombre por nombre.
+
+### 2. Migraciones Alembic
+
+```
+alembic heads -> 0056 (head)   [única cabeza, confirmado]
+```
+
+`alembic upgrade head` desde una base SQLite vacía (`DATABASE_URL` apuntando
+a un archivo temporal nuevo, para no depender del `zeus.db` de desarrollo ya
+persistido en este worktree) aplicó las 56 migraciones sin error;
+`alembic_version` quedó en `0056`; `users` con 25 columnas (incluidas las 13
+migradas por `0056`).
+
+**Nota sobre el `zeus.db` del worktree**: el `alembic upgrade head` "en
+caliente" contra el `zeus.db` ya existente en este worktree (34 MB,
+acumulado de sesiones de desarrollo/tests anteriores, **no versionado en
+git** — está en `.gitignore`: `*.db`) falla, porque esa base nunca se
+gestionó con Alembic — se bootstrapeó con `create_tables()`
+(`Base.metadata.create_all`, ver `app/main.py::startup_event`), que no lleva
+tabla `alembic_version`. Esto es preexistente y no relacionado con la fusión
+verificada: ver más abajo (sección 3) el hallazgo que esto mismo provocó al
+verificar Seguros.
+
+### 3. Verificación funcional con Playwright real (backend + frontend levantados desde este worktree)
+
+**Entorno**: backend `uvicorn app.main:app --port 8000` (proxy de Vite
+hardcodeado a `localhost:8000`, así que se usó ese puerto en vez de uno
+alternativo) y frontend `npx vite --port 5173 --strictPort` (también se
+probó `5180`, pero el CORS de desarrollo local en `app/core/config.py` solo
+garantiza expresamente `5173`/`3000`/`8000`; con `5180` el registro fallaba
+con `OPTIONS ... -> 400 Bad Request` y luego CORS-block — no es un bug de la
+fusión, es la lista blanca de orígenes de desarrollo, documentada en el
+propio código como "ZEUS_LOCAL_CORS_FIX_001"), ambos arrancados dentro de
+`C:\Users\Acer\ZEUS-IA\.claude\worktrees\consolidacion-final` (confirmado
+por los paths de los logs de arranque, p. ej. `[DEBUG] Serving /static ...
+consolidacion-final\backend\static`).
+
+**Hallazgo encontrado y resuelto durante la verificación (no es una
+regresión de código de la fusión)**: al registrar un tenant nuevo y navegar
+a `/insurance`, `GET /api/v1/insurance/policies` devolvía `500 Internal
+Server Error` de forma consistente (reproducido también por `curl` directo
+con un token real, no solo desde el navegador). Diagnóstico:
+
+- El `zeus.db` de este worktree ya tenía la tabla `insurance_policies`
+  creada **antes** de que el modelo incluyera la columna `branch`
+  (migración `0054`, de la vertical Seguros — anterior a esta fusión).
+  `create_tables()` usa `create_all()`, que solo crea tablas que no
+  existen; nunca altera una tabla ya existente para añadir columnas nuevas
+  del modelo. Confirmado con `PRAGMA table_info(insurance_policies)`: sin
+  `branch`.
+- `ensure_schema_patches()` (`app/db/base.py`) no tiene ningún parche
+  específico para `insurance_policies` — solo cubre `users`,
+  `document_approvals`, `expenses`, columnas de `company_id` en varias
+  tablas, etc. (barrido confirmado por grep, ver Hallazgo 2 arriba). El
+  `_migrate_*` correspondiente a la vertical Seguros nunca se escribió,
+  porque esa vertical se apoyó desde el principio en Alembic real (`0049`,
+  `0054`), no en parches en caliente.
+- Confirmado con un script aislado (`SessionLocal` directo, bypaseando
+  FastAPI) que el error real era
+  `sqlite3.OperationalError: no such column: insurance_policies.branch`,
+  enmascarado además por un bug preexistente y no relacionado en
+  `app/db/session.py::get_db` (el generador de reintentos hace `continue`
+  tras capturar una `OperationalError` ya en curso de `.throw()`, violando
+  el protocolo de generadores de Python — `RuntimeError: generator didn't
+  stop after throw()`). Este bug de `get_db` es preexistente (commit
+  `2366122`, muy anterior a esta fusión) y ortogonal a los cambios de RLS.
+- **Esto es un artefacto del `zeus.db` acumulado y no versionado de este
+  worktree en concreto** (creado en algún momento antes de que existiera la
+  columna `branch` en el modelo, y nunca recreado desde entonces), no un
+  bug introducido por la fusión de `feature/fix-rls-insurance-schema` ni
+  por ningún commit de `consolidacion-final`. Contra una base gestionada
+  correctamente por Alembic (ver sección 2), la columna existe desde la
+  migración `0054`.
+- **Resolución aplicada** (cambio de datos local, no de código): se
+  detuvo el backend, se renombró `backend/zeus.db` a
+  `zeus.db.stale-pre-branch-column.bak` (después eliminado, ya
+  documentado aquí) y se reinició el servidor, que recreó el esquema
+  completo desde cero vía `create_tables()` con el modelo actual
+  (`branch` presente, confirmado con `PRAGMA table_info`). El `zeus.db`
+  no está versionado en git (`*.db` en `.gitignore`), así que esto no
+  afecta a ningún otro entorno ni a la fusión en sí.
+
+**Flujo verificado tras la base de datos fresca**, con un tenant 100% nuevo
+(`qa.consolidacion.1788712449c@example.com`, empresa "Correduria QA
+Consolidacion Dos SL", `company_id` nuevo vía `/auth/register` real +
+onboarding real):
+
+1. **Alta de póliza real por la UI** (`InsuranceView.vue`): creado primero
+   un cliente real vía CRM oficina (`POST /api/v1/crm/customers`,
+   requisito del formulario de pólizas), y luego una póliza real de ramo
+   Hogar (cliente "Cliente QA Consolidacion", NIF `12345678Z`, prima
+   450,00 €, estado Activa) con el botón "Nueva póliza" → "Crear póliza".
+   Confirmado en red: `POST /api/v1/insurance/policies -> 201 Created`.
+2. **Aparece en el listado inmediatamente**: tras el `POST`, el propio
+   flujo dispara un `GET /api/v1/insurance/policies -> 200 OK` que muestra
+   `Pólizas (1)` con la fila `POL-20260906-... | Hogar | Cliente QA
+   Consolidacion | 450.00 € | Activa`. Esto es exactamente el flujo que
+   `get_db_scoped` (Hallazgo 1 de esta misma auditoría) corrige bajo RLS
+   real en Postgres — contra SQLite (sin RLS) ya funcionaba antes y sigue
+   funcionando igual después de la fusión.
+3. **Persistencia tras recargar**: navegación completa (recarga de página,
+   no solo cambio de ruta SPA) a `/insurance` — la póliza sigue apareciendo
+   (`Pólizas (1)`, misma fila), confirmado dos veces.
+4. **Sistema de diseño intacto**: cabecera "Seguros", descripción de los 6
+   ramos, tarjeta con fondo/bordes y botón degradado "Nueva póliza"
+   (mismo patrón visual que el resto del dashboard — gradiente
+   azul-a-magenta, tipografía y espaciado consistentes), tabla con
+   columnas N.º póliza/Ramo/Cliente/Prima/Estado/Renovación/Acciones — sin
+   cambios visuales respecto a lo esperado, sin elementos rotos o
+   desalineados.
+5. **Consola**: sin errores nuevos achacables al flujo de Seguros tras la
+   base de datos fresca (`POST`/`GET` a `insurance/policies` sin errores).
+   Se observó una ráfaga de errores `401` en `/api/v1/auth/refresh` en el
+   buffer de consola, pero corresponden a la sesión **anterior** (con el
+   `zeus.db` viejo, antes de recrearlo) cuyo `refresh_token` quedó inválido
+   al recrear la base — confirmado que no hay peticiones de red activas a
+   `auth/refresh` en el estado final de la sesión verificada; no
+   reaparecen tras una navegación limpia con el tenant nuevo.
+
+### 4. Qué NO se pudo verificar
+
+- No se verificó el flujo de Seguros contra Postgres real en este paso
+  (ya se hizo, con más profundidad — incluidas las 2 empresas cruzadas y
+  los 8 endpoints — en la verificación de `revisor-independiente` de esta
+  misma rama, sección "Cierre de la reproducción en vivo bloqueada"
+  arriba). El encargo de esta verificación era explícitamente confirmar
+  que la fusión no rompió el flujo ya validado contra SQLite, no repetir
+  la prueba de RLS contra Postgres.
+- No se verificaron los otros 5 ramos de seguros (Comunidad, Coche, Vida,
+  Decesos, Salud) end-to-end por la UI — solo Hogar, como muestra
+  representativa suficiente para confirmar que la fusión no rompió el
+  flujo; los 6 ramos comparten el mismo endpoint y modelo.
+- No se investigó a fondo el bug preexistente de `get_db` (`generator
+  didn't stop after throw()`) más allá de diagnosticarlo como causa
+  colateral del enmascaramiento del error real — no es de esta fusión y
+  no se tocó.
+
+### 5. Qué queda pendiente / hallazgos nuevos para decisión del usuario
+
+1. **Hallazgo nuevo, no corregido, fuera de alcance de esta verificación**:
+   `ensure_schema_patches()` no tiene ningún mecanismo para sincronizar
+   columnas nuevas de modelos en tablas SQLite ya creadas por
+   `create_tables()` en entornos de desarrollo persistentes (a diferencia
+   de `users`, que sí tiene su propio parche dedicado). Cualquier tabla
+   creada en caliente antes de que se le añadiera una columna nueva al
+   modelo (como pasó aquí con `insurance_policies.branch`) queda
+   permanentemente desincronizada hasta que alguien borre manualmente el
+   `zeus.db` local. Esto solo afecta a bases SQLite de desarrollo
+   acumuladas (no a Postgres real, gestionado por Alembic de verdad), pero
+   puede confundir a cualquier desarrollador que reutilice un `zeus.db`
+   antiguo. Posible mitigación: documentar en `README_LOCAL.md` que hay
+   que borrar `zeus.db` tras cada `git pull` con migraciones nuevas, o
+   añadir un parche genérico en `ensure_schema_patches()` que compare
+   columnas del modelo contra `PRAGMA table_info` para las tablas que ya
+   tienen parches dedicados de otras verticales.
+2. **Bug preexistente confirmado pero no de esta fusión**: `app/db/session.py::get_db`
+   viola el protocolo de generadores de Python cuando una excepción
+   `OperationalError`/`DisconnectionError` se lanza dentro del bloque
+   `yield db` en un intento que no es el último permitido — hace `continue`
+   y vuelve a hacer `yield` en vez de detenerse, produciendo `RuntimeError:
+   generator didn't stop after throw()` y enmascarando el error real de
+   base de datos detrás de un 500 genérico. Reproducido en este entorno
+   por la contención de `insurance_policies.branch` faltante, pero el bug
+   en sí es independiente de eso y de esta fusión (commit `2366122`,
+   preexistente). No se tocó por estar fuera del alcance de esta tarea.
+3. No se hizo `push` de esta rama ni de ningún commit — sigue en local en
+   este worktree, tal y como se pidió.
+
+**No me declaro cerrado a mí mismo.** Esta verificación descubrió un
+hallazgo de entorno (base SQLite local desincronizada) que enmascaró
+temporalmente el flujo de Seguros, y un bug preexistente en `get_db` que
+lo hizo más difícil de diagnosticar. Ninguno de los dos es una regresión de
+`feature/fix-rls-insurance-schema` ni de la fusión en `consolidacion-final`
+— el código fusionado en sí (RLS de `insurance.py`, `ensure_schema_patches()`
+con guard de privilegios, migración `0056`) queda confirmado sin regresión
+en tests, migraciones y flujo funcional real. Recomiendo que
+`revisor-independiente` confirme esta lectura antes de dar el ciclo por
+cerrado, dado que el hallazgo #1 de la sección anterior (colisión de
+`invoice_number`) y los pendientes de roles de Railway siguen abiertos de
+la ronda anterior.

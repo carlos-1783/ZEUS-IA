@@ -41,9 +41,81 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
+def _is_postgres_url() -> bool:
+    return "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
+
+
+def _current_role_can_alter_schema() -> bool:
+    """True si el rol de conexión puede ejecutar `ALTER TABLE` sobre el
+    esquema de la aplicación.
+
+    SQLite no tiene modelo de ownership -> siempre True (comportamiento sin
+    cambios). En PostgreSQL, hoy en día el 100% de las columnas/tablas que
+    `ensure_schema_patches()` intenta añadir ya tienen una migración Alembic
+    real (ver AUDIT_FIX_RLS_INSURANCE_SCHEMA.md y la migración 0056, que
+    cerró el último hueco real: 13 columnas de `users`). Bajo el rol de
+    runtime endurecido recomendado para producción (`zeus_app`, sin
+    `SUPERUSER` ni ownership de las tablas), cada `ALTER TABLE` de este
+    módulo fallaba con `InsufficientPrivilege`, se registraba como un WARN
+    y se ignoraba en silencio -- si la columna en cuestión de verdad faltaba
+    (p. ej. una BD a la que aún no se le aplicó `alembic upgrade head`), el
+    fallo real no se veía hasta que un endpoint disparaba `UndefinedColumn`
+    en mitad de una petición (ver app/db/session.py, 503 schema_missing).
+
+    Con este chequeo, si el rol no es superusuario ni dueño de las tablas,
+    `ensure_schema_patches()` se salta por completo en vez de intentar (y
+    fallar) columna a columna: el esquema real pasa a depender exclusiva-
+    mente de `alembic upgrade head`, ejecutado con un rol propietario, tal
+    como ya recomendaba `dec54c0` para separar credenciales de
+    migración/DDL de las credenciales de runtime."""
+    if not _is_postgres_url():
+        return True
+    try:
+        from sqlalchemy import text
+
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    """
+                    SELECT
+                        COALESCE((SELECT rolsuper FROM pg_roles WHERE rolname = current_user), false) AS is_super,
+                        EXISTS (
+                            SELECT 1 FROM pg_class c
+                            JOIN pg_roles r ON r.oid = c.relowner
+                            WHERE c.relname = 'users' AND r.rolname = current_user
+                        ) AS owns_users
+                    """
+                )
+            ).first()
+        if row is None:
+            # No se pudo evaluar (p.ej. sin permiso de lectura de catálogo) ->
+            # asumir que NO se puede alterar, por seguridad: es preferible
+            # omitir un parche opcional a lanzar ALTER TABLE a ciegas.
+            return False
+        return bool(row[0]) or bool(row[1])
+    except Exception as e:
+        logger.warning(
+            "ensure_schema_patches: no se pudo determinar si el rol puede alterar "
+            "el esquema (%s); se asume que no, por seguridad", e,
+        )
+        return False
+
+
 def ensure_schema_patches():
     """Migraciones idempotentes (legacy sin Alembic real). Seguro llamar en cada arranque."""
     try:
+        if not _current_role_can_alter_schema():
+            msg = (
+                "[SCHEMA] Rol de conexión sin privilegios de ALTER TABLE "
+                "(rol de runtime endurecido, p.ej. zeus_app) -- se omiten los "
+                "parches de esquema en caliente. Todo lo que hacían ya tiene "
+                "migración Alembic real; ejecuta `alembic upgrade head` con un "
+                "rol propietario de las tablas antes de arrancar la app con "
+                "este rol."
+            )
+            print(msg)
+            logger.info(msg)
+            return
         print("[SCHEMA] Aplicando parches de esquema...")
         _migrate_user_columns()
         _migrate_document_approvals_columns()

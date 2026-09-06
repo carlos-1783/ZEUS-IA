@@ -394,3 +394,222 @@ convivía con las verificaciones anteriores de la misma forma.
 **No me declaro cerrado a mí mismo** — esta tarea toca Postgres real y
 necesita revisión independiente (`revisor-independiente`) antes de darse
 por buena, con el mismo rigor que las dos verificaciones anteriores.
+
+---
+
+## Revision independiente (revisor-independiente) - DEVUELTO
+
+**Veredicto: DEVUELTO** - no por defecto de fondo en el codigo del ejecutor
+(todo lo que pude verificar de forma independiente coincide con lo
+reportado), sino porque no pude completar la reproduccion independiente
+en vivo que exige el protocolo de revision, por una restriccion dura de
+mi propio entorno de herramientas (detallada abajo), y porque encontre
+una limpieza pendiente de Postgres no hecha y un hallazgo de codigo
+nuevo, narrow pero real, que el ejecutor no cubrio.
+
+### 0. Estado del worktree y limpieza previa
+
+Confirmado por mi mismo: rama feature/fix-rls-insurance-schema, commit
+5b703c6, arbol de trabajo limpio (git status sin cambios).
+
+Datos huerfanos encontrados de la sesion de revisor cortada (tal y como
+advertia el encargo): 4 companies (ids 1-4: "Empresa Reviewer A/B SL",
+"Empresa Reviewer FinalA/FinalB SL"), 5 users (ids 1-5, incluido el
+superusuario admin@zeus-ia.com recreado automaticamente en el arranque),
+y filas dependientes en agent_activities, agent_decision_log,
+agent_operational_state, company_employees, customers,
+thalos_alerts, thalos_events, thalos_login_attempts,
+thalos_security_events, tpv_products, user_companies -- todo con
+created_at entre 2026-09-06 07:31 y 07:41 UTC, es decir despues del
+ultimo commit del ejecutor (5b703c6, 07:22:46 UTC), confirmando que son
+restos de la sesion de revisor cortada, no del propio ejecutor.
+
+No pude limpiarlos. Intente un DELETE acotado (una sola tabla,
+thalos_alerts WHERE company_id IS NULL) y un ALTER ROLE zeus_app WITH
+PASSWORD ... (necesario para poder conectarme como zeus_app de verdad) y
+ambos fueron bloqueados por el clasificador automatico de Claude Code con
+"Blocked by classifier" -- cualquier mutacion contra este Postgres (DELETE,
+ALTER ROLE) esta vetada en esta sesion, no solo por mi sino a nivel de
+herramienta. Los SELECT si funcionan sin problema. Estos datos
+huerfanos siguen en el Postgres de staging y deben limpiarse en una
+sesion con permisos de escritura antes del proximo cierre.
+
+### 1. Lo que si verifique de forma independiente (coincide con el reporte)
+
+- Diff completo de los 2 commits (git show 7b1d714, git show 08d4976)
+  leido linea por linea.
+- insurance.py: confirmado por grep que los 8 endpoints usan
+  Depends(get_db_scoped) y que no queda ningun Depends(get_db) en el
+  archivo (grep -c "Depends(get_db_scoped)" da 8; grep "Depends(get_db)"
+  da 0 resultados).
+- Causa raiz del bug de commit/refresh: confirme de forma aislada
+  (sin tocar ninguna tabla de negocio, solo set_config/current_setting
+  sobre una clave de prueba propia) que set_config(key, val, true) en
+  Postgres efectivamente se resetea a vacio tras un COMMIT en la misma
+  sesion -- la causa raiz que describe el commit 7b1d714 es real y esta
+  correctamente diagnosticada.
+- RLS fail-closed vs fail-open: lei pg_policies directamente --
+  insurance_policies/insurance_claims tienen policy sin clausula de
+  bypass por contexto vacio (fail-closed real); las otras 6 tablas
+  (invoices, agent_activities, thalos_*) si tienen el "OR
+  NULLIF(...) IS NULL" (fail-open). Coincide exactamente con la
+  descripcion del reporte.
+- Aplicacion real de RLS bajo un rol NO superusuario, con datos reales:
+  usando SET ROLE zeus_app (cambio de rol dentro de mi propia sesion,
+  sin persistir nada, reversible con RESET ROLE, confirmado
+  rolsuper=false / rolbypassrls=false para ese rol) ejecute SELECT
+  contra agent_activities y thalos_login_attempts (que si tienen datos
+  reales de los tenants huerfanos 1 y 2) fijando app.current_company_id
+  a 1, 2, 999 y vacio:
+  - contexto=1 -> solo filas de company_id=1
+  - contexto=2 -> solo filas de company_id=2
+  - contexto=999 (empresa inexistente) -> 0 filas
+  - sin contexto -> todas las filas (fail-open, tal y como documenta
+    tenant_context.py)
+  Esto es una reproduccion real -no leida del reporte- de que RLS
+  efectivamente filtra bajo un rol no-superusuario en este Postgres, que es
+  el mecanismo exacto que corrige el Hallazgo 1. No pude repetir esta misma
+  prueba sobre insurance_policies/insurance_claims porque ahora mismo
+  tienen 0 filas (ver limitaciones abajo).
+- Barrido independiente de las 16 funciones _migrate_*: confirme que
+  ensure_schema_patches() invoca exactamente 16 funciones (grep de las
+  llamadas, lineas 120-135 de base.py) y que existe una 17a funcion
+  (_migrate_firewall_columns_legacy) marcada DEPRECATED y nunca
+  invocada -- el ejecutor no la conto y hace bien en no contarla.
+  Ademas, _migrate_user_columns() intenta parchear 17 columnas (no 13):
+  las 13 del hueco real + role, public_site_enabled,
+  public_site_slug, phone. Confirme por grep que estas 4 columnas
+  extra si tienen migracion Alembic real (0006_add_user_role.py,
+  0008_public_site_and_reservations.py, 0009_add_user_phone.py), asi
+  que el recuento de "13 columnas, unico hueco real" del ejecutor es
+  correcto tras mi propia comprobacion, no solo de confiar en su barrido.
+- Migracion 0056: compare columna por columna contra
+  app/models/user.py -- tipos (String/Boolean/Integer/Text),
+  nullable=True e indices (stripe_customer_id, tpv_business_profile,
+  control_horario_business_profile) coinciden exactamente.
+- Estado real del Postgres de staging (solo lectura): alembic_version
+  = 0056 (head); las 13 columnas de users existen; los 3 indices
+  esperados existen (ix_users_stripe_customer_id,
+  ix_users_tpv_business_profile,
+  ix_users_control_horario_business_profile).
+- Ownership uniforme: las 70 tablas de public tienen un unico
+  tableowner (postgres), validando hoy la asuncion documentada en
+  _current_role_can_alter_schema() (usar users como tabla
+  representativa del ownership de todo el esquema).
+- Suite SQLite ejecutada por mi mismo (venv compartido, no el reportado
+  por el ejecutor):
+  backend/venv/Scripts/python.exe -m pytest tests -q
+  -> 7 failed, 300 passed, 34 warnings, 3 errors in 154.81s
+  Mismos 7 tests fallidos y mismos 3 errores (test_config_loading,
+  test_default_flags_simulated, test_audit_includes_ai_modules,
+  test_default_mode_is_simulation_for_heuristic_modules,
+  test_backup_requires_execution_and_backup_flags,
+  test_build_metadata_origin_mock,
+  test_monitoring_cycle_respects_flags, y los 3 ERROR de
+  test_app.py por NameError: TestClient) -- cero regresion confirmada
+  de forma independiente.
+- invoices.py / colision de invoice_number: confirme por lectura de
+  codigo (linea 201 de app/api/v1/endpoints/invoices.py) que
+  invoice_number usa func.count(Invoice.id) sobre una sesion
+  get_db_scoped (RLS-scoped), contra una columna invoice_number con
+  unique=True global (app/models/erp.py:158).
+  El hallazgo es real: dos empresas nuevas el mismo dia colisionan. Estoy
+  de acuerdo con el ejecutor en que es una tarea separada y no bloquea
+  este cierre -- pero le subo la severidad a ALTA (no solo "documentado"),
+  porque es plausible que ocurra en produccion real cada vez que dos
+  empresas se dan de alta el mismo dia y ambas facturan, no un caso de
+  laboratorio.
+
+### 2. Lo que NO pude reproducir yo mismo (limitacion de entorno, no hallazgo de codigo)
+
+El clasificador automatico de esta sesion de Claude Code bloquea toda
+mutacion contra este Postgres (confirmado con dos intentos distintos:
+DELETE acotado a una fila y ALTER ROLE ... WITH PASSWORD, ambos con
+"Permission for this action was denied by the Claude Code auto mode
+classifier"). No hay Docker ni un Postgres local disponible en esta
+maquina para montar un Postgres desechable alternativo. Como consecuencia,
+no pude:
+
+- Ejecutar el flujo HTTP real de POST/GET/PATCH /api/v1/insurance/...
+  con datos propios (crearia filas permanentes que no puedo borrar
+  despues).
+- Arrancar uvicorn conectando como zeus_app (no tengo su contrasena --
+  nunca se persiste en ningun sitio por diseno -- y no pude fijarle una
+  nueva porque ALTER ROLE esta bloqueado).
+- Arrancar la app conectando como el rol superusuario para confirmar el
+  camino legacy de ensure_schema_patches() sin regresion (razone el
+  codigo y confirme por SQL que rolsuper=true hace return True
+  inmediatamente sin evaluar ownership, pero no ejecute el arranque real).
+- Ejecutar el ciclo alembic downgrade base / upgrade head completo
+  contra este Postgres (mutacion de esquema, mismo tipo de bloqueo
+  esperable).
+
+Sustitui parcialmente estas pruebas con: (a) verificacion de RLS real via
+SET ROLE zeus_app sobre tablas con datos ya existentes (ver seccion 1),
+que si demuestra que el mecanismo de fondo funciona bajo un rol no
+superusuario real, y (b) lectura exhaustiva de codigo + estado actual del
+esquema. Pero no es lo mismo que reproducir el flujo HTTP completo ni el
+ciclo de migracion, que el encargo pedia explicitamente hacer yo mismo.
+
+### 3. Hallazgo nuevo de codigo -- edge case en el fix de create_policy / create_claim / update_claim
+
+En los 3 endpoints (insurance.py lineas ~183-199, ~280-291, ~379-389), el
+patron es:
+
+  db.add(policy)
+  db.commit()
+  set_tenant_context(db, company_id, ...)
+  db.refresh(policy)
+  # except Exception: db.rollback(); raise HTTPException(500, ...)
+
+Si db.commit() tiene exito (la fila queda persistida de verdad) pero
+set_tenant_context() o db.refresh() lanzan una excepcion por cualquier
+motivo (caida de conexion, timeout, etc.), el except hace db.rollback()
+-que no deshace nada porque ya se hizo commit- y devuelve 500 al cliente.
+El cliente ve un error y puede reintentar/duplicar, pero el recurso ya se
+creo con exito en la base de datos. No es una fuga multi-tenant ni un
+try/except: pass silencioso (el error se loguea y se informa), pero es
+un hueco de correctitud real que el propio ejecutor no cubrio en su
+seccion "Que NO se pudo verificar" -- antes del fix, este codigo ni
+siquiera llegaba a esta rama con exito (el commit + refresh completo
+fallaba siempre bajo RLS sin contexto), asi que es una ventana de fallo
+nueva, aunque estrecha, introducida por hacer que el flujo funcione de
+verdad. Recomiendo documentarlo explicitamente o mitigarlo (p. ej.
+capturar el ID ya generado antes de intentar el refresh() y devolver
+success con advertencia si solo el refresh falla, distinguiendo ese caso
+del fallo real de escritura).
+
+### 4. Observacion estructural -- Hallazgo 2 asume una separacion de roles que el codigo aun no tiene
+
+_current_role_can_alter_schema() documenta como premisa "alembic upgrade
+head ejecutado con un rol propietario" distinto del rol de runtime
+(zeus_app). Confirme leyendo backend/alembic/env.py (get_url() retorna
+settings.DATABASE_URL) y railway.toml (startCommand con un unico
+"sh -c" que encadena alembic upgrade head && ... && ensure_schema_patches.py
+&& exec gunicorn ...) que hoy todos usan la misma DATABASE_URL -- no hay
+una variable de entorno separada para el paso de migracion. Esto significa
+que el dia que se aplique de verdad zeus_app como rol de runtime en
+Railway (pendiente #2 del propio reporte), alembic upgrade head tambien
+correria como zeus_app y fallaria para cualquier migracion futura que
+necesite ALTER TABLE / CREATE TABLE -- el mismo problema que este fix
+resuelve para ensure_schema_patches() reapareceria en el paso de
+migracion real. No es una regresion de esta tarea (hoy todo corre como
+postgres, confirmado: las 70 tablas son propiedad de postgres), pero el
+pendiente #2 del reporte deberia ampliarse explicitamente para incluir
+"introducir una DATABASE_URL de migracion separada de la de runtime", no
+solo "cambiar DATABASE_URL a zeus_app".
+
+### 5. Que hace falta para aprobar en la siguiente vuelta
+
+1. Limpiar los datos huerfanos de la sesion de revisor cortada
+   (companies 1-4, users 2-5 y filas dependientes) en una sesion con
+   permisos de escritura sobre este Postgres.
+2. Reproducir en vivo (con permisos de escritura habilitados) el flujo
+   HTTP completo de insurance.py bajo zeus_app con datos nuevos, el
+   arranque de la app como zeus_app y como superusuario, y el ciclo
+   downgrade base / upgrade head, dejando el Postgres limpio al terminar.
+3. Decision del ejecutor/usuario sobre el edge case de la seccion 3
+   (aceptar el riesgo documentandolo explicitamente, o mitigarlo).
+4. Ampliar el pendiente #2 del reporte con la observacion de la seccion 4
+   (separar DATABASE_URL de migracion vs runtime en alembic/env.py y
+   railway.toml, no solo cambiar el rol de runtime).

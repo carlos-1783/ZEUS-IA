@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user
 from app.core.validators_es import validar_nif_cif
-from app.db.session import get_db
+from app.db.tenant_context import get_db_scoped, set_tenant_context
 from app.models.customer import Customer
 from app.models.insurance import ClaimStatus, InsuranceClaim, InsurancePolicy, PolicyBranch, PolicyStatus
 from app.models.user import User
@@ -86,7 +86,7 @@ def _generate_policy_number(db: Session) -> str:
 
 @router.get("/policies", response_model=InsurancePolicyListResponse)
 def list_policies(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, le=1000),
     status_filter: Optional[str] = Query(None, alias="status"),
@@ -131,7 +131,7 @@ def list_policies(
 def create_policy(
     *,
     policy_in: InsurancePolicyCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
     current_user: User = Depends(get_current_active_user),
 ):
     """Alta de póliza. El customer_id debe pertenecer a la misma empresa del usuario."""
@@ -183,6 +183,15 @@ def create_policy(
     try:
         db.add(policy)
         db.commit()
+        # `insurance_policies` tiene RLS fail-closed (migración 0049): el
+        # `set_config(..., is_local=true)` de get_db_scoped se resetea solo
+        # al hacer commit/rollback (fin de la transacción). Sin re-fijar el
+        # contexto aquí, este `db.refresh()` (nueva transacción implícita)
+        # se ejecutaría SIN app.current_company_id -> la policy fail-closed
+        # esconde la fila que el propio usuario acaba de crear y
+        # `db.refresh()` lanza `InvalidRequestError: Could not refresh
+        # instance` (confirmado en vivo contra Postgres real con zeus_app).
+        set_tenant_context(db, company_id, user_id=current_user.id, user_email=current_user.email)
         db.refresh(policy)
     except Exception:
         db.rollback()
@@ -200,7 +209,7 @@ def create_policy(
 @router.get("/policies/{policy_id}", response_model=InsurancePolicyResponse)
 def get_policy(
     policy_id: int = Path(..., description="ID of the policy to retrieve"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
     current_user: User = Depends(get_current_active_user),
 ):
     policy = get_policy_or_404(db, policy_id, current_user)
@@ -212,7 +221,7 @@ def list_policy_claims(
     policy_id: int = Path(..., description="ID of the policy"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, le=1000),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
     current_user: User = Depends(get_current_active_user),
 ):
     """Siniestros de una póliza — 404 si la póliza no pertenece a la empresa del usuario."""
@@ -241,15 +250,25 @@ def list_policy_claims(
 def create_claim(
     *,
     claim_in: InsuranceClaimCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
     current_user: User = Depends(get_current_active_user),
 ):
     """Apertura de siniestro sobre una póliza de la empresa del usuario (404 si no)."""
     policy = get_policy_or_404(db, claim_in.policy_id, current_user)
+    # Capturados en variables ANTES del commit: `insurance_policies` también
+    # es fail-closed, y tras el commit de más abajo `policy` (cargado en una
+    # transacción anterior) queda expirado como cualquier otro objeto de la
+    # sesión -- acceder a `policy.id`/`policy.company_id` DESPUÉS del commit
+    # (p. ej. como argumento de `set_tenant_context`, evaluado antes de que
+    # la llamada se ejecute) dispara una recarga SIN contexto de tenant
+    # todavía fijado y rompe con `ObjectDeletedError` (confirmado en vivo
+    # contra Postgres real con zeus_app).
+    policy_id = policy.id
+    policy_company_id = policy.company_id
 
     claim = InsuranceClaim(
-        policy_id=policy.id,
-        company_id=policy.company_id,
+        policy_id=policy_id,
+        company_id=policy_company_id,
         claim_date=claim_in.claim_date,
         description=claim_in.description,
         status=ClaimStatus.OPEN,
@@ -261,15 +280,20 @@ def create_claim(
     try:
         db.add(claim)
         db.commit()
+        # Mismo motivo que en create_policy: `insurance_claims` es fail-closed
+        # y `is_local=true` resetea el contexto al hacer commit -> hay que
+        # re-fijarlo (con la variable capturada arriba, no con `policy.*`)
+        # antes de este `db.refresh()`.
+        set_tenant_context(db, policy_company_id, user_id=current_user.id, user_email=current_user.email)
         db.refresh(claim)
     except Exception:
         db.rollback()
-        logger.exception("create_claim: fallo al persistir siniestro policy_id=%s", policy.id)
+        logger.exception("create_claim: fallo al persistir siniestro policy_id=%s", policy_id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="No se pudo abrir el siniestro")
 
     logger.info(
         "insurance_claim_created claim_id=%s policy_id=%s company_id=%s user_id=%s",
-        claim.id, policy.id, policy.company_id, current_user.id,
+        claim.id, policy_id, policy_company_id, current_user.id,
     )
 
     return {"success": True, "data": claim}
@@ -277,7 +301,7 @@ def create_claim(
 
 @router.get("/claims", response_model=InsuranceClaimListResponse)
 def list_claims(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, le=1000),
     status_filter: Optional[str] = Query(None, alias="status"),
@@ -315,7 +339,7 @@ def list_claims(
 @router.get("/claims/{claim_id}", response_model=InsuranceClaimResponse)
 def get_claim(
     claim_id: int = Path(..., description="ID of the claim to retrieve"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
     current_user: User = Depends(get_current_active_user),
 ):
     claim = get_claim_or_404(db, claim_id, current_user)
@@ -327,7 +351,7 @@ def update_claim(
     *,
     claim_id: int = Path(..., description="ID of the claim to update"),
     claim_in: InsuranceClaimUpdate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_scoped),
     current_user: User = Depends(get_current_active_user),
 ):
     """Cambia estado/importe resuelto de un siniestro. 404 si no pertenece a la empresa del usuario."""
@@ -347,9 +371,17 @@ def update_claim(
         claim.documents = [d if isinstance(d, dict) else d.model_dump(mode="json") for d in update_data["documents"]]
 
     claim.updated_at = datetime.utcnow()
+    # Capturado ANTES del commit (atributo ya cargado por get_claim_or_404):
+    # tras el commit, cualquier acceso a un atributo expirado de `claim`
+    # dispararía una query sin contexto de tenant fijado (ver más abajo).
+    claim_company_id = claim.company_id
 
     try:
         db.commit()
+        # Mismo motivo que en create_policy/create_claim: `insurance_claims`
+        # es fail-closed y el contexto de tenant se resetea al hacer commit
+        # (is_local=true) -> hay que re-fijarlo antes de este `db.refresh()`.
+        set_tenant_context(db, claim_company_id, user_id=current_user.id, user_email=current_user.email)
         db.refresh(claim)
     except Exception:
         db.rollback()

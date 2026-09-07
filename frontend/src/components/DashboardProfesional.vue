@@ -1,19 +1,60 @@
 <template>
   <div class="dashboard-profesional dashboard-root" :class="{ 'dashboard-executive-root': currentView === 'dashboard' }">
+    <!-- Barra superior: identidad + estado real del sistema + acciones de cuenta -->
+    <header class="app-topbar">
+      <div class="app-topbar-left">
+        <img src="/images/logo-zeus.png" alt="ZEUS" class="app-topbar-logo" />
+        <div class="app-topbar-brand">
+          <h1>ZEUS-IA</h1>
+          <p class="app-topbar-subtitle">{{ t('dashboardPro.subtitle') }}</p>
+        </div>
+      </div>
+      <div class="app-topbar-right">
+        <span class="app-topbar-version">
+          <span class="version-dot" :class="backendHealthLabel === 'OK' ? 'online' : 'degraded'" aria-hidden="true"></span>
+          {{ t('dashboardPro.systemVersion', { version: appVersion }) }}
+        </span>
+        <button
+          type="button"
+          class="topbar-icon-btn"
+          :class="{ 'has-alert': (executiveAnalytics.alerts ?? 0) > 0 }"
+          :title="t('dashboardPro.nav.alerts') || 'Alertas'"
+          @click="router.push('/alerts')"
+        >
+          🔔
+          <span v-if="(executiveAnalytics.alerts ?? 0) > 0" class="topbar-alert-dot" aria-hidden="true"></span>
+        </button>
+        <button
+          type="button"
+          class="topbar-user-btn"
+          :title="authStore.user?.name || authStore.user?.email || ''"
+          @click="closeSidebarOnMobile(); goToUserSettings()"
+        >
+          <span class="topbar-user-icon">👤</span>
+          <span class="topbar-user-label">{{ authStore.user?.name || authStore.user?.email || t('dashboardPro.nav.settings') }}</span>
+          <span class="topbar-chevron" aria-hidden="true">⌄</span>
+        </button>
+        <button
+          type="button"
+          class="topbar-icon-btn topbar-logout"
+          :title="t('layout.logout')"
+          @click="handleLogout"
+        >
+          ⎋
+        </button>
+      </div>
+    </header>
+
+    <div class="dashboard-body">
     <!-- Overlay para móvil -->
-    <div 
-      class="sidebar-overlay" 
+    <div
+      class="sidebar-overlay"
       :class="{ active: sidebarOpen }"
       @click="sidebarOpen = false"
     ></div>
 
     <!-- Sidebar Oscura -->
     <aside class="sidebar-dark" :class="{ open: sidebarOpen }">
-      <div class="logo-section">
-        <img src="/images/logo-zeus.png" alt="ZEUS" class="logo-zeus-img" />
-        <h1>ZEUS-IA</h1>
-        <p class="subtitle">{{ t('dashboardPro.subtitle') }}</p>
-      </div>
 
       <nav class="nav-menu">
         <button 
@@ -106,6 +147,8 @@
           <div class="metric-label">{{ t('dashboardPro.metrics.activeAgents') }}</div>
         </div>
       </div>
+
+      <p class="sidebar-tagline">{{ t('dashboardPro.sidebarTagline') }}</p>
     </aside>
 
     <!-- Main Content -->
@@ -196,6 +239,12 @@
                   {{ t('dashboardPro.agentCard.interact') }}
                 </button>
               </div>
+              <!-- Banner con el asset real ya existente de Zeus (sin arte nuevo,
+                   ver AUDIT_REDISENO_TARJETAS_AGENTE.md) -->
+              <div class="zeus-core-banner" aria-hidden="true">
+                <img src="/images/zues-3d-main.png" alt="" class="zeus-core-banner-img" />
+                <p class="zeus-core-banner-text">{{ t('dashboardPro.zeusCoreBannerText') }}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -208,6 +257,7 @@
           :class="{ 'has-avatar': agent.hasGLB }"
           @click="selectAgent(agent)"
         >
+          <span class="agent-card-arrow" aria-hidden="true">›</span>
           <!-- Avatar Image: mismo asset real, con tratamiento CSS propio
                por agente (sin arte nuevo, ver AUDIT_REDISENO_TARJETAS_AGENTE.md) -->
           <div class="avatar-container" :class="agentAvatarFx(agent.name)">
@@ -402,6 +452,7 @@
         </div>
       </Transition>
     </main>
+    </div>
   </div>
 </template>
 
@@ -420,6 +471,16 @@ const router = useRouter()
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 const { t } = useI18n()
+
+/** Versión real de la app (frontend/package.json) — mostrada tal cual en la
+ * barra superior, nunca un número inventado. Mantener en sync manualmente
+ * hasta que se exponga vía Vite `define` en build. */
+const appVersion = '1.0.6'
+
+const handleLogout = async () => {
+  await authStore.logout()
+  router.push('/login')
+}
 
 const props = defineProps({
   agents: Array
@@ -1148,7 +1209,7 @@ const executiveKpis = computed(() => {
       key: 'agents_active',
       label: 'Agentes',
       value: ex.agents || agentsData.value.length,
-      icon: '🤖',
+      icon: '👤',
       route: '/agents',
     },
     {
@@ -1162,14 +1223,14 @@ const executiveKpis = computed(() => {
       key: 'efficiency',
       label: 'Eficiencia',
       value: `${ex.efficiency ?? 0}%`,
-      icon: '📈',
+      icon: '🕐',
       route: '/analytics/efficiency',
     },
     {
       key: 'alerts',
       label: 'Alertas',
       value: ex.alerts ?? 0,
-      icon: '🔔',
+      icon: '🛡️',
       route: '/alerts',
     },
     {
@@ -1183,7 +1244,7 @@ const executiveKpis = computed(() => {
       key: 'system_health',
       label: 'Sistema',
       value: systemOk ? 'OK' : '!',
-      icon: '💚',
+      icon: '🗄️',
       route: '/system-health',
     },
   ]
@@ -1244,6 +1305,7 @@ onUnmounted(() => {
 .dashboard-profesional {
   position: relative;
   display: flex;
+  flex-direction: column;
   height: 100vh;
   min-height: 100vh;
   max-height: 100vh;
@@ -1252,6 +1314,168 @@ onUnmounted(() => {
   font-family: var(--zeus-font-sans);
   overflow: hidden;
   box-sizing: border-box;
+}
+
+/* ---- Barra superior ---- */
+.app-topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 24px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 40%), #1a1c20;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  position: relative;
+  z-index: 20;
+}
+
+.app-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app-topbar-logo {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.app-topbar-brand h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.1;
+  background: linear-gradient(135deg, #6366f1 0%, #a78bfa 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.app-topbar-subtitle {
+  margin: 1px 0 0;
+  font-size: 11px;
+  color: rgba(226, 229, 235, 0.6);
+}
+
+.app-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.app-topbar-version {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(226, 229, 235, 0.75);
+  white-space: nowrap;
+  margin-right: 4px;
+}
+
+.version-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.version-dot.online {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.7);
+}
+
+.version-dot.degraded {
+  background: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+}
+
+.topbar-icon-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e2e5eb;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background var(--zeus-transition), transform var(--zeus-transition);
+}
+
+.topbar-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.topbar-alert-dot {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 1.5px solid #1a1c20;
+}
+
+.topbar-user-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 8px;
+  border-radius: var(--zeus-radius-full);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e2e5eb;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  max-width: 220px;
+  transition: background var(--zeus-transition);
+}
+
+.topbar-user-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.topbar-user-icon {
+  font-size: 14px;
+}
+
+.topbar-user-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-chevron {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.topbar-logout {
+  color: #fca5a5;
+}
+
+.topbar-logout:hover {
+  background: rgba(239, 68, 68, 0.16);
+}
+
+/* ---- Fila sidebar + contenido, debajo de la barra superior ---- */
+.dashboard-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
 }
 
 /* Grano/ruido del fondo de bandas metálicas — obligatorio en toda
@@ -1295,9 +1519,9 @@ onUnmounted(() => {
 /* SIDEBAR */
 .sidebar-dark {
   width: 280px;
-  background: var(--zeus-surface);
-  border-right: 1px solid var(--zeus-border);
-  padding: 32px 24px;
+  background: linear-gradient(180deg, #1f2937 0%, #161a22 55%, #12151b 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 24px 20px;
   display: flex;
   flex-direction: column;
   transition: transform 0.3s ease;
@@ -1348,22 +1572,24 @@ onUnmounted(() => {
   padding: 10px 14px;
   background: transparent;
   border: none;
-  border-radius: var(--zeus-radius-sm);
-  color: var(--zeus-text-secondary);
+  border-left: 3px solid transparent;
+  border-radius: 0 var(--zeus-radius-sm) var(--zeus-radius-sm) 0;
+  color: rgba(226, 229, 235, 0.75);
   cursor: pointer;
-  transition: background var(--zeus-transition), color var(--zeus-transition);
+  transition: background var(--zeus-transition), color var(--zeus-transition), border-color var(--zeus-transition);
   font-size: 14px;
   font-weight: 500;
 }
 
 .nav-item:hover {
-  background: var(--zeus-bg-subtle);
-  color: var(--zeus-text);
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
 }
 
 .nav-item.active {
-  background: var(--zeus-accent-soft);
-  color: var(--zeus-accent);
+  background: rgba(99, 102, 241, 0.18);
+  border-left-color: var(--zeus-accent-2, #6366f1);
+  color: #ffffff;
 }
 
 .nav-item.admin-btn {
@@ -1411,7 +1637,7 @@ onUnmounted(() => {
   display: flex;
   gap: 16px;
   padding-top: 24px;
-  border-top: 1px solid var(--zeus-border);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .metric-item {
@@ -1421,13 +1647,21 @@ onUnmounted(() => {
 .metric-value {
   font-size: 24px;
   font-weight: 700;
-  color: var(--zeus-accent);
+  color: #a5b4fc;
 }
 
 .metric-label {
   font-size: 11px;
-  color: var(--zeus-text-muted);
+  color: rgba(226, 229, 235, 0.55);
   margin-top: 4px;
+}
+
+.sidebar-tagline {
+  margin: 16px 4px 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(226, 229, 235, 0.45);
+  font-style: italic;
 }
 
 /* BOTÓN HAMBURGUESA (oculto en desktop) */
@@ -1528,25 +1762,76 @@ onUnmounted(() => {
 }
 
 .zeus-core-card {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 16px;
   width: 100%;
-  max-width: 720px;
+  max-width: 900px;
   height: 100%;
   padding: 10px 20px;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.06) 0%, rgba(139, 92, 246, 0.05) 100%), var(--zeus-surface);
-  border: 1px solid rgba(59, 130, 246, 0.25);
+  background: linear-gradient(145deg, #2a2d33 0%, #1c1e23 55%, #24262b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--zeus-radius-lg);
-  box-shadow: var(--zeus-shadow);
+  box-shadow: var(--zeus-shadow-md);
   box-sizing: border-box;
   cursor: pointer;
+  overflow: hidden;
   transition: box-shadow var(--zeus-transition), border-color var(--zeus-transition);
 }
 
 .zeus-core-card:hover {
-  box-shadow: var(--zeus-shadow-md);
-  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: var(--zeus-shadow-lg);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.zeus-core-info {
+  position: relative;
+  z-index: 2;
+}
+
+/* Banner con el asset real ya existente de Zeus, superpuesto en el lado
+   derecho de la tarjeta (sin arte nuevo). */
+.zeus-core-banner {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 42%;
+  min-width: 180px;
+  overflow: hidden;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  background: linear-gradient(90deg, rgba(20, 22, 26, 0) 0%, rgba(15, 17, 20, 0.55) 30%, rgba(10, 11, 13, 0.92) 100%);
+}
+
+.zeus-core-banner-img {
+  position: absolute;
+  right: -10%;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 130%;
+  width: auto;
+  object-fit: contain;
+  filter: grayscale(0.15) contrast(1.05);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.zeus-core-banner-text {
+  position: relative;
+  z-index: 2;
+  max-width: 55%;
+  margin: 0 16px 0 0;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  text-align: right;
 }
 
 .zeus-core-avatar-container {
@@ -1581,7 +1866,7 @@ onUnmounted(() => {
   margin: 0;
   font-size: 18px;
   font-weight: 700;
-  color: var(--zeus-text);
+  color: #ffffff;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1590,7 +1875,7 @@ onUnmounted(() => {
 .zeus-core-role {
   margin: 2px 0 8px;
   font-size: 12px;
-  color: var(--zeus-text-secondary);
+  color: rgba(226, 229, 235, 0.7);
 }
 
 .zeus-core-metrics {
@@ -1613,7 +1898,7 @@ onUnmounted(() => {
 }
 
 .zeus-core-activity {
-  color: var(--zeus-text-muted);
+  color: rgba(226, 229, 235, 0.55);
 }
 
 .executive-agents-grid {
@@ -1870,16 +2155,18 @@ onUnmounted(() => {
 }
 
 .agent-card {
+  position: relative;
   height: 100%;
   width: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  background: var(--zeus-surface);
-  border: 1px solid var(--zeus-border);
+  background: linear-gradient(145deg, #2a2d33 0%, #1c1e23 55%, #24262b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--zeus-radius);
   padding: 10px;
+  padding-right: 26px;
   cursor: pointer;
   transition: transform var(--zeus-transition), border-color var(--zeus-transition), box-shadow var(--zeus-transition);
   overflow: hidden;
@@ -1891,6 +2178,23 @@ onUnmounted(() => {
   transform: translateY(-3px);
   border-color: rgba(59, 130, 246, 0.35);
   box-shadow: var(--zeus-shadow-md);
+}
+
+.agent-card-arrow {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  font-size: 20px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.32);
+  pointer-events: none;
+  transition: color var(--zeus-transition), transform var(--zeus-transition);
+}
+
+.agent-card:hover .agent-card-arrow {
+  color: rgba(255, 255, 255, 0.7);
+  transform: translateY(-50%) translateX(2px);
 }
 
 .agent-card--executive .avatar-container {
@@ -2048,7 +2352,7 @@ onUnmounted(() => {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 2px solid var(--zeus-surface, #fff);
+  border: 2px solid #24262b;
   background: #cbd5e1;
 }
 
@@ -2128,11 +2432,11 @@ onUnmounted(() => {
   font-size: 16px;
   font-weight: 700;
   margin: 0;
-  color: var(--zeus-text);
+  color: #ffffff;
 }
 
 .agent-role {
-  color: var(--zeus-text-muted);
+  color: rgba(226, 229, 235, 0.6);
   font-size: 12px;
   margin: 0;
 }
@@ -2152,7 +2456,7 @@ onUnmounted(() => {
 
 .stat-label {
   font-size: 11px;
-  color: var(--zeus-text-muted);
+  color: rgba(226, 229, 235, 0.55);
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
@@ -2160,7 +2464,7 @@ onUnmounted(() => {
 .stat-value {
   font-size: 16px;
   font-weight: 600;
-  color: var(--zeus-text);
+  color: #ffffff;
 }
 
 .status-active {
@@ -2622,6 +2926,32 @@ onUnmounted(() => {
 
 /* Mobile-only executive dashboard (≤768px) */
 @media (max-width: 768px) {
+  /* Topbar: en móvil no cabe marca + versión + campana + usuario + logout
+     en una sola fila (ver AUDIT_REDISENO_TARJETAS_AGENTE.md) — se oculta
+     el texto secundario y se deja solo lo accionable, sin perder ninguna
+     acción real (todo sigue siendo clicable, solo cambia lo que se lee). */
+  .app-topbar {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .app-topbar-subtitle {
+    display: none;
+  }
+
+  .app-topbar-version {
+    display: none;
+  }
+
+  .topbar-user-label,
+  .topbar-chevron {
+    display: none;
+  }
+
+  .topbar-user-btn {
+    padding: 6px 8px;
+  }
+
   .main-content--dashboard {
     padding: 8px;
     padding-bottom: 20px;

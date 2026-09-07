@@ -27,12 +27,12 @@
      tarjetas/superficies (--zeus-surface) siguen siendo blanco plano
      flotando encima — este token solo afecta al fondo de página. */
   --zeus-bg-bands: repeating-linear-gradient(90deg,
-      #E2E4E7 0px, #FAFBFC 15px, #C3C6CB 35px,
-      #F5F6F8 60px, #B8BCC2 85px, #E0E2E5 110px);
-  --zeus-bg-sheen: linear-gradient(135deg, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0.06) 40%, rgba(255, 255, 255, 0) 65%);
+      #1b1d21 0px, #3d4046 15px, #121316 35px,
+      #2e3136 60px, #0d0e10 85px, #262931 110px);
+  --zeus-bg-sheen: linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.02) 28%, rgba(0, 0, 0, 0.32) 52%, rgba(255, 255, 255, 0.06) 74%, rgba(0, 0, 0, 0.24) 100%);
   --zeus-bg: var(--zeus-bg-sheen), var(--zeus-bg-bands);
-  --zeus-bg-flat: #eef0f3;         /* misma gama en plano, para elementos pequeños donde un degradado no aporta */
-  --zeus-bg-subtle: #eef1f6;       /* fondo de zonas secundarias (sidebar, headers) */
+  --zeus-bg-flat: #202226;         /* misma gama en plano, para elementos pequeños donde un degradado no aporta */
+  --zeus-bg-subtle: #24262b;       /* fondo de zonas secundarias (sidebar, headers) */
   --zeus-surface: #ffffff;         /* tarjetas, paneles */
   --zeus-surface-raised: #ffffff;  /* tarjetas destacadas / overlays */
   --zeus-border: #e1e5eb;          /* borde estándar */

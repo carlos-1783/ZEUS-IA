@@ -12,7 +12,7 @@
       :title="item.route ? `Ver ${item.label}` : item.label"
       @click="onKpiClick(item)"
     >
-      <span class="kpi-icon" aria-hidden="true">{{ item.icon }}</span>
+      <span class="kpi-icon-badge" :class="`kpi-icon-badge--${item.key}`" aria-hidden="true">{{ item.icon }}</span>
       <span class="kpi-value">{{ item.value }}</span>
       <span class="kpi-label">{{ item.label }}</span>
     </button>
@@ -54,18 +54,37 @@ const onKpiClick = (item) => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  background: var(--zeus-surface, #fff);
-  border: 1px solid var(--zeus-border, #e5e9f0);
+  gap: 4px;
+  background: linear-gradient(160deg, #24262b 0%, #17181b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--zeus-radius-sm, 8px);
-  padding: 6px 4px;
+  padding: 8px 4px;
   min-width: 0;
   overflow: hidden;
   font: inherit;
   color: inherit;
   text-align: center;
-  box-shadow: var(--zeus-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
+
+.kpi-icon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.kpi-icon-badge--agents_active { background: rgba(99, 102, 241, 0.28); }
+.kpi-icon-badge--tasks_running { background: rgba(245, 158, 11, 0.28); }
+.kpi-icon-badge--efficiency { background: rgba(20, 184, 166, 0.28); }
+.kpi-icon-badge--alerts { background: rgba(239, 68, 68, 0.28); }
+.kpi-icon-badge--automations { background: rgba(148, 163, 184, 0.28); }
+.kpi-icon-badge--system_health { background: rgba(34, 197, 94, 0.28); }
 
 .kpi-item--clickable {
   cursor: pointer;
@@ -87,15 +106,10 @@ const onKpiClick = (item) => {
   box-shadow: 0 0 12px rgba(245, 158, 11, 0.15);
 }
 
-.kpi-icon {
-  font-size: 14px;
-  line-height: 1;
-}
-
 .kpi-value {
   font-size: 16px;
   font-weight: 700;
-  color: var(--zeus-text, #0f172a);
+  color: #ffffff;
   line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
@@ -105,7 +119,7 @@ const onKpiClick = (item) => {
 
 .kpi-label {
   font-size: 10px;
-  color: var(--zeus-text-muted, #8792a6);
+  color: rgba(226, 229, 235, 0.6);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   text-align: center;

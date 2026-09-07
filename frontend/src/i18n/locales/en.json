@@ -39,7 +39,8 @@
       "payroll": "Payroll",
       "officeCrm": "Office CRM",
       "insurance": "Insurance",
-      "settings": "Settings"
+      "settings": "Settings",
+      "alerts": "Alerts"
     },
     "header": {
       "title": "AI agents control center",

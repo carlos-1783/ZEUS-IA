@@ -17,18 +17,19 @@
 
 :root {
   /* ---- Superficie: sistema de diseño DEFINITIVO ----
-     Fondo de bandas metálicas — obligatorio en TODA página/modal, sin
-     excepción. Valores exactos, no reinterpretados:
-     repeating-linear-gradient(90deg, #E8E9EB 0px, #F5F6F7 15px,
-     #D4D6D9 35px, #F0F1F3 60px, #C9CCD0 85px, #E5E7E9 110px)
-     + veta diagonal blanco→transparente al 12% + grano SVG al 3%
-     (el grano va en ::before vía .zeus-metal-surface, ver más abajo).
-     Las tarjetas/superficies (--zeus-surface) siguen siendo blanco
-     plano flotando encima. */
+     Fondo de metal cepillado con reflejo direccional — obligatorio en
+     TODA página/modal, sin excepción. Actualizado (tarjetas de agente,
+     rediseño): bandas verticales de luz/sombra más definidas (más
+     contraste entre highlight y sombra que la v1 plana) + veta diagonal
+     de mayor contraste simulando el reflejo de una lámina de metal
+     cepillado bajo luz direccional + grano SVG al 3% (el grano va en
+     ::before vía .zeus-metal-surface, ver más abajo). Las
+     tarjetas/superficies (--zeus-surface) siguen siendo blanco plano
+     flotando encima — este token solo afecta al fondo de página. */
   --zeus-bg-bands: repeating-linear-gradient(90deg,
-      #E8E9EB 0px, #F5F6F7 15px, #D4D6D9 35px,
-      #F0F1F3 60px, #C9CCD0 85px, #E5E7E9 110px);
-  --zeus-bg-sheen: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 55%);
+      #E2E4E7 0px, #FAFBFC 15px, #C3C6CB 35px,
+      #F5F6F8 60px, #B8BCC2 85px, #E0E2E5 110px);
+  --zeus-bg-sheen: linear-gradient(135deg, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0.06) 40%, rgba(255, 255, 255, 0) 65%);
   --zeus-bg: var(--zeus-bg-sheen), var(--zeus-bg-bands);
   --zeus-bg-flat: #eef0f3;         /* misma gama en plano, para elementos pequeños donde un degradado no aporta */
   --zeus-bg-subtle: #eef1f6;       /* fondo de zonas secundarias (sidebar, headers) */

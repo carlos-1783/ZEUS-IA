@@ -279,3 +279,70 @@ Comprobado con Playwright/Browser real:
 
 No me declaro cerrado — pendiente de verificación independiente por
 `revisor-frontend`.
+
+## 6. Revision independiente - revisor-frontend
+
+Verificacion 100% propia, sin fiarme del reporte del ejecutor: rama y commit confirmados (feature/consolidacion-final, 71d3cfb), diffs de los 3 commits (faf05b6, 5bae5bd, 6cec4fb) leidos linea por linea, y entorno propio levantado desde cero en este worktree.
+
+### 6.0 Marcador de entorno - evitando el checkout compartido
+
+Antes de fiarme de ninguna captura propia, confirme con Get-CimInstance Win32_Process que el puerto 5173 (.claude/launch.json) lo ocupa el checkout COMPARTIDO C:\Users\Acer\ZEUS-IA\frontend (proceso node vite.js en ese path), no este worktree. Levante mi propio backend (uvicorn, puerto 8000, sqlite backend/zeus.db de este worktree) y mi propio frontend (vite --port 5194) exclusivamente para esta revision, con un usuario de prueba propio (zeus.revisor.independiente@example.com, company_id=109, promovido a superusuario directamente en el sqlite de este worktree). Tuve que resolver dos problemas de entorno no relacionados con el cambio auditado para poder verificar en vivo: (1) el proxy de Vite en vite.config.ts tiene el target hardcodeado a localhost:8000 (no configurable por VITE_API_URL), asi que recoloque el backend a ese puerto; (2) BACKEND_CORS_ORIGINS no incluye 5194 por defecto, asi que use la variable ya existente ZEUS_ADDITIONAL_CORS_ORIGINS (app/core/config.py) para anadirlo sin tocar codigo. Ninguno de los dos es un hallazgo de esta tarea.
+
+### 6.1 Diseno (criterio frontend-design)
+
+- Fondo metalico: confirmado el diff de zeus-light-system.css - mismas 6 paradas de banda, valores mas extremos (#FAFBFC/#B8BCC2 vs. #F5F6F7/#C9CCD0 antes) y veta diagonal de 3 paradas en vez de 2 (12 a 0 por ciento pasa a 24, 6 y 0 por ciento). Verificado visualmente en 6 pantallas: las 4 que probo el ejecutor (dashboard, agents, insurance, tpv) mas 2 adicionales que yo mismo elegi (Control Horario Universal y CRM de oficina) - el mismo patron de bandas y veta diagonal aparece en las 6, sin romper contraste de texto. Es un cambio real de mas contraste, no cosmetico: se nota reflejo direccional, no una textura plana.
+- Un unico acento por vista: confirmado en insurance (boton Nueva poliza con gradiente) frente a dashboard y agents, donde ningun boton Interactuar lleva gradiente - coherente con la regla de un solo acento vibrante por vista.
+- Efectos por agente sobre las fotos reales: verificados visualmente (no solo leidos en el diff) en agents: THALOS con halo azul claramente visible sin ser agresivo, JUSTICIA con un ghost trail sutil (segunda copia desenfocada, apenas perceptible sin desfigurar la foto), RAFAEL con marco de esquinas rectas frente al circulo de los demas, AFRODITA con aura ambar suave. Los efectos son discretos pero perceptibles, tal como pedia el criterio - no encontre ninguno exagerado ni ninguno tan sutil que resultara indistinguible del resto.
+- Tipografia: la variable de fuente sigue declarada como Inter en zeus-light-system.css linea 69 y ninguno de los 3 commits la sobrescribe.
+- Inconsistencia menor encontrada (no bloqueante): en DashboardProfesional.vue los efectos de PERSEO, RAFAEL, THALOS y AFRODITA se intensifican en estado hover (reglas anadidas para los 4), pero en KpiAgentsView.vue solo existe el efecto base, sin la intensificacion en hover para ninguno de los 4 - la duplicacion deliberada que ya reconoce el ejecutor en la seccion 5 hizo que las dos copias divergieran ligeramente. Es cosmetico (no afecta datos, no afecta accesibilidad, no es una regresion funcional) pero confirma el riesgo que el propio ejecutor ya senalo al no extraer un componente compartido.
+
+### 6.2 Cambio de estado real - reproducido con un agente distinto (RAFAEL)
+
+En vez de reutilizar el AFRODITA del reporte, provoque yo mismo en el sqlite de mi propio backend un UPDATE sobre agent_activities para que todas las filas de RAFAEL tuvieran fecha 2020-01-01, y confirme primero por API (status = offline), luego recargando la pantalla dashboard (RAFAEL paso de En linea a Desconectado, punto verde a gris) y la pantalla agents (pill Offline, Uptime: Sin datos, Ultima actividad: Sin actividad) - en ambas pantallas, sin tocar codigo. Despues probe el camino inverso, que el ejecutor no habia probado: inserte una fila nueva y real en agent_activities para RAFAEL con timestamp actual y confirme que ambas pantallas reflejaron el cambio con precision al segundo: la pantalla agents mostro Uptime 100 por ciento, Decisiones hoy 1 y Ultima actividad con el timestamp exacto que yo inserte, no un valor aproximado ni cacheado. Esto descarta cualquier simulacion: el dato viene del backend en ambas direcciones (offline a online y online a offline), con un agente distinto al usado en la verificacion original.
+
+### 6.3 Badge BETA
+
+Confirme por mi cuenta, buscando los terminos beta, version y stability sobre el archivo de endpoints de agentes del backend, que AGENT_REGISTRY no tiene ningun campo de este tipo para ninguno de los 6 agentes (lei la definicion completa del diccionario). La decision de hardcodear el flag beta solo en ZEUS CORE, documentada en comentario junto a la declaracion de datos en ambos archivos, es razonable: es metadata de producto sin impacto en datos operativos (estado, actividad, decisiones si siguen siendo 100 por ciento reales, verificado en 6.2), y el propio comentario dice explicitamente que debe migrar a un campo real si el backend lo expone en el futuro. No es una investigacion insuficiente, es la conclusion correcta dado que el campo no existe.
+
+### 6.4 Viewport movil - limitacion de entorno tambien de mi lado
+
+Mi entorno de revision tampoco expone una herramienta de redimensionar el viewport del Browser pane a un ancho arbitrario (no hay ninguna funcion equivalente a resize_window en el listado de herramientas de esta sesion). Si consegui una verificacion parcial mas estrecha que la del ejecutor: al abrir el panel AgentActivityPanel sobre una tarjeta, el pane se redimensiono a 629px de ancho (mismo ancho que el ejecutor reporto en su sesion) y en ese ancho el grid de la pantalla dashboard mantuvo 2 columnas sin overlaps ni texto cortado (comprobado con capturas en dos scrolls distintos, viendo las 6 tarjetas). No pude bajar de 629px. Para el resto hasta 320-414px, confirme por lectura de codigo (DashboardProfesional.vue lineas 2624 a 2672 y KpiAgentsView.vue lineas 422 a 426) que las reglas de max-width 768px y max-width 560px son simples cambios de grid-template-columns, de bajo riesgo de romper el layout - no hay ninguna dependencia de altura fija ni de JS que pueda fallar en un ancho menor. Coincido con el ejecutor en que esto queda verificado por codigo, no visualmente, por limitacion de entorno compartida.
+
+### 6.5 prefers-reduced-motion
+
+Confirme por lectura directa que la regla esta en el sitio correcto en ambos archivos: DashboardProfesional.vue lineas 2088 a 2093 y KpiAgentsView.vue lineas 323 a 327, inmediatamente despues del keyframe status-dot-pulse correspondiente, aplicando animation none y display none sobre el mismo selector que dispara el pulso (status-dot.online despues del pseudo elemento). Sintacticamente correcto y en el lugar adecuado. Igual que el ejecutor, no pude alternar la preferencia de SO o navegador en runtime desde esta sesion para verlo en vivo - verificacion por codigo unicamente.
+
+### 6.6 Regresion en pantallas hermanas
+
+Ademas de las 4 pantallas que ya probo el ejecutor, comprobe Control Horario Universal y CRM de oficina - ambas cargan el fondo de bandas metalicas actualizado sin errores de consola ni perdida de contraste. No usan el patron de tarjetas de agente, asi que no hay regresion posible en ese aspecto, pero sirven para confirmar que el cambio de las variables de fondo en el CSS global no rompio nada fuera de las pantallas ya probadas.
+
+### 6.7 Funcionalidad - boton Interactuar
+
+Repeti la comprobacion con PERSEO (no JUSTICIA, que fue la tarjeta que probo el ejecutor): clic en Interactuar abrio el mismo AgentActivityPanel con pestanas Texto y Voz visibles y el nombre y rol correctos, se cerro con el boton de cerrar sin dejar el modal montado ni errores en consola.
+
+### 6.8 Consola
+
+Revise los mensajes de consola en cada navegacion (login, dashboard, agents, insurance, tpv, CRM oficina, Control Horario, apertura y cierre del panel de PERSEO). El unico ruido presente es el mismo que documenta el ejecutor: el cliente HMR de Vite intentando conectar al puerto 5173 bloqueado por CSP, artefacto de usar un puerto no estandar (5194) para no chocar con el checkout compartido - no hay ningun error de Vue, red 4xx o 5xx real ni JavaScript en las vistas tocadas.
+
+### 6.9 Repositorio
+
+El estado de git esta limpio salvo la carpeta .claude sin trackear (no relacionado con esta tarea). El log de origin/main confirma que main remoto no tiene ninguno de estos 3 commits. No se creo rama nueva, no se hizo push.
+
+## 7. Veredicto
+
+### APROBADO
+
+Cada verificacion independiente que hice coincide con lo reportado por el ejecutor:
+
+- El fondo metalico tiene de verdad mas contraste y reflejo direccional, confirmado en 6 pantallas (las 4 del ejecutor mas 2 propias).
+- Los efectos CSS por agente estan bien ejecutados: discretos pero perceptibles, ninguno desfigura la foto real ni resulta invisible.
+- El cambio de estado real se refleja correctamente en dashboard y agents, reproducido por mi con un agente distinto (RAFAEL) y en ambas direcciones (online a offline y offline a online con una fila insertada por mi, con timestamp y contador exactos).
+- El badge BETA hardcodeado en ZEUS CORE es una decision razonable, y confirme por mi cuenta que no existe ningun campo real de beta o version en AGENT_REGISTRY.
+- prefers-reduced-motion esta bien escrito y en el sitio correcto en ambos archivos.
+- No encontre ninguna regresion funcional: el boton Interactuar sigue abriendo el mismo panel real, con datos reales, en una tarjeta distinta a la probada originalmente.
+- No hay errores nuevos de consola.
+- Repo limpio, main y remoto sin tocar, sin rama nueva, sin push.
+
+La unica verificacion que no pude completar en runtime (viewport movil por debajo de 629px y prefers-reduced-motion alternado en vivo) es una limitacion de entorno que comparto con el ejecutor, no una duda sobre la correccion del codigo - en ambos casos la inspeccion de codigo no deja lugar a ambiguedad razonable sobre el resultado esperado. La unica discrepancia real que encontre (falta de intensificacion en hover para 4 de los 5 efectos en KpiAgentsView.vue frente a DashboardProfesional.vue) es cosmetica, no funcional, y ya esta cubierta por el propio hallazgo del ejecutor sobre la duplicacion deliberada de estilos entre ambos archivos.
+
+Revisado y aprobado por revisor-frontend.

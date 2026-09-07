@@ -164,13 +164,24 @@
         <div class="executive-section executive-section--zeus">
           <div class="zeus-core-highlight zeus-core">
             <div class="zeus-core-card" @click="selectAgent(zeusCoreAgent)">
-              <img
-                :src="zeusCoreAgent.image"
-                :alt="zeusCoreAgent.name"
-                class="zeus-core-avatar"
-              />
+              <div class="zeus-core-avatar-container">
+                <img
+                  :src="zeusCoreAgent.image"
+                  :alt="zeusCoreAgent.name"
+                  class="zeus-core-avatar"
+                />
+                <span
+                  class="status-dot"
+                  :class="zeusCoreAgent.status"
+                  :title="agentStatusLabel(zeusCoreAgent.status)"
+                  aria-hidden="true"
+                ></span>
+              </div>
               <div class="zeus-core-info">
-                <h2 class="zeus-core-name">{{ zeusCoreAgent.name }}</h2>
+                <h2 class="zeus-core-name">
+                  {{ zeusCoreAgent.name }}
+                  <span v-if="zeusCoreAgent.beta" class="beta-badge">BETA</span>
+                </h2>
                 <p class="zeus-core-role">{{ zeusCoreAgent.role }}</p>
                 <div class="zeus-core-metrics">
                   <span class="zeus-core-status" :class="backendHealthLabel === 'OK' ? 'online' : 'degraded'">
@@ -190,31 +201,48 @@
         </div>
 
         <section class="agents-grid executive-agents-grid">
-        <div 
-          v-for="agent in executiveGridAgents" 
+        <div
+          v-for="agent in executiveGridAgents"
           :key="agent.name"
           class="agent-card agent-card--executive"
           :class="{ 'has-avatar': agent.hasGLB }"
           @click="selectAgent(agent)"
         >
-          <!-- Avatar Image -->
-          <div class="avatar-container">
-            <img 
-              :src="agent.image" 
+          <!-- Avatar Image: mismo asset real, con tratamiento CSS propio
+               por agente (sin arte nuevo, ver AUDIT_REDISENO_TARJETAS_AGENTE.md) -->
+          <div class="avatar-container" :class="agentAvatarFx(agent.name)">
+            <img
+              v-if="agent.name === 'JUSTICIA'"
+              :src="agent.image"
+              alt=""
+              aria-hidden="true"
+              class="avatar-ghost"
+            />
+            <img
+              :src="agent.image"
               :alt="agent.name"
               class="avatar-image"
             />
+            <span
+              class="status-dot"
+              :class="agent.status"
+              :title="agentStatusLabel(agent.status)"
+              aria-hidden="true"
+            ></span>
           </div>
 
           <!-- Agent Info -->
           <div class="agent-info">
-            <h3 class="agent-name">{{ agent.name }}</h3>
+            <h3 class="agent-name">
+              {{ agent.name }}
+              <span v-if="agent.beta" class="beta-badge">BETA</span>
+            </h3>
             <p class="agent-role">{{ agent.role }}</p>
-            
+
             <div class="agent-stats">
               <div class="stat">
                 <span class="stat-label">{{ t('dashboardPro.agentCard.status') }}</span>
-                <span class="stat-value status-active">{{ t('dashboardPro.agentCard.online') }}</span>
+                <span class="stat-value" :class="`status-${agent.status}`">{{ agentStatusLabel(agent.status) }}</span>
               </div>
               <div class="stat">
                 <span class="stat-label">{{ t('dashboardPro.agentCard.activities24h') }}</span>
@@ -917,6 +945,7 @@ const refreshDashboardData = async () => {
   if (pollTick % 2 === 0) {
     await loadBackendHealth()
     await loadAgentsActivities()
+    await loadAgentsStatus()
   }
 }
 
@@ -953,6 +982,9 @@ onMounted(async () => {
   
   loadSavedSettings()
   await refreshDashboardData()
+  // Estado online/offline real inmediato, sin esperar al primer poll
+  // (refreshDashboardData solo lo refresca cuando pollTick es par).
+  await loadAgentsStatus()
 
   dashboardPollTimer = window.setInterval(() => {
     void refreshDashboardData()
@@ -1001,44 +1033,100 @@ onUnmounted(() => {
   document.documentElement.classList.remove('dashboard-executive-mode')
 })
 
+// NOTA sobre `beta`: no existe ningún campo real en el backend (ver
+// GET /api/v1/agents/status → AGENT_REGISTRY en
+// backend/app/api/v1/endpoints/agents.py) que marque un agente como
+// "beta". Es una decisión de producto puramente informativa, no una
+// condición de negocio, así que se marca a mano solo en ZEUS CORE
+// (el orquestador es el componente más nuevo y menos rodado del
+// núcleo). Si en el futuro el backend expone un campo real de
+// versión/estabilidad por agente, este flag debe leerse de ahí.
 const agentsData = ref([
   {
     name: 'ZEUS CORE',
     role: 'Supreme Orchestrator',
     image: '/images/avatars/Zeus-avatar.jpg',
-    activities_24h: 0
+    activities_24h: 0,
+    status: 'loading',
+    beta: true
   },
   {
     name: 'PERSEO',
     role: 'Growth Strategist',
     image: '/images/avatars/Perseo-avatar.jpg',
-    activities_24h: 0
+    activities_24h: 0,
+    status: 'loading'
   },
   {
     name: 'RAFAEL',
     role: 'Fiscal Guardian',
     image: '/images/avatars/Rafael-avatar.jpg',
-    activities_24h: 0
+    activities_24h: 0,
+    status: 'loading'
   },
   {
     name: 'THALOS',
     role: 'Cybersecurity Defender',
     image: '/images/avatars/Thalos-avatar.jpg',
-    activities_24h: 0
+    activities_24h: 0,
+    status: 'loading'
   },
   {
     name: 'JUSTICIA',
     role: 'Legal & GDPR Advisor',
     image: '/images/avatars/Justicia-avatar.jpg',
-    activities_24h: 0
+    activities_24h: 0,
+    status: 'loading'
   },
   {
     name: 'AFRODITA',
     role: 'HR & Logistics Manager',
     image: '/images/avatars/Afrodita-avatar.jpg',
-    activities_24h: 0
+    activities_24h: 0,
+    status: 'loading'
   }
 ])
+
+// Estado real online/idle/offline por agente — GET /api/v1/agents/status
+// (mismo endpoint que ya consumen OlymposDashboard.vue y KpiAgentsView.vue,
+// calculado desde agent_activities, no un valor fijo).
+const loadAgentsStatus = async () => {
+  if (!authStore.getToken?.() && !authStore.token) return
+  try {
+    await authStore.ensureAccessTokenFresh(300)
+    const api = (await import('@/services/api')).default
+    const data = await api.get('/api/v1/agents/status')
+    const backendAgents = data?.agents || {}
+    agentsData.value.forEach((agent) => {
+      const info = backendAgents[agent.name]
+      agent.status = info?.status || 'offline'
+    })
+  } catch (error) {
+    console.error('Error cargando estado de agentes:', error)
+  }
+}
+
+const AGENT_STATUS_LABELS = {
+  online: 'En línea',
+  idle: 'Inactivo',
+  offline: 'Desconectado',
+  loading: 'Cargando…'
+}
+
+const agentStatusLabel = (status) => AGENT_STATUS_LABELS[status] || AGENT_STATUS_LABELS.offline
+
+// Clase de tratamiento visual por agente sobre el avatar real (mismo
+// asset, sin arte nuevo — ver AUDIT_REDISENO_TARJETAS_AGENTE.md para el
+// porqué de cada tratamiento).
+const AGENT_AVATAR_FX = {
+  PERSEO: 'avatar-fx-perseo',
+  RAFAEL: 'avatar-fx-rafael',
+  THALOS: 'avatar-fx-thalos',
+  JUSTICIA: 'avatar-fx-justicia',
+  AFRODITA: 'avatar-fx-afrodita'
+}
+
+const agentAvatarFx = (agentName) => AGENT_AVATAR_FX[agentName] || ''
 
 const zeusCoreAgent = computed(() =>
   agentsData.value.find((a) => a.name.includes('ZEUS')) || agentsData.value[0]
@@ -1461,6 +1549,15 @@ onUnmounted(() => {
   border-color: rgba(59, 130, 246, 0.4);
 }
 
+.zeus-core-avatar-container {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border: none;
+  background: none;
+}
+
 .zeus-core-avatar {
   width: 64px;
   height: 64px;
@@ -1485,6 +1582,9 @@ onUnmounted(() => {
   font-size: 18px;
   font-weight: 700;
   color: var(--zeus-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .zeus-core-role {
@@ -1718,10 +1818,17 @@ onUnmounted(() => {
   }
 
   .executive-agents-grid {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto;
+    /* Tablet: 2 columnas, igual que desktop y que móvil — la rejilla de
+       tarjetas de agente se mantiene siempre en 2 columnas en este
+       breakpoint intermedio en vez de colapsar a 1 sola (con solo 5
+       tarjetas, 1 columna desperdicia el ancho disponible). */
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: none;
+    grid-auto-rows: minmax(150px, auto);
     height: auto;
-    flex: none;
+    max-height: none;
+    overflow-y: auto;
+    flex: 1;
   }
 
   .agent-card--executive {
@@ -1746,14 +1853,19 @@ onUnmounted(() => {
   }
 }
 
-/* AGENTS GRID — fullscreen 3×2 */
+/* AGENTS GRID — 2 columnas (5 tarjetas de agente sin ZEUS CORE, que
+   tiene su propia fila destacada arriba). Antes era 3×2: se reduce a
+   2 columnas para dar más aire a cada tarjeta (avatar + estado real +
+   badge), a costa de una fila extra que cabe con scroll vertical
+   dentro de la sección en vez de forzar cada tarjeta a encogerse. */
 .agents-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(2, 1fr);
+  grid-template-columns: repeat(2, 1fr);
+  grid-auto-rows: minmax(0, 1fr);
   gap: 10px;
   height: 100%;
   width: 100%;
+  overflow-y: auto;
   box-sizing: border-box;
 }
 
@@ -1807,6 +1919,7 @@ onUnmounted(() => {
 }
 
 .avatar-container {
+  position: relative;
   width: 80px;
   height: 80px;
   margin: auto;
@@ -1827,6 +1940,8 @@ onUnmounted(() => {
 }
 
 .avatar-image {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -1835,6 +1950,168 @@ onUnmounted(() => {
 
 .agent-card:hover .avatar-image {
   transform: scale(1.1);
+}
+
+/* ---- Tratamiento de dinamismo por agente sobre la MISMA foto real ----
+   No hay generación de ilustraciones nuevas disponible en este entorno
+   (decisión ya acordada con el usuario): se aplican transformaciones
+   CSS sutiles sobre el asset ya existente para sugerir personalidad,
+   nunca desfigurando la foto. Ver AUDIT_REDISENO_TARJETAS_AGENTE.md. */
+
+/* PERSEO — atlético/dinámico: encuadre inclinado + líneas de velocidad
+   que se desvanecen desde el borde izquierdo (sugiere movimiento hacia
+   la derecha, sin animación permanente). */
+.avatar-container.avatar-fx-perseo .avatar-image {
+  transform: rotate(-5deg) scale(1.14);
+  object-position: 55% 30%;
+}
+
+.agent-card:hover .avatar-container.avatar-fx-perseo .avatar-image {
+  transform: rotate(-5deg) scale(1.2);
+}
+
+.avatar-container.avatar-fx-perseo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    100deg,
+    transparent 0px, transparent 6px,
+    rgba(255, 255, 255, 0.5) 6px, rgba(255, 255, 255, 0.5) 8px,
+    transparent 8px, transparent 20px
+  );
+  -webkit-mask-image: linear-gradient(90deg, black 0%, transparent 40%);
+  mask-image: linear-gradient(90deg, black 0%, transparent 40%);
+}
+
+/* RAFAEL — ejecutivo/sobrio: marco recto en vez del círculo genérico,
+   sin inclinación, borde de un solo tono neutro (nada de gradiente). */
+.avatar-container.avatar-fx-rafael {
+  border-radius: 10px;
+  border-color: rgba(82, 96, 122, 0.45);
+}
+
+.avatar-container.avatar-fx-rafael .avatar-image {
+  border-radius: 7px;
+}
+
+.agent-card:hover .avatar-container.avatar-fx-rafael {
+  border-color: rgba(82, 96, 122, 0.7);
+}
+
+/* THALOS — defensivo: aura/anillo frío estático (sin pulso: un escudo
+   no parpadea), en vez del anillo índigo genérico. */
+.avatar-container.avatar-fx-thalos {
+  border-color: rgba(59, 130, 246, 0.55);
+  box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.14), 0 0 18px rgba(59, 130, 246, 0.28);
+}
+
+.agent-card:hover .avatar-container.avatar-fx-thalos {
+  border-color: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 0 0 7px rgba(59, 130, 246, 0.18), 0 0 24px rgba(59, 130, 246, 0.4);
+}
+
+/* JUSTICIA — movimiento/doble exposición: una segunda copia de la misma
+   foto, desplazada y difuminada detrás, como un "ghost trail". */
+.avatar-ghost {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.4;
+  filter: blur(2px) grayscale(0.15);
+  transform: translateX(-7px) scale(1.06);
+}
+
+/* AFRODITA — cercana/cálida: aura suave en tono ámbar (token ya
+   existente --zeus-warning, sin introducir un color nuevo). */
+.avatar-container.avatar-fx-afrodita {
+  border-color: rgba(245, 158, 11, 0.35);
+  box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.1);
+}
+
+.agent-card:hover .avatar-container.avatar-fx-afrodita {
+  border-color: rgba(245, 158, 11, 0.6);
+  box-shadow: 0 0 0 7px rgba(245, 158, 11, 0.16);
+}
+
+/* ---- Indicador de estado real (online/idle/offline) ---- */
+.status-dot {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  z-index: 3;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--zeus-surface, #fff);
+  background: #cbd5e1;
+}
+
+.status-dot.online {
+  background: #10b981;
+}
+
+.status-dot.idle {
+  background: #f59e0b;
+}
+
+.status-dot.offline {
+  background: #94a3b8;
+}
+
+.status-dot.loading {
+  background: #cbd5e1;
+}
+
+/* Pulso sutil solo cuando está realmente online — respeta
+   prefers-reduced-motion (ver media query al final del bloque). */
+.status-dot.online::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid #10b981;
+  opacity: 0.55;
+  animation: status-dot-pulse 1.8s ease-out infinite;
+}
+
+@keyframes status-dot-pulse {
+  0% { transform: scale(0.55); opacity: 0.55; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-dot.online::after {
+    animation: none;
+    display: none;
+  }
+}
+
+/* ---- Badge BETA (informativo de producto, ver comentario en <script>
+   sobre por qué solo ZEUS CORE lo lleva hardcodeado) ---- */
+.beta-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--zeus-accent);
+  background: var(--zeus-accent-soft);
+  border-radius: var(--zeus-radius-full);
+  line-height: 1.4;
+}
+
+.agent-name {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .agent-info {
@@ -1888,6 +2165,25 @@ onUnmounted(() => {
 
 .status-active {
   color: #0d9668;
+}
+
+/* Texto del stat "Estado" en la tarjeta — coloreado según el estado
+   real devuelto por GET /api/v1/agents/status (mismo criterio de color
+   que el punto de estado del avatar). */
+.status-online {
+  color: #0d9668;
+}
+
+.status-idle {
+  color: #b45309;
+}
+
+.status-offline {
+  color: #64748b;
+}
+
+.status-loading {
+  color: var(--zeus-text-muted);
 }
 
 /* Botón secundario: el Dashboard es una vista de selección entre 6

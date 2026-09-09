@@ -1745,7 +1745,13 @@ onUnmounted(() => {
 .executive-section--kpi {
   flex: 0 0 12%;
   max-height: 12%;
-  min-height: 52px;
+  min-height: 88px;
+  /* Compensa el mismo hueco que .executive-pwa-bar (position:absolute,
+     top:4px, ~32px de alto) reserva ya en el breakpoint móvil de abajo
+     (@media max-width: 1024px) — en escritorio esa barra no tenía
+     ningún desplazamiento equivalente y quedaba flotando encima de la
+     fila de KPIs. Mismo valor (36px) que ya usa esa media query. */
+  padding-top: 36px;
 }
 
 .executive-section--zeus {

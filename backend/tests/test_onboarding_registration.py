@@ -21,7 +21,10 @@ def client():
 def _register_payload():
     suf = uuid.uuid4().hex[:10]
     return {
-        "email": f"onb_{suf}@example.test",
+        # "example.com" (no "example.test"/".local") es imprescindible: el validador
+        # de email de pydantic rechaza dominios reservados/special-use y estos tests
+        # se saltaban en silencio (pytest.skip) sin ejecutar nunca el registro real.
+        "email": f"onb_{suf}@example.com",
         "password": "TestPass1",
         "full_name": "Titular Test",
         "phone": "612345678",
@@ -61,6 +64,27 @@ def test_register_restaurant_creates_user_company_and_login(client: TestClient):
     body = st.json()
     assert body.get("validation", {}).get("ok") is True
     assert body.get("questionnaire_completed") is False
+    # Regresión: el seed automático de registro (CompanyEmployee "owner" placeholder +
+    # producto de catálogo por defecto) NO debe hacer que setup_completed se infiera
+    # True antes de que el usuario complete de verdad el wizard.
+    assert body.get("setup_completed") is False, (
+        "setup_completed no debe ser True solo por el seed automático de registro "
+        f"(owner placeholder / producto auto_created): {body}"
+    )
+    assert body.get("setup_inferred") is False
+
+
+def test_questionnaire_endpoint_completes_and_flips_flag(client: TestClient):
+    p = _register_payload()
+    r = client.post(f"{settings.API_V1_STR}/auth/register", json=p)
+    if r.status_code != 201:
+        pytest.skip(f"Registro no disponible en este entorno: {r.status_code} {r.text[:200]}")
+
+    login = client.post(
+        f"{settings.API_V1_STR}/auth/login",
+        data={"username": p["email"], "password": p["password"]},
+    )
+    tok = login.json().get("access_token")
 
     q = client.post(
         f"{settings.API_V1_STR}/auth/onboarding/questionnaire",
@@ -71,7 +95,7 @@ def test_register_restaurant_creates_user_company_and_login(client: TestClient):
             "business_hours": "L-V 9:00-18:00",
         },
     )
-    assert q.status_code == 200
+    assert q.status_code == 200, q.text
     st2 = client.get(
         f"{settings.API_V1_STR}/auth/onboarding/status",
         headers={"Authorization": f"Bearer {tok}"},
@@ -104,7 +128,7 @@ def test_onboarding_profile_persists_setup(client: TestClient):
             ],
             "uses_tpv": False,
             "business_hours": "L-V 9:00 - 13:00",
-            "email_gestor_fiscal": "gestor@example.test",
+            "email_gestor_fiscal": "gestor@example.com",
             "autoriza_envio_documentos_a_asesores": True,
             "whatsapp_number": "+34624363349",
         },
@@ -118,3 +142,87 @@ def test_onboarding_profile_persists_setup(client: TestClient):
     )
     assert st.status_code == 200
     assert st.json().get("setup_completed") is True
+
+
+def test_owner_placeholder_alone_does_not_infer_setup_completed(client: TestClient):
+    """
+    El CompanyEmployee "owner" (source="onboarding_owner") y el producto de catálogo
+    auto-creado (metadata.auto_created=True) del seed de registro NO deben, por sí
+    solos, marcar setup_completed=True. Repro directo del hallazgo de
+    AUDIT_FINAL_COMPLETA.md secciones 1.2 y 6.1.
+    """
+    p = _register_payload()
+    r = client.post(f"{settings.API_V1_STR}/auth/register", json=p)
+    if r.status_code != 201:
+        pytest.skip(f"Registro no disponible: {r.status_code}")
+    login = client.post(
+        f"{settings.API_V1_STR}/auth/login",
+        data={"username": p["email"], "password": p["password"]},
+    )
+    tok = login.json().get("access_token")
+    st = client.get(
+        f"{settings.API_V1_STR}/auth/onboarding/status",
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+    body = st.json()
+    assert body.get("validation", {}).get("checks", {}).get("company_employees_count") == 1
+    assert body.get("validation", {}).get("checks", {}).get("tpv_products", 0) >= 1
+    assert body.get("setup_completed") is False
+    assert body.get("setup_inferred") is False
+
+
+def test_real_employee_without_questionnaire_still_infers_setup_completed(client: TestClient):
+    """
+    No-regresión: una empresa con un empleado REAL (no el placeholder "owner", p.ej.
+    filas antiguas anteriores a la columna "source", o añadidas por AFRODITA/import)
+    debe seguir infiriendo setup_completed=True aunque el usuario nunca haya
+    completado el cuestionario/perfil nuevo. Esto preserva el comportamiento legítimo
+    para cuentas pre-existentes que ya tenían datos reales.
+    """
+    from app.db.session import SessionLocal
+    from app.models.company import UserCompany
+    from app.models.company_employee import CompanyEmployee
+
+    p = _register_payload()
+    r = client.post(f"{settings.API_V1_STR}/auth/register", json=p)
+    if r.status_code != 201:
+        pytest.skip(f"Registro no disponible: {r.status_code}")
+    user_id = r.json().get("user_id")
+
+    db = SessionLocal()
+    try:
+        link = (
+            db.query(UserCompany)
+            .filter(UserCompany.user_id == user_id)
+            .order_by(UserCompany.id.asc())
+            .first()
+        )
+        assert link, "El registro debe crear el vínculo user<->company"
+        db.add(
+            CompanyEmployee(
+                company_id=link.company_id,
+                full_name="Empleada Real Preexistente",
+                role_title="camarera",
+                employee_code=f"LEGACY-{user_id}",
+                phone="611111111",
+                is_active=True,
+                source=None,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    login = client.post(
+        f"{settings.API_V1_STR}/auth/login",
+        data={"username": p["email"], "password": p["password"]},
+    )
+    tok = login.json().get("access_token")
+    st = client.get(
+        f"{settings.API_V1_STR}/auth/onboarding/status",
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+    body = st.json()
+    assert body.get("questionnaire_completed") is False
+    assert body.get("setup_completed") is True, body
+    assert body.get("setup_inferred") is True

@@ -96,7 +96,7 @@ def evaluate_and_persist(
     status = _get_status(score)
 
     record = AutomationReadiness(
-        company_id=company_id,
+        user_id=company_id,
         leads_last_30_days=data.get("leads_last_30_days", 0) or 0,
         avg_response_time_hours=float(data.get("avg_response_time_hours", 0) or 0),
         active_channels=data.get("active_channels", 0) or 0,
@@ -118,7 +118,7 @@ def get_latest(db: Session, company_id: int) -> Optional[AutomationReadiness]:
     """Obtiene la última evaluación para una empresa."""
     return (
         db.query(AutomationReadiness)
-        .filter(AutomationReadiness.company_id == company_id)
+        .filter(AutomationReadiness.user_id == company_id)
         .order_by(AutomationReadiness.evaluated_at.desc())
         .first()
     )

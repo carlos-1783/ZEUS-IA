@@ -30,6 +30,9 @@
   },
   "dashboardPro": {
     "subtitle": "Plataforma empresarial de IA",
+    "systemVersion": "Sistema operativo v{version}",
+    "sidebarTagline": "Más que herramientas, tu aliado estratégico.",
+    "zeusCoreBannerText": "Inteligencia artificial que trabaja para ti",
     "nav": {
       "dashboard": "Panel",
       "admin": "Administración",
@@ -38,7 +41,9 @@
       "controlHorario": "Control horario",
       "payroll": "Nóminas",
       "officeCrm": "CRM oficina",
-      "settings": "Ajustes"
+      "insurance": "Seguros",
+      "settings": "Ajustes",
+      "alerts": "Alertas"
     },
     "header": {
       "title": "Centro de control de agentes IA",

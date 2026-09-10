@@ -271,6 +271,11 @@ import { useRouter, useRoute } from 'vue-router';
 import api from '@/api';
 import { useAuthStore } from '@/stores/auth';
 import { resolvePostAuthPath } from '@/utils/postAuthRedirect';
+import {
+  KNOWN_MESSAGE_TRANSLATIONS,
+  translateFieldMessage as translateFieldMessageShared,
+  looksSpanish,
+} from '@/utils/apiErrorTranslation';
 
 const router = useRouter();
 const route = useRoute();
@@ -385,9 +390,45 @@ const validateForm = () => {
   return isValid;
 };
 
+// Nombres de campo legibles para los mensajes de validación genéricos.
+const FIELD_LABELS = {
+  email: 'el correo electrónico',
+  password: 'la contraseña',
+  password_confirmation: 'la confirmación de contraseña',
+  first_name: 'el nombre',
+  last_name: 'los apellidos',
+  company_name: 'el nombre de la empresa',
+  phone: 'el teléfono',
+  terms: 'los términos y condiciones',
+}
+
+// Tabla de traducciones y helper de mensajes por campo: compartidos con
+// OnboardingSetup.vue en frontend/src/utils/apiErrorTranslation.ts para
+// no duplicar esta lógica (ver Hallazgo 6 de AUDIT_FRONTEND_CIERRE.md).
+function translateFieldMessage(field, rawMsg) {
+  return translateFieldMessageShared(field, rawMsg, FIELD_LABELS)
+}
+
+/**
+ * El cliente API (src/api/index.ts) normaliza los errores de axios a un
+ * Error plano sin `.response` (usa `.details` con el body del backend y
+ * `.originalError` con el error de axios original) — sin esto,
+ * parseRegisterError nunca encontraba el detail real y caía siempre en
+ * el `err.message` genérico en inglés ("Validation error", "Bad request",
+ * etc.), sin importar cuántas traducciones se añadieran más abajo.
+ * Se comprueban las tres formas posibles para cubrir ambos casos.
+ */
+function extractResponseData(err) {
+  return err?.response?.data ?? err?.details ?? err?.originalError?.response?.data
+}
+
+function extractResponseStatus(err) {
+  return err?.response?.status ?? err?.status ?? err?.originalError?.response?.status
+}
+
 /** Mensaje real del backend (FastAPI: detail string o lista de errores de validación). */
 function parseRegisterError(err) {
-  const data = err?.response?.data
+  const data = extractResponseData(err)
   const detail = data?.detail ?? data?.message
 
   if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
@@ -401,7 +442,13 @@ function parseRegisterError(err) {
     if (detail === 'Email already registered') {
       return 'Este correo ya está registrado. Inicia sesión o usa otro email.'
     }
-    return detail
+    const known = KNOWN_MESSAGE_TRANSLATIONS.find((entry) => entry.match.test(detail))
+    if (known) return `No se pudo completar el registro: ${known.es}.`
+    // Si el mensaje ya viene redactado en español por el propio backend
+    // (heurística compartida: contiene alguna tilde/ñ o palabras comunes
+    // en español), se muestra tal cual; si no, se usa un mensaje generico
+    // en español en vez de exponer texto tecnico en ingles.
+    return looksSpanish(detail) ? detail : 'No se pudo completar el registro. Revisa los datos introducidos e inténtalo de nuevo.'
   }
 
   if (Array.isArray(detail)) {
@@ -410,16 +457,13 @@ function parseRegisterError(err) {
         if (!item || typeof item !== 'object') return ''
         const field = Array.isArray(item.loc) ? item.loc.slice(-1)[0] : ''
         const msg = item.msg || item.message || ''
-        if (field === 'password') {
-          return 'La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula y un número.'
-        }
-        return msg
+        return translateFieldMessage(field, msg)
       })
       .filter(Boolean)
     if (parts.length) return parts.join(' ')
   }
 
-  const status = err?.response?.status
+  const status = extractResponseStatus(err)
   if (status === 400) {
     return 'No se pudo completar el registro. Revisa los datos o prueba con otro correo.'
   }
@@ -478,8 +522,8 @@ const handleSubmit = async () => {
   } catch (err) {
     console.error('Registration error:', err);
     const parsed = parseRegisterError(err);
-    const status = err?.response?.status;
-    const detail = err?.response?.data?.detail;
+    const status = extractResponseStatus(err);
+    const detail = extractResponseData(err)?.detail;
     const accountLikelyCreated =
       status === 500 &&
       typeof detail === 'string' &&

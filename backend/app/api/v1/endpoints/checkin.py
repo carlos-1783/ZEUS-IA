@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user
+from app.core.security_middleware import get_real_client_ip
 from app.db.session import get_db
 from app.models.company import UserCompany
 from app.models.user import User
@@ -68,7 +69,12 @@ async def post_checkin(
     db: Session = Depends(get_db),
 ):
     """Registrar fichaje real (entrada/salida/pausa) con validación y coste."""
-    client_ip = http_req.client.host if http_req.client else None
+    # VUELTA 2 del hallazgo de AUDIT_SEGURIDAD_ESTANDAR.md sección 0: unificado
+    # con la misma lógica de IP que usa el rate limiting (`X-Real-IP` primero,
+    # según documentación oficial de Railway; `request.client.host` como
+    # fallback honesto) en vez de leer `request.client.host` directamente.
+    # Ver app/core/security_middleware.py::get_real_client_ip().
+    client_ip = get_real_client_ip(http_req)
     user_agent = (http_req.headers.get("user-agent") or "")[:512] or None
     device_id = body.device_id or (http_req.headers.get("x-device-id") or "").strip() or None
     return register_checkin(

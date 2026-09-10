@@ -323,17 +323,20 @@ const runLogs = async () => {
 
 <style scoped>
 
+/* El unico acento de la vista ya vive en la cabecera del modal --
+   aqui todo queda en tokens neutros (antes: fondo/borde teal en el
+   panel, borde celeste "highlight", botones teal/azul solidos). */
 .tools-panel {
 
   margin-top: 24px;
 
   padding: 22px;
 
-  border: 1px solid rgba(15, 118, 110, 0.3);
+  border: 1px solid var(--zeus-border, #e1e5eb);
 
-  border-radius: 16px;
+  border-radius: var(--zeus-radius-lg, 16px);
 
-  background: #f0fdfa;
+  background: var(--zeus-surface, #fff);
 
 }
 
@@ -377,11 +380,11 @@ const runLogs = async () => {
 
 .tool-card {
 
-  background: white;
+  background: var(--zeus-surface, #fff);
 
-  border: 1px solid rgba(15, 118, 110, 0.35);
+  border: 1px solid var(--zeus-border, #e1e5eb);
 
-  border-radius: 12px;
+  border-radius: var(--zeus-radius, 12px);
 
   padding: 14px;
 
@@ -393,21 +396,13 @@ const runLogs = async () => {
 
 }
 
-.tool-card.highlight {
-
-  border-color: #0ea5e9;
-
-  box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.2);
-
-}
-
 .hint {
 
   margin: 0;
 
   font-size: 12px;
 
-  color: #64748b;
+  color: var(--zeus-text-secondary, #52607a);
 
 }
 
@@ -417,15 +412,15 @@ const runLogs = async () => {
 
   font-size: 11px;
 
-  color: #b45309;
+  color: var(--zeus-warning, #f59e0b);
 
 }
 
 .tool-card textarea {
 
-  border: 1px solid rgba(148, 163, 184, 0.5);
+  border: 1px solid var(--zeus-border-strong, #cdd3db);
 
-  border-radius: 8px;
+  border-radius: var(--zeus-radius-sm, 8px);
 
   padding: 8px;
 
@@ -433,27 +428,35 @@ const runLogs = async () => {
 
   min-height: 70px;
 
+  color: var(--zeus-text, #0f172a);
+
+  background: var(--zeus-surface, #fff);
+
 }
 
 .tool-card button {
 
-  border: none;
+  border: 1px solid #D1D5DB;
 
-  border-radius: 8px;
+  border-radius: var(--zeus-radius-sm, 8px);
 
-  background: #0f766e;
+  background: #ffffff;
 
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
 
   padding: 8px 10px;
 
   cursor: pointer;
 
+  font-weight: var(--zeus-weight-medium, 500);
+
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+
 }
 
-.tool-card.highlight button {
+.tool-card button:hover:not(:disabled) {
 
-  background: #0369a1;
+  border-color: #9aa2af;
 
 }
 
@@ -463,11 +466,11 @@ const runLogs = async () => {
 
   padding: 10px;
 
-  border-radius: 8px;
+  border-radius: var(--zeus-radius-sm, 8px);
 
-  background: #ecfeff;
+  background: var(--zeus-bg-subtle, #eef1f6);
 
-  color: #0f172a;
+  color: var(--zeus-text, #0f172a);
 
   font-size: 13px;
 
@@ -479,7 +482,7 @@ const runLogs = async () => {
 
   margin-top: 10px;
 
-  color: #b91c1c;
+  color: var(--zeus-danger, #ef4444);
 
 }
 
@@ -489,7 +492,7 @@ const runLogs = async () => {
 
   font-size: 12px;
 
-  color: #475569;
+  color: var(--zeus-text-secondary, #52607a);
 
 }
 

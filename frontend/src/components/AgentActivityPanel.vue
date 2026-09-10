@@ -3,7 +3,9 @@
     <!-- Header con toggle Texto/Voz -->
     <div class="panel-header">
       <div class="agent-info">
-        <img :src="agent.image" :alt="agent.name" class="agent-avatar-small" />
+        <span class="agent-avatar-ring">
+          <img :src="agent.image" :alt="agent.name" class="agent-avatar-small" />
+        </span>
         <div>
           <h3>{{ agent.name }}</h3>
           <p class="agent-role">{{ agent.role }}</p>
@@ -803,9 +805,18 @@ const formatMetricValue = (value) => {
 
 <style scoped>
 .activity-panel {
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 24px;
+  /* Superficie "metal cepillado" — capas de gradiente (veta + barrido de
+     luz diagonal + brillo/sombra de esquina) sobre la base platino, más
+     grano SVG en ::before. Sistema validado en preview-rafael.html antes
+     de aplicarse aquí; ver tokens zeus-metal y zeus-noise-svg en
+     zeus-light-system.css. Los bloques de contenido (tarjetas, header)
+     siguen flotando encima como superficies blancas con sombra. */
+  position: relative;
+  overflow-x: hidden;
+  background-image: var(--zeus-metal-bg);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius-lg, 16px);
+  box-shadow: var(--zeus-shadow-lg);
   padding: 32px;
   height: auto;
   max-height: calc(100vh - 96px);
@@ -813,6 +824,21 @@ const formatMetricValue = (value) => {
   display: flex;
   flex-direction: column;
   width: 100%;
+  color: var(--zeus-text, #0f172a);
+}
+
+.activity-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+.activity-panel > * {
+  position: relative;
 }
 
 /* Header */
@@ -822,7 +848,7 @@ const formatMetricValue = (value) => {
   align-items: center;
   margin-bottom: 20px;
   padding-bottom: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--zeus-border, #e5e9f0);
 }
 
 .agent-info {
@@ -831,71 +857,107 @@ const formatMetricValue = (value) => {
   gap: 12px;
 }
 
+.agent-avatar-ring {
+  display: block;
+  width: 54px;
+  height: 54px;
+  padding: 3px;
+  border-radius: 50%;
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 40%, #ec4899 70%, #f97316 100%));
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 10px rgba(139, 92, 246, 0.35));
+  flex-shrink: 0;
+}
+
 .agent-avatar-small {
-  width: 48px;
-  height: 48px;
+  width: 100%;
+  height: 100%;
+  display: block;
   border-radius: 50%;
   object-fit: cover;
+  border: 2px solid var(--zeus-surface, #fff);
 }
 
 .agent-info h3 {
   margin: 0;
   font-size: 18px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
 }
 
 .agent-role {
   margin: 4px 0 0;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 /* Communication Toggle */
 .communication-toggle {
   display: flex;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  gap: 4px;
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   padding: 4px;
-  border-radius: 8px;
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow-sm);
 }
 
+/* Toggle Texto/Voz — botón secundario (blanco, sin sombra). El
+   gradiente vibrante queda reservado para el único botón de mayor
+   jerarquía de esta vista (la acción primaria del workspace, ej.
+   "Actualizar") — la selección aquí se comunica solo con peso
+   tipográfico, igual que en preview-rafael.html. */
 .mode-btn {
   padding: 8px 16px;
   background: transparent;
   border: none;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-secondary, #52607a);
   cursor: pointer;
   border-radius: 6px;
-  transition: all 0.2s;
+  transition: color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   font-size: 14px;
+  font-weight: 500;
 }
 
 .mode-btn.active {
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  color: white;
+  color: var(--zeus-text, #0f172a);
+  font-weight: 700;
 }
 
 /* Tabs */
 .tabs {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   margin-bottom: 16px;
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius, 12px);
+  padding: 4px;
+  box-shadow: var(--zeus-shadow-sm);
 }
 
 .tabs button {
   flex: 1;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.05);
+  padding: 9px 10px;
+  background: transparent;
   border: none;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-secondary, #52607a);
   cursor: pointer;
-  border-radius: 8px;
-  transition: all 0.2s;
+  border-radius: var(--zeus-radius-sm, 8px);
+  transition: color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  font-weight: 500;
 }
 
 .tabs button.active {
-  background: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
+  color: var(--zeus-text, #0f172a);
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-btn,
+  .mode-btn.active,
+  .tabs button,
+  .tabs button.active {
+    transition-duration: 1ms;
+  }
 }
 
 /* Tab Content */
@@ -923,7 +985,7 @@ const formatMetricValue = (value) => {
 .chat-history-loading {
   margin: 0;
   font-size: 0.85rem;
-  color: #64748b;
+  color: var(--zeus-text-muted, #8792a6);
   text-align: center;
 }
 
@@ -944,17 +1006,17 @@ const formatMetricValue = (value) => {
 .message-content {
   padding: 12px 16px;
   border-radius: 12px;
-  background: rgba(59, 130, 246, 0.2);
-  color: #fff;
+  background: var(--zeus-accent-soft, #eef1ff);
+  color: var(--zeus-text, #0f172a);
 }
 
 .message.agent .message-content {
-  background: rgba(139, 92, 246, 0.2);
+  background: var(--zeus-accent-2-soft, #f3ecfd);
 }
 
 .message-time {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--zeus-text-muted, #8792a6);
   margin-top: 4px;
   padding: 0 8px;
 }
@@ -962,9 +1024,9 @@ const formatMetricValue = (value) => {
 .image-uploader-wrapper {
   margin: 12px 16px 0;
   padding: 12px;
-  border: 1px dashed rgba(255, 255, 255, 0.25);
+  border: 1px dashed var(--zeus-border-strong, #d7dce5);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--zeus-bg-subtle, #eef1f6);
 }
 
 .perseo-image-uploader {
@@ -974,18 +1036,18 @@ const formatMetricValue = (value) => {
 }
 
 .perseo-image-uploader input[type="file"] {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 :deep(.uploader-dropzone) {
-  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border: 1px dashed var(--zeus-border-strong, #d7dce5);
   border-radius: 10px;
   padding: 8px;
 }
 
 :deep(.uploader-dnd-hint) {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--zeus-text-muted, #8792a6);
   margin: 6px 0 0 16px;
 }
 
@@ -1019,12 +1081,12 @@ const formatMetricValue = (value) => {
   justify-content: space-between;
   align-items: center;
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--zeus-text, #0f172a);
 }
 
 .uploader-link {
   font-size: 12px;
-  color: #93c5fd;
+  color: var(--zeus-accent, #3b82f6);
 }
 
 .uploader-body {
@@ -1050,7 +1112,7 @@ const formatMetricValue = (value) => {
   height: 72px;
   border-radius: 12px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--zeus-border, #e5e9f0);
 }
 
 .uploader-preview img {
@@ -1103,20 +1165,20 @@ const formatMetricValue = (value) => {
   gap: 8px;
   padding: 6px 12px;
   border-radius: 999px;
-  background: rgba(59, 130, 246, 0.2);
-  color: #bfdbfe;
+  background: var(--zeus-accent-soft, #eef1ff);
+  color: var(--zeus-accent-hover, #2c46e0);
   font-size: 13px;
 }
 
 .image-reference-chip a {
-  color: #dbeafe;
+  color: var(--zeus-accent-hover, #2c46e0);
   text-decoration: underline;
 }
 
 .chip-remove {
   border: none;
   background: transparent;
-  color: #fff;
+  color: var(--zeus-text-secondary, #52607a);
   cursor: pointer;
   font-size: 12px;
 }
@@ -1125,16 +1187,16 @@ const formatMetricValue = (value) => {
   display: flex;
   gap: 8px;
   padding: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--zeus-border, #e5e9f0);
 }
 
 .chat-input {
   flex: 1;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  border: 1px solid var(--zeus-border, #e5e9f0);
   border-radius: 8px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
 }
 
 .send-btn {
@@ -1194,7 +1256,7 @@ const formatMetricValue = (value) => {
 }
 
 .voice-status {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--zeus-text-secondary, #52607a);
   font-size: 16px;
   text-align: center;
 }
@@ -1218,10 +1280,11 @@ const formatMetricValue = (value) => {
 
 .voice-transcript, .voice-response {
   padding: 16px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--zeus-bg-subtle, #eef1f6);
   border-radius: 8px;
   text-align: center;
   max-width: 400px;
+  color: var(--zeus-text, #0f172a);
 }
 
 /* Activity Timeline */
@@ -1235,14 +1298,15 @@ const formatMetricValue = (value) => {
 .activity-header h4 {
   margin: 0;
   font-size: 18px;
+  color: var(--zeus-text, #0f172a);
 }
 
 .days-selector {
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e5e9f0);
   border-radius: 6px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
 }
 
@@ -1256,14 +1320,14 @@ const formatMetricValue = (value) => {
   display: flex;
   gap: 16px;
   padding: 16px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--zeus-bg-subtle, #eef1f6);
   border-left: 3px solid #3b82f6;
   border-radius: 8px;
   transition: all 0.2s;
 }
 
 .activity-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--zeus-accent-soft, #eef1ff);
 }
 
 .activity-item.high {
@@ -1296,7 +1360,7 @@ const formatMetricValue = (value) => {
 
 .activity-description {
   margin: 0 0 8px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   font-size: 14px;
 }
 
@@ -1308,20 +1372,21 @@ const formatMetricValue = (value) => {
 
 .activity-time {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .activity-status {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 4px;
-  background: rgba(16, 185, 129, 0.2);
-  color: #10b981;
+  background: var(--zeus-success-soft, #e9faf3);
+  color: #0d9668;
+  font-weight: 600;
 }
 
 .activity-status.failed {
-  background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
+  background: var(--zeus-danger-soft, #fdecec);
+  color: #dc2626;
 }
 
 .activity-metrics {
@@ -1334,9 +1399,10 @@ const formatMetricValue = (value) => {
 .metric-badge {
   font-size: 11px;
   padding: 4px 8px;
-  background: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
+  background: var(--zeus-accent-soft, #eef1ff);
+  color: var(--zeus-accent, #3b82f6);
   border-radius: 4px;
+  font-weight: 600;
 }
 
 /* Metrics */
@@ -1348,8 +1414,8 @@ const formatMetricValue = (value) => {
 }
 
 .metric-card {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  border: 1px solid var(--zeus-border, #e5e9f0);
   border-radius: 12px;
   padding: 20px;
   text-align: center;
@@ -1357,7 +1423,7 @@ const formatMetricValue = (value) => {
 
 .metric-label {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-secondary, #52607a);
   margin-bottom: 8px;
 }
 
@@ -1391,6 +1457,7 @@ const formatMetricValue = (value) => {
 .specific-metrics h5 {
   margin: 0 0 16px;
   font-size: 16px;
+  color: var(--zeus-text, #0f172a);
 }
 
 .specific-metrics-grid {
@@ -1403,36 +1470,41 @@ const formatMetricValue = (value) => {
   display: flex;
   justify-content: space-between;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--zeus-bg-subtle, #eef1f6);
   border-radius: 8px;
 }
 
 .metric-key {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .metric-val {
   font-size: 14px;
   font-weight: 600;
-  color: #3b82f6;
+  color: var(--zeus-accent, #3b82f6);
 }
 
 .btn-refresh-metrics {
   width: 100%;
   padding: 12px;
-  background: rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  color: #3b82f6;
+  background: var(--zeus-accent-soft, #eef1ff);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  color: var(--zeus-accent, #3b82f6);
   border-radius: 8px;
   cursor: pointer;
   margin-top: 20px;
+  font-weight: 600;
+}
+
+.btn-refresh-metrics:hover {
+  background: rgba(59, 130, 246, 0.15);
 }
 
 .empty-state {
   text-align: center;
   padding: 40px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 /* Workspace Tab */
@@ -1447,7 +1519,7 @@ const formatMetricValue = (value) => {
   align-items: center;
   justify-content: center;
   height: 400px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
   font-size: 16px;
 }
 

@@ -5,7 +5,7 @@
     :loading="loading"
     :error="error"
   >
-    <p v-if="data?.read_only" class="audit-badge">🔒 Read-only audit mode</p>
+    <p v-if="data?.read_only" class="audit-badge">🔒 Modo auditoría — solo lectura</p>
 
     <div class="phase-b-actions">
       <button
@@ -169,11 +169,11 @@ onMounted(async () => {
   display: inline-block;
   margin: 0 0 16px;
   padding: 6px 12px;
-  background: rgba(59, 130, 246, 0.12);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  border-radius: 8px;
-  font-size: 12px;
-  color: #93c5fd;
+  background: var(--zeus-info-soft, #eaf2ff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius-sm, 8px);
+  font-size: var(--zeus-text-xs, 12px);
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .phase-b-actions {
@@ -184,24 +184,40 @@ onMounted(async () => {
   align-items: center;
 }
 
+/* Unico acento de la vista: "Test flujo RRHH" es la accion principal.
+   "Test Payment Risk" queda como accion secundaria/neutra para no
+   competir con ella (antes: verde vs naranja compitiendo). */
 .phase-b-btn {
   padding: 10px 16px;
-  border-radius: 8px;
-  border: 1px solid rgba(16, 185, 129, 0.4);
-  background: rgba(16, 185, 129, 0.15);
-  color: #6ee7b7;
+  border-radius: var(--zeus-radius-sm, 8px);
+  border: none;
+  background: var(--zeus-accent-gradient);
+  color: #ffffff;
+  box-shadow: var(--zeus-accent-gradient-shadow);
   font-size: 14px;
+  font-weight: var(--zeus-weight-semibold, 600);
   cursor: pointer;
+  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+.phase-b-btn:hover:not(:disabled) {
+  box-shadow: var(--zeus-accent-gradient-shadow-hover);
+  transform: translateY(-1px);
 }
 
 .phase-c-btn {
   padding: 10px 16px;
-  border-radius: 8px;
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  background: rgba(245, 158, 11, 0.15);
-  color: #fcd34d;
+  border-radius: var(--zeus-radius-sm, 8px);
+  border: 1px solid #D1D5DB;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
   font-size: 14px;
+  font-weight: var(--zeus-weight-medium, 500);
   cursor: pointer;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+.phase-c-btn:hover:not(:disabled) {
+  border-color: #9aa2af;
 }
 
 .phase-b-btn:disabled,
@@ -219,12 +235,12 @@ onMounted(async () => {
 
 .phase-b-result.ok,
 .phase-c-result.ok {
-  color: #10b981;
+  color: var(--zeus-success, #10b981);
 }
 
 .phase-b-result.warn,
 .phase-c-result.warn {
-  color: #f59e0b;
+  color: var(--zeus-warning, #f59e0b);
 }
 
 .audit-section {
@@ -232,7 +248,8 @@ onMounted(async () => {
 }
 
 .audit-section h2 {
-  font-size: 18px;
+  font-size: var(--zeus-text-lg, 18px);
+  color: var(--zeus-text, #0f172a);
   margin: 0 0 12px;
 }
 
@@ -240,13 +257,19 @@ onMounted(async () => {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  color: var(--zeus-text, #0f172a);
 }
 
 .audit-table th,
 .audit-table td {
   padding: 10px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--zeus-border, #e1e5eb);
   text-align: left;
+}
+
+.audit-table th {
+  color: var(--zeus-text-secondary, #52607a);
+  font-weight: var(--zeus-weight-semibold, 600);
 }
 
 .log-list {
@@ -259,9 +282,9 @@ onMounted(async () => {
 
 .log-item {
   padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--zeus-surface, #fff);
+  border-radius: var(--zeus-radius-sm, 8px);
+  border: 1px solid var(--zeus-border, #e1e5eb);
 }
 
 .log-head {
@@ -270,39 +293,40 @@ onMounted(async () => {
   gap: 10px;
   align-items: center;
   font-size: 13px;
+  color: var(--zeus-text, #0f172a);
 }
 
 .pill.success {
-  color: #10b981;
+  color: var(--zeus-success, #10b981);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
 }
 
 .pill.partial {
-  color: #f59e0b;
+  color: var(--zeus-warning, #f59e0b);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
 }
 
 .agent {
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--zeus-text-secondary, #52607a);
   font-size: 12px;
 }
 
 .log-meta {
   margin-top: 6px;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .empty {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .audit-link {
-  color: #3b82f6;
+  color: var(--zeus-accent, #4f46e5);
   text-decoration: none;
   font-size: 14px;
 }

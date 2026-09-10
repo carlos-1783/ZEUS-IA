@@ -144,24 +144,58 @@ async def get_agent_metrics(
         )
 
 @router.post("/log")
-async def log_activity(activity: ActivityCreate):
+async def log_activity(
+    activity: ActivityCreate,
+    current_user: User = Depends(get_current_active_user),
+):
     """
     Registrar una nueva actividad de agente
-    
+
     Args:
         activity: Datos de la actividad
-        
+
     Returns:
         Actividad creada
+
+    Nota de seguridad: el campo `user_email` del payload es libremente
+    manipulable por el llamante y no puede usarse como fuente de verdad para
+    atribuir la actividad. Un usuario normal solo puede registrar actividad
+    a su propio nombre (se ignora cualquier `user_email` distinto en el
+    payload); solo un superusuario puede registrar actividad en nombre de
+    otro email (uso legítimo: procesos internos/administrativos).
+
+    Nota de seguridad adicional (AUDIT_FIX_THALOS_SHIELD.md, sección 13):
+    este endpoint no tenía NINGUNA autenticación antes del fix de arriba, y
+    `AgentAutomationExecutor` (services/automation/agent_executor.py) recoge
+    en segundo plano cualquier `AgentActivity` con `status in ("pending",
+    "in_progress")` y la ejecuta vía `resolve_handler`, incluidos los
+    handlers reales de THALOS v1 (`services/automation/handlers/thalos_v1.py`,
+    que llaman a `execute_action("detect_suspicious_activity"/"block_user"/...)`
+    y a `run_monitoring_cycle`). Sin autenticación, cualquiera (sin cuenta)
+    podía encolar una actividad `agent_name="THALOS"`,
+    `action_type="detect_suspicious_activity"` (o `"block_user"` con un
+    `company_id`/`user_email` de otra empresa) y, en cuanto
+    `THALOS_EXECUTION_ENABLED`/`THALOS_AUTO_BLOCK` se activaran, el executor
+    en segundo plano la ejecutaría sin ningún control de tenant ni de rol.
+    Como defensa en profundidad adicional, los propios handlers de THALOS v1
+    (ver `services/automation/handlers/thalos_v1.py`) gatean por superusuario
+    la ejecución real — así que incluso si `effective_user_email` permitiera
+    a un superusuario spoofear el email en este endpoint, el motor global no
+    se dispara para nadie que no sea superusuario en el momento de la
+    ejecución real.
     """
     try:
+        is_superuser = getattr(current_user, "is_superuser", False)
+        effective_user_email = (
+            activity.user_email if (is_superuser and activity.user_email) else current_user.email
+        )
         result = ActivityLogger.log_activity(
             agent_name=activity.agent_name.upper(),
             action_type=activity.action_type,
             action_description=activity.action_description,
             details=activity.details,
             metrics=activity.metrics,
-            user_email=activity.user_email,
+            user_email=effective_user_email,
             status=activity.status,
             priority=activity.priority
         )

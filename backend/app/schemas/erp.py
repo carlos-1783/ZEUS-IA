@@ -106,10 +106,20 @@ class InvoiceBase(BaseModel):
     customer_id: Optional[int] = Field(None, gt=0, description="Customer ID")
     invoice_type: InvoiceType = Field(InvoiceType.INVOICE, description="Type of invoice")
     status: InvoiceStatus = Field(InvoiceStatus.DRAFT, description="Invoice status")
-    issue_date: date = Field(default_factory=date.today, description="Date the invoice was issued")
-    due_date: Optional[date] = Field(None, description="Due date for payment")
+    # NOTA (Bloque 2 multi-tenant-bd + envio-gestoria, fix duplicado
+    # descubierto en ambas ramas de forma independiente): tipado como
+    # datetime (no date) porque la columna real en BD es DateTime
+    # (app/models/erp.py Invoice.issue_date/due_date) con default
+    # datetime.utcnow(). Con `date`, Pydantic v2 rechaza la respuesta
+    # (ResponseValidationError: date_from_datetime_inexact) en cuanto la
+    # hora no es exactamente medianoche — rompía SIEMPRE la creación de
+    # facturas.
+    issue_date: datetime = Field(default_factory=datetime.utcnow, description="Date the invoice was issued")
+    due_date: Optional[datetime] = Field(None, description="Due date for payment")
     notes: Optional[str] = Field(None, description="Additional notes")
-    
+
+    model_config = ConfigDict(from_attributes=True)
+
     @model_validator(mode='after')
     def validate_due_date(self) -> 'InvoiceBase':
         if self.due_date and self.due_date < self.issue_date:
@@ -123,7 +133,9 @@ class InvoiceItemBase(BaseModel):
     unit_price: float = Field(..., gt=0, description="Unit price")
     tax_rate: float = Field(0.0, ge=0, le=100, description="Tax rate in percentage")
     discount: float = Field(0.0, ge=0, description="Discount amount")
-    
+
+    model_config = ConfigDict(from_attributes=True)
+
     @field_validator('quantity')
     @classmethod
     def validate_quantity(cls, v: float) -> float:
@@ -138,7 +150,9 @@ class PaymentBase(BaseModel):
     transaction_id: Optional[str] = Field(None, max_length=100, description="Transaction ID")
     reference: Optional[str] = Field(None, max_length=100, description="Reference number")
     notes: Optional[str] = Field(None, description="Additional notes")
-    payment_date: date = Field(default_factory=date.today, description="Date of payment")
+    payment_date: datetime = Field(default_factory=datetime.utcnow, description="Date of payment")
+
+    model_config = ConfigDict(from_attributes=True)
 
 # Create schemas
 class ProductVariantCreate(ProductVariantBase):
@@ -266,6 +280,7 @@ class InventoryMovementInDB(InventoryMovementBase):
     created_by: Optional[int]
 
 class InvoiceItemInDB(InvoiceItemBase):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     invoice_id: int
     product_id: Optional[int]
@@ -276,6 +291,12 @@ class InvoiceItemInDB(InvoiceItemBase):
     updated_at: datetime
 
 class InvoiceInDB(InvoiceBase):
+    # NOTA (Bloque 2 multi-tenant-bd): sin from_attributes=True, model_validate()
+    # sobre un objeto ORM falla (ValidationError: "Input should be a valid
+    # dictionary or instance of InvoiceInDB") — rompía GET /invoices/{id} para
+    # CUALQUIER usuario, propio o ajeno (bug preexistente, no relacionado con
+    # RLS: detectado al verificar acceso a una factura propia contra Postgres real).
+    model_config = ConfigDict(from_attributes=True)
     id: int
     invoice_number: str
     subtotal: float

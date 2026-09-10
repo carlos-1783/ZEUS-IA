@@ -32,7 +32,7 @@ export class Character3D {
     
     // Cargar la imagen del avatar y mapearla al cilindro
     const bodyTexture = textureLoader.load(
-      this.agentData.image || '/images/avatars/perseo-avatar.jpg',
+      this.agentData.image || '/images/avatars/Perseo-avatar.jpg',
       (texture) => {
         // Configurar textura para que cubra todo el cilindro
         texture.wrapS = THREE.RepeatWrapping

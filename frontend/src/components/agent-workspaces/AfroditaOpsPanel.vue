@@ -209,11 +209,11 @@ onMounted(async () => {
     zeusVerified.value = isVerifiedReal(zeus)
     const mode = truthStatus.value.execution_mode
     if (mode === 'ERROR') {
-      statusNote.value = 'SYSTEM ERROR — base de datos no disponible.'
+      statusNote.value = 'No se pudo conectar con la base de datos. Esta herramienta no está disponible en este momento.'
     } else if (mode === 'REAL') {
-      statusNote.value = 'OPS REAL — inventario, movimientos y rutas persisten en BD.'
+      statusNote.value = 'Operaciones activas: inventario, movimientos y rutas persisten en BD.'
     } else {
-      statusNote.value = `${executionModeLabel(mode)} — escritura global deshabilitada.`
+      statusNote.value = `Modo actual: ${executionModeLabel(mode)}. Escritura deshabilitada — contacta con el equipo de ZEUS-IA para activarla.`
     }
     await Promise.all([loadInventory(true), loadMovements(true), loadRoutes(true), loadWarehouse(true)])
   } catch {

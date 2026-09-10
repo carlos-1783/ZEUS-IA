@@ -95,7 +95,7 @@ def test_block_user_dry_run_without_auto_block(db: Session, monkeypatch):
     monkeypatch.setattr(settings, "THALOS_AUTO_BLOCK", False)
 
     user, _ = _seed_company(db)
-    result = thalos_executor.block_user(db, user_email=user.email)
+    result = thalos_executor.block_user(db, user_email=user.email, allow_unscoped=True)
     assert result["status"] == "dry_run"
     db.refresh(user)
     assert user.is_active is True
@@ -105,9 +105,25 @@ def test_block_user_respects_protected_email(db: Session, monkeypatch):
     monkeypatch.setattr(settings, "THALOS_EXECUTION_ENABLED", True)
     monkeypatch.setattr(settings, "THALOS_AUTO_BLOCK", True)
 
-    result = thalos_executor.block_user(db, user_email="admin")
+    result = thalos_executor.block_user(db, user_email="admin", allow_unscoped=True)
     assert result["status"] == "blocked_by_safeguard"
     assert result["executed"] is False
+
+
+def test_block_user_without_company_id_fails_closed(db: Session, monkeypatch):
+    """Sin allow_unscoped, company_id=None debe rechazarse (fail-closed), no
+    proceder sin ninguna restricción de tenant. Regresión directa del hueco
+    confirmado en AUDIT_FIX_THALOS_SHIELD.md sección 8.2."""
+    monkeypatch.setattr(settings, "THALOS_EXECUTION_ENABLED", True)
+    monkeypatch.setattr(settings, "THALOS_AUTO_BLOCK", True)
+
+    user, _ = _seed_company(db)
+    result = thalos_executor.block_user(db, user_email=user.email)
+    assert result["status"] == "forbidden"
+    assert result["executed"] is False
+    assert result["reason"] == "company_id_not_resolved_for_requester"
+    db.refresh(user)
+    assert user.is_active is True
 
 
 def test_cashflow_anomaly_detection(db: Session):

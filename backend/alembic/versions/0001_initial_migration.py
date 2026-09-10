@@ -101,8 +101,17 @@ def upgrade() -> None:
     sa.Column('quantity_on_hand', sa.Float(), nullable=True),
     sa.Column('quantity_allocated', sa.Float(), nullable=True),
     sa.Column('low_stock_threshold', sa.Float(), nullable=True),
-    sa.Column('category', sa.Enum('GOODS', 'SERVICES', 'DIGITAL', 'SUBSCRIPTION', name='productcategory'), nullable=True),
-    sa.Column('status', sa.Enum('ACTIVE', 'INACTIVE', 'DISCONTINUED', name='productstatus'), nullable=True),
+    # NOTA (Bloque 2 multi-tenant-bd): las labels del ENUM deben coincidir con
+    # el .value de cada PyEnum (app/models/erp.py), no con el .name — SQLAlchemy
+    # vincula .value al insertar (confirmado contra Postgres real: un INSERT con
+    # InvoiceType.INVOICE mandaba el literal 'invoice', no 'INVOICE'). Con las
+    # labels en mayúsculas originales, cualquier INSERT real fallaba con
+    # "invalid input value for enum ...". Nunca se detectó antes porque en
+    # local (SQLite) las tablas se crean vía Base.metadata.create_all(), que
+    # genera el CHECK con los mismos valores que usa el propio modelo — nunca
+    # se había ejecutado esta migración contra Postgres real hasta ahora.
+    sa.Column('category', sa.Enum('goods', 'services', 'digital', 'subscription', name='productcategory'), nullable=True),
+    sa.Column('status', sa.Enum('active', 'inactive', 'discontinued', name='productstatus'), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.Column('metadata', sa.JSON(), nullable=True),
@@ -129,34 +138,13 @@ def upgrade() -> None:
     op.create_index(op.f('ix_product_variants_id'), 'product_variants', ['id'], unique=False)
     op.create_index(op.f('ix_product_variants_sku'), 'product_variants', ['sku'], unique=True)
     
-    # Create inventory_movements table
-    op.create_table('inventory_movements',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('product_id', sa.Integer(), nullable=False),
-    sa.Column('variant_id', sa.Integer(), nullable=True),
-    sa.Column('invoice_id', sa.Integer(), nullable=True),
-    sa.Column('movement_type', sa.Enum('PURCHASE', 'SALE', 'ADJUSTMENT', 'RETURN', 'TRANSFER_IN', 'TRANSFER_OUT', name='inventorymovementtype'), nullable=False),
-    sa.Column('quantity', sa.Float(), nullable=False),
-    sa.Column('unit_cost', sa.Float(precision=2), nullable=True),
-    sa.Column('reference', sa.String(length=100), nullable=True),
-    sa.Column('notes', sa.Text(), nullable=True),
-    sa.Column('created_at', sa.DateTime(), nullable=True),
-    sa.Column('created_by', sa.Integer(), nullable=True),
-    sa.ForeignKeyConstraint(['product_id'], ['products.id'], ),
-    sa.ForeignKeyConstraint(['variant_id'], ['product_variants.id'], ),
-    sa.ForeignKeyConstraint(['invoice_id'], ['invoices.id'], ),
-    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_inventory_movements_id'), 'inventory_movements', ['id'], unique=False)
-    
     # Create invoices table
     op.create_table('invoices',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('invoice_number', sa.String(length=50), nullable=False),
     sa.Column('customer_id', sa.Integer(), nullable=True),
-    sa.Column('invoice_type', sa.Enum('INVOICE', 'CREDIT_NOTE', 'PROFORMA', 'ESTIMATE', name='invoicetype'), nullable=True),
-    sa.Column('status', sa.Enum('DRAFT', 'SENT', 'PAID', 'PARTIALLY_PAID', 'VOID', 'OVERDUE', name='invoicestatus'), nullable=True),
+    sa.Column('invoice_type', sa.Enum('invoice', 'credit_note', 'proforma', 'estimate', name='invoicetype'), nullable=True),
+    sa.Column('status', sa.Enum('draft', 'sent', 'paid', 'partially_paid', 'void', 'overdue', name='invoicestatus'), nullable=True),
     sa.Column('issue_date', sa.DateTime(), nullable=True),
     sa.Column('due_date', sa.DateTime(), nullable=True),
     sa.Column('subtotal', sa.Float(precision=2), nullable=True),
@@ -205,8 +193,8 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('invoice_id', sa.Integer(), nullable=False),
     sa.Column('amount', sa.Float(precision=2), nullable=False),
-    sa.Column('payment_method', sa.Enum('CASH', 'CREDIT_CARD', 'BANK_TRANSFER', 'CHECK', 'OTHER', name='paymentmethod'), nullable=False),
-    sa.Column('status', sa.Enum('PENDING', 'COMPLETED', 'FAILED', 'REFUNDED', 'PARTIALLY_REFUNDED', name='paymentstatus'), nullable=True),
+    sa.Column('payment_method', sa.Enum('cash', 'credit_card', 'bank_transfer', 'check', 'other', name='paymentmethod'), nullable=False),
+    sa.Column('status', sa.Enum('pending', 'completed', 'failed', 'refunded', 'partially_refunded', name='paymentstatus'), nullable=True),
     sa.Column('transaction_id', sa.String(length=100), nullable=True),
     sa.Column('reference', sa.String(length=100), nullable=True),
     sa.Column('notes', sa.Text(), nullable=True),
@@ -218,12 +206,43 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_payments_id'), 'payments', ['id'], unique=False)
-    
+
+    # Create inventory_movements table
+    # NOTA (Bloque 2 multi-tenant-bd): movida a este punto — declaraba una FK a
+    # invoices.id pero se creaba ANTES que la tabla invoices, así que
+    # `alembic upgrade head` desde una BD limpia rompía siempre con
+    # "relation invoices does not exist" (nunca se había ejecutado la cadena
+    # completa desde cero hasta verificarla contra Postgres real). No cambia
+    # el esquema resultante, solo el orden de creación.
+    op.create_table('inventory_movements',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('product_id', sa.Integer(), nullable=False),
+    sa.Column('variant_id', sa.Integer(), nullable=True),
+    sa.Column('invoice_id', sa.Integer(), nullable=True),
+    sa.Column('movement_type', sa.Enum('purchase', 'sale', 'adjustment', 'return', 'transfer_in', 'transfer_out', name='inventorymovementtype'), nullable=False),
+    sa.Column('quantity', sa.Float(), nullable=False),
+    sa.Column('unit_cost', sa.Float(precision=2), nullable=True),
+    sa.Column('reference', sa.String(length=100), nullable=True),
+    sa.Column('notes', sa.Text(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('created_by', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['product_id'], ['products.id'], ),
+    sa.ForeignKeyConstraint(['variant_id'], ['product_variants.id'], ),
+    sa.ForeignKeyConstraint(['invoice_id'], ['invoices.id'], ),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_inventory_movements_id'), 'inventory_movements', ['id'], unique=False)
+
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
+    # inventory_movements tiene FK a invoices.id: debe borrarse antes que
+    # invoices (mismo motivo que el reordenamiento en upgrade()).
+    op.drop_index(op.f('ix_inventory_movements_id'), table_name='inventory_movements')
+    op.drop_table('inventory_movements')
     op.drop_index(op.f('ix_payments_id'), table_name='payments')
     op.drop_table('payments')
     op.drop_index(op.f('ix_invoice_items_id'), table_name='invoice_items')
@@ -232,8 +251,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_invoices_invoice_number'), table_name='invoices')
     op.drop_index(op.f('ix_invoices_id'), table_name='invoices')
     op.drop_table('invoices')
-    op.drop_index(op.f('ix_inventory_movements_id'), table_name='inventory_movements')
-    op.drop_table('inventory_movements')
     op.drop_index(op.f('ix_product_variants_sku'), table_name='product_variants')
     op.drop_index(op.f('ix_product_variants_id'), table_name='product_variants')
     op.drop_table('product_variants')
@@ -255,3 +272,25 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_users_email'), table_name='users')
     op.drop_table('users')
     # ### end Alembic commands ###
+
+    # `op.drop_table(nombre)` con solo el nombre (sin las columnas) NO sabe
+    # que hay tipos ENUM de Postgres asociados a esas columnas, así que nunca
+    # emite el `DROP TYPE` correspondiente (a diferencia de `op.create_table`,
+    # que sí crea el tipo automáticamente porque recibe las columnas
+    # completas). Sin esto, los 7 ENUM de esta migración quedan huérfanos en
+    # el catálogo tras el downgrade, y el siguiente `alembic upgrade head`
+    # rompe con "type ... already exists" al intentar recrear la tabla que
+    # los usa. No-op en SQLite (no tiene tipos ENUM nativos). Encontrado
+    # ejecutando el ciclo downgrade/upgrade completo contra un Postgres real
+    # por primera vez.
+    if op.get_bind().dialect.name == "postgresql":
+        for enum_name in (
+            "inventorymovementtype",
+            "paymentstatus",
+            "paymentmethod",
+            "invoicestatus",
+            "invoicetype",
+            "productstatus",
+            "productcategory",
+        ):
+            op.execute(f"DROP TYPE IF EXISTS {enum_name}")

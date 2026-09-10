@@ -185,20 +185,25 @@ async function onSessionTimeoutChange(e: Event) {
 </script>
 
 <style scoped>
+/* Sistema de diseño Ronda 2: tarjetas blancas planas (antes translúcidas
+   sobre fondo oscuro). Único botón con acento gradiente de esta vista:
+   "Guardar gestor fiscal" (acción real de mayor jerarquía — las otras
+   son selects/checkboxes de configuración, no CTAs). */
 .user-app-settings {
   display: contents;
 }
 
 .settings-card {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
+  background: var(--zeus-surface, #ffffff);
+  border-radius: var(--zeus-radius, 12px);
   padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  box-shadow: var(--zeus-shadow, 0 1px 3px rgba(15, 23, 42, 0.06));
 }
 
 .settings-card h3 {
   margin: 0 0 16px 0;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   font-size: 1.1rem;
 }
 
@@ -216,7 +221,7 @@ async function onSessionTimeoutChange(e: Event) {
 .setting-item label {
   display: block;
   margin-bottom: 6px;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--zeus-text-secondary, #52607a);
   font-size: 0.9rem;
 }
 
@@ -227,20 +232,30 @@ async function onSessionTimeoutChange(e: Event) {
 .setting-input {
   width: 100%;
   padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(0, 0, 0, 0.25);
-  color: #fff;
+  border-radius: var(--zeus-radius-sm, 8px);
+  border: 1px solid var(--zeus-border-strong, #cdd3db);
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
+  box-sizing: border-box;
 }
 
 .save-gestor-btn {
   margin-top: 10px;
   padding: 10px 14px;
-  border-radius: 8px;
+  border-radius: var(--zeus-radius-sm, 8px);
   border: none;
-  background: #4f46e5;
-  color: #fff;
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%));
+  color: #ffffff;
+  font-weight: 600;
   cursor: pointer;
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 8px rgba(0, 0, 0, 0.15));
+  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.save-gestor-btn:hover:not(:disabled) {
+  box-shadow: var(--zeus-accent-gradient-shadow-hover, 0 4px 14px rgba(0, 0, 0, 0.22));
+  transform: translateY(-1px);
 }
 
 .save-gestor-btn:disabled {
@@ -249,23 +264,24 @@ async function onSessionTimeoutChange(e: Event) {
 }
 
 .setting-hint.ok {
-  color: #86efac;
+  color: #0d9668;
 }
 
 .setting-select {
   width: 100%;
   padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(0, 0, 0, 0.35);
-  color: #fff;
+  border-radius: var(--zeus-radius-sm, 8px);
+  border: 1px solid var(--zeus-border-strong, #cdd3db);
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
   font-size: 0.95rem;
+  box-sizing: border-box;
 }
 
 .setting-hint {
   margin: -8px 0 12px;
   font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--zeus-text-muted, #8792a6);
   line-height: 1.35;
 }
 </style>

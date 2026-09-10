@@ -2,35 +2,41 @@
   <div class="tpv-container">
     <!-- Botón de vuelta al Dashboard -->
     <button @click="goToDashboard" class="back-to-dashboard-btn fixed-top-left">
-      <span class="btn-icon">📊</span>
+      <span class="btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M4 20h16"/></svg></span>
       <span class="btn-label">{{ $t('tpv.backToDashboard') }}</span>
     </button>
 
     <!-- Header del TPV -->
     <div class="tpv-header">
       <div class="tpv-title-section">
-        <h1 class="tpv-title">💳 {{ $t('tpv.title') }}</h1>
+        <h1 class="tpv-title">
+          <span class="tpv-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg></span>
+          {{ $t('tpv.title') }}
+        </h1>
         <p class="tpv-subtitle">{{ $t('tpv.subtitle') }}</p>
       </div>
       <div class="header-actions">
-        <button 
+        <button
           v-if="tpvConfig.tables_enabled"
-          @click="toggleTablesMode" 
-          class="header-btn" 
+          @click="toggleTablesMode"
+          class="header-btn"
           :class="{ active: tablesMode }"
         >
-          🪑 {{ tablesMode ? $t('tpv.viewProducts') : $t('tpv.tablesMode') }}
+          <span class="header-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="4" rx="1"/><path d="M6 10v8M18 10v8"/></svg></span>
+          {{ tablesMode ? $t('tpv.viewProducts') : $t('tpv.tablesMode') }}
         </button>
-        <button 
+        <button
           v-if="canEditProducts"
-          @click="copyComanderoLink" 
+          @click="copyComanderoLink"
           class="header-btn"
           title="Copiar enlace del TPV con la comanda actual para compartir con empleados"
         >
-          🔗 {{ $t('tpv.shareComandero') || 'Compartir comandero' }}
+          <span class="header-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg></span>
+          {{ $t('tpv.shareComandero') || 'Compartir comandero' }}
         </button>
         <button @click="checkStatus" class="header-btn">
-          🔄 {{ $t('tpv.refresh') }}
+          <span class="header-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-5h5"/></svg></span>
+          {{ $t('tpv.refresh') }}
         </button>
         <div v-if="authStore.isEmployee && tpvJornada" class="tpv-jornada-badge" :class="{ on: tpvJornada.in_turno }">
           {{ tpvJornada.in_turno ? $t('controlHorario.enTurno') : $t('controlHorario.fueraTurno') }}
@@ -43,7 +49,8 @@
           {{ $t('tpv.changeOperator') }}
         </button>
         <div v-if="businessProfile" class="business-profile-badge">
-          🏢 {{ getBusinessProfileLabel(businessProfile) }}
+          <span class="header-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1M10 21v-4h4v4"/></svg></span>
+          {{ getBusinessProfileLabel(businessProfile) }}
         </div>
       </div>
     </div>
@@ -55,7 +62,7 @@
         <!-- Con mesa seleccionada: barra "Mesa X" + volver a mesas -->
         <div v-if="tablesMode && tpvConfig.tables_enabled && selectedTable" class="tables-selected-bar">
           <button type="button" @click="backToTablesList" class="back-to-tables-btn" title="Volver a mesas">
-            ← {{ $t('tpv.tablesMode') || 'Mesas' }}
+            <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg></span> {{ $t('tpv.tablesMode') || 'Mesas' }}
           </button>
           <span class="tables-selected-label">Añadir productos a Mesa {{ selectedTable?.number }}</span>
         </div>
@@ -88,7 +95,7 @@
             type="button"
           >
             <div class="add-product-content">
-              <span class="add-product-icon">➕</span>
+              <span class="add-product-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span class="add-product-label">{{ $t('tpv.products.add') || 'Añadir Producto' }}</span>
             </div>
           </button>
@@ -108,14 +115,24 @@
                   class="product-image-file"
                   @error="handleImageError"
                 />
-                <span 
-                  v-else-if="product.icon" 
+                <span
+                  v-else-if="product.icon"
                   class="product-icon"
-                >{{ getIconEmoji(product.icon, product.category) }}</span>
-                <span 
-                  v-else 
+                  aria-hidden="true"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path v-for="(d, i) in getIconPaths(product.name, product.icon, product.category)" :key="i" :d="d" />
+                  </svg>
+                </span>
+                <span
+                  v-else
                   class="product-icon"
-                >{{ getProductIcon(product.category) }}</span>
+                  aria-hidden="true"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path v-for="(d, i) in getProductIconPaths(product.name, product.category)" :key="i" :d="d" />
+                  </svg>
+                </span>
               </div>
               <div class="product-info">
                 <h3 class="product-name">{{ product.name }}</h3>
@@ -131,33 +148,33 @@
             </div>
             <!-- Botones CRUD (solo para ADMIN y SUPERUSER) -->
             <div class="product-actions" v-if="canEditProducts">
-              <button 
-                @click.stop="editProduct(product)" 
+              <button
+                @click.stop="editProduct(product)"
                 class="product-action-btn edit-btn"
                 title="Editar producto"
               >
-                ✏️
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
               </button>
-              <button 
+              <button
                 v-if="isSuperuser"
-                @click.stop="deleteProduct(product)" 
+                @click.stop="deleteProduct(product)"
                 class="product-action-btn delete-btn"
                 title="Eliminar producto"
               >
-                🗑️
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M9.5 7l.7 12a1 1 0 0 0 1 1h5.6a1 1 0 0 0 1-1l.7-12"/></svg>
               </button>
             </div>
           </div>
           
           <!-- Mensaje si no hay productos -->
           <div v-if="filteredProducts.length === 0" class="no-products">
-            <p>📦 {{ $t('tpv.products.empty') }}</p>
+            <p><span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg></span> {{ $t('tpv.products.empty') }}</p>
             <p v-if="businessProfileLoading" class="loading-message">{{ $t('tpv.products.loading') }}</p>
             <p v-else-if="!businessProfile" class="error-message">
-              ⚠️ {{ $t('tpv.products.configureBusinessProfile') }}
+              <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.5 17a1.7 1.7 0 0 0 1.5 2.6h16a1.7 1.7 0 0 0 1.5-2.6L13.7 3.9a1.7 1.7 0 0 0-3.4 0Z"/></svg></span> {{ $t('tpv.products.configureBusinessProfile') }}
             </p>
             <p v-else-if="!canEditProducts" class="error-message">
-              ⚠️ No tienes permisos para crear productos. Contacta con un administrador.
+              <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.5 17a1.7 1.7 0 0 0 1.5 2.6h16a1.7 1.7 0 0 0 1.5-2.6L13.7 3.9a1.7 1.7 0 0 0-3.4 0Z"/></svg></span> No tienes permisos para crear productos. Contacta con un administrador.
             </p>
           </div>
         </div>
@@ -165,7 +182,7 @@
         <!-- Reservas del día (cuando modo mesas, para abrir como mesa) -->
         <div v-if="tablesMode && tpvConfig.tables_enabled && !selectedTable" class="reservations-day-block">
           <div class="reservations-day-header">
-            <span>📅 Reservas del día</span>
+            <span><span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span> Reservas del día</span>
             <input v-model="reservationsDate" type="date" @focus="openReservationsDate" class="reservations-date-input">
             <button type="button" class="reservations-load-btn" :disabled="loadingReservations" @click="fetchReservations">
               {{ loadingReservations ? 'Cargando…' : 'Cargar' }}
@@ -205,7 +222,8 @@
           >
             <div class="table-number">Mesa {{ table.number }}</div>
             <div class="table-status" :class="getTableOrderTotal(table.id) > 0 ? 'occupied' : 'free'">
-              {{ getTableOrderTotal(table.id) > 0 ? '🟢 Ocupada' : '⚪ Libre' }}
+              <span class="table-status-dot" aria-hidden="true"></span>
+              {{ getTableOrderTotal(table.id) > 0 ? 'Ocupada' : 'Libre' }}
             </div>
             <div v-if="getTableOrderTotal(table.id) > 0" class="table-total">
               €{{ formatPrice(getTableOrderTotal(table.id)) }}
@@ -213,7 +231,7 @@
           </div>
           
           <button @click="addTable" class="add-table-btn">
-            ➕ Añadir Mesa
+            <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span> Añadir Mesa
           </button>
         </div>
       </div>
@@ -223,17 +241,20 @@
         <!-- Resumen del Carrito -->
         <div class="cart-panel">
           <div class="cart-header">
-            <h2><span class="tpv-icon tpv-icon-ui">🛒</span> Carrito <span v-if="cart.length > 0" class="cart-count-badge">({{ cart.length }})</span></h2>
+            <h2><span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="17" cy="20" r="1"/><path d="M2 4h2l2.6 12.4a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.6L21 8H6"/></svg></span> Carrito <span v-if="cart.length > 0" class="cart-count-badge">({{ cart.length }})</span></h2>
             <button @click="clearCart" class="clear-cart-btn" v-if="cart.length > 0">
-              <span class="tpv-icon tpv-icon-ui">🗑️</span> Limpiar
+              <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M9.5 7l.7 12a1 1 0 0 0 1 1h5.6a1 1 0 0 0 1-1l.7-12"/></svg></span> Limpiar
             </button>
           </div>
 
           <!-- Feedback visual del carrito -->
           <transition name="fade-slide">
             <div v-if="cartFeedback" class="cart-feedback" :class="cartFeedback.type">
-              <span class="feedback-icon">
-                {{ cartFeedback.type === 'added' ? '✅' : cartFeedback.type === 'removed' ? '🗑️' : cartFeedback.type === 'cleared' ? '🧹' : '🔄' }}
+              <span class="feedback-icon" aria-hidden="true">
+                <svg v-if="cartFeedback.type === 'added'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                <svg v-else-if="cartFeedback.type === 'removed'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M9.5 7l.7 12a1 1 0 0 0 1 1h5.6a1 1 0 0 0 1-1l.7-12"/></svg>
+                <svg v-else-if="cartFeedback.type === 'cleared'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h6M17 15l3 3m0-3-3 3"/></svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-5h5"/></svg>
               </span>
               <span class="feedback-message">{{ cartFeedback.message }}</span>
             </div>
@@ -258,28 +279,28 @@
               </div>
               <!-- Controles de edición (solo en estado CART) -->
               <div class="cart-item-controls" v-if="tpvState === TPV_STATES.CART">
-                <button 
-                  @click="decreaseQuantity(index)" 
+                <button
+                  @click="decreaseQuantity(index)"
                   class="qty-btn decrement-btn"
                   :title="$t('tpv.cart.decreaseQuantity')"
                 >
-                  ➖
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg>
                 </button>
                 <span class="cart-item-qty">{{ item.quantity }}</span>
-                <button 
-                  @click="increaseQuantity(index)" 
+                <button
+                  @click="increaseQuantity(index)"
                   class="qty-btn increment-btn"
                   :title="$t('tpv.cart.increaseQuantity')"
                   :disabled="item.quantity >= 999"
                 >
-                  ➕
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
                 </button>
-                <button 
-                  @click="removeFromCart(index)" 
+                <button
+                  @click="removeFromCart(index)"
                   class="remove-btn"
                   :title="$t('tpv.cart.removeItem')"
                 >
-                  🗑
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M9.5 7l.7 12a1 1 0 0 0 1 1h5.6a1 1 0 0 0 1-1l.7-12"/></svg>
                 </button>
               </div>
               <!-- Vista de solo lectura (PRE_PAYMENT, PAYMENT, CLOSED) -->
@@ -289,9 +310,9 @@
             </div>
             
             <div v-if="cart.length === 0" class="empty-cart">
-              <div class="empty-cart-icon">🛒</div>
+              <div class="empty-cart-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="17" cy="20" r="1"/><path d="M2 4h2l2.6 12.4a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.6L21 8H6"/></svg></div>
               <p class="empty-cart-message">{{ $t('tpv.cart.emptyMessage') || 'Añade productos o servicios para comenzar' }}</p>
-              <p class="empty-cart-hint">💡 Haz clic en cualquier producto para añadirlo al carrito</p>
+              <p class="empty-cart-hint"><span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a6 6 0 0 0-4 10.5c.6.5 1 1.3 1 2.1V15h6v-.4c0-.8.4-1.6 1-2.1A6 6 0 0 0 12 2Z"/></svg></span> Haz clic en cualquier producto para añadirlo al carrito</p>
             </div>
           </div>
           </div>
@@ -342,68 +363,68 @@
               :disabled="cart.length === 0"
               :title="cart.length === 0 ? 'Añade productos al carrito para generar comanda' : 'Enviar comanda a cocina/barra'"
             >
-              <span class="tpv-icon tpv-icon-ui">🖨️</span> Imprimir Comanda
+              <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2M6 14h12v7H6z"/></svg></span> Imprimir Comanda
             </button>
             <!-- Estado CART: Mostrar botón para revisar y pagar -->
             <template v-if="tpvState === TPV_STATES.CART">
-              <button 
-                @click="goToPrePayment" 
-                class="action-btn pay-btn" 
+              <button
+                @click="goToPrePayment"
+                class="action-btn pay-btn"
                 :disabled="!Array.isArray(cart) || cart.length === 0"
                 :title="(!Array.isArray(cart) || cart.length === 0) ? 'Añade productos al carrito para continuar' : 'Revisar y proceder al pago'"
               >
-                <span class="tpv-icon tpv-icon-primary">💳</span> REVISAR Y PAGAR €{{ formatPrice(total) }}
+                <span class="tpv-icon tpv-icon-primary" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg></span> REVISAR Y PAGAR €{{ formatPrice(total) }}
               </button>
-              <button 
-                @click="openDiscount" 
-                class="action-btn secondary-btn" 
+              <button
+                @click="openDiscount"
+                class="action-btn secondary-btn"
                 :disabled="cart.length === 0"
                 :title="cart.length === 0 ? 'Añade productos al carrito para aplicar descuento' : 'Aplicar descuento al carrito'"
               >
-                <span class="tpv-icon tpv-icon-ui">🏷️</span> Descuento
+                <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12.5 12.8 20.2a2 2 0 0 1-2.83 0l-6.17-6.17a2 2 0 0 1 0-2.83L11.5 3.5H19a1.5 1.5 0 0 1 1.5 1.5v7.5Z"/><circle cx="15.5" cy="7.5" r="1.25"/></svg></span> Descuento
               </button>
             </template>
-            
+
             <!-- Estado PRE_PAYMENT: Mostrar botones para volver o confirmar pago -->
             <template v-else-if="tpvState === TPV_STATES.PRE_PAYMENT">
-              <button 
-                @click="startPayment" 
+              <button
+                @click="startPayment"
                 class="action-btn pay-btn"
                 :title="'Confirmar y proceder al pago de €' + formatPrice(total)"
               >
-                <span class="tpv-icon tpv-icon-primary">💳</span> CONFIRMAR PAGO €{{ formatPrice(total) }}
+                <span class="tpv-icon tpv-icon-primary" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg></span> CONFIRMAR PAGO €{{ formatPrice(total) }}
               </button>
-              <button 
-                @click="backToCart" 
+              <button
+                @click="backToCart"
                 class="action-btn secondary-btn"
                 title="Volver al carrito para editar productos (no se pierde el estado)"
               >
-                <span class="tpv-icon tpv-icon-ui">←</span> Volver al Carrito
+                <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg></span> Volver al Carrito
               </button>
-              <button 
-                @click="openDiscount" 
+              <button
+                @click="openDiscount"
                 class="action-btn secondary-btn"
                 title="Aplicar descuento al carrito"
               >
-                <span class="tpv-icon tpv-icon-ui">🏷️</span> Descuento
+                <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12.5 12.8 20.2a2 2 0 0 1-2.83 0l-6.17-6.17a2 2 0 0 1 0-2.83L11.5 3.5H19a1.5 1.5 0 0 1 1.5 1.5v7.5Z"/><circle cx="15.5" cy="7.5" r="1.25"/></svg></span> Descuento
               </button>
             </template>
-            
+
             <!-- Estado PAYMENT: Mostrar botones de pago o cancelar -->
             <template v-else-if="tpvState === TPV_STATES.PAYMENT">
-              <button 
-                @click="processPayment" 
+              <button
+                @click="processPayment"
                 class="action-btn pay-btn"
                 :title="'Finalizar pago de €' + formatPrice(total) + ' - La venta se registrará automáticamente'"
               >
-                <span class="tpv-icon tpv-icon-primary">✅</span> FINALIZAR PAGO €{{ formatPrice(total) }}
+                <span class="tpv-icon tpv-icon-primary" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span> FINALIZAR PAGO €{{ formatPrice(total) }}
               </button>
               <button 
                 @click="cancelPayment" 
                 class="action-btn secondary-btn"
                 title="Cancelar pago y volver a revisión (no se pierde el carrito)"
               >
-                <span class="tpv-icon tpv-icon-ui">←</span> Cancelar
+                <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg></span> Cancelar
               </button>
             </template>
             
@@ -414,7 +435,7 @@
                 class="action-btn pay-btn"
                 title="Iniciar una nueva venta (se limpiará el carrito)"
               >
-                <span class="tpv-icon tpv-icon-primary">🆕</span> NUEVA VENTA
+                <span class="tpv-icon tpv-icon-primary" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span> NUEVA VENTA
               </button>
               <button 
                 v-if="tpvConfig.supports_invoices"
@@ -422,7 +443,7 @@
                 class="action-btn secondary-btn"
                 :title="lastSaleTicketId ? 'Generar factura para el ticket #' + lastSaleTicketId : 'Generar factura para el último ticket'"
               >
-                <span class="tpv-icon tpv-icon-ui">🧾</span> Generar Factura
+                <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l3 3v15H6z"/><path d="M15 3v3h3M9 12h6M9 16h6M9 8h2"/></svg></span> Generar Factura
               </button>
             </template>
           </div>
@@ -449,7 +470,7 @@
       <p>Cargando TPV...</p>
     </div>
     <div v-if="errorMessage" class="error-overlay">
-      <p>❌ {{ errorMessage }}</p>
+      <p><span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg></span> {{ errorMessage }}</p>
       <button @click="checkStatus" class="retry-btn">Reintentar</button>
     </div>
     
@@ -457,8 +478,16 @@
     <div v-if="showProductModal" class="modal-overlay" @click.self="showProductModal = false">
       <div class="modal-content">
         <div class="modal-header">
-          <h2>{{ editingProduct ? '✏️ Editar Producto' : '➕ Crear Producto' }}</h2>
-          <button @click="showProductModal = false" class="modal-close">✕</button>
+          <h2>
+            <span class="tpv-icon tpv-icon-ui" aria-hidden="true">
+              <svg v-if="editingProduct" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            </span>
+            {{ editingProduct ? 'Editar Producto' : 'Crear Producto' }}
+          </h2>
+          <button @click="showProductModal = false" class="modal-close" aria-label="Cerrar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
         </div>
         <div class="modal-body">
           <div class="form-group">
@@ -536,7 +565,9 @@
       <div class="modal-content operator-switch-modal" role="dialog" aria-modal="true" aria-labelledby="operator-switch-title">
         <div class="modal-header">
           <h3 id="operator-switch-title">{{ $t('tpv.changeOperatorTitle') }}</h3>
-          <button type="button" class="modal-close" @click="showOperatorSwitchModal = false">✕</button>
+          <button type="button" class="modal-close" @click="showOperatorSwitchModal = false" aria-label="Cerrar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
         </div>
         <p class="modal-hint operator-switch-hint">{{ $t('tpv.changeOperatorHint') }}</p>
         <p v-if="!tpvOperatorCandidates.length" class="modal-hint operator-switch-warning">
@@ -626,6 +657,8 @@ const paymentNote = ref('') // Nota adicional para el pago
 const cartFeedback = ref(null) // Feedback visual del carrito
 const cartFeedbackTimeout = ref(null) // Timeout para ocultar feedback
 const lastSaleTicketId = ref(null) // ID del último ticket vendido
+const lastSaleCustomerData = ref(null) // Datos de cliente de la última venta (para facturación real)
+const invoiceGenerationInProgress = ref(false)
 /** Operador según sesión + RRHH (GET /api/v1/tpv → tpv_operator) */
 const tpvOperator = ref(null)
 /** Jornada (empleado); mismo payload que /auth/me → jornada */
@@ -1225,34 +1258,68 @@ const normalizeCategory = (value) => {
     .toLowerCase()
 }
 
-const getProductIcon = (category) => {
-  const key = normalizeCategory(category)
-  if (!key) return '📦'
+// Icono de categoría/producto en formato SVG (line-icon, mismo patrón que el
+// resto del TPV). Cada clave mapea a uno o varios <path> del icono heroicons-style.
+const PRODUCT_ICON_PATHS = {
+  drink: ['M7 3h10l-1.3 14.5A2 2 0 0 1 13.7 19h-3.4a2 2 0 0 1-2-1.5L7 3Z', 'M9 8h6'],
+  alcohol: ['M8 3h8a4 4 0 0 1-4 8 4 4 0 0 1-4-8Z', 'M12 11v6', 'M9 21h6'],
+  coffee: ['M4 8h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8Z', 'M17 9h1.5a2.5 2.5 0 0 1 0 5H17', 'M8 3c0 1-1 1-1 2s1 1 1 2', 'M12 3c0 1-1 1-1 2s1 1 1 2'],
+  sandwich: ['M3 12h18', 'M4 12l1.5 6a1 1 0 0 0 1 .8h11a1 1 0 0 0 1-.8L20 12', 'M6 12 12 6l6 6'],
+  pizza: ['M12 3 3 20h18L12 3Z', 'M9 15h.01M12 12h.01M15 15h.01'],
+  skewer: ['M4 20 20 4', 'M8 8a2 2 0 1 0 3-3 2 2 0 0 0-3 3Z', 'M13 13a2 2 0 1 0 3-3 2 2 0 0 0-3 3Z'],
+  plate: ['M12 4a8 8 0 1 0 .01 0Z', 'M12 8a4 4 0 1 0 .01 0Z'],
+  dessert: ['M6 11h12l-1.2 8.2a2 2 0 0 1-2 1.8H9.2a2 2 0 0 1-2-1.8L6 11Z', 'M5 11a7 4 0 0 1 14 0', 'M12 3v3'],
+  salad: ['M3 12a9 5 0 0 0 18 0Z', 'M3 12h18', 'M12 12c0-3 2-6 5-7'],
+  briefcase: ['M3 8h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8Z', 'M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'],
+  medical: ['M12 3a9 9 0 1 0 .01 0Z', 'M12 8v8M8 12h8'],
+  sparkle: ['M12 3v4M12 17v4M3 12h4M17 12h4', 'M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18'],
+  scissors: ['M6 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z', 'M6 20a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z', 'M20 4 7.5 12M20 20 7.5 12'],
+  wrench: ['M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 0 5.4-5.4l-2.8 2.8-2-2Z'],
+  ticket: ['M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1.5a1.5 1.5 0 0 0 0 3V15a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1.5a1.5 1.5 0 0 0 0-3Z', 'M9 7v10'],
+  pill: ['M4.9 4.9a5 5 0 0 1 7.07 0l7.07 7.07a5 5 0 1 1-7.07 7.07L4.9 11.97a5 5 0 0 1 0-7.07Z', 'M9 9l6 6'],
+  house: ['M4 11 12 4l8 7', 'M6 10v9a1 1 0 0 0 1 1h4v-6h2v6h4a1 1 0 0 0 1-1v-9'],
+  package: ['M21 8 12 3 3 8v8l9 5 9-5V8Z', 'M3 8l9 5 9-5', 'M12 13v8'],
+  // Jarra de cerveza (mango + cuerpo rectangular + espuma), deliberadamente
+  // distinta de "alcohol" (copa de vino/licor) para que Cerveza no comparta
+  // icono con Vino/Cóctel.
+  beer: ['M5 7h10v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7Z', 'M15 9h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-2', 'M6.5 7c0-1.5 1-2 1-3.5M10.5 7c0-1.5 1-2 1-3.5'],
+}
+
+// Reglas de deteccion por palabra clave, compartidas entre nombre de
+// producto y categoria (misma logica, dos campos distintos a los que
+// aplicarla). "cerveza" tiene su propia regla ANTES que el resto de
+// alcoholes para no compartir icono con vino/licor/cocktail.
+const ICON_KEYWORD_RULES = [
+  { terms: ['cerveza'], icon: 'beer' },
+  { terms: ['bebida', 'refresco', 'zumo', 'agua'], icon: 'drink' },
+  { terms: ['alcohol', 'vino', 'licor', 'cocktail', 'coctel'], icon: 'alcohol' },
+  { terms: ['cafe', 'infusion', 'te'], icon: 'coffee' },
+  { terms: ['bocadillo', 'bocadillos', 'sandwich', 'hamburguesa'], icon: 'sandwich' },
+  { terms: ['pizza'], icon: 'pizza' },
+  // Tapas / pintxos: icono tipo pincho (brocheta), antes de la regla genérica de comida
+  { terms: ['tapa', 'tapas', 'pintxo', 'pintxos', 'pincho', 'pinchos'], icon: 'skewer' },
+  { terms: ['plato', 'comida', 'menu', 'especialidad', 'sugerencia', 'tostada', 'tosta', 'pan'], icon: 'plate' },
+  { terms: ['postre', 'dulce'], icon: 'dessert' },
+  { terms: ['entrante', 'ensalada'], icon: 'salad' },
+  { terms: ['servicio'], icon: 'briefcase' },
+  { terms: ['consulta'], icon: 'medical' },
+  { terms: ['tratamiento'], icon: 'sparkle' },
+  { terms: ['corte'], icon: 'scissors' },
+  { terms: ['repuesto'], icon: 'wrench' },
+  { terms: ['entrada', 'ticket'], icon: 'ticket' },
+  { terms: ['medicamento'], icon: 'pill' },
+  { terms: ['envio'], icon: 'package' },
+]
+
+// Busca coincidencia de palabra clave en un texto (nombre o categoria).
+// Devuelve la clave de icono o null si no hay match — null, no 'package',
+// para poder distinguir "no hay match aqui, prueba el siguiente campo" de
+// "es explicitamente generico/envio".
+const matchIconKeyword = (text) => {
+  const key = normalizeCategory(text)
+  if (!key) return null
   const words = new Set(key.split(/[^a-z0-9]+/).filter(Boolean))
-
-  // Detección por palabras clave para evitar depender de mayúsculas/acentos exactos.
-  const rules = [
-    { terms: ['bebida', 'refresco', 'zumo', 'agua'], icon: '🥤' },
-    { terms: ['alcohol', 'cerveza', 'vino', 'licor', 'cocktail', 'coctel'], icon: '🍷' },
-    { terms: ['cafe', 'infusion', 'te'], icon: '☕' },
-    { terms: ['bocadillo', 'bocadillos', 'sandwich', 'hamburguesa'], icon: '🥪' },
-    { terms: ['pizza'], icon: '🍕' },
-    // Tapas / pintxos: icono tipo pincho (brocheta), antes de la regla genérica de comida
-    { terms: ['tapa', 'tapas', 'pintxo', 'pintxos', 'pincho', 'pinchos'], icon: '🍢' },
-    { terms: ['plato', 'comida', 'menu', 'especialidad', 'sugerencia'], icon: '🍽️' },
-    { terms: ['postre', 'dulce'], icon: '🍰' },
-    { terms: ['entrante', 'ensalada'], icon: '🥗' },
-    { terms: ['servicio'], icon: '💼' },
-    { terms: ['consulta'], icon: '🏥' },
-    { terms: ['tratamiento'], icon: '✨' },
-    { terms: ['corte'], icon: '✂️' },
-    { terms: ['repuesto'], icon: '🔧' },
-    { terms: ['entrada', 'ticket'], icon: '🎫' },
-    { terms: ['medicamento'], icon: '💊' },
-    { terms: ['envio'], icon: '📦' },
-  ]
-
-  const matched = rules.find((rule) =>
+  const matched = ICON_KEYWORD_RULES.find((rule) =>
     rule.terms.some((term) => {
       const t = normalizeCategory(term)
       if (!t) return false
@@ -1261,27 +1328,48 @@ const getProductIcon = (category) => {
       return key.includes(t)
     })
   )
-  return matched?.icon || '📦'
+  return matched ? matched.icon : null
 }
 
-// Obtener emoji según icono predefinido
-const getIconEmoji = (icon, category) => {
-  const categoryIcon = getProductIcon(category)
-  // Si la categoría ya tiene icono específico, priorizarla sobre iconos heredados del producto.
-  if (categoryIcon !== '📦') return categoryIcon
-
-  const key = normalizeCategory(icon)
-  const iconMap = {
-    'coffee': '☕',
-    'food': '🍽️',
-    'service': '💼',
-    'house': '🏠',
-    'default': '📦'
-  }
-  const mapped = iconMap[key]
-  if (mapped && mapped !== '📦') return mapped
-  return '📦'
+// Icono predefinido del producto (campo product.icon: coffee/food/service/
+// house/default) -> clave de PRODUCT_ICON_PATHS. Es el campo MENOS
+// especifico (solo 5 valores posibles para cualquier tipo de negocio), por
+// eso es la ultima prioridad, no la primera — ver resolveProductIconKey.
+const GENERIC_ICON_FIELD_MAP = {
+  coffee: 'coffee',
+  food: 'plate',
+  service: 'briefcase',
+  house: 'house',
+  default: 'package',
 }
+
+// Resuelve la clave de icono real de un producto con prioridad de mas a
+// menos especifico:
+//   1. Nombre del producto ("Café", "Cerveza", "Refresco" ya distinguen
+//      entre si por si solos — es el campo mas fiable para diferenciar
+//      productos de la MISMA categoria).
+//   2. Categoria ("Tapas", "Postres"...) — mas generica que el nombre pero
+//      mas especifica que el campo `icon`.
+//   3. Campo `icon` predefinido del producto (coffee/food/service/house) —
+//      bucket generico, ultimo recurso.
+//   4. Genérico/caja (sin match en ninguno de los anteriores).
+// ANTES: la categoria tenia prioridad absoluta sobre el nombre, asi que
+// Café/Cerveza/Refresco (los 3 con categoria "Bebidas") colapsaban todos
+// en el mismo icono generico de vaso — bug real reportado por el usuario
+// con captura, corregido aqui.
+const resolveProductIconKey = (name, icon, category) => {
+  return (
+    matchIconKeyword(name) ||
+    matchIconKeyword(category) ||
+    GENERIC_ICON_FIELD_MAP[normalizeCategory(icon)] ||
+    'package'
+  )
+}
+
+const getProductIconPaths = (name, category) =>
+  PRODUCT_ICON_PATHS[resolveProductIconKey(name, null, category)] || PRODUCT_ICON_PATHS.package
+const getIconPaths = (name, icon, category) =>
+  PRODUCT_ICON_PATHS[resolveProductIconKey(name, icon, category)] || PRODUCT_ICON_PATHS.package
 
 // Manejar error al cargar imagen
 const handleImageError = (event) => {
@@ -2089,9 +2177,10 @@ const processPayment = async () => {
     const api = (await import('@/services/api')).default
     const result = await api.post('/api/v1/tpv/sale', saleData, token)
     
-    // Guardar ticket_id para facturación posterior
+    // Guardar ticket_id + datos de cliente para facturación real posterior
     const ticketId = result.ticket_id || result.ticket?.id || null
     lastSaleTicketId.value = ticketId
+    lastSaleCustomerData.value = customerData
     
     // Cambiar estado a CLOSED después del pago exitoso
     tpvState.value = TPV_STATES.CLOSED
@@ -2121,8 +2210,44 @@ const processPayment = async () => {
 }
 
 const generateInvoice = async () => {
-  // En una implementación completa, esto generaría la factura
-  info('Generando factura... (Funcionalidad en desarrollo)')
+  if (!lastSaleTicketId.value) {
+    warning('No hay ninguna venta cobrada todavía para facturar')
+    return
+  }
+  if (invoiceGenerationInProgress.value) {
+    return
+  }
+  invoiceGenerationInProgress.value = true
+  try {
+    const token = await getAuthToken()
+    if (!token) {
+      warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
+      router.push(loginRedirectPath())
+      return
+    }
+    const api = (await import('@/services/api')).default
+    const result = await api.post('/api/v1/tpv/invoice', {
+      ticket_id: lastSaleTicketId.value,
+      customer_data: lastSaleCustomerData.value || null
+    }, token)
+
+    const invoice = result?.invoice
+    if (!invoice) {
+      error('El backend no devolvió una factura válida')
+      return
+    }
+    if (result.already_existed) {
+      info(`Ya existía una factura para este ticket: ${invoice.invoice_number} (Total: EUR ${formatPrice(invoice.total)})`)
+    } else {
+      success(`Factura ${invoice.invoice_number} generada. Total: EUR ${formatPrice(invoice.total)}`)
+    }
+  } catch (err) {
+    console.error('Error generando factura:', err)
+    const detail = err?.detail || err.message
+    error('No se pudo generar la factura: ' + detail)
+  } finally {
+    invoiceGenerationInProgress.value = false
+  }
 }
 
 const printTicket = async () => {
@@ -2642,8 +2767,9 @@ onUnmounted(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #0f1419 0%, #1a1f2e 100%);
-  color: #fff;
+  background-image: var(--zeus-bg);
+  color: var(--zeus-text, #0f172a);
+  font-family: var(--zeus-font-sans, 'Inter', sans-serif);
   padding: 12px;
   box-sizing: border-box;
 }
@@ -2657,18 +2783,24 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   padding: 12px 24px;
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  border: none;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border-strong, #D1D5DB);
   border-radius: 10px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+  box-shadow: none;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .back-to-dashboard-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
+  border-color: #9aa2af;
+  transform: translateY(-1px);
+}
+
+.back-to-dashboard-btn:active {
+  transform: translateY(0);
 }
 
 .tpv-header {
@@ -2677,25 +2809,54 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 12px;
   margin: 52px 0 8px 0;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--zeus-shadow-md, 0 4px 16px rgba(15, 23, 42, 0.06));
 }
 
+/* Título con texto en gradiente clip -> índigo sólido: el acento
+   vibrante se reserva a botones/badges/anillos, nunca a texto (mismo
+   ajuste ya aplicado al logo de Admin Panel). */
 .tpv-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: 2rem;
   font-weight: 700;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--zeus-accent, #4f46e5);
   margin: 0;
 }
 
+.tpv-title-icon {
+  display: inline-flex;
+  color: var(--zeus-accent, #4f46e5);
+}
+
+.tpv-title-icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.header-btn-icon {
+  display: inline-flex;
+  vertical-align: -4px;
+  margin-right: 4px;
+}
+
+.header-btn-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.btn-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
 .tpv-subtitle {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-secondary, #52607a);
   margin: 5px 0 0;
 }
 
@@ -2708,18 +2869,24 @@ onUnmounted(() => {
 
 .header-btn {
   padding: 10px 20px;
-  background: rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 8px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   font-weight: 600;
+  box-shadow: var(--zeus-shadow-btn-ghost, 0 1px 2px rgba(15, 23, 42, 0.05));
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .header-btn:hover,
 .header-btn.active {
-  background: rgba(59, 130, 246, 0.4);
-  border-color: rgba(59, 130, 246, 0.6);
+  background: var(--zeus-accent-soft, #eef1ff);
+  border-color: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-accent, #4f46e5);
+  box-shadow: var(--zeus-shadow-btn-ghost-hover, 0 3px 8px rgba(15, 23, 42, 0.08));
 }
 
 /* Carrito prioridad: ~48% ancho mín; productos compactos a la izquierda */
@@ -2736,12 +2903,12 @@ onUnmounted(() => {
 /* Solo la zona de productos tiene scroll; carrito sin cambios */
 .tpv-left-panel {
   min-height: 0;
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 8px;
   padding: 16px;
   overflow-y: auto;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--zeus-shadow-md, 0 4px 16px rgba(15, 23, 42, 0.06));
 }
 
 .categories-bar {
@@ -2753,20 +2920,31 @@ onUnmounted(() => {
 
 .category-btn {
   padding: 10px 20px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 8px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--zeus-text-secondary, #52607a);
   cursor: pointer;
   font-weight: 600;
-  transition: all 0.2s;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
-.category-btn:hover,
+.category-btn:hover {
+  background: var(--zeus-accent-soft, #eef1ff);
+  border-color: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-accent, #4f46e5);
+}
+
+/* Categoría activa: solo negrita + borde — el gradiente vibrante queda
+   reservado para "Cobrar", la única acción primaria de esta vista. */
 .category-btn.active {
-  background: rgba(59, 130, 246, 0.3);
-  border-color: rgba(59, 130, 246, 0.5);
-  color: #fff;
+  background: var(--zeus-surface, #ffffff);
+  border-color: #9aa2af;
+  color: var(--zeus-text, #0f172a);
+  font-weight: 700;
+  box-shadow: none;
 }
 
 .products-grid {
@@ -2776,16 +2954,20 @@ onUnmounted(() => {
 }
 
 .product-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 2px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-surface, #fff);
+  border: 2px solid var(--zeus-border, #e1e5eb);
   border-radius: 8px;
   padding: 12px;
-  transition: all 0.3s;
+  transition: transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   text-align: center;
   user-select: none;
   position: relative;
   display: flex;
   flex-direction: column;
+  box-shadow: var(--zeus-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04));
 }
 
 .product-clickable {
@@ -2794,10 +2976,10 @@ onUnmounted(() => {
 }
 
 .product-card:hover {
-  transform: translateY(-5px);
-  border-color: rgba(59, 130, 246, 0.5);
-  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.3);
-  background: rgba(59, 130, 246, 0.1);
+  transform: translateY(-3px);
+  border-color: var(--zeus-accent, #4f46e5);
+  box-shadow: var(--zeus-shadow-md, 0 4px 16px rgba(15, 23, 42, 0.06));
+  background: var(--zeus-accent-soft, #eef1ff);
 }
 
 .product-actions {
@@ -2806,7 +2988,7 @@ onUnmounted(() => {
   justify-content: center;
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--zeus-border, #e1e5eb);
 }
 
 .product-action-btn {
@@ -2815,33 +2997,63 @@ onUnmounted(() => {
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.9rem;
-  transition: all 0.2s;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  color: var(--zeus-text, #0f172a);
+}
+
+.product-action-btn svg {
+  width: 15px;
+  height: 15px;
 }
 
 .product-action-btn.edit-btn:hover {
-  background: rgba(59, 130, 246, 0.4);
+  background: var(--zeus-accent-soft, #eef1ff);
+  color: var(--zeus-accent, #4f46e5);
   transform: scale(1.1);
 }
 
 .product-action-btn.delete-btn:hover {
-  background: rgba(239, 68, 68, 0.4);
+  background: var(--zeus-danger-soft, #fdecec);
+  color: var(--zeus-danger, #ef4444);
   transform: scale(1.1);
 }
 
-.product-icon {
-  font-size: 2rem; /* tamaño lógico similar a iconos del carrito */
-  display: block;
+/* Caja fija para la imagen/icono del producto: mismo alto tenga la tarjeta
+   una foto real o un icono de categoria, icono siempre centrado dentro
+   -- antes no existia esta regla base (solo un override de 80px en
+   móvil), así que el SVG del icono no tenía caja de referencia y crecía
+   sin límite/desalineado dentro de la tarjeta. */
+.product-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100px;
   margin-bottom: 8px;
+}
+
+.product-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--zeus-accent, #4f46e5);
+  opacity: 0.85;
+}
+
+.product-icon svg {
+  width: 38px;
+  height: 38px;
 }
 
 .product-image-file {
   width: 100%;
-  height: 110px;
+  height: 100%;
   object-fit: cover;
   border-radius: 8px;
-  margin-bottom: 8px;
 }
 
 .image-preview {
@@ -2853,23 +3065,25 @@ onUnmounted(() => {
   max-width: 200px;
   max-height: 200px;
   border-radius: 8px;
-  border: 2px solid rgba(59, 130, 246, 0.3);
+  border: 2px solid var(--zeus-accent, #4f46e5);
   margin-bottom: 10px;
 }
 
 .btn-remove-image {
-  background: rgba(239, 68, 68, 0.3);
-  border: 1px solid rgba(239, 68, 68, 0.5);
-  color: #fca5a5;
+  background: var(--zeus-danger-soft, #fdecec);
+  border: 1px solid var(--zeus-danger, #ef4444);
+  color: var(--zeus-danger, #ef4444);
   padding: 6px 12px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.85rem;
-  transition: all 0.2s;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn-remove-image:hover {
-  background: rgba(239, 68, 68, 0.5);
+  background: var(--zeus-danger, #ef4444);
+  color: var(--zeus-text-on-accent, #fff);
   transform: scale(1.05);
 }
 
@@ -2877,12 +3091,12 @@ onUnmounted(() => {
   font-size: 1rem;
   font-weight: 600;
   margin: 10px 0 5px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
 }
 
 .product-category {
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
   margin: 0 0 10px;
 }
 
@@ -2896,18 +3110,18 @@ onUnmounted(() => {
 
 .price-label {
   font-size: 1rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .price-value {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #10b981;
+  color: var(--zeus-success, #10b981);
 }
 
 .product-stock {
   font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
   margin-top: 5px;
 }
 
@@ -2927,16 +3141,16 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   max-height: 100%;
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-left: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 8px;
   padding: 12px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
   gap: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--zeus-shadow-md, 0 4px 16px rgba(15, 23, 42, 0.06));
   overflow: hidden;
 }
 
@@ -2952,11 +3166,19 @@ onUnmounted(() => {
 .tpv-icon-primary {
   font-size: 16px;
 }
+.tpv-icon svg {
+  width: 16px;
+  height: 16px;
+}
 .secondary-btn .tpv-icon {
   opacity: 0.9;
 }
 .action-btn .tpv-icon {
   font-size: 14px;
+}
+.action-btn .tpv-icon svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* Bloques del carrito: ultra compactos, márgenes ≤8px */
@@ -3001,18 +3223,24 @@ onUnmounted(() => {
 
 .cart-count-badge {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-muted, #8792a6);
   font-weight: 400;
 }
 
 .clear-cart-btn {
   padding: 4px 8px;
-  background: rgba(239, 68, 68, 0.2);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: var(--zeus-danger-soft, #fdecec);
+  border: 1px solid var(--zeus-danger, #ef4444);
   border-radius: 6px;
-  color: #fca5a5;
+  color: var(--zeus-danger, #ef4444);
   cursor: pointer;
   font-size: 12px;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.clear-cart-btn:hover {
+  background: var(--zeus-danger, #ef4444);
+  color: var(--zeus-text-on-accent, #fff);
 }
 
 .cart-items {
@@ -3030,17 +3258,22 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: flex-start;
   padding: 6px 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--zeus-bg-subtle, #eef1f6);
   border-radius: 8px;
   margin-bottom: 6px;
   flex-shrink: 0;
   min-height: 44px;
+  position: relative;
+  border: 1px solid transparent;
 }
 
+/* Línea activa para edición con el teclado numérico: solo borde — el
+   gradiente queda reservado para "Cobrar", la única acción primaria. */
 .cart-item--active {
-  outline: 1px solid rgba(59, 130, 246, 0.8);
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.5);
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(16, 185, 129, 0.12));
+  background: var(--zeus-surface, #ffffff);
+  border-color: #9aa2af;
+  box-shadow: none;
+  padding-left: 12px;
 }
 
 .cart-item-info {
@@ -3056,26 +3289,26 @@ onUnmounted(() => {
   font-weight: 600;
   margin-bottom: 2px;
   font-size: 13px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   word-break: break-word;
   min-height: 1.2em;
 }
 
 .cart-item-price {
-  color: #10b981;
+  color: var(--zeus-success, #10b981);
   font-weight: 700;
 }
 
 .cart-item-unit-price {
   display: block;
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
   margin-top: 2px;
 }
 
 .cart-item.read-only {
   opacity: 0.8;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--zeus-bg-subtle, #eef1f6);
 }
 
 .cart-item-readonly {
@@ -3086,7 +3319,7 @@ onUnmounted(() => {
 
 .cart-item-qty-readonly {
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .cart-item-controls {
@@ -3102,20 +3335,26 @@ onUnmounted(() => {
   height: 32px;
   border-radius: 6px;
   border: none;
-  background: rgba(59, 130, 246, 0.3);
-  color: #fff;
+  background: var(--zeus-accent-soft, #eef1ff);
+  color: var(--zeus-accent, #4f46e5);
   cursor: pointer;
   font-weight: 700;
   font-size: 1rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .qty-btn:hover:not(:disabled) {
-  background: rgba(59, 130, 246, 0.5);
   transform: scale(1.1);
+}
+
+.qty-btn svg,
+.remove-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .qty-btn:disabled {
@@ -3124,19 +3363,23 @@ onUnmounted(() => {
 }
 
 .increment-btn {
-  background: rgba(16, 185, 129, 0.3);
+  background: var(--zeus-success-soft, #e9faf3);
+  color: var(--zeus-success, #10b981);
 }
 
 .increment-btn:hover:not(:disabled) {
-  background: rgba(16, 185, 129, 0.5);
+  background: var(--zeus-success, #10b981);
+  color: var(--zeus-text-on-accent, #fff);
 }
 
 .decrement-btn {
-  background: rgba(245, 158, 11, 0.3);
+  background: var(--zeus-warning-soft, #fef6e7);
+  color: var(--zeus-warning, #f59e0b);
 }
 
 .decrement-btn:hover:not(:disabled) {
-  background: rgba(245, 158, 11, 0.5);
+  background: var(--zeus-warning, #f59e0b);
+  color: var(--zeus-text-on-accent, #fff);
 }
 
 .cart-item-qty {
@@ -3150,25 +3393,27 @@ onUnmounted(() => {
   height: 32px;
   border-radius: 6px;
   border: none;
-  background: rgba(239, 68, 68, 0.3);
-  color: #fca5a5;
+  background: var(--zeus-danger-soft, #fdecec);
+  color: var(--zeus-danger, #ef4444);
   cursor: pointer;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .remove-btn:hover {
-  background: rgba(239, 68, 68, 0.5);
+  background: var(--zeus-danger, #ef4444);
+  color: var(--zeus-text-on-accent, #fff);
   transform: scale(1.1);
 }
 
 .empty-cart {
   text-align: center;
   padding: 12px 8px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3176,26 +3421,32 @@ onUnmounted(() => {
 }
 
 .empty-cart-icon {
-  font-size: 1.75rem;
+  display: flex;
+  justify-content: center;
   margin-bottom: 6px;
   opacity: 0.6;
+}
+
+.empty-cart-icon svg {
+  width: 28px;
+  height: 28px;
 }
 
 .empty-cart-message {
   font-size: 0.9rem;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .empty-cart-hint {
   font-size: 0.8rem;
   margin-top: 6px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .cart-totals {
   flex: 0 0 auto;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-top: 1px solid var(--zeus-border, #e1e5eb);
   padding-top: 6px;
   margin-bottom: 0;
 }
@@ -3204,7 +3455,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   margin-bottom: 2px;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--zeus-text-secondary, #52607a);
   font-size: 12px;
   line-height: 1.2;
   white-space: nowrap;
@@ -3213,8 +3464,8 @@ onUnmounted(() => {
 .total-final {
   font-size: 16px;
   font-weight: 600;
-  color: #fff;
-  border-top: 2px solid rgba(255, 255, 255, 0.2);
+  color: var(--zeus-text, #0f172a);
+  border-top: 2px solid var(--zeus-border-strong, #cdd3db);
   padding-top: 4px;
   margin-top: 4px;
   margin-bottom: 0;
@@ -3247,35 +3498,41 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 6px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  box-shadow: var(--zeus-shadow-btn-ghost, 0 1px 2px rgba(15, 23, 42, 0.05));
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .keyboard-key:hover {
-  background: rgba(59, 130, 246, 0.25);
-  border-color: rgba(59, 130, 246, 0.5);
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+  background: var(--zeus-accent-soft, #eef1ff);
+  border-color: var(--zeus-accent, #4f46e5);
+  box-shadow: var(--zeus-shadow-btn-ghost-hover, 0 3px 8px rgba(15, 23, 42, 0.08));
 }
 
 .keyboard-key:active {
-  background: rgba(59, 130, 246, 0.4);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  color: var(--zeus-text, #0f172a);
+  box-shadow: none;
 }
 
 .key-action {
-  background: rgba(139, 92, 246, 0.3);
-  border-color: rgba(139, 92, 246, 0.5);
+  background: var(--zeus-accent-2-soft, #eef2ff);
+  border-color: var(--zeus-accent-2, #6366f1);
+  color: var(--zeus-accent-2, #6366f1);
 }
 
 .key-enter {
-  background: rgba(16, 185, 129, 0.3);
-  border-color: rgba(16, 185, 129, 0.5);
+  background: var(--zeus-success-soft, #e9faf3);
+  border-color: var(--zeus-success, #10b981);
+  color: var(--zeus-success, #10b981);
 }
 
 .action-buttons {
@@ -3292,7 +3549,9 @@ onUnmounted(() => {
   font-weight: 600;
   font-size: 0.75rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3305,54 +3564,64 @@ onUnmounted(() => {
 }
 
 /* ZEUS_TPV_CART_ULTRA_MINIMAL_003: principal 38px, 14px */
+/* Botón "Cobrar": el ÚNICO botón con el acento gradiente de esta vista —
+   es la acción de mayor jerarquía real (cerrar la venta). */
 .pay-btn {
   height: 38px;
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: #fff;
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%));
+  color: var(--zeus-text-on-accent, #fff);
   font-size: 14px;
   font-weight: 600;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 8px rgba(0, 0, 0, 0.15));
 }
 
 .pay-btn:hover:not(:disabled) {
-  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.5);
-  filter: brightness(1.05);
+  box-shadow: var(--zeus-accent-gradient-shadow-hover, 0 4px 14px rgba(0, 0, 0, 0.22));
+  transform: translateY(-1px);
+}
+
+.pay-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+  transition-duration: var(--zeus-dur-press, 100ms);
 }
 
 .secondary-btn {
   height: 30px;
-  background: rgba(59, 130, 246, 0.25);
-  border: 1px solid rgba(59, 130, 246, 0.4);
-  color: rgba(255, 255, 255, 0.95);
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border-strong, #D1D5DB);
+  color: var(--zeus-text, #0f172a);
   font-size: 12px;
+  box-shadow: none;
 }
 
 .secondary-btn:hover:not(:disabled) {
-  background: rgba(59, 130, 246, 0.4);
-  border-color: rgba(59, 130, 246, 0.6);
+  background: var(--zeus-accent-soft, #eef1ff);
+  border-color: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-accent, #4f46e5);
+  box-shadow: var(--zeus-shadow-btn-ghost-hover, 0 3px 8px rgba(15, 23, 42, 0.08));
 }
 
 .payment-note-section {
   margin-top: 15px;
   padding-top: 15px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--zeus-border, #e1e5eb);
 }
 
 .payment-note-section label {
   display: block;
   margin-bottom: 8px;
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--zeus-text-secondary, #52607a);
   font-weight: 500;
 }
 
 .payment-note-input {
   width: 100%;
   padding: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 6px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   font-family: inherit;
   font-size: 0.9rem;
   resize: vertical;
@@ -3361,12 +3630,13 @@ onUnmounted(() => {
 
 .payment-note-input:focus {
   outline: none;
-  border-color: rgba(59, 130, 246, 0.5);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--zeus-accent, #4f46e5);
+  background: var(--zeus-surface, #fff);
+  box-shadow: var(--zeus-shadow-focus, 0 0 0 3px rgba(59, 91, 253, 0.15));
 }
 
 .payment-note-input::placeholder {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .tpv-operator-badge {
@@ -3375,10 +3645,10 @@ onUnmounted(() => {
   align-items: flex-start;
   justify-content: center;
   padding: 6px 14px;
-  background: rgba(16, 185, 129, 0.18);
-  border: 1px solid rgba(16, 185, 129, 0.45);
+  background: var(--zeus-success-soft, #e9faf3);
+  border: 1px solid var(--zeus-success, #10b981);
   border-radius: 8px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   margin-left: 8px;
   max-width: min(280px, 40vw);
 }
@@ -3387,7 +3657,7 @@ onUnmounted(() => {
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: rgba(226, 232, 240, 0.85);
+  color: var(--zeus-text-secondary, #52607a);
   font-weight: 600;
 }
 
@@ -3406,15 +3676,15 @@ onUnmounted(() => {
   font-size: 0.88rem;
   font-weight: 600;
   margin-left: 8px;
-  background: rgba(148, 163, 184, 0.25);
-  border: 1px solid rgba(148, 163, 184, 0.5);
-  color: rgba(226, 232, 240, 0.95);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .tpv-jornada-badge.on {
-  background: rgba(16, 185, 129, 0.22);
-  border-color: rgba(16, 185, 129, 0.5);
-  color: #ecfdf5;
+  background: var(--zeus-success-soft, #e9faf3);
+  border-color: var(--zeus-success, #10b981);
+  color: var(--zeus-success, #10b981);
 }
 
 /* Barra "Mesa X" cuando hay mesa seleccionada para anotar */
@@ -3424,32 +3694,36 @@ onUnmounted(() => {
   gap: 12px;
   margin-bottom: 12px;
   padding: 8px 12px;
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: var(--zeus-accent-soft, #eef1ff);
+  border: 1px solid var(--zeus-accent, #4f46e5);
   border-radius: 8px;
 }
 .back-to-tables-btn {
   padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 6px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   font-size: 0.9rem;
+  box-shadow: var(--zeus-shadow-btn-ghost, 0 1px 2px rgba(15, 23, 42, 0.05));
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 .back-to-tables-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--zeus-accent-soft, #eef1ff);
+  border-color: var(--zeus-accent, #4f46e5);
 }
 .tables-selected-label {
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.95);
+  color: var(--zeus-text, #0f172a);
 }
 
 /* Reservas del día */
 .reservations-day-block {
   margin-bottom: 16px;
   padding: 12px;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 10px;
 }
 .reservations-day-header {
@@ -3462,17 +3736,22 @@ onUnmounted(() => {
 .reservations-date-input {
   padding: 6px 10px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  background: var(--zeus-surface, #fff);
+  color: var(--zeus-text, #0f172a);
 }
 .reservations-load-btn {
   padding: 6px 12px;
   border-radius: 6px;
-  background: rgba(59, 130, 246, 0.6);
-  color: #fff;
-  border: none;
+  background: var(--zeus-surface, #ffffff);
+  color: var(--zeus-text, #0f172a);
+  border: 1px solid var(--zeus-border-strong, #D1D5DB);
   cursor: pointer;
+  box-shadow: none;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+.reservations-load-btn:hover:not(:disabled) {
+  border-color: #9aa2af;
 }
 .reservations-load-btn:disabled {
   opacity: 0.6;
@@ -3489,21 +3768,21 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 8px;
   padding: 8px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--zeus-border, #e1e5eb);
   font-size: 0.9rem;
 }
 .reservation-item.seated {
   opacity: 0.7;
 }
-.reservation-guest { font-weight: 600; min-width: 100px; }
-.reservation-time { color: rgba(255,255,255,0.8); }
-.reservation-guests { color: rgba(255,255,255,0.7); }
-.reservation-seated { font-style: italic; color: #10b981; }
+.reservation-guest { font-weight: 600; min-width: 100px; color: var(--zeus-text, #0f172a); }
+.reservation-time { color: var(--zeus-text-secondary, #52607a); }
+.reservation-guests { color: var(--zeus-text-secondary, #52607a); }
+.reservation-seated { font-style: italic; color: var(--zeus-success, #10b981); }
 .reservation-seat-btn {
   padding: 4px 10px;
   border-radius: 6px;
-  background: rgba(59, 130, 246, 0.5);
-  color: #fff;
+  background: var(--zeus-surface, #ffffff);
+  color: var(--zeus-text, #0f172a);
   border: none;
   cursor: pointer;
   font-size: 0.85rem;
@@ -3522,12 +3801,12 @@ onUnmounted(() => {
   cursor: pointer;
   font-size: 0.85rem;
 }
-.table-pick-btn { background: rgba(16, 185, 129, 0.6); color: #fff; }
-.table-pick-cancel { background: rgba(255,255,255,0.2); color: #fff; }
+.table-pick-btn { background: var(--zeus-success, #10b981); color: var(--zeus-text-on-accent, #fff); }
+.table-pick-cancel { background: var(--zeus-bg-subtle, #eef1f6); color: var(--zeus-text, #0f172a); }
 .reservations-empty {
   margin: 0;
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 /* Mesas */
@@ -3538,80 +3817,116 @@ onUnmounted(() => {
 }
 
 .table-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 2px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-surface, #fff);
+  border: 2px solid var(--zeus-border, #e1e5eb);
   border-radius: 12px;
   padding: 20px;
   cursor: pointer;
   text-align: center;
-  transition: all 0.3s;
+  position: relative;
+  box-shadow: var(--zeus-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04));
+  transition: transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .table-card:hover {
-  transform: translateY(-5px);
-  border-color: rgba(59, 130, 246, 0.5);
+  transform: translateY(-3px);
+  border-color: var(--zeus-accent, #4f46e5);
+  box-shadow: var(--zeus-shadow-md, 0 4px 16px rgba(15, 23, 42, 0.06));
 }
 
+/* Mesa ocupada: color de estado (familia "ocupado" heredada del sistema
+   original — se conserva el verde, no se reinterpreta el significado). */
 .table-card.occupied {
-  border-color: rgba(16, 185, 129, 0.5);
-  background: rgba(16, 185, 129, 0.1);
+  border-color: var(--zeus-success, #10b981);
+  background: var(--zeus-success-soft, #e9faf3);
 }
 
+/* Mesa seleccionada: solo borde — el gradiente queda reservado para
+   "Cobrar", la única acción primaria de esta vista. */
 .table-card.selected {
-  border-color: rgba(59, 130, 246, 1);
-  background: rgba(59, 130, 246, 0.2);
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+  border-color: #9aa2af;
+  background: var(--zeus-surface, #ffffff);
+  box-shadow: none;
 }
 
 .table-number {
   font-size: 1.5rem;
   font-weight: 700;
   margin-bottom: 10px;
+  color: var(--zeus-text, #0f172a);
 }
 
 .table-status {
   font-size: 0.85rem;
   margin-bottom: 5px;
+  color: var(--zeus-text-secondary, #52607a);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.table-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--zeus-border-strong, #cbd5e1);
+  flex-shrink: 0;
+}
+
+.table-status.occupied .table-status-dot {
+  background: var(--zeus-success, #10b981);
+}
+
+.table-status.free .table-status-dot {
+  background: var(--zeus-border-strong, #cbd5e1);
 }
 
 .table-total {
   font-size: 1.1rem;
   font-weight: 700;
-  color: #10b981;
+  color: var(--zeus-success, #10b981);
   margin-top: 10px;
 }
 
 .add-table-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 2px dashed rgba(255, 255, 255, 0.3);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  border: 2px dashed var(--zeus-border-strong, #cdd3db);
   border-radius: 12px;
   padding: 40px 20px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
   font-size: 1.2rem;
   font-weight: 600;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .add-table-btn:hover {
-  border-color: rgba(59, 130, 246, 0.5);
-  color: #fff;
-  background: rgba(59, 130, 246, 0.1);
+  border-color: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-accent, #4f46e5);
+  background: var(--zeus-accent-soft, #eef1ff);
 }
 
 .no-products {
   text-align: center;
   padding: 60px 20px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 /* Tarjeta para añadir producto (visible siempre si tiene permisos) */
 .add-product-card {
   min-height: 200px;
-  border: 2px dashed rgba(59, 130, 246, 0.5);
+  border: 2px dashed var(--zeus-accent, #4f46e5);
   border-radius: 12px;
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--zeus-accent-soft, #eef1ff);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3620,24 +3935,28 @@ onUnmounted(() => {
 }
 
 .add-product-card:hover:not(.disabled) {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.8);
+  background: var(--zeus-surface, #ffffff);
+  border-color: var(--zeus-accent-hover, #4338ca);
   transform: scale(1.02);
+}
+
+.add-product-card:hover:not(.disabled) .add-product-label {
+  color: var(--zeus-accent, #4f46e5);
 }
 
 .add-product-card.disabled,
 .add-product-card:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  border-color: rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--zeus-border, #e1e5eb);
+  background: var(--zeus-bg-subtle, #eef1f6);
   pointer-events: none;
 }
 
 .add-product-card:disabled:hover {
   transform: none;
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  border-color: var(--zeus-border, #e1e5eb);
 }
 
 .add-product-content {
@@ -3648,32 +3967,46 @@ onUnmounted(() => {
 }
 
 .add-product-icon {
-  font-size: 2.2rem;
+  display: inline-flex;
   opacity: 0.85;
+}
+
+.add-product-icon svg {
+  width: 36px;
+  height: 36px;
 }
 
 .add-product-label {
   font-size: 1.1rem;
   font-weight: 600;
-  color: rgba(59, 130, 246, 0.9);
+  color: var(--zeus-accent, #4f46e5);
+  transition: color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .add-product-btn {
   margin-top: 20px;
   padding: 12px 24px;
-  background: rgba(59, 130, 246, 0.3);
-  border: 1px solid rgba(59, 130, 246, 0.5);
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border-strong, #D1D5DB);
   border-radius: 8px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   font-weight: 600;
+  box-shadow: none;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.add-product-btn:hover {
+  border-color: #9aa2af;
+  transform: translateY(-1px);
 }
 
 .loading-overlay,
 .error-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(15, 23, 42, 0.55);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3687,12 +4020,18 @@ onUnmounted(() => {
 
 .retry-btn {
   padding: 12px 24px;
-  background: rgba(59, 130, 246, 0.3);
-  border: 1px solid rgba(59, 130, 246, 0.5);
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border-strong, #D1D5DB);
   border-radius: 8px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   font-weight: 600;
+  box-shadow: none;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.retry-btn:hover {
+  border-color: #9aa2af;
 }
 
 /* Responsive: 1366x768 y 1920x1080 sin scroll (layout base). Tablet/móvil: columna única */
@@ -3901,10 +4240,10 @@ onUnmounted(() => {
 
 .business-profile-badge {
   padding: 8px 16px;
-  background: rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(59, 130, 246, 0.4);
+  background: var(--zeus-accent-soft, #eef1ff);
+  border: 1px solid var(--zeus-accent, #4f46e5);
   border-radius: 8px;
-  color: #fff;
+  color: var(--zeus-accent, #4f46e5);
   font-size: 0.9rem;
   font-weight: 600;
   margin-left: 10px;
@@ -3914,7 +4253,7 @@ onUnmounted(() => {
 .modal-overlay {
   position: fixed !important;
   inset: 0 !important;
-  background: rgba(0, 0, 0, 0.8) !important;
+  background: rgba(15, 23, 42, 0.55) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -3925,15 +4264,15 @@ onUnmounted(() => {
 }
 
 .modal-content {
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 15px;
   padding: 0;
   max-width: 500px;
   width: 90%;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--zeus-shadow-lg, 0 12px 32px rgba(15, 23, 42, 0.1));
   animation: slideUp 0.3s;
 }
 
@@ -3943,7 +4282,7 @@ onUnmounted(() => {
 
 .operator-switch-warning {
   margin: 0 20px 12px;
-  color: rgba(255, 200, 120, 0.95);
+  color: var(--zeus-warning, #f59e0b);
   font-size: 0.88rem;
   line-height: 1.35;
 }
@@ -3955,7 +4294,7 @@ onUnmounted(() => {
 .operator-switch-modal .form-label {
   display: block;
   margin: 8px 20px 6px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--zeus-text, #0f172a);
   font-weight: 600;
 }
 
@@ -3974,39 +4313,46 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--zeus-border, #e1e5eb);
 }
 
 .modal-header h2 {
   margin: 0;
   font-size: 1.5rem;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
 }
 
 .modal-header h3 {
   margin: 0;
   font-size: 1.25rem;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
 }
 
 .modal-close {
-  background: rgba(239, 68, 68, 0.2);
-  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: var(--zeus-danger-soft, #fdecec);
+  border: 1px solid var(--zeus-danger, #ef4444);
   border-radius: 50%;
   width: 32px;
   height: 32px;
-  color: #fff;
+  color: var(--zeus-danger, #ef4444);
   cursor: pointer;
   font-size: 1.2rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .modal-close:hover {
-  background: rgba(239, 68, 68, 0.4);
+  background: var(--zeus-danger, #ef4444);
+  color: var(--zeus-text-on-accent, #fff);
   transform: scale(1.1);
+}
+
+.modal-close svg {
+  width: 14px;
+  height: 14px;
 }
 
 .modal-body {
@@ -4020,7 +4366,7 @@ onUnmounted(() => {
 .form-group label {
   display: block;
   margin-bottom: 8px;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--zeus-text-secondary, #52607a);
   font-weight: 500;
   font-size: 0.9rem;
 }
@@ -4028,28 +4374,29 @@ onUnmounted(() => {
 .form-input {
   width: 100%;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 8px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   font-size: 1rem;
-  transition: all 0.2s;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .form-input:focus {
   outline: none;
-  border-color: rgba(59, 130, 246, 0.5);
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: var(--zeus-accent, #4f46e5);
+  background: var(--zeus-surface, #fff);
+  box-shadow: var(--zeus-shadow-focus, 0 0 0 3px rgba(59, 91, 253, 0.15));
 }
 
 .form-input::placeholder {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .form-hint {
   margin-top: 8px;
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--zeus-text-muted, #8792a6);
   font-size: 0.82rem;
 }
 
@@ -4058,37 +4405,40 @@ onUnmounted(() => {
   gap: 10px;
   justify-content: flex-end;
   padding: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--zeus-border, #e1e5eb);
 }
 
 .btn-cancel {
   padding: 12px 24px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
   border-radius: 8px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   font-weight: 600;
-  transition: all 0.2s;
+  box-shadow: var(--zeus-shadow-btn-ghost, 0 1px 2px rgba(15, 23, 42, 0.05));
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn-cancel:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  box-shadow: var(--zeus-shadow-btn-ghost-hover, 0 3px 8px rgba(15, 23, 42, 0.08));
 }
 
 .btn-secondary {
   padding: 12px 24px;
-  background: rgba(59, 130, 246, 0.25);
-  border: 1px solid rgba(59, 130, 246, 0.45);
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border-strong, #D1D5DB);
   border-radius: 8px;
-  color: #e0f2fe;
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   font-weight: 600;
-  transition: all 0.2s;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: rgba(59, 130, 246, 0.4);
+  border-color: #9aa2af;
 }
 
 .btn-secondary:disabled {
@@ -4098,19 +4448,18 @@ onUnmounted(() => {
 
 .btn-save {
   padding: 12px 24px;
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  border: none;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border-strong, #D1D5DB);
   border-radius: 8px;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   font-weight: 600;
-  transition: all 0.2s;
-  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  box-shadow: none;
 }
 
 .btn-save:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+  border-color: #9aa2af;
 }
 
 @keyframes fadeIn {
@@ -4137,34 +4486,39 @@ onUnmounted(() => {
   padding: 12px 16px;
   margin-bottom: 15px;
   border-radius: 8px;
-  background: rgba(16, 185, 129, 0.2);
-  border: 1px solid rgba(16, 185, 129, 0.4);
-  color: #10b981;
+  background: var(--zeus-success-soft, #e9faf3);
+  border: 1px solid var(--zeus-success, #10b981);
+  color: var(--zeus-success, #10b981);
   font-weight: 600;
   animation: slideIn 0.3s ease-out;
 }
 
 .cart-feedback.removed {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.4);
-  color: #ef4444;
+  background: var(--zeus-danger-soft, #fdecec);
+  border-color: var(--zeus-danger, #ef4444);
+  color: var(--zeus-danger, #ef4444);
 }
 
 .cart-feedback.cleared {
-  background: rgba(245, 158, 11, 0.2);
-  border-color: rgba(245, 158, 11, 0.4);
-  color: #f59e0b;
+  background: var(--zeus-warning-soft, #fef6e7);
+  border-color: var(--zeus-warning, #f59e0b);
+  color: var(--zeus-warning, #f59e0b);
 }
 
 .cart-feedback.updated {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.4);
-  color: #3b82f6;
+  background: var(--zeus-info-soft, #eaf2ff);
+  border-color: var(--zeus-info, #3b82f6);
+  color: var(--zeus-info, #3b82f6);
 }
 
 .feedback-icon {
-  font-size: 18px;
+  display: inline-flex;
   vertical-align: middle;
+}
+
+.feedback-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
 .feedback-message {
@@ -4184,12 +4538,43 @@ onUnmounted(() => {
 
 .fade-slide-enter-active,
 .fade-slide-leave-active {
-  transition: all 0.3s ease;
+  transition: opacity var(--zeus-transition-slow, 220ms cubic-bezier(0.4, 0, 0.2, 1)),
+    transform var(--zeus-transition-slow, 220ms cubic-bezier(0.4, 0, 0.2, 1));
 }
 
 .fade-slide-enter-from,
 .fade-slide-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+
+/* Respeta la preferencia de movimiento reducido: desactiva los
+   transforms de hover/press/enter-leave añadidos en este rediseño,
+   dejando solo los cambios de color/sombra. */
+@media (prefers-reduced-motion: reduce) {
+  .back-to-dashboard-btn:hover,
+  .back-to-dashboard-btn:active,
+  .product-card:hover,
+  .product-action-btn.edit-btn:hover,
+  .product-action-btn.delete-btn:hover,
+  .btn-remove-image:hover,
+  .qty-btn:hover:not(:disabled),
+  .remove-btn:hover,
+  .keyboard-key:active,
+  .add-product-card:hover:not(.disabled),
+  .add-product-btn:hover,
+  .table-card:hover,
+  .modal-close:hover,
+  .btn-save:hover,
+  .pay-btn:hover:not(:disabled),
+  .pay-btn:active:not(:disabled),
+  .header-btn:hover {
+    transform: none;
+  }
+
+  .fade-slide-enter-active,
+  .fade-slide-leave-active {
+    transition-duration: 1ms;
+  }
 }
 </style>

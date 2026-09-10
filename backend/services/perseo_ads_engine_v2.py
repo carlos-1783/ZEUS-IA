@@ -68,17 +68,25 @@ def create_google_campaign(
     name: str,
     daily_budget_micros: int = 10_000_000,
 ) -> Dict[str, Any]:
+    _ = name, daily_budget_micros
     if not _google_configured():
         raise HTTPException(status_code=503, detail={"error": "google_ads_not_configured"})
-    return {
-        "success": True,
-        "platform": "google_ads",
-        "campaign_id": None,
-        "simulated": False,
-        "persisted_local": True,
-        "message": "Google Ads API client not installed — campaign persisted locally only",
-        "configured": True,
-    }
+    # GOOGLE_ADS_CUSTOMER_ID / GOOGLE_ADS_DEVELOPER_TOKEN están presentes, pero no
+    # existe cliente real de la Google Ads API integrado (no hay librería
+    # `google-ads` en requirements.txt ni llamada HTTP real como en Meta Ads).
+    # Devolver success=True aquí sería un falso-éxito: la campaña NUNCA se crea
+    # en Google Ads. Fallar de forma explícita en su lugar.
+    raise HTTPException(
+        status_code=501,
+        detail={
+            "error": "google_ads_client_not_implemented",
+            "message": (
+                "Google Ads API client no está implementado — la campaña NO se ha "
+                "creado en Google Ads. Falta integración real (librería google-ads "
+                "y flujo OAuth) antes de poder crear campañas reales."
+            ),
+        },
+    )
 
 
 def create_ad_campaign(

@@ -38,7 +38,9 @@
       "controlHorario": "Time tracking",
       "payroll": "Payroll",
       "officeCrm": "Office CRM",
-      "settings": "Settings"
+      "insurance": "Insurance",
+      "settings": "Settings",
+      "alerts": "Alerts"
     },
     "header": {
       "title": "AI agents control center",

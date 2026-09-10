@@ -69,7 +69,31 @@ class ActivityLogger:
             return u.email if u else None
         except Exception:
             return None
-    
+
+    @staticmethod
+    def _resolve_company_id(
+        db: Session,
+        company_id: Optional[int],
+        user_email: Optional[str],
+    ) -> Optional[int]:
+        """Resuelve el company_id de la actividad: usa el explícito si se pasó,
+        si no lo infiere de la empresa principal del usuario (mismo patrón que
+        services/crm_office_service.company_ids_for_user)."""
+        if company_id is not None:
+            return company_id
+        if not user_email:
+            return None
+        try:
+            from app.models.user import User
+            import services.crm_office_service as crm_svc
+
+            user = db.query(User).filter(User.email == user_email).first()
+            if not user:
+                return None
+            return crm_svc.primary_company_id(db, user)
+        except Exception:
+            return None
+
     @staticmethod
     def log_activity(
         agent_name: str,
@@ -81,11 +105,12 @@ class ActivityLogger:
         status: str = "completed",
         priority: str = "normal",
         visible_to_client: bool = True,
+        company_id: Optional[int] = None,
         _retry: bool = True,
     ) -> AgentActivity:
         """
         Registrar una actividad de un agente
-        
+
         Args:
             agent_name: Nombre del agente (ZEUS, PERSEO, etc.)
             action_type: Tipo de acción (campaign_created, invoice_sent, etc.)
@@ -96,7 +121,9 @@ class ActivityLogger:
             status: Estado (completed, failed, pending)
             priority: Prioridad (low, normal, high, critical)
             visible_to_client: Si el cliente puede ver esta actividad
-            
+            company_id: Empresa/tenant propietaria. Si no se pasa, se infiere
+                de la empresa principal del usuario resuelto por user_email.
+
         Returns:
             AgentActivity creada
         """
@@ -109,6 +136,11 @@ class ActivityLogger:
                 details=details,
                 metrics=metrics,
             )
+            resolved_company_id = ActivityLogger._resolve_company_id(
+                db=db,
+                company_id=company_id,
+                user_email=resolved_email,
+            )
             normalized_agent = (agent_name or "").strip().upper()
             activity = AgentActivity(
                 agent_name=normalized_agent or agent_name,
@@ -117,6 +149,7 @@ class ActivityLogger:
                 details=details,
                 metrics=metrics,
                 user_email=resolved_email,
+                company_id=resolved_company_id,
                 status=status,
                 priority=priority,
                 visible_to_client=visible_to_client,

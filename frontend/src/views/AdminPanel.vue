@@ -309,7 +309,7 @@
           </div>
           
           <div class="revenue-card">
-            <h3>Setup fees (total)</h3>
+            <h3>Cuotas de alta (total)</h3>
             <p class="amount">€{{ formatCurrency(stats.totalSetupFees) }}</p>
             <p class="detail">Pagos únicos de instalación</p>
           </div>
@@ -714,7 +714,7 @@ const renderEmptyChart = (message = 'No hay datos disponibles') => {
   
   // Dibujar mensaje directamente
   ctx.save()
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
+  ctx.fillStyle = '#8792a6'
   ctx.font = 'bold 18px sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -816,7 +816,7 @@ const renderChart = (chartData) => {
           display: true,
           position: 'top',
           labels: {
-            color: 'rgba(255, 255, 255, 0.8)',
+            color: '#52607a',
             font: {
               size: 12,
               family: "'Inter', sans-serif"
@@ -826,10 +826,12 @@ const renderChart = (chartData) => {
           }
         },
         tooltip: {
+          // Tooltip flotante: se mantiene oscuro a propósito (independiente
+          // del fondo claro de la tarjeta), texto blanco ya correcto sobre él.
           backgroundColor: 'rgba(10, 14, 25, 0.95)',
           titleColor: '#fff',
           bodyColor: 'rgba(255, 255, 255, 0.9)',
-          borderColor: 'rgba(59, 130, 246, 0.5)',
+          borderColor: 'rgba(79, 70, 229, 0.5)',
           borderWidth: 1,
           padding: 12,
           displayColors: true,
@@ -844,20 +846,20 @@ const renderChart = (chartData) => {
       scales: {
         x: {
           ticks: {
-            color: 'rgba(255, 255, 255, 0.6)',
+            color: '#52607a',
             font: {
               size: 11
             }
           },
           grid: {
-            color: 'rgba(255, 255, 255, 0.05)',
+            color: 'rgba(15, 23, 42, 0.08)',
             drawBorder: false
           }
         },
         y: {
           beginAtZero: true,
           ticks: {
-            color: 'rgba(255, 255, 255, 0.6)',
+            color: '#52607a',
             font: {
               size: 11
             },
@@ -866,7 +868,7 @@ const renderChart = (chartData) => {
             }
           },
           grid: {
-            color: 'rgba(255, 255, 255, 0.05)',
+            color: 'rgba(15, 23, 42, 0.08)',
             drawBorder: false
           }
         }
@@ -901,9 +903,11 @@ const getPlanName = (plan) => {
     startup: 'STARTUP',
     growth: 'GROWTH',
     business: 'BUSINESS',
-    enterprise: 'ENTERPRISE'
+    enterprise: 'ENTERPRISE',
+    none: 'Sin plan'
   }
-  return names[plan] || plan.toUpperCase()
+  const key = String(plan || 'none').toLowerCase()
+  return names[key] || String(plan).toUpperCase()
 }
 
 const formatDate = (date) => {
@@ -1188,18 +1192,38 @@ const goToDashboard = () => {
 </script>
 
 <style scoped>
+/* Sistema de diseño Ronda 2 (zeus-light-system.css): bandas metálicas
+   obligatorias en toda la vista. La navegación del sidebar es selección
+   dentro de un grupo (Overview/Clientes/Ingresos/Configuración) — sin
+   gradiente, solo tinte + negrita en el activo. "Volver al Dashboard"
+   es secundario. El logo usa el índigo de marca sólido, no texto con
+   gradiente (el acento vibrante se reserva a botones/badges/anillos). */
 .admin-panel {
   display: flex;
+  position: relative;
+  overflow: hidden;
   min-height: 100vh;
-  background: #0a0e1a;
-  color: #fff;
+  background-image: var(--zeus-bg);
+  color: var(--zeus-text, #0f172a);
+  font-family: var(--zeus-font-sans, 'Inter', sans-serif);
+}
+
+.admin-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
 }
 
 /* Sidebar */
 .admin-sidebar {
+  position: relative;
   width: 280px;
-  background: linear-gradient(180deg, #0f1419 0%, #1a1f2e 100%);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-surface, #ffffff);
+  border-right: 1px solid var(--zeus-border, #e1e5eb);
   padding: 32px 24px;
   display: flex;
   flex-direction: column;
@@ -1208,14 +1232,11 @@ const goToDashboard = () => {
 .logo h1 {
   font-size: 24px;
   margin: 0 0 4px;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--zeus-accent, #4f46e5);
 }
 
 .logo p {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
   font-size: 12px;
   margin: 0 0 40px;
 }
@@ -1231,36 +1252,44 @@ const goToDashboard = () => {
   padding: 12px 16px;
   background: transparent;
   border: none;
-  border-radius: 8px;
-  color: rgba(255, 255, 255, 0.7);
+  border-radius: var(--zeus-radius-sm, 8px);
+  color: var(--zeus-text-secondary, #52607a);
   text-align: left;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   font-size: 14px;
 }
 
 .admin-nav button:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+  background: var(--zeus-bg-flat, #eef0f3);
+  color: var(--zeus-text, #0f172a);
 }
 
 .admin-nav button.active {
-  background: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
+  background: var(--zeus-accent-soft, #eef1ff);
+  color: var(--zeus-accent, #4f46e5);
+  font-weight: 600;
 }
 
 .btn-back {
   padding: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  color: #fff;
+  background: #ffffff;
+  border: 1px solid #D1D5DB;
+  border-radius: var(--zeus-radius-sm, 8px);
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   margin-top: 20px;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.btn-back:hover {
+  border-color: #9aa2af;
 }
 
 /* Main Content */
 .admin-content {
+  position: relative;
   flex: 1;
   padding: 40px;
   overflow-y: auto;
@@ -1276,14 +1305,18 @@ const goToDashboard = () => {
 .admin-content h2 {
   font-size: 32px;
   margin: 0 0 32px;
+  color: var(--zeus-text, #0f172a);
 }
 
 .admin-content h3 {
   font-size: 20px;
   margin: 32px 0 16px;
+  color: var(--zeus-text, #0f172a);
 }
 
-/* Stats Grid */
+/* Stats Grid — Overview: sin acción real (solo lectura), sin botón por
+   tanto sin gradiente en esta vista. La cifra destacada usa el índigo
+   de marca sólido, no texto con gradiente. */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -1292,9 +1325,10 @@ const goToDashboard = () => {
 }
 
 .stat-card {
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius-lg, 16px);
+  box-shadow: var(--zeus-shadow, 0 1px 3px rgba(15, 23, 42, 0.06));
   padding: 24px;
   text-align: center;
 }
@@ -1307,23 +1341,24 @@ const goToDashboard = () => {
 .stat-value {
   font-size: 36px;
   font-weight: 700;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--zeus-accent, #4f46e5);
   margin-bottom: 8px;
 }
 
 .stat-label {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-secondary, #52607a);
   font-size: 14px;
 }
 
-/* Customers Table */
+/* Customers Table — sin CTA de creación (los clientes se dan de alta
+   solos vía registro público), "Actualizar" es utilidad repetible y
+   Ver/Editar/Pausar son acciones repetidas por fila: todo secundario,
+   sin gradiente en esta vista (0 es válido). El gradiente de esta
+   sección vive en los dos modales de abajo, cada uno su propia vista. */
 .customers-table {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius, 12px);
   overflow: hidden;
 }
 
@@ -1333,14 +1368,14 @@ table {
 }
 
 thead {
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--zeus-accent-soft, #eef1ff);
 }
 
 th {
   padding: 16px;
   text-align: left;
   font-weight: 600;
-  color: #3b82f6;
+  color: var(--zeus-accent, #4f46e5);
   font-size: 14px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1348,92 +1383,108 @@ th {
 
 td {
   padding: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--zeus-border, #e1e5eb);
+  color: var(--zeus-text, #0f172a);
 }
 
 .plan-badge {
   display: inline-block;
   padding: 4px 12px;
-  border-radius: 12px;
+  border-radius: var(--zeus-radius-full, 12px);
   font-size: 12px;
   font-weight: 600;
 }
 
 .plan-badge.startup {
-  background: rgba(16, 185, 129, 0.2);
-  color: #10b981;
+  background: var(--zeus-success-soft, #e9faf3);
+  color: #0d9668;
 }
 
 .plan-badge.growth {
-  background: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
+  background: var(--zeus-info-soft, #eaf2ff);
+  color: #2563eb;
 }
 
 .plan-badge.business {
-  background: rgba(139, 92, 246, 0.2);
-  color: #8b5cf6;
+  background: var(--zeus-accent-soft, #eef1ff);
+  color: var(--zeus-accent, #4f46e5);
 }
 
 .plan-badge.enterprise {
-  background: rgba(234, 179, 8, 0.2);
-  color: #eab308;
+  background: var(--zeus-warning-soft, #fef6e7);
+  color: #b45309;
 }
 
 .status-badge {
   display: inline-block;
   padding: 4px 12px;
-  border-radius: 12px;
+  border-radius: var(--zeus-radius-full, 12px);
   font-size: 12px;
   font-weight: 600;
 }
 
 .status-badge.active {
-  background: rgba(16, 185, 129, 0.2);
-  color: #10b981;
+  background: var(--zeus-success-soft, #e9faf3);
+  color: #0d9668;
 }
 
 .status-badge.inactive {
-  background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
+  background: var(--zeus-danger-soft, #fdecec);
+  color: #b91c1c;
 }
 
 .btn-action {
   padding: 6px 12px;
-  background: rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  border-radius: 6px;
-  color: #3b82f6;
+  background: #ffffff;
+  border: 1px solid #D1D5DB;
+  border-radius: var(--zeus-radius-sm, 6px);
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   margin-right: 8px;
   font-size: 12px;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn-action:hover {
-  background: rgba(59, 130, 246, 0.3);
+  border-color: #9aa2af;
 }
 
+/* Acción de pausar/activar cuenta o eliminar: semánticamente peligrosa,
+   se mantiene como secundario con tinte rojo (no gradiente, no un
+   tercer color arbitrario) para que siga siendo distinguible de las
+   acciones neutras. */
 .btn-action.danger {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.3);
-  color: #ef4444;
+  background: #ffffff;
+  border-color: #f3b6b6;
+  color: #b91c1c;
+}
+
+.btn-action.danger:hover {
+  border-color: #ef4444;
 }
 
 .btn-refresh {
   padding: 10px 20px;
-  background: rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  border-radius: 8px;
-  color: #3b82f6;
+  background: #ffffff;
+  border: 1px solid #D1D5DB;
+  border-radius: var(--zeus-radius-sm, 8px);
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.btn-refresh:hover {
+  border-color: #9aa2af;
 }
 
 .empty-state {
   padding: 60px;
   text-align: center;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
-/* Revenue */
+/* Revenue — vista de solo lectura (cifras y desglose por plan), sin
+   acción real -> sin botón, sin gradiente en esta vista. */
 .revenue-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -1442,15 +1493,16 @@ td {
 }
 
 .revenue-card {
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 1px 3px rgba(15, 23, 42, 0.06));
   padding: 24px;
 }
 
 .revenue-card h3 {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-secondary, #52607a);
   margin: 0 0 12px;
   font-weight: 500;
 }
@@ -1458,13 +1510,13 @@ td {
 .revenue-card .amount {
   font-size: 32px;
   font-weight: 700;
-  color: #10b981;
+  color: #0d9668;
   margin: 0 0 8px;
 }
 
 .revenue-card .detail {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
   margin: 0;
 }
 
@@ -1479,9 +1531,9 @@ td {
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius-sm, 8px);
 }
 
 .plan-info {
@@ -1492,33 +1544,37 @@ td {
 
 .plan-name {
   font-weight: 600;
+  color: var(--zeus-text, #0f172a);
 }
 
 .plan-count {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .plan-amount {
   font-size: 24px;
   font-weight: 700;
-  color: #3b82f6;
+  color: var(--zeus-accent, #4f46e5);
 }
 
-/* Chart */
+/* Chart — el archivo original definía .chart-container/.chart-loading/
+   .chart-error DOS VECES (la segunda ganaba por cascada); consolidado
+   en una sola definición limpia al migrar a los tokens del sistema. */
 .chart-section {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 1px 3px rgba(15, 23, 42, 0.06));
   padding: 32px;
 }
 
 .chart-container {
   height: 400px;
-  position: relative;
-  padding: 20px;
   min-height: 400px;
   width: 100%;
+  position: relative;
+  padding: 20px;
 }
 
 .chart-container canvas {
@@ -1529,47 +1585,14 @@ td {
 
 .chart-loading {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 16px;
-  z-index: 10;
-  pointer-events: none;
-}
-
-.chart-error {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: #ef4444;
-  font-size: 14px;
-  z-index: 10;
-  pointer-events: none;
-  text-align: center;
-  padding: 20px;
-  background: rgba(239, 68, 68, 0.1);
-  border-radius: 8px;
-  max-width: 80%;
-}
-
-.chart-container {
-  height: 400px;
-  position: relative;
-  padding: 20px;
-}
-
-.chart-loading {
-  position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted, #8792a6);
   font-size: 16px;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 12px;
+  background: var(--zeus-bg-flat, #eef0f3);
+  border-radius: var(--zeus-radius, 12px);
 }
 
 .chart-error {
@@ -1578,19 +1601,23 @@ td {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #ef4444;
+  color: #b91c1c;
   font-size: 14px;
-  background: rgba(239, 68, 68, 0.1);
-  border-radius: 12px;
+  background: var(--zeus-danger-soft, #fdecec);
+  border-radius: var(--zeus-radius, 12px);
   padding: 20px;
   text-align: center;
 }
 
-/* Settings */
+/* Settings — última sección. "Verificar E2E" es un diagnóstico gratuito
+   y repetible (no muta nada) -> secundario. "Guardar configuración" es
+   la única acción real de escritura de esta vista -> el único botón
+   con el acento gradiente. */
 .settings-section {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  background: var(--zeus-surface, #ffffff);
+  border: 1px solid var(--zeus-border, #e1e5eb);
+  border-radius: var(--zeus-radius, 12px);
+  box-shadow: var(--zeus-shadow, 0 1px 3px rgba(15, 23, 42, 0.06));
   padding: 24px;
   margin-bottom: 24px;
 }
@@ -1606,15 +1633,16 @@ td {
   justify-content: space-between;
   align-items: center;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 8px;
+  background: var(--zeus-bg-flat, #eef0f3);
+  border-radius: var(--zeus-radius-sm, 8px);
+  color: var(--zeus-text, #0f172a);
 }
 
 .status-dot {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: rgba(239, 68, 68, 0.5);
+  background: #d1d5db;
 }
 
 .status-dot.active {
@@ -1625,19 +1653,24 @@ td {
 .integration-hint {
   margin: 12px 0;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--zeus-text-muted, #8792a6);
   line-height: 1.4;
 }
 
 .btn-e2e {
   margin-top: 8px;
   padding: 12px 20px;
-  border: 1px solid rgba(59, 130, 246, 0.5);
-  border-radius: 8px;
-  background: rgba(59, 130, 246, 0.15);
-  color: #93c5fd;
+  border: 1px solid #D1D5DB;
+  border-radius: var(--zeus-radius-sm, 8px);
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
   font-weight: 600;
   cursor: pointer;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.btn-e2e:hover:not(:disabled) {
+  border-color: #9aa2af;
 }
 
 .btn-e2e:disabled {
@@ -1648,28 +1681,29 @@ td {
 .e2e-results {
   margin-top: 16px;
   padding: 16px;
-  border-radius: 8px;
+  border-radius: var(--zeus-radius-sm, 8px);
   font-size: 13px;
 }
 
 .e2e-results.ok {
-  background: rgba(16, 185, 129, 0.1);
+  background: var(--zeus-success-soft, #e9faf3);
   border: 1px solid rgba(16, 185, 129, 0.35);
 }
 
 .e2e-results.warn {
-  background: rgba(245, 158, 11, 0.1);
+  background: var(--zeus-warning-soft, #fef6e7);
   border: 1px solid rgba(245, 158, 11, 0.35);
 }
 
 .e2e-summary {
   margin: 0 0 8px;
   font-weight: 700;
+  color: var(--zeus-text, #0f172a);
 }
 
 .e2e-recommendation {
   margin: 0 0 12px;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--zeus-text-secondary, #52607a);
 }
 
 .e2e-checks {
@@ -1686,31 +1720,32 @@ td {
   grid-template-columns: 1fr auto;
   gap: 4px 12px;
   padding: 8px 10px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--zeus-radius-sm, 6px);
+  background: #ffffff;
+  border: 1px solid var(--zeus-border, #e1e5eb);
 }
 
 .e2e-checks li.pass strong {
-  color: #6ee7b7;
+  color: #0d9668;
 }
 
 .e2e-checks li.fail strong {
-  color: #fca5a5;
+  color: #b91c1c;
 }
 
 .e2e-checks li small {
   grid-column: 1 / -1;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .e2e-error {
-  color: #f87171 !important;
+  color: #b91c1c !important;
 }
 
 .e2e-disclaimer {
   margin: 12px 0 0;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .checkbox-label {
@@ -1719,6 +1754,7 @@ td {
   gap: 12px;
   padding: 12px;
   cursor: pointer;
+  color: var(--zeus-text, #0f172a);
 }
 
 .checkbox-label input {
@@ -1729,20 +1765,29 @@ td {
 
 .btn-save {
   padding: 14px 32px;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%));
   border: none;
-  border-radius: 8px;
-  color: white;
+  border-radius: var(--zeus-radius-sm, 8px);
+  color: #ffffff;
   font-weight: 600;
   cursor: pointer;
   margin-top: 24px;
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 8px rgba(0, 0, 0, 0.15));
+  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .btn-save:hover {
-  transform: scale(1.02);
+  box-shadow: var(--zeus-accent-gradient-shadow-hover, 0 4px 14px rgba(0, 0, 0, 0.22));
+  transform: translateY(-1px);
 }
 
-/* Modal Editar Cliente */
+/* Modales Ver/Editar Cliente — cada modal es su propia vista según la
+   regla "un botón por vista": el único acento gradiente vive en
+   .admin-modal-actions .btn-action.primary ("Editar / Gestionar" en el
+   modal Ver, "Guardar" en el modal Editar — nunca ambos a la vez,
+   v-if mutuamente excluyentes). El fondo de bandas metálicas es
+   obligatorio también dentro del modal, sin excepción. */
 .admin-modal-overlay {
   position: fixed;
   inset: 0;
@@ -1753,21 +1798,35 @@ td {
   z-index: 2000;
 }
 .admin-modal {
-  background: #1a1f2e;
-  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  background-image: var(--zeus-bg);
+  border-radius: var(--zeus-radius, 12px);
   padding: 24px;
   min-width: 320px;
   max-width: 90vw;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
 }
+.admin-modal::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+.admin-modal > * {
+  position: relative;
+}
 .admin-modal h3 {
   margin: 0 0 8px 0;
-  color: #fff;
+  color: var(--zeus-text, #0f172a);
   font-size: 1.25rem;
 }
 .admin-modal-email {
   margin: 0 0 16px 0;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--zeus-text-secondary, #52607a);
   font-size: 0.9rem;
 }
 .admin-modal-form {
@@ -1777,22 +1836,22 @@ td {
   margin-bottom: 20px;
 }
 .admin-modal-form label {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--zeus-text-secondary, #52607a);
   font-size: 0.875rem;
 }
 .admin-modal-form input,
 .admin-modal-form select {
   padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+  border-radius: var(--zeus-radius-sm, 8px);
+  border: 1px solid var(--zeus-border-strong, #cdd3db);
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
   font-size: 1rem;
 }
 .admin-modal-web-public { margin-top: 12px; }
 .admin-modal-web-public .checkbox-label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .admin-modal-web-public .slug-input { margin-top: 6px; }
-.admin-modal-hint { margin: 4px 0 0 0; font-size: 0.8rem; color: rgba(255, 255, 255, 0.5); }
+.admin-modal-hint { margin: 4px 0 0 0; font-size: 0.8rem; color: var(--zeus-text-muted, #8792a6); }
 .admin-modal-actions {
   display: flex;
   gap: 12px;
@@ -1810,7 +1869,7 @@ td {
 }
 .admin-danger-zone h4 {
   margin: 0 0 8px;
-  color: #f87171;
+  color: #b91c1c;
   font-size: 0.95rem;
 }
 .admin-danger-zone .inline-actions {
@@ -1831,18 +1890,25 @@ td {
   cursor: not-allowed;
 }
 .admin-modal-hint.warn {
-  color: #fbbf24;
+  color: #b45309;
 }
 .admin-companies-list ul {
   margin: 8px 0 0;
   padding-left: 18px;
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--zeus-text-secondary, #52607a);
 }
+/* Único botón con acento gradiente del modal (mayor jerarquía real:
+   "Editar / Gestionar" en Ver Cliente, "Guardar" en Editar Cliente). */
 .admin-modal-actions .btn-action.primary {
-  background: #3b82f6;
-  color: #fff;
-  border-color: #3b82f6;
+  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%));
+  color: #ffffff;
+  border: none;
+  font-weight: 600;
+  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 8px rgba(0, 0, 0, 0.15));
+}
+.admin-modal-actions .btn-action.primary:hover {
+  box-shadow: var(--zeus-accent-gradient-shadow-hover, 0 4px 14px rgba(0, 0, 0, 0.22));
 }
 
 /* Cabecera móvil (solo en viewport pequeño) */
@@ -1866,8 +1932,8 @@ td {
     right: 0;
     height: 56px;
     padding: 0 16px;
-    background: linear-gradient(180deg, #0f1419 0%, #1a1f2e 100%);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--zeus-surface, #ffffff);
+    border-bottom: 1px solid var(--zeus-border, #e1e5eb);
     z-index: 1001;
   }
 
@@ -1879,7 +1945,7 @@ td {
     background: transparent;
     border: none;
     cursor: pointer;
-    color: #fff;
+    color: var(--zeus-text, #0f172a);
   }
   .admin-mobile-menu-btn span {
     display: block;
@@ -1893,18 +1959,15 @@ td {
     margin: 0;
     font-size: 18px;
     font-weight: 700;
-    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--zeus-accent, #4f46e5);
   }
 
   .admin-mobile-back {
     padding: 8px 12px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
-    color: #fff;
+    background: #ffffff;
+    border: 1px solid #D1D5DB;
+    border-radius: var(--zeus-radius-sm, 8px);
+    color: var(--zeus-text, #0f172a);
     font-size: 14px;
     cursor: pointer;
   }

@@ -205,8 +205,8 @@
       {{ showMetrics ? '📊 OCULTAR' : '📊 MÉTRICAS' }}
     </button>
 
-    <!-- Botón Admin Panel -->
-    <button @click="goToAdmin" class="admin-toggle">
+    <!-- Botón Admin Panel: solo superusuario (mismo criterio que DashboardProfesional.vue) -->
+    <button v-if="authStore.isAdmin" @click="goToAdmin" class="admin-toggle">
       ⚙️ ADMIN
     </button>
 
@@ -375,7 +375,7 @@ const olymposAgents = ref([
     id: 2, 
     name: 'PERSEO', 
     icon: '🎯', 
-    image: '/images/avatars/perseo-avatar.jpg',
+    image: '/images/avatars/Perseo-avatar.jpg',
     active: false, 
     description: 'Estratega de Crecimiento', 
     status: 'online' 
@@ -384,7 +384,7 @@ const olymposAgents = ref([
     id: 3, 
     name: 'RAFAEL', 
     icon: '📊', 
-    image: '/images/avatars/rafael-avatar.jpg',
+    image: '/images/avatars/Rafael-avatar.jpg',
     active: false, 
     description: 'Guardián Fiscal', 
     status: 'online' 
@@ -393,7 +393,7 @@ const olymposAgents = ref([
     id: 4, 
     name: 'THALOS', 
     icon: '🛡️', 
-    image: '/images/avatars/thalos-avatar.jpg',
+    image: '/images/avatars/Thalos-avatar.jpg',
     active: false, 
     description: 'Defensor Cibernético', 
     status: 'online' 
@@ -402,7 +402,7 @@ const olymposAgents = ref([
     id: 5, 
     name: 'JUSTICIA', 
     icon: '⚖️', 
-    image: '/images/avatars/justicia-avatar.jpg',
+    image: '/images/avatars/Justicia-avatar.jpg',
     active: false, 
     description: 'Asesora Legal y GDPR', 
     status: 'online' 

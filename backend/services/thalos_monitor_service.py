@@ -111,6 +111,10 @@ def run_monitor_cycle(
                     message=f"{alert.get('pattern')} @ {alert.get('agent')}",
                     source="thalos_security_engine",
                     metadata_json=serialize_metadata(alert),
+                    # AUDIT_THALOS_ESTRUCTURAL.md, paso 1: company_id ya está
+                    # disponible como parámetro de esta función -- se
+                    # persiste hacia adelante en vez de dejarlo NULL siempre.
+                    company_id=company_id,
                 )
             )
         db.flush()

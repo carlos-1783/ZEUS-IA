@@ -27,7 +27,13 @@
     <!-- Preconnect to external domains -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    
+
+    <!-- Tipografía de marca: Inter estaba referenciada en el CSS de toda
+         la app pero nunca se cargaba de verdad (sin @font-face ni link),
+         así que siempre se veía la fuente del sistema. Se carga aquí de
+         verdad — ver AUDIT_REDISENO_FASE1.md. -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json">
     

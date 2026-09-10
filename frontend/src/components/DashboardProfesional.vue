@@ -1,19 +1,60 @@
 <template>
   <div class="dashboard-profesional dashboard-root" :class="{ 'dashboard-executive-root': currentView === 'dashboard' }">
+    <!-- Barra superior: identidad + estado real del sistema + acciones de cuenta -->
+    <header class="app-topbar">
+      <div class="app-topbar-left">
+        <img src="/images/logo-zeus.png" alt="ZEUS" class="app-topbar-logo" />
+        <div class="app-topbar-brand">
+          <h1>ZEUS-IA</h1>
+          <p class="app-topbar-subtitle">{{ t('dashboardPro.subtitle') }}</p>
+        </div>
+      </div>
+      <div class="app-topbar-right">
+        <span class="app-topbar-version">
+          <span class="version-dot" :class="backendHealthLabel === 'OK' ? 'online' : 'degraded'" aria-hidden="true"></span>
+          {{ t('dashboardPro.systemVersion', { version: appVersion }) }}
+        </span>
+        <button
+          type="button"
+          class="topbar-icon-btn"
+          :class="{ 'has-alert': (executiveAnalytics.alerts ?? 0) > 0 }"
+          :title="t('dashboardPro.nav.alerts') || 'Alertas'"
+          @click="router.push('/alerts')"
+        >
+          🔔
+          <span v-if="(executiveAnalytics.alerts ?? 0) > 0" class="topbar-alert-dot" aria-hidden="true"></span>
+        </button>
+        <button
+          type="button"
+          class="topbar-user-btn"
+          :title="authStore.user?.name || authStore.user?.email || ''"
+          @click="closeSidebarOnMobile(); goToUserSettings()"
+        >
+          <span class="topbar-user-icon">👤</span>
+          <span class="topbar-user-label">{{ authStore.user?.name || authStore.user?.email || t('dashboardPro.nav.settings') }}</span>
+          <span class="topbar-chevron" aria-hidden="true">⌄</span>
+        </button>
+        <button
+          type="button"
+          class="topbar-icon-btn topbar-logout"
+          :title="t('layout.logout')"
+          @click="handleLogout"
+        >
+          ⎋
+        </button>
+      </div>
+    </header>
+
+    <div class="dashboard-body">
     <!-- Overlay para móvil -->
-    <div 
-      class="sidebar-overlay" 
+    <div
+      class="sidebar-overlay"
       :class="{ active: sidebarOpen }"
       @click="sidebarOpen = false"
     ></div>
 
     <!-- Sidebar Oscura -->
     <aside class="sidebar-dark" :class="{ open: sidebarOpen }">
-      <div class="logo-section">
-        <img src="/images/logo-zeus.png" alt="ZEUS" class="logo-zeus-img" />
-        <h1>ZEUS-IA</h1>
-        <p class="subtitle">{{ t('dashboardPro.subtitle') }}</p>
-      </div>
 
       <nav class="nav-menu">
         <button 
@@ -67,8 +108,18 @@
           <span class="icon">📁</span>
           <span>{{ t('dashboardPro.nav.officeCrm') }}</span>
         </button>
+        <!-- Seguros: sin gating por company_type (vertical nueva, ver AUDIT_VERTICAL_SEGUROS.md) -->
+        <button
+          v-if="!isEmployee"
+          type="button"
+          class="nav-item"
+          @click="closeSidebarOnMobile(); goToInsurance()"
+        >
+          <span class="icon">🛡️</span>
+          <span>{{ t('dashboardPro.nav.insurance') }}</span>
+        </button>
         <!-- Nóminas: solo dueño de empresa (empleado no ve) -->
-        <button 
+        <button
           v-if="showModule('payroll')"
           class="nav-item"
           @click="closeSidebarOnMobile(); goToPayroll()"
@@ -96,6 +147,8 @@
           <div class="metric-label">{{ t('dashboardPro.metrics.activeAgents') }}</div>
         </div>
       </div>
+
+      <p class="sidebar-tagline">{{ t('dashboardPro.sidebarTagline') }}</p>
     </aside>
 
     <!-- Main Content -->
@@ -154,13 +207,24 @@
         <div class="executive-section executive-section--zeus">
           <div class="zeus-core-highlight zeus-core">
             <div class="zeus-core-card" @click="selectAgent(zeusCoreAgent)">
-              <img
-                :src="zeusCoreAgent.image"
-                :alt="zeusCoreAgent.name"
-                class="zeus-core-avatar"
-              />
+              <div class="zeus-core-avatar-container">
+                <img
+                  :src="zeusCoreAgent.image"
+                  :alt="zeusCoreAgent.name"
+                  class="zeus-core-avatar"
+                />
+                <span
+                  class="status-dot"
+                  :class="zeusCoreAgent.status"
+                  :title="agentStatusLabel(zeusCoreAgent.status)"
+                  aria-hidden="true"
+                ></span>
+              </div>
               <div class="zeus-core-info">
-                <h2 class="zeus-core-name">{{ zeusCoreAgent.name }}</h2>
+                <h2 class="zeus-core-name">
+                  {{ zeusCoreAgent.name }}
+                  <span v-if="zeusCoreAgent.beta" class="beta-badge">BETA</span>
+                </h2>
                 <p class="zeus-core-role">{{ zeusCoreAgent.role }}</p>
                 <div class="zeus-core-metrics">
                   <span class="zeus-core-status" :class="backendHealthLabel === 'OK' ? 'online' : 'degraded'">
@@ -175,36 +239,60 @@
                   {{ t('dashboardPro.agentCard.interact') }}
                 </button>
               </div>
+              <!-- Banner con el asset real ya existente de Zeus (sin arte nuevo,
+                   ver AUDIT_REDISENO_TARJETAS_AGENTE.md) -->
+              <div class="zeus-core-banner" aria-hidden="true">
+                <img src="/images/zues-3d-main.png" alt="" class="zeus-core-banner-img" />
+                <p class="zeus-core-banner-text">{{ t('dashboardPro.zeusCoreBannerText') }}</p>
+              </div>
             </div>
           </div>
         </div>
 
         <section class="agents-grid executive-agents-grid">
-        <div 
-          v-for="agent in executiveGridAgents" 
+        <div
+          v-for="agent in executiveGridAgents"
           :key="agent.name"
           class="agent-card agent-card--executive"
           :class="{ 'has-avatar': agent.hasGLB }"
           @click="selectAgent(agent)"
         >
-          <!-- Avatar Image -->
-          <div class="avatar-container">
-            <img 
-              :src="agent.image" 
+          <span class="agent-card-arrow" aria-hidden="true">›</span>
+          <!-- Avatar Image: mismo asset real, con tratamiento CSS propio
+               por agente (sin arte nuevo, ver AUDIT_REDISENO_TARJETAS_AGENTE.md) -->
+          <div class="avatar-container" :class="agentAvatarFx(agent.name)">
+            <img
+              v-if="agent.name === 'JUSTICIA'"
+              :src="agent.image"
+              alt=""
+              aria-hidden="true"
+              class="avatar-ghost"
+            />
+            <img
+              :src="agent.image"
               :alt="agent.name"
               class="avatar-image"
             />
+            <span
+              class="status-dot"
+              :class="agent.status"
+              :title="agentStatusLabel(agent.status)"
+              aria-hidden="true"
+            ></span>
           </div>
 
           <!-- Agent Info -->
           <div class="agent-info">
-            <h3 class="agent-name">{{ agent.name }}</h3>
+            <h3 class="agent-name">
+              {{ agent.name }}
+              <span v-if="agent.beta" class="beta-badge">BETA</span>
+            </h3>
             <p class="agent-role">{{ agent.role }}</p>
-            
+
             <div class="agent-stats">
               <div class="stat">
                 <span class="stat-label">{{ t('dashboardPro.agentCard.status') }}</span>
-                <span class="stat-value status-active">{{ t('dashboardPro.agentCard.online') }}</span>
+                <span class="stat-value" :class="`status-${agent.status}`">{{ agentStatusLabel(agent.status) }}</span>
               </div>
               <div class="stat">
                 <span class="stat-label">{{ t('dashboardPro.agentCard.activities24h') }}</span>
@@ -348,13 +436,23 @@
       </section>
 
       <!-- Agent Activity Panel (si hay agente seleccionado) -->
-      <div v-if="selectedAgent" class="agent-overlay" @click.self="selectedAgent = null">
-        <div class="agent-panel-container">
-          <button class="btn-close-panel" @click="selectedAgent = null">✕</button>
-          <AgentActivityPanel :agent="selectedAgent" />
+      <Transition name="agent-modal">
+        <div
+          v-if="selectedAgent"
+          class="agent-overlay"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="`Workspace de ${selectedAgent?.name || 'agente'}`"
+          @click.self="closeAgentPanel"
+        >
+          <div class="agent-panel-container">
+            <button class="btn-close-panel" @click="closeAgentPanel" aria-label="Cerrar">✕</button>
+            <AgentActivityPanel :agent="selectedAgent" />
+          </div>
         </div>
-      </div>
+      </Transition>
     </main>
+    </div>
   </div>
 </template>
 
@@ -373,6 +471,16 @@ const router = useRouter()
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 const { t } = useI18n()
+
+/** Versión real de la app (frontend/package.json) — mostrada tal cual en la
+ * barra superior, nunca un número inventado. Mantener en sync manualmente
+ * hasta que se exponga vía Vite `define` en build. */
+const appVersion = '1.0.6'
+
+const handleLogout = async () => {
+  await authStore.logout()
+  router.push('/login')
+}
 
 const props = defineProps({
   agents: Array
@@ -418,6 +526,10 @@ const goToControlHorario = () => {
 
 const goToOfficeCrm = () => {
   router.push('/office-crm')
+}
+
+const goToInsurance = () => {
+  router.push('/insurance')
 }
 
 // Navegar a Nóminas
@@ -894,13 +1006,19 @@ const refreshDashboardData = async () => {
   if (pollTick % 2 === 0) {
     await loadBackendHealth()
     await loadAgentsActivities()
+    await loadAgentsStatus()
   }
 }
 
 // Cargar al montar y refrescar periódicamente (un solo interval, cleanup en unmount)
 onMounted(async () => {
-  // Inicializar authStore si no está inicializado
-  if (!authStore.isAuthenticated && authStore.initialize) {
+  // Inicializar authStore si aún no tiene el usuario cargado. OJO:
+  // authStore.isAuthenticated solo indica que hay un token válido (ver
+  // stores/auth.ts), no que authStore.user ya se haya rellenado desde
+  // /auth/me — comprobar isAuthenticated aquí hacía que, en una recarga
+  // directa con sesión ya guardada, nunca se llamara a initialize() y
+  // authStore.user se quedara en null para siempre en esta vista.
+  if (!authStore.user && authStore.initialize) {
     console.log('🔄 Inicializando authStore...')
     await authStore.initialize()
   }
@@ -925,45 +1043,44 @@ onMounted(async () => {
   
   loadSavedSettings()
   await refreshDashboardData()
+  // Estado online/offline real inmediato, sin esperar al primer poll
+  // (refreshDashboardData solo lo refresca cuando pollTick es par).
+  await loadAgentsStatus()
 
   dashboardPollTimer = window.setInterval(() => {
     void refreshDashboardData()
   }, DASHBOARD_POLL_MS)
   
-  // Verificar después de múltiples delays para asegurar que authStore esté listo
-  setTimeout(() => {
-    console.log('🔍 Estado después de delay 100ms:', {
+  // Verificar después de múltiples delays para asegurar que authStore esté listo.
+  // Antes esto referenciaba shouldShowTPV/shouldShowControlHorario/shouldShowAdmin,
+  // que no existían en ningún sitio del componente: el ReferenceError se lanzaba
+  // al construir el objeto del console.log, ANTES de llegar a llamar a
+  // updateModulesForSuperuser() — es decir, los 3 reintentos estaban muertos
+  // desde siempre. Se usa showModule(), la función real que decide qué ve el
+  // usuario, para que el log refleje el estado real y el reintento se ejecute.
+  const logModuleVisibilityState = (label) => {
+    console.log(`🔍 Estado de módulos (${label}):`, {
       isAdmin: authStore.isAdmin,
       userIsSuperuser: authStore.user?.is_superuser,
       user: authStore.user,
-      shouldShowTPV: shouldShowTPV.value,
-      shouldShowControlHorario: shouldShowControlHorario.value,
-      shouldShowAdmin: shouldShowAdmin.value
+      showTPV: showModule('tpv'),
+      showControlHorario: showModule('control_horario'),
+      showAdmin: showModule('admin'),
     })
+  }
+
+  setTimeout(() => {
+    logModuleVisibilityState('100ms')
     updateModulesForSuperuser()
   }, 100)
-  
+
   setTimeout(() => {
-    console.log('🔍 Estado después de delay 500ms:', {
-      isAdmin: authStore.isAdmin,
-      userIsSuperuser: authStore.user?.is_superuser,
-      user: authStore.user,
-      shouldShowTPV: shouldShowTPV.value,
-      shouldShowControlHorario: shouldShowControlHorario.value,
-      shouldShowAdmin: shouldShowAdmin.value
-    })
+    logModuleVisibilityState('500ms')
     updateModulesForSuperuser()
   }, 500)
-  
+
   setTimeout(() => {
-    console.log('🔍 Estado después de delay 1000ms:', {
-      isAdmin: authStore.isAdmin,
-      userIsSuperuser: authStore.user?.is_superuser,
-      user: authStore.user,
-      shouldShowTPV: shouldShowTPV.value,
-      shouldShowControlHorario: shouldShowControlHorario.value,
-      shouldShowAdmin: shouldShowAdmin.value
-    })
+    logModuleVisibilityState('1000ms')
     updateModulesForSuperuser()
   }, 1000)
 })
@@ -977,44 +1094,100 @@ onUnmounted(() => {
   document.documentElement.classList.remove('dashboard-executive-mode')
 })
 
+// NOTA sobre `beta`: no existe ningún campo real en el backend (ver
+// GET /api/v1/agents/status → AGENT_REGISTRY en
+// backend/app/api/v1/endpoints/agents.py) que marque un agente como
+// "beta". Es una decisión de producto puramente informativa, no una
+// condición de negocio, así que se marca a mano solo en ZEUS CORE
+// (el orquestador es el componente más nuevo y menos rodado del
+// núcleo). Si en el futuro el backend expone un campo real de
+// versión/estabilidad por agente, este flag debe leerse de ahí.
 const agentsData = ref([
   {
     name: 'ZEUS CORE',
     role: 'Supreme Orchestrator',
     image: '/images/avatars/Zeus-avatar.jpg',
-    activities_24h: 0
+    activities_24h: 0,
+    status: 'loading',
+    beta: true
   },
   {
     name: 'PERSEO',
     role: 'Growth Strategist',
     image: '/images/avatars/Perseo-avatar.jpg',
-    activities_24h: 0
+    activities_24h: 0,
+    status: 'loading'
   },
   {
     name: 'RAFAEL',
     role: 'Fiscal Guardian',
     image: '/images/avatars/Rafael-avatar.jpg',
-    activities_24h: 0
+    activities_24h: 0,
+    status: 'loading'
   },
   {
     name: 'THALOS',
     role: 'Cybersecurity Defender',
     image: '/images/avatars/Thalos-avatar.jpg',
-    activities_24h: 0
+    activities_24h: 0,
+    status: 'loading'
   },
   {
     name: 'JUSTICIA',
     role: 'Legal & GDPR Advisor',
     image: '/images/avatars/Justicia-avatar.jpg',
-    activities_24h: 0
+    activities_24h: 0,
+    status: 'loading'
   },
   {
     name: 'AFRODITA',
     role: 'HR & Logistics Manager',
     image: '/images/avatars/Afrodita-avatar.jpg',
-    activities_24h: 0
+    activities_24h: 0,
+    status: 'loading'
   }
 ])
+
+// Estado real online/idle/offline por agente — GET /api/v1/agents/status
+// (mismo endpoint que ya consumen OlymposDashboard.vue y KpiAgentsView.vue,
+// calculado desde agent_activities, no un valor fijo).
+const loadAgentsStatus = async () => {
+  if (!authStore.getToken?.() && !authStore.token) return
+  try {
+    await authStore.ensureAccessTokenFresh(300)
+    const api = (await import('@/services/api')).default
+    const data = await api.get('/api/v1/agents/status')
+    const backendAgents = data?.agents || {}
+    agentsData.value.forEach((agent) => {
+      const info = backendAgents[agent.name]
+      agent.status = info?.status || 'offline'
+    })
+  } catch (error) {
+    console.error('Error cargando estado de agentes:', error)
+  }
+}
+
+const AGENT_STATUS_LABELS = {
+  online: 'En línea',
+  idle: 'Inactivo',
+  offline: 'Desconectado',
+  loading: 'Cargando…'
+}
+
+const agentStatusLabel = (status) => AGENT_STATUS_LABELS[status] || AGENT_STATUS_LABELS.offline
+
+// Clase de tratamiento visual por agente sobre el avatar real (mismo
+// asset, sin arte nuevo — ver AUDIT_REDISENO_TARJETAS_AGENTE.md para el
+// porqué de cada tratamiento).
+const AGENT_AVATAR_FX = {
+  PERSEO: 'avatar-fx-perseo',
+  RAFAEL: 'avatar-fx-rafael',
+  THALOS: 'avatar-fx-thalos',
+  JUSTICIA: 'avatar-fx-justicia',
+  AFRODITA: 'avatar-fx-afrodita'
+}
+
+const agentAvatarFx = (agentName) => AGENT_AVATAR_FX[agentName] || ''
 
 const zeusCoreAgent = computed(() =>
   agentsData.value.find((a) => a.name.includes('ZEUS')) || agentsData.value[0]
@@ -1036,7 +1209,7 @@ const executiveKpis = computed(() => {
       key: 'agents_active',
       label: 'Agentes',
       value: ex.agents || agentsData.value.length,
-      icon: '🤖',
+      icon: '👤',
       route: '/agents',
     },
     {
@@ -1050,14 +1223,14 @@ const executiveKpis = computed(() => {
       key: 'efficiency',
       label: 'Eficiencia',
       value: `${ex.efficiency ?? 0}%`,
-      icon: '📈',
+      icon: '🕐',
       route: '/analytics/efficiency',
     },
     {
       key: 'alerts',
       label: 'Alertas',
       value: ex.alerts ?? 0,
-      icon: '🔔',
+      icon: '🛡️',
       route: '/alerts',
     },
     {
@@ -1071,7 +1244,7 @@ const executiveKpis = computed(() => {
       key: 'system_health',
       label: 'Sistema',
       value: systemOk ? 'OK' : '!',
-      icon: '💚',
+      icon: '🗄️',
       route: '/system-health',
     },
   ]
@@ -1108,19 +1281,219 @@ const chatWith = (agent) => {
   selectedAgent.value = agent
   emit('agentClicked', agent)
 }
+
+const closeAgentPanel = () => {
+  selectedAgent.value = null
+}
+
+const handleAgentPanelKeydown = (event) => {
+  if (event.key === 'Escape' && selectedAgent.value) {
+    closeAgentPanel()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleAgentPanelKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleAgentPanelKeydown)
+})
 </script>
 
 <style scoped>
 .dashboard-profesional {
+  position: relative;
   display: flex;
+  flex-direction: column;
   height: 100vh;
   min-height: 100vh;
   max-height: 100vh;
-  background: #0a0e1a;
-  color: #fff;
-  font-family: 'Inter', -apple-system, sans-serif;
+  background-image: var(--zeus-bg);
+  color: var(--zeus-text);
+  font-family: var(--zeus-font-sans);
   overflow: hidden;
   box-sizing: border-box;
+}
+
+/* ---- Barra superior ---- */
+.app-topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 24px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 40%), #1a1c20;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  position: relative;
+  z-index: 20;
+}
+
+.app-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app-topbar-logo {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.app-topbar-brand h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.1;
+  background: linear-gradient(135deg, #6366f1 0%, #a78bfa 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.app-topbar-subtitle {
+  margin: 1px 0 0;
+  font-size: 11px;
+  color: rgba(226, 229, 235, 0.6);
+}
+
+.app-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.app-topbar-version {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(226, 229, 235, 0.75);
+  white-space: nowrap;
+  margin-right: 4px;
+}
+
+.version-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.version-dot.online {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.7);
+}
+
+.version-dot.degraded {
+  background: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+}
+
+.topbar-icon-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e2e5eb;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background var(--zeus-transition), transform var(--zeus-transition);
+}
+
+.topbar-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.topbar-alert-dot {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 1.5px solid #1a1c20;
+}
+
+.topbar-user-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 8px;
+  border-radius: var(--zeus-radius-full);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e2e5eb;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  max-width: 220px;
+  transition: background var(--zeus-transition);
+}
+
+.topbar-user-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.topbar-user-icon {
+  font-size: 14px;
+}
+
+.topbar-user-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-chevron {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.topbar-logout {
+  color: #fca5a5;
+}
+
+.topbar-logout:hover {
+  background: rgba(239, 68, 68, 0.16);
+}
+
+/* ---- Fila sidebar + contenido, debajo de la barra superior ---- */
+.dashboard-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Grano/ruido del fondo de bandas metálicas — obligatorio en toda
+   página, sin excepción. */
+.dashboard-profesional::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dashboard-profesional > * {
+  position: relative;
+  z-index: 1;
 }
 
 /* SIDEBAR OVERLAY (solo móvil) */
@@ -1131,7 +1504,7 @@ const chatWith = (agent) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(15, 23, 42, 0.4);
   z-index: 998;
   opacity: 0;
   pointer-events: none;
@@ -1146,9 +1519,9 @@ const chatWith = (agent) => {
 /* SIDEBAR */
 .sidebar-dark {
   width: 280px;
-  background: linear-gradient(180deg, #0f1419 0%, #1a1f2e 100%);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 32px 24px;
+  background: linear-gradient(180deg, #1f2937 0%, #161a22 55%, #12151b 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 24px 20px;
   display: flex;
   flex-direction: column;
   transition: transform 0.3s ease;
@@ -1180,7 +1553,7 @@ const chatWith = (agent) => {
 }
 
 .subtitle {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted);
   font-size: 12px;
   margin: 4px 0 0;
 }
@@ -1188,7 +1561,7 @@ const chatWith = (agent) => {
 .nav-menu {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   margin-bottom: auto;
 }
 
@@ -1196,58 +1569,64 @@ const chatWith = (agent) => {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 10px 14px;
   background: transparent;
   border: none;
-  border-radius: 8px;
-  color: rgba(255, 255, 255, 0.7);
+  border-left: 3px solid transparent;
+  border-radius: 0 var(--zeus-radius-sm) var(--zeus-radius-sm) 0;
+  color: rgba(226, 229, 235, 0.75);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background var(--zeus-transition), color var(--zeus-transition), border-color var(--zeus-transition);
   font-size: 14px;
+  font-weight: 500;
 }
 
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
 }
 
 .nav-item.active {
-  background: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
+  background: rgba(99, 102, 241, 0.18);
+  border-left-color: var(--zeus-accent-2, #6366f1);
+  color: #ffffff;
 }
 
 .nav-item.admin-btn {
   margin-top: 8px;
-  background: rgba(139, 92, 246, 0.1);
-  border: 1px solid rgba(139, 92, 246, 0.3);
+  background: var(--zeus-accent-2-soft);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  color: #7c3aed;
 }
 
 .nav-item.admin-btn:hover {
-  background: rgba(139, 92, 246, 0.2);
-  color: #8b5cf6;
-  border-color: rgba(139, 92, 246, 0.5);
+  background: rgba(124, 58, 237, 0.14);
+  color: #7c3aed;
+  border-color: rgba(139, 92, 246, 0.4);
 }
 
 .nav-item.tpv-nav-btn {
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: var(--zeus-success-soft);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #0d9668;
 }
 
 .nav-item.tpv-nav-btn:hover {
-  background: rgba(16, 185, 129, 0.2);
-  color: #10b981;
-  border-color: rgba(16, 185, 129, 0.5);
+  background: rgba(16, 185, 129, 0.16);
+  color: #0d9668;
+  border-color: rgba(16, 185, 129, 0.4);
 }
 
 .nav-item.control-horario-nav-btn {
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: var(--zeus-info-soft);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  color: #2563eb;
 }
 
 .nav-item.control-horario-nav-btn:hover {
-  background: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
-  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.16);
+  color: #2563eb;
+  border-color: rgba(59, 130, 246, 0.4);
 }
 
 .icon {
@@ -1258,7 +1637,7 @@ const chatWith = (agent) => {
   display: flex;
   gap: 16px;
   padding-top: 24px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .metric-item {
@@ -1268,13 +1647,21 @@ const chatWith = (agent) => {
 .metric-value {
   font-size: 24px;
   font-weight: 700;
-  color: #3b82f6;
+  color: #a5b4fc;
 }
 
 .metric-label {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(226, 229, 235, 0.55);
   margin-top: 4px;
+}
+
+.sidebar-tagline {
+  margin: 16px 4px 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(226, 229, 235, 0.45);
+  font-style: italic;
 }
 
 /* BOTÓN HAMBURGUESA (oculto en desktop) */
@@ -1293,7 +1680,7 @@ const chatWith = (agent) => {
   display: block;
   width: 24px;
   height: 2px;
-  background: #fff;
+  background: var(--zeus-text);
   transition: all 0.3s;
 }
 
@@ -1358,7 +1745,13 @@ const chatWith = (agent) => {
 .executive-section--kpi {
   flex: 0 0 12%;
   max-height: 12%;
-  min-height: 52px;
+  min-height: 88px;
+  /* Compensa el mismo hueco que .executive-pwa-bar (position:absolute,
+     top:4px, ~32px de alto) reserva ya en el breakpoint móvil de abajo
+     (@media max-width: 1024px) — en escritorio esa barra no tenía
+     ningún desplazamiento equivalente y quedaba flotando encima de la
+     fila de KPIs. Mismo valor (36px) que ya usa esa media query. */
+  padding-top: 36px;
 }
 
 .executive-section--zeus {
@@ -1375,19 +1768,85 @@ const chatWith = (agent) => {
 }
 
 .zeus-core-card {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 16px;
   width: 100%;
-  max-width: 720px;
+  max-width: 900px;
   height: 100%;
   padding: 10px 20px;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(139, 92, 246, 0.08) 100%);
-  border: 1px solid rgba(59, 130, 246, 0.35);
-  border-radius: 14px;
-  box-shadow: 0 4px 24px rgba(59, 130, 246, 0.12);
+  background: linear-gradient(145deg, #2a2d33 0%, #1c1e23 55%, #24262b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--zeus-radius-lg);
+  box-shadow: var(--zeus-shadow-md);
   box-sizing: border-box;
   cursor: pointer;
+  overflow: hidden;
+  transition: box-shadow var(--zeus-transition), border-color var(--zeus-transition);
+}
+
+.zeus-core-card:hover {
+  box-shadow: var(--zeus-shadow-lg);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.zeus-core-info {
+  position: relative;
+  z-index: 2;
+}
+
+/* Banner con el asset real ya existente de Zeus, superpuesto en el lado
+   derecho de la tarjeta (sin arte nuevo). */
+.zeus-core-banner {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 42%;
+  min-width: 180px;
+  overflow: hidden;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  background: linear-gradient(90deg, rgba(20, 22, 26, 0) 0%, rgba(15, 17, 20, 0.55) 30%, rgba(10, 11, 13, 0.92) 100%);
+}
+
+.zeus-core-banner-img {
+  position: absolute;
+  right: -10%;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 130%;
+  width: auto;
+  object-fit: contain;
+  filter: grayscale(0.15) contrast(1.05);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.zeus-core-banner-text {
+  position: relative;
+  z-index: 2;
+  max-width: 55%;
+  margin: 0 16px 0 0;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  text-align: right;
+}
+
+.zeus-core-avatar-container {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border: none;
+  background: none;
 }
 
 .zeus-core-avatar {
@@ -1413,13 +1872,16 @@ const chatWith = (agent) => {
   margin: 0;
   font-size: 18px;
   font-weight: 700;
-  color: #fff;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .zeus-core-role {
   margin: 2px 0 8px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.65);
+  color: rgba(226, 229, 235, 0.7);
 }
 
 .zeus-core-metrics {
@@ -1442,7 +1904,7 @@ const chatWith = (agent) => {
 }
 
 .zeus-core-activity {
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(226, 229, 235, 0.55);
 }
 
 .executive-agents-grid {
@@ -1468,30 +1930,33 @@ const chatWith = (agent) => {
   font-size: 32px;
   font-weight: 700;
   margin: 0;
+  color: var(--zeus-text);
 }
 
 .breadcrumb {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted);
   font-size: 14px;
   margin: 4px 0 0;
 }
 
 .status-badge {
   padding: 8px 16px;
-  border-radius: 20px;
+  border-radius: var(--zeus-radius-full);
   font-size: 13px;
   font-weight: 600;
+  border: 1px solid transparent;
 }
 
 .status-badge.degraded {
-  background: rgba(255, 165, 0, 0.15);
-  color: #ffa500;
-  border-color: rgba(255, 165, 0, 0.4);
+  background: var(--zeus-warning-soft);
+  color: #b45309;
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
 .status-badge.online {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
+  background: var(--zeus-success-soft);
+  color: #0d9668;
+  border-color: rgba(16, 185, 129, 0.25);
 }
 
 /* RESPONSIVE - MÓVIL Y TABLET */
@@ -1509,7 +1974,7 @@ const chatWith = (agent) => {
     height: 100vh;
     transform: translateX(-100%);
     z-index: 999;
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--zeus-shadow-lg);
   }
 
   /* Sidebar visible cuando está abierto */
@@ -1644,10 +2109,17 @@ const chatWith = (agent) => {
   }
 
   .executive-agents-grid {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto;
+    /* Tablet: 2 columnas, igual que desktop y que móvil — la rejilla de
+       tarjetas de agente se mantiene siempre en 2 columnas en este
+       breakpoint intermedio en vez de colapsar a 1 sola (con solo 5
+       tarjetas, 1 columna desperdicia el ancho disponible). */
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: none;
+    grid-auto-rows: minmax(150px, auto);
     height: auto;
-    flex: none;
+    max-height: none;
+    overflow-y: auto;
+    flex: 1;
   }
 
   .agent-card--executive {
@@ -1672,38 +2144,63 @@ const chatWith = (agent) => {
   }
 }
 
-/* AGENTS GRID — fullscreen 3×2 */
+/* AGENTS GRID — 2 columnas (5 tarjetas de agente sin ZEUS CORE, que
+   tiene su propia fila destacada arriba). Antes era 3×2: se reduce a
+   2 columnas para dar más aire a cada tarjeta (avatar + estado real +
+   badge), a costa de una fila extra que cabe con scroll vertical
+   dentro de la sección en vez de forzar cada tarjeta a encogerse. */
 .agents-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(2, 1fr);
+  grid-template-columns: repeat(2, 1fr);
+  grid-auto-rows: minmax(0, 1fr);
   gap: 10px;
   height: 100%;
   width: 100%;
+  overflow-y: auto;
   box-sizing: border-box;
 }
 
 .agent-card {
+  position: relative;
   height: 100%;
   width: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  background: linear-gradient(145deg, #2a2d33 0%, #1c1e23 55%, #24262b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--zeus-radius);
   padding: 10px;
+  padding-right: 26px;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: transform var(--zeus-transition), border-color var(--zeus-transition), box-shadow var(--zeus-transition);
   overflow: hidden;
   box-sizing: border-box;
+  box-shadow: var(--zeus-shadow-sm);
 }
 
 .agent-card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(59, 130, 246, 0.5);
-  box-shadow: 0 8px 32px rgba(59, 130, 246, 0.2);
+  transform: translateY(-3px);
+  border-color: rgba(59, 130, 246, 0.35);
+  box-shadow: var(--zeus-shadow-md);
+}
+
+.agent-card-arrow {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  font-size: 20px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.32);
+  pointer-events: none;
+  transition: color var(--zeus-transition), transform var(--zeus-transition);
+}
+
+.agent-card:hover .agent-card-arrow {
+  color: rgba(255, 255, 255, 0.7);
+  transform: translateY(-50%) translateX(2px);
 }
 
 .agent-card--executive .avatar-container {
@@ -1732,26 +2229,29 @@ const chatWith = (agent) => {
 }
 
 .avatar-container {
+  position: relative;
   width: 80px;
   height: 80px;
   margin: auto;
   flex-shrink: 0;
   border-radius: 50%;
   overflow: hidden;
-  background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.08) 0%, transparent 70%);
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 3px solid rgba(59, 130, 246, 0.3);
+  border: 3px solid rgba(59, 130, 246, 0.18);
   transition: all 0.3s;
 }
 
 .agent-card:hover .avatar-container {
-  border-color: rgba(59, 130, 246, 0.8);
-  box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.08);
 }
 
 .avatar-image {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -1760,6 +2260,168 @@ const chatWith = (agent) => {
 
 .agent-card:hover .avatar-image {
   transform: scale(1.1);
+}
+
+/* ---- Tratamiento de dinamismo por agente sobre la MISMA foto real ----
+   No hay generación de ilustraciones nuevas disponible en este entorno
+   (decisión ya acordada con el usuario): se aplican transformaciones
+   CSS sutiles sobre el asset ya existente para sugerir personalidad,
+   nunca desfigurando la foto. Ver AUDIT_REDISENO_TARJETAS_AGENTE.md. */
+
+/* PERSEO — atlético/dinámico: encuadre inclinado + líneas de velocidad
+   que se desvanecen desde el borde izquierdo (sugiere movimiento hacia
+   la derecha, sin animación permanente). */
+.avatar-container.avatar-fx-perseo .avatar-image {
+  transform: rotate(-5deg) scale(1.14);
+  object-position: 55% 30%;
+}
+
+.agent-card:hover .avatar-container.avatar-fx-perseo .avatar-image {
+  transform: rotate(-5deg) scale(1.2);
+}
+
+.avatar-container.avatar-fx-perseo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    100deg,
+    transparent 0px, transparent 6px,
+    rgba(255, 255, 255, 0.5) 6px, rgba(255, 255, 255, 0.5) 8px,
+    transparent 8px, transparent 20px
+  );
+  -webkit-mask-image: linear-gradient(90deg, black 0%, transparent 40%);
+  mask-image: linear-gradient(90deg, black 0%, transparent 40%);
+}
+
+/* RAFAEL — ejecutivo/sobrio: marco recto en vez del círculo genérico,
+   sin inclinación, borde de un solo tono neutro (nada de gradiente). */
+.avatar-container.avatar-fx-rafael {
+  border-radius: 10px;
+  border-color: rgba(82, 96, 122, 0.45);
+}
+
+.avatar-container.avatar-fx-rafael .avatar-image {
+  border-radius: 7px;
+}
+
+.agent-card:hover .avatar-container.avatar-fx-rafael {
+  border-color: rgba(82, 96, 122, 0.7);
+}
+
+/* THALOS — defensivo: aura/anillo frío estático (sin pulso: un escudo
+   no parpadea), en vez del anillo índigo genérico. */
+.avatar-container.avatar-fx-thalos {
+  border-color: rgba(59, 130, 246, 0.55);
+  box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.14), 0 0 18px rgba(59, 130, 246, 0.28);
+}
+
+.agent-card:hover .avatar-container.avatar-fx-thalos {
+  border-color: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 0 0 7px rgba(59, 130, 246, 0.18), 0 0 24px rgba(59, 130, 246, 0.4);
+}
+
+/* JUSTICIA — movimiento/doble exposición: una segunda copia de la misma
+   foto, desplazada y difuminada detrás, como un "ghost trail". */
+.avatar-ghost {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.4;
+  filter: blur(2px) grayscale(0.15);
+  transform: translateX(-7px) scale(1.06);
+}
+
+/* AFRODITA — cercana/cálida: aura suave en tono ámbar (token ya
+   existente --zeus-warning, sin introducir un color nuevo). */
+.avatar-container.avatar-fx-afrodita {
+  border-color: rgba(245, 158, 11, 0.35);
+  box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.1);
+}
+
+.agent-card:hover .avatar-container.avatar-fx-afrodita {
+  border-color: rgba(245, 158, 11, 0.6);
+  box-shadow: 0 0 0 7px rgba(245, 158, 11, 0.16);
+}
+
+/* ---- Indicador de estado real (online/idle/offline) ---- */
+.status-dot {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  z-index: 3;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #24262b;
+  background: #cbd5e1;
+}
+
+.status-dot.online {
+  background: #10b981;
+}
+
+.status-dot.idle {
+  background: #f59e0b;
+}
+
+.status-dot.offline {
+  background: #94a3b8;
+}
+
+.status-dot.loading {
+  background: #cbd5e1;
+}
+
+/* Pulso sutil solo cuando está realmente online — respeta
+   prefers-reduced-motion (ver media query al final del bloque). */
+.status-dot.online::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid #10b981;
+  opacity: 0.55;
+  animation: status-dot-pulse 1.8s ease-out infinite;
+}
+
+@keyframes status-dot-pulse {
+  0% { transform: scale(0.55); opacity: 0.55; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-dot.online::after {
+    animation: none;
+    display: none;
+  }
+}
+
+/* ---- Badge BETA (informativo de producto, ver comentario en <script>
+   sobre por qué solo ZEUS CORE lo lleva hardcodeado) ---- */
+.beta-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--zeus-accent);
+  background: var(--zeus-accent-soft);
+  border-radius: var(--zeus-radius-full);
+  line-height: 1.4;
+}
+
+.agent-name {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .agent-info {
@@ -1776,11 +2438,11 @@ const chatWith = (agent) => {
   font-size: 16px;
   font-weight: 700;
   margin: 0;
-  color: #fff;
+  color: #ffffff;
 }
 
 .agent-role {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(226, 229, 235, 0.6);
   font-size: 12px;
   margin: 0;
 }
@@ -1800,28 +2462,57 @@ const chatWith = (agent) => {
 
 .stat-label {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(226, 229, 235, 0.55);
   text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .stat-value {
   font-size: 16px;
   font-weight: 600;
+  color: #ffffff;
 }
 
 .status-active {
-  color: #10b981;
+  color: #0d9668;
 }
 
+/* Texto del stat "Estado" en la tarjeta — coloreado según el estado
+   real devuelto por GET /api/v1/agents/status (mismo criterio de color
+   que el punto de estado del avatar). */
+.status-online {
+  color: #0d9668;
+}
+
+.status-idle {
+  color: #b45309;
+}
+
+.status-offline {
+  color: #64748b;
+}
+
+.status-loading {
+  color: var(--zeus-text-muted);
+}
+
+/* Botón secundario: el Dashboard es una vista de selección entre 6
+   agentes de igual jerarquía — ninguno de los 6 "Interactuar" es "el"
+   botón primario de la vista (mismo criterio que el open-trigger del
+   preview de referencia: un disparador que abre otra vista no es la
+   acción de mayor jerarquía de ESTA vista). El gradiente vibrante queda
+   reservado para la acción única de mayor jerarquía dentro de cada
+   panel de agente ya abierto (ej. "Actualizar"). */
 .btn-interact {
   padding: 8px 16px;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  border: none;
-  border-radius: 8px;
-  color: #fff;
+  background: #ffffff;
+  border: 1px solid #D1D5DB;
+  border-radius: var(--zeus-radius-sm);
+  color: var(--zeus-text, #0f172a);
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  box-shadow: none;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   font-size: 12px;
   display: inline-flex;
   align-items: center;
@@ -1832,8 +2523,13 @@ const chatWith = (agent) => {
 }
 
 .btn-interact:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
+  border-color: #9aa2af;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-interact {
+    transition-duration: 1ms;
+  }
 }
 
 /* AGENT ACTIVITY PANEL OVERLAY */
@@ -1843,14 +2539,65 @@ const chatWith = (agent) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(10px);
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
   padding: 32px 24px;
   overflow-y: auto;
+}
+
+/* Modal animado — entrada/salida (240ms), backdrop en fade, panel con
+   fade + escala + desplazamiento sutil. Easing distinto para entrada
+   (desaceleración natural) y salida (aceleración) — sistema de motion
+   compartido, ver tokens zeus-ease y zeus-dur en zeus-light-system.css.
+   Ver .agent-modal-* más abajo para las clases que genera
+   <Transition name="agent-modal">. */
+.agent-modal-enter-active {
+  transition: background-color var(--zeus-dur-modal, 240ms) var(--zeus-ease-enter, ease-out);
+}
+
+.agent-modal-leave-active {
+  transition: background-color var(--zeus-dur-modal, 240ms) var(--zeus-ease-exit, ease-in);
+}
+
+.agent-modal-enter-active .agent-panel-container {
+  transition: opacity var(--zeus-dur-modal, 240ms) var(--zeus-ease-enter, ease-out),
+    transform var(--zeus-dur-modal, 240ms) var(--zeus-ease-enter, ease-out);
+}
+
+.agent-modal-leave-active .agent-panel-container {
+  transition: opacity var(--zeus-dur-modal, 240ms) var(--zeus-ease-exit, ease-in),
+    transform var(--zeus-dur-modal, 240ms) var(--zeus-ease-exit, ease-in);
+}
+
+.agent-modal-enter-from,
+.agent-modal-leave-to {
+  background-color: rgba(15, 23, 42, 0);
+}
+
+.agent-modal-enter-from .agent-panel-container,
+.agent-modal-leave-to .agent-panel-container {
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+}
+
+/* Respeta la preferencia del sistema de reducir movimiento: sin escala
+   ni desplazamiento, solo un fade casi instantáneo. */
+@media (prefers-reduced-motion: reduce) {
+  .agent-modal-enter-active,
+  .agent-modal-leave-active,
+  .agent-modal-enter-active .agent-panel-container,
+  .agent-modal-leave-active .agent-panel-container {
+    transition-duration: 1ms;
+  }
+
+  .agent-modal-enter-from .agent-panel-container,
+  .agent-modal-leave-to .agent-panel-container {
+    transform: none;
+  }
 }
 
 .agent-panel-container {
@@ -1863,16 +2610,6 @@ const chatWith = (agent) => {
   gap: 16px;
 }
 
-.agent-panel-container::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: 20px;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.6), rgba(139, 92, 246, 0.4));
-  opacity: 0.2;
-  pointer-events: none;
-  z-index: -1;
-}
 
 .btn-close-panel {
   align-self: flex-end;
@@ -2020,33 +2757,35 @@ const chatWith = (agent) => {
 }
 
 .stat-card {
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  background: var(--zeus-surface);
+  border: 1px solid var(--zeus-border);
+  border-radius: var(--zeus-radius);
   padding: 24px;
   display: flex;
   gap: 16px;
   align-items: flex-start;
+  box-shadow: var(--zeus-shadow-sm);
 }
 
 .stat-icon {
   font-size: 32px;
-  background: rgba(59, 130, 246, 0.15);
+  background: var(--zeus-accent-soft);
   padding: 12px;
-  border-radius: 12px;
+  border-radius: var(--zeus-radius);
 }
 
 .stat-content h3 {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--zeus-text-secondary);
   margin: 0 0 8px;
+  font-weight: 500;
 }
 
 .stat-number {
   font-size: 28px;
   font-weight: 700;
   margin: 0;
-  color: #fff;
+  color: var(--zeus-text);
 }
 
 .stat-change {
@@ -2056,22 +2795,24 @@ const chatWith = (agent) => {
 }
 
 .stat-change.positive {
-  color: #10b981;
+  color: #0d9668;
 }
 
 .chart-placeholder {
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  background: var(--zeus-surface);
+  border: 1px solid var(--zeus-border);
+  border-radius: var(--zeus-radius);
   padding: 32px;
   min-height: 400px;
   display: flex;
   flex-direction: column;
+  box-shadow: var(--zeus-shadow-sm);
 }
 
 .chart-placeholder h3 {
   margin: 0 0 24px;
   font-size: 20px;
+  color: var(--zeus-text);
 }
 
 .placeholder-content {
@@ -2085,11 +2826,11 @@ const chatWith = (agent) => {
 
 .icon-large {
   font-size: 64px;
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 .placeholder-content p {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted);
   font-size: 16px;
 }
 
@@ -2105,33 +2846,34 @@ const chatWith = (agent) => {
 }
 
 .settings-card {
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  background: var(--zeus-surface);
+  border: 1px solid var(--zeus-border);
+  border-radius: var(--zeus-radius);
   padding: 24px;
+  box-shadow: var(--zeus-shadow-sm);
 }
 
 .settings-card h3 {
   margin: 0 0 20px;
   font-size: 18px;
-  color: #fff;
+  color: var(--zeus-text);
 }
 
 .settings-embed-hint {
   margin: 0 0 16px;
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--zeus-text-secondary);
   line-height: 1.45;
 }
 
 .settings-link {
-  color: #7eb8ff;
+  color: var(--zeus-accent);
   text-decoration: underline;
   cursor: pointer;
 }
 
 .settings-link:hover {
-  color: #a8d4ff;
+  color: var(--zeus-accent-hover);
 }
 
 .setting-item {
@@ -2139,7 +2881,7 @@ const chatWith = (agent) => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--zeus-border);
 }
 
 .setting-item:last-child {
@@ -2147,7 +2889,7 @@ const chatWith = (agent) => {
 }
 
 .setting-item label {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--zeus-text);
   font-size: 14px;
 }
 
@@ -2158,25 +2900,25 @@ const chatWith = (agent) => {
 }
 
 .setting-item select {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--zeus-surface);
+  border: 1px solid var(--zeus-border);
   border-radius: 6px;
   padding: 8px 12px;
-  color: #fff;
+  color: var(--zeus-text);
   font-size: 14px;
   cursor: pointer;
 }
 
 .setting-item select option {
-  background: #1a1f2e;
+  background: var(--zeus-surface);
 }
 
 .btn-secondary {
   padding: 8px 16px;
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: var(--zeus-accent-soft);
+  border: 1px solid rgba(59, 130, 246, 0.25);
   border-radius: 6px;
-  color: #3b82f6;
+  color: var(--zeus-accent);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -2184,12 +2926,38 @@ const chatWith = (agent) => {
 }
 
 .btn-secondary:hover {
-  background: rgba(59, 130, 246, 0.25);
-  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(59, 130, 246, 0.4);
 }
 
 /* Mobile-only executive dashboard (≤768px) */
 @media (max-width: 768px) {
+  /* Topbar: en móvil no cabe marca + versión + campana + usuario + logout
+     en una sola fila (ver AUDIT_REDISENO_TARJETAS_AGENTE.md) — se oculta
+     el texto secundario y se deja solo lo accionable, sin perder ninguna
+     acción real (todo sigue siendo clicable, solo cambia lo que se lee). */
+  .app-topbar {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .app-topbar-subtitle {
+    display: none;
+  }
+
+  .app-topbar-version {
+    display: none;
+  }
+
+  .topbar-user-label,
+  .topbar-chevron {
+    display: none;
+  }
+
+  .topbar-user-btn {
+    padding: 6px 8px;
+  }
+
   .main-content--dashboard {
     padding: 8px;
     padding-bottom: 20px;

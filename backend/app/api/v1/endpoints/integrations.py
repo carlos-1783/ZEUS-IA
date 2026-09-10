@@ -2,6 +2,8 @@
 🔌 Integrations Endpoints
 Endpoints para WhatsApp, Email, Hacienda, Stripe
 """
+import logging
+
 from fastapi import APIRouter, HTTPException, Request, Header, Depends
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any
@@ -15,8 +17,14 @@ from services.stripe_service import stripe_service
 from app.core.auth import require_scopes
 from app.core.auth import get_current_active_superuser
 from app.models.user import User
+# Tabla de precios oficial (misma fuente de verdad que usa
+# /onboarding/create-account al verificar el pago) -- se reutiliza aquí
+# para calcular el importe del checkout público en el servidor, nunca
+# confiando en un importe que mande el cliente.
+from app.api.v1.endpoints.onboarding import PRICING_PLANS
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # MODELS
@@ -55,6 +63,20 @@ class PaymentIntent(BaseModel):
     customer_email: EmailStr
     description: str
     metadata: Optional[Dict[str, str]] = None
+
+
+class PublicCheckoutPaymentIntent(BaseModel):
+    """Payload del checkout público (cliente nuevo, sin sesión).
+
+    Deliberadamente NO tiene campo `amount`: el importe nunca debe salir
+    del cliente para este flujo, se calcula en el servidor a partir de
+    `plan` usando PRICING_PLANS. Si el cliente manda un campo `amount` de
+    todas formas (compatibilidad con payloads antiguos), se ignora.
+    """
+    plan: str
+    customer_email: EmailStr
+    description: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 # ============================================================================
 # WHATSAPP ENDPOINTS
@@ -221,8 +243,83 @@ async def create_payment(
     
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error"))
-    
+
     return result
+
+
+@router.post("/stripe/checkout/payment-intent")
+async def create_checkout_payment_intent(payment: PublicCheckoutPaymentIntent):
+    """
+    Crear Payment Intent PÚBLICO para el checkout de alta de un cliente
+    nuevo (`/checkout/:plan`, ruta sin sesión -- el visitante todavía no
+    tiene cuenta ni token, por diseño: paga primero y crea la cuenta
+    después con `/onboarding/create-account`).
+
+    Deliberadamente separado del endpoint genérico
+    `/stripe/payment-intent` (que exige `tax:write`, pensado para uso
+    autenticado, ej. un usuario ya logueado gestionando su facturación) en
+    vez de quitarle la autenticación a ese endpoint genérico: así no se
+    debilita ninguna protección existente sobre una superficie que puede
+    tener otros usos futuros.
+
+    Controles anti-abuso de esta ruta pública:
+    - El importe NUNCA se toma del cliente. Se calcula en el servidor a
+      partir de `plan`, usando la misma tabla de precios (`PRICING_PLANS`)
+      que ya usa `/onboarding/create-account` para validar el pago -- si el
+      cliente manda un plan que no existe, 400 sin llamar a Stripe.
+    - Pasa por el `SecurityMiddleware` global (rate limiting por IP,
+      bucket dedicado y estricto para esta ruta -- ver
+      `app/core/security_middleware.py`), igual que el resto del núcleo.
+    - No crea ninguna cuenta ni persiste nada en la BD propia -- solo
+      genera un PaymentIntent en Stripe. La creación real de la cuenta
+      sigue exigiendo, en `/onboarding/create-account`, verificar contra
+      la API de Stripe que ese PaymentIntent está `succeeded`.
+    """
+    plan_config = PRICING_PLANS.get(payment.plan)
+    if plan_config is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Plan '{payment.plan}' no válido. "
+                f"Planes válidos: {list(PRICING_PLANS.keys())}"
+            ),
+        )
+
+    # Importe calculado en el servidor -- nunca confiar en un importe
+    # enviado por el cliente para este flujo público.
+    amount = plan_config["setup_price"] + plan_config["monthly_price"]
+
+    metadata: Dict[str, str] = {}
+    for key, value in (payment.metadata or {}).items():
+        if value is not None:
+            metadata[key] = str(value)
+    metadata["plan"] = payment.plan
+
+    description = payment.description or (
+        f"{plan_config['name']} - Setup + primera mensualidad (checkout público)"
+    )
+
+    result = await stripe_service.create_payment_intent(
+        amount=amount,
+        customer_email=payment.customer_email,
+        description=description,
+        metadata=metadata,
+    )
+
+    if not result.get("success"):
+        logger.error(
+            "checkout_payment_intent_failed plan=%s customer_email=%s error=%s",
+            payment.plan, payment.customer_email, result.get("error"),
+        )
+        raise HTTPException(status_code=502, detail=result.get("error"))
+
+    logger.info(
+        "checkout_payment_intent_created plan=%s amount=%s customer_email=%s payment_intent_id=%s",
+        payment.plan, amount, payment.customer_email, result.get("payment_intent_id"),
+    )
+
+    return result
+
 
 @router.post("/stripe/webhook")
 async def stripe_webhook(

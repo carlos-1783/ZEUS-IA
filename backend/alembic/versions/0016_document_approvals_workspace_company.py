@@ -25,14 +25,14 @@ def upgrade() -> None:
         ["company_id"],
         unique=False,
     )
-    op.create_foreign_key(
-        "fk_document_approvals_company_id",
-        "document_approvals",
-        "companies",
-        ["company_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    with op.batch_alter_table("document_approvals") as batch_op:
+        batch_op.create_foreign_key(
+            "fk_document_approvals_company_id",
+            "companies",
+            ["company_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
     op.add_column(
         "document_approvals",
         sa.Column(
@@ -45,7 +45,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column("document_approvals", "visible_in_workspace")
-    op.drop_constraint("fk_document_approvals_company_id", "document_approvals", type_="foreignkey")
-    op.drop_index(op.f("ix_document_approvals_company_id"), table_name="document_approvals")
-    op.drop_column("document_approvals", "company_id")
+    with op.batch_alter_table("document_approvals") as batch_op:
+        batch_op.drop_column("visible_in_workspace")
+        batch_op.drop_constraint("fk_document_approvals_company_id", type_="foreignkey")
+        batch_op.drop_index(op.f("ix_document_approvals_company_id"))
+        batch_op.drop_column("company_id")

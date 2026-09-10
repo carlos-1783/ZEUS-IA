@@ -23,7 +23,10 @@ export interface ZeusPipelineResult {
 }
 
 export async function fetchZeusDocumentPipelineStatus() {
-  return api.get('/api/v1/zeus/document-pipeline/status') as Promise<
+  // Migrado de /api/v1/zeus/document-pipeline/status a
+  // /api/v1/zeus-core/document-pipeline/status (Bloque 3, limpieza de
+  // simulación) — ver zeus_status_api.ts.
+  return api.get('/api/v1/zeus-core/document-pipeline/status') as Promise<
     Record<string, unknown> & { success: boolean; active?: boolean; agents?: string[] }
   >
 }

@@ -155,7 +155,7 @@ def run_safe_lock(
         "env_validation": env_report,
         "teamflow": teamflow_report,
         "execution_source_of_truth": {
-            "endpoint": "/api/v1/zeus/status",
+            "endpoint": "/api/v1/zeus-core/status",
             "required_fields": ["execution_mode", "writes_enabled", "modules"],
             "present": bool(execution),
         },

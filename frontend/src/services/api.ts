@@ -6,6 +6,7 @@
 
 import { useAuthStore } from '@/stores/auth';
 import { API_BASE_URL as CONFIG_API_BASE } from '@/config';
+import { translateValidationDetail } from '@/utils/apiErrorTranslation';
 
 // Misma fuente que axios (`@/api`) y chat: VITE_* / REACT_APP_API_URL / runtime / DEFAULT_PROD
 const API_BASE_URL = (CONFIG_API_BASE || '').replace(/\/+$/, '');
@@ -150,6 +151,21 @@ const request = async (endpoint: string, options: RequestOptions = {}): Promise<
       }
     } catch {
       /* ignore */
+    }
+    // Traduce el fallback genérico (`error.message`) a español reutilizando
+    // la misma tabla que ya usan Register.vue/OnboardingSetup.vue — ver
+    // Hallazgo 6 de AUDIT_FRONTEND_CIERRE.md. `error.detail`/`error.data`
+    // se dejan intactos (el body crudo del backend) para que los llamadores
+    // que ya hacen su propia traducción con etiquetas de campo específicas
+    // (ej. OnboardingSetup.vue) sigan funcionando exactamente igual.
+    try {
+      const errorDataDetail = errorData?.detail ?? errorData?.message;
+      const translated = translateValidationDetail(errorDataDetail);
+      if (translated) {
+        errorMessage = translated;
+      }
+    } catch {
+      /* nunca romper el flujo de error por un fallo de traducción */
     }
     const error = new Error(errorMessage) as any;
     error.status = response.status;

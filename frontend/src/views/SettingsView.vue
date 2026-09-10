@@ -30,14 +30,31 @@ function goBack() {
 </script>
 
 <style scoped>
+/* Sistema de diseño Ronda 2: bandas metálicas obligatorias en toda la
+   vista (antes degradado oscuro plano #1a1f2e→#0f1419). Botón "Volver"
+   secundario blanco/borde — no es la acción de mayor jerarquía. */
 .settings-page {
+  position: relative;
+  overflow: hidden;
   min-height: 100vh;
   padding: 24px 20px 48px;
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-  color: #fff;
+  background-image: var(--zeus-bg);
+  color: var(--zeus-text, #0f172a);
+  box-sizing: border-box;
+}
+
+.settings-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--zeus-noise-svg);
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
 }
 
 .settings-page-header {
+  position: relative;
   max-width: 720px;
   margin: 0 auto 24px;
   display: flex;
@@ -49,24 +66,27 @@ function goBack() {
   margin: 0;
   font-size: 1.5rem;
   font-weight: 700;
+  color: var(--zeus-text, #0f172a);
 }
 
 .back-btn {
   align-self: flex-start;
   padding: 8px 14px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  border-radius: var(--zeus-radius-sm, 8px);
+  border: 1px solid #D1D5DB;
+  background: #ffffff;
+  color: var(--zeus-text, #0f172a);
   cursor: pointer;
   font-size: 0.9rem;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .back-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
+  border-color: #9aa2af;
 }
 
 .settings-page-grid {
+  position: relative;
   max-width: 720px;
   margin: 0 auto;
   display: grid;

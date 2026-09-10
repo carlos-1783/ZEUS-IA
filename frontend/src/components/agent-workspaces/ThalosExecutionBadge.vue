@@ -1,10 +1,10 @@
 <template>
   <div class="thalos-badges" :class="{ inline: inline }">
     <span v-if="showGlobal && globalMode" class="badge global" :class="modeClass(globalMode)">
-      {{ globalMode }}
+      {{ globalModeLabel }}
     </span>
     <span v-if="moduleBadge" class="badge module" :class="uiClass(moduleBadge)">
-      {{ moduleBadge }}
+      {{ moduleBadgeLabel }}
     </span>
     <span v-if="dataOrigin" class="badge origin" :title="'Origen de datos'">
       {{ originLabel }}
@@ -76,6 +76,47 @@ const originLabel = computed(() => {
     mixed: 'Mixto',
   }
   return map[o] || o
+})
+
+// Mismo patron que originLabel: el backend devuelve identificadores
+// tecnicos crudos (execution_mode / ui_badge) que no significan nada
+// para un usuario de negocio -- se traducen aqui, con un texto
+// explicativo de fallback si aparece un valor no mapeado (nunca se
+// muestra el string crudo del backend).
+const GLOBAL_MODE_LABELS: Record<string, string> = {
+  REAL: 'Real',
+  REAL_ACTIVE: 'Activo (real)',
+  REAL_SAFE: 'Real (modo seguro)',
+  SIMULATION: 'Simulado',
+  SIMULATED: 'Simulado',
+  ERROR: 'Error de conexión',
+  UNKNOWN: 'Estado desconocido',
+}
+
+const MODULE_BADGE_LABELS: Record<string, string> = {
+  REAL: 'Real',
+  SIMULATED: 'Simulado',
+  PARTIAL: 'Parcial',
+  UNKNOWN: 'Desconocido',
+  ERROR: 'Error',
+  NONE: 'No disponible',
+}
+
+function humanizeRawMode(value: string): string {
+  const readable = value.toLowerCase().replace(/_/g, ' ')
+  return readable.charAt(0).toUpperCase() + readable.slice(1)
+}
+
+const globalModeLabel = computed(() => {
+  const mode = props.globalMode
+  if (!mode) return ''
+  return GLOBAL_MODE_LABELS[mode] || humanizeRawMode(mode)
+})
+
+const moduleBadgeLabel = computed(() => {
+  const badge = moduleBadge.value
+  if (!badge) return ''
+  return MODULE_BADGE_LABELS[badge] || humanizeRawMode(badge)
 })
 
 const modeClass = (mode: string) => {

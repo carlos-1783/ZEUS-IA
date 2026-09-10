@@ -1,78 +1,142 @@
 """
 ⚖️ JUSTICIA Automation Handler
-Genera entregables legales y de cumplimiento.
+Ejecuta trabajo legal real (GDPR + documentos pendientes en BD) para las
+actividades genéricas que el motor de workflows (teamflow_engine.py) dispara
+para JUSTICIA: task_assigned / document_reviewed / compliance_check.
+
+Historial: antes devolvía SIEMPRE el mismo texto fijo de política de
+privacidad / términos de servicio, sin leer ni escribir nada en BD, con
+"docs_generated": 3 hardcodeado -- el mismo patrón "toolkit legal = stub"
+ya cerrado en POST /api/v1/justice/contracts/generate, pero seguía vivo en
+esta ruta (la que ejecutan de verdad los pasos "legal_review" /
+"gdpr_validation" / "legal_stamp" de teamflow_engine.py). Ver
+AUDIT_JUSTICIA_ESTADO_FINAL.md para la evidencia completa.
 """
 
 from __future__ import annotations
 
-from typing import Dict, Any
+import logging
+from typing import Any, Dict, Optional
 
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+
+from app.db.session import SessionLocal
 from app.models.agent_activity import AgentActivity
-from .. import utils
+from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 
-def _privacy_policy() -> str:
-    return (
-        "ZEUS IA recopila datos estrictamente necesarios para automatizar operaciones. "
-        "Los datos se cifran en reposo y en tránsito. Los clientes pueden solicitar acceso, rectificación y "
-        "eliminación en cualquier momento enviando un mensaje a privacidad@zeus-ia.com."
-    )
+def _user_from_activity(session: Session, activity: AgentActivity) -> Optional[User]:
+    details = activity.details if isinstance(activity.details, dict) else {}
+    uid = details.get("user_id")
+    if uid:
+        user = session.query(User).filter(User.id == int(uid)).first()
+        if user:
+            return user
+    email = (activity.user_email or "").strip()
+    if email:
+        return session.query(User).filter(User.email == email).first()
+    return None
 
 
-def _terms_of_service() -> str:
-    return (
-        "Al activar ZEUS IA aceptas que el sistema orquestará procesos automatizados en ventas, soporte y finanzas. "
-        "El cliente es responsable de proporcionar credenciales válidas y mantener la información fiscal actualizada."
-    )
-
-
-def _compliance_checklist() -> Dict[str, Any]:
-    return {
-        "gdpr": ["Contrato de encargado firmado", "Registro de tratamientos actualizado", "DPIA aprobada"],
-        "integraciones": {
-            "google": "OAuth2 con scopes mínimos firmada.",
-            "stripe": "Webhooks firmados y logs auditados.",
-            "whatsapp": "Sandbox y documentación de consentimiento almacenada.",
-        },
-        "alerts": ["Rotar credenciales cada 90 días", "Registrar logs de acceso a información sensible"],
-    }
+def _payload(activity: AgentActivity) -> Dict[str, Any]:
+    details = activity.details if isinstance(activity.details, dict) else {}
+    inner = details.get("payload")
+    if isinstance(inner, dict):
+        return {**details, **inner}
+    return details
 
 
 def handle_justicia_task(activity: AgentActivity) -> Dict[str, Any]:
-    agent = activity.agent_name.upper()
-    prefix = f"{activity.id}_{activity.action_type}"
-
-    deliverable = {
-        "privacy_policy": _privacy_policy(),
-        "terms_of_service": _terms_of_service(),
-        "compliance_checklist": _compliance_checklist(),
-        "summary": "Documentación legal base preparada para prelanzamiento y auditoría RGPD.",
-    }
-
-    json_path = utils.write_json(agent, prefix, deliverable)
-    markdown = utils.summarize_markdown(
-        "Documentación Legal ZEUS IA",
-        {
-            "Política de Privacidad": deliverable["privacy_policy"],
-            "Términos de Servicio": deliverable["terms_of_service"],
-            "Checklist de Cumplimiento": [
-                "GDPR: contrato encargado, registro de tratamientos y DPIA.",
-                "Integraciones: Google, Stripe y WhatsApp auditadas.",
-                "Alertas: rotación de credenciales y logs de accesos.",
-            ],
-        },
-    )
-    markdown_path = utils.write_markdown(agent, prefix, markdown)
-
-    return {
-        "status": "completed",
-        "details_update": {
-            "automation": {
-                "deliverables": {"json": json_path, "markdown": markdown_path},
-                "summary": deliverable["summary"],
+    """Auditoría GDPR real + documentos pendientes reales, scopeados al usuario
+    real de la actividad. Si el payload trae un `document_id`, intenta también
+    aplicar firma real (mismo servicio que usa POST /api/v1/justice/sign)."""
+    session = SessionLocal()
+    try:
+        user = _user_from_activity(session, activity)
+        if not user:
+            return {
+                "status": "failed",
+                "details_update": {
+                    "real_execution": False,
+                    "error": "Usuario no encontrado para tarea JUSTICIA",
+                },
+                "notes": (
+                    "No se pudo resolver el usuario asociado a la actividad "
+                    "(activity.user_email/user_id); no se ejecuta ninguna "
+                    "acción legal simulada en su lugar."
+                ),
             }
-        },
-        "metrics_update": {"docs_generated": 3},
-        "notes": f"Kit legal generado y listo para revisión. Archivos: {json_path}",
-    }
 
+        from services.gdpr_engine import run_gdpr_check
+        from services.justice_audit_service import list_documents, list_pending_documents_grouped
+
+        gdpr = run_gdpr_check(session, user, systems=[])
+        pending = list_pending_documents_grouped(session, user)
+        recent_docs = list_documents(session, user, limit=10)
+
+        signature_result: Optional[Dict[str, Any]] = None
+        signature_error: Optional[str] = None
+        payload = _payload(activity)
+        document_id = payload.get("document_id")
+        if document_id:
+            try:
+                from services.signature_service import apply_signature
+
+                signature_result = apply_signature(
+                    session,
+                    user,
+                    document_id=document_id,
+                    document_name=payload.get("document_name") or "",
+                    file_hash=payload.get("file_hash") or "",
+                    signer_label=payload.get("signer") or "JUSTICIA",
+                )
+            except HTTPException as exc:
+                signature_error = str(exc.detail)
+
+        session.commit()
+
+        issues = gdpr.get("issues") or []
+        summary = (
+            f"Revisión legal real: {len(issues)} hallazgo(s) GDPR, "
+            f"{pending.get('total_pending', 0)} documento(s) pendiente(s) de aprobación."
+        )
+        if signature_result:
+            summary += f" Documento {signature_result.get('document_id')} firmado."
+        elif signature_error:
+            summary += f" Firma solicitada no aplicada: {signature_error}."
+
+        return {
+            "status": "completed",
+            "details_update": {
+                "automation": {
+                    "gdpr_issues": issues,
+                    "pending_documents": pending,
+                    "recent_legal_documents": recent_docs,
+                    "signature": signature_result,
+                    "signature_error": signature_error,
+                    "summary": summary,
+                },
+                "real_execution": True,
+                "data_origin": "database",
+            },
+            "metrics_update": {
+                "gdpr_alerts_created": gdpr.get("alerts_created", 0),
+                "pending_documents_total": pending.get("total_pending", 0),
+                "documents_signed": 1 if signature_result else 0,
+            },
+            "notes": summary,
+            "executed_handler": "gdpr_engine.run_gdpr_check+justice_audit_service.list_pending_documents_grouped",
+        }
+    except Exception as exc:  # pragma: no cover - defensive, error real reportado
+        session.rollback()
+        logger.exception("handle_justicia_task failed for activity_id=%s", getattr(activity, "id", None))
+        return {
+            "status": "failed",
+            "details_update": {"real_execution": False, "error": str(exc)},
+            "notes": f"Error ejecutando revisión legal real: {exc}",
+        }
+    finally:
+        session.close()

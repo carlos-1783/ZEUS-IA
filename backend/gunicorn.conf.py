@@ -1,6 +1,24 @@
 # Configuración de Gunicorn para ZEUS-IA - Producción
 # ===================================================
 
+# ZEUS_ENCODING_GUARD: mismo guard que app/main.py (ver ese archivo y
+# AUDIT_ENCODING_TPV.md para el detalle). Los hooks de este archivo
+# (when_ready, post_fork, etc.) corren en el proceso master/worker de
+# gunicorn ANTES de que app.main se importe en cada worker (preload_app =
+# False), así que su propio guard no los cubre — se repite aquí para que
+# ningún log de arranque con emoji (🚀, 👥, 🔗, ✅, 🔄, ⚠️) pueda reventar
+# si el contenedor no tiene una locale UTF-8, con el mismo criterio
+# "protege por defecto, sin depender de variables de entorno externas".
+import sys
+
+for _stream_name in ("stdout", "stderr"):
+    _stream = getattr(sys, _stream_name, None)
+    if _stream is not None and hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
 import os
 
 _root = (os.getenv("ZEUS_APP_ROOT") or "").strip()
@@ -60,7 +78,41 @@ raw_env = [
 # certfile = "/etc/letsencrypt/live/zeus-ia.com/fullchain.pem"
 
 # Configuración de proxy
-forwarded_allow_ips = "*"
+# SEGURIDAD -- VUELTA 2 (ver AUDIT_SEGURIDAD_ESTANDAR.md sección 4). El
+# revisor-independiente señaló, sobre la vuelta 1 de este mismo comentario,
+# un efecto secundario no evaluado: con forwarded_allow_ips="127.0.0.1",
+# ProxyHeadersMiddleware NUNCA reescribe request.client.host en producción
+# (el peer TCP real -- el edge de Railway -- nunca es 127.0.0.1), así que
+# ese valor pasa a ser SIEMPRE el mismo para todos los usuarios reales en
+# vez de discriminar por IP -- correcto en el sentido de "no falsificable",
+# pero un dato que deja de distinguir usuarios si algo lo lee directamente.
+#
+# Confirmado (no asumido) en esta vuelta: ese efecto SOLO afecta a código
+# que lea `request.client.host` directamente. La extracción de IP para
+# seguridad (rate limiting, auditoría de login, fichajes) NO depende de
+# este ajuste ni de ProxyHeadersMiddleware -- vive únicamente en
+# app/core/security_middleware.py::get_real_client_ip(), que lee la
+# cabecera `X-Real-IP` cruda de `request.headers` (la única que Railway
+# documenta oficialmente para identificar al cliente real, ver
+# docs.railway.com/networking/public-networking/specs-and-limits) ANTES de
+# mirar `request.client.host`, y nunca X-Forwarded-For (no documentada por
+# Railway, cliente-controlable sin ninguna garantía). Esa misma función
+# ahora también la usan app/middleware/thalos_login_audit_middleware.py y
+# app/api/v1/endpoints/checkin.py (antes leían request.client.host sin
+# pasar por ella), así que el efecto "IP uniforme" que preocupaba al
+# revisor ya no aplica a esos dos archivos tampoco: si X-Real-IP llega
+# (comportamiento esperado según la documentación de Railway), discriminan
+# por IP real igual que el rate limiting; solo colapsan al valor uniforme
+# del edge si esa cabecera faltara.
+#
+# Con esto, "127.0.0.1" (el default seguro de uvicorn) sigue siendo la
+# opción correcta: sin una lista pública de IPs del edge de Railway para
+# restringir el hop de confianza de forma verificable, es preferible que
+# CUALQUIER código que en el futuro lea request.client.host directamente
+# (sin pasar por get_real_client_ip) reciba un valor no falsificable pero
+# uniforme, no uno falsificable por header ("*", el valor anterior a la
+# vuelta 1, permitía justo eso).
+forwarded_allow_ips = "127.0.0.1"
 secure_scheme_headers = {
     'X-FORWARDED-PROTOCOL': 'ssl',
     'X-FORWARDED-PROTO': 'https',

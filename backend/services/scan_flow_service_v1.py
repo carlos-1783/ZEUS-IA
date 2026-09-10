@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import date, datetime, time
 from typing import Any, Dict, Optional, Tuple
 
 from fastapi import HTTPException
@@ -163,6 +163,17 @@ def _create_invoice_draft(
         customer_id=customer_id,
         invoice_type=InvoiceType.INVOICE,
         status=InvoiceStatus.DRAFT,
+        # Invoice.issue_date es Column(DateTime), pero el schema de lectura
+        # (app.schemas.erp.InvoiceInDB.issue_date) exige un `date` exacto
+        # a medianoche. Si se deja el default crudo del modelo
+        # (datetime.utcnow(), que incluye hora), la fila queda persistida
+        # con hora y CUALQUIER GET /invoices/ que la liste revienta con
+        # ResponseValidationError: date_from_datetime_inexact -- mismo bug
+        # de raiz ya corregido en app/api/v1/endpoints/invoices.py::
+        # create_invoice, pero este flujo de escaneo/QR construye el
+        # Invoice() directamente y no pasaba por ahi. Se fija aqui
+        # explicitamente para no depender del default del modelo.
+        issue_date=datetime.combine(date.today(), time.min),
         subtotal=subtotal,
         tax_amount=tax_amount,
         total=amt,

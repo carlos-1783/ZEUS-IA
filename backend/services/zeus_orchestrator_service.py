@@ -45,16 +45,31 @@ _OPERATIONAL_HELP = (
 
 
 def _company_key(user: User, context: Optional[Dict[str, Any]]) -> str:
-    if context and context.get("company_id"):
-        return str(context["company_id"])
+    """Clave de empresa para la memoria/pending de ZEUS.
+
+    H-01: sale SOLO del contexto construido por el servidor (`zeus_global_context`), nunca de
+    un `company_id` que envíe el cliente. El respaldo para usuarios sin empresa lleva prefijo
+    para que jamás coincida con el id de una empresa real (antes `str(user.id)` podía
+    colisionar con `str(company_id)`).
+    """
     gc = (context or {}).get("zeus_global_context") or {}
     if gc.get("company_id"):
         return str(gc["company_id"])
-    return str(user.id)
+    return f"user:{user.id}"
 
 
 def _thread_id(context: Optional[Dict[str, Any]]) -> str:
     return str((context or {}).get("thread_id") or "main")
+
+
+def _pending_thread_key(user: User, context: Optional[Dict[str, Any]]) -> str:
+    """Hilo bajo el que se guarda el pending: atado al usuario que lo solicitó.
+
+    H-01: antes el pending se indexaba solo por (empresa, hilo), así que cualquier usuario que
+    escribiera «confirmar» en ese hilo ejecutaba la acción de otro. La columna `thread_id` es
+    String(128): se recorta la parte del cliente para dejar sitio al sufijo.
+    """
+    return f"{_thread_id(context)[:100]}:u{user.id}"
 
 
 def _get_pending(company_id: str, thread_id: str) -> Optional[Dict[str, Any]]:
@@ -192,7 +207,7 @@ async def try_handle_zeus_chat(
     ctx = enrich_chat_context(db, user, context)
     global_context = ctx["zeus_global_context"]
     company_id = _company_key(user, ctx)
-    thread_id = _thread_id(ctx)
+    thread_id = _pending_thread_key(user, ctx)
 
     if ctx.get("skip_action_execution"):
         return None

@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 import logging
 
+from app.core.auth import get_current_active_user
 from app.core.config import settings
 from app.core.security import verify_password
 from app.db.base import get_db
@@ -216,16 +217,12 @@ async def execute_command(
         )
 
 
-@router.post(
-    "/activate-company/{empresa}",
-    operation_id="commands_activate_company_api_v1",
-    summary="Activate Company",
-    description="Activate a specific company and update system state.",
-    response_description="Activation status"
-)
 async def activate_company(empresa: str) -> Dict[str, Any]:
     """
     Activa una empresa específica y actualiza el estado del sistema.
+
+    Función auxiliar SIN autenticación propia: la ruta HTTP es `activate_company_endpoint`,
+    que exige superusuario (H-04). No llamar a esta función desde código expuesto.
     
     Args:
         empresa: Nombre de la empresa a activar (ej: "PER-SEO", "THALOS")
@@ -258,3 +255,30 @@ async def activate_company(empresa: str) -> Dict[str, Any]:
         "message": f"Empresa {empresa} activada correctamente",
         "data": new_state
     }
+
+
+@router.post(
+    "/activate-company/{empresa}",
+    operation_id="commands_activate_company_api_v1",
+    summary="Activate Company",
+    description=(
+        "Activate a specific company and update the (global) system state. "
+        "Requires authentication and superuser role."
+    ),
+    response_description="Activation status"
+)
+async def activate_company_endpoint(
+    empresa: str,
+    current_user: User = Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    """
+    H-04 (ZEUS_JARVIS_INTERACTION_AUDIT.md): antes este endpoint respondía 200 SIN token y
+    mutaba un estado global persistido en `app/data/system_state.json`. Ahora exige usuario
+    autenticado y rol de superusuario (el estado es global, no por empresa).
+    """
+    if not getattr(current_user, "is_superuser", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo un superusuario puede activar una empresa en el estado global.",
+        )
+    return await activate_company(empresa)

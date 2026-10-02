@@ -152,6 +152,45 @@ def ensure_agent_stack() -> None:
         finally:
             _agents_ready = True
 
+# H-01 (ZEUS_JARVIS_INTERACTION_AUDIT.md): identidad y estado interno que el cliente NO puede
+# imponer. La empresa y el usuario se derivan solo en servidor (JWT -> BD).
+_CLIENT_FORBIDDEN_CONTEXT_KEYS = frozenset(
+    {
+        "company_id",
+        "tenant_id",
+        "user_id",
+        "user_email",
+        "zeus_global_context",
+        "conversation_history",
+    }
+)
+
+
+def build_server_context(
+    db: Session,
+    user: User,
+    client_context: Optional[Dict[str, Any]],
+    thread_id: str,
+) -> Dict[str, Any]:
+    """Contexto de una petición de chat: lo que envía el cliente, sin identidad ni estado interno.
+
+    Se descartan las claves de identidad (`company_id`, `user_id`, `user_email`, …) y todo lo
+    que empiece por `_` (`_memory`, `_company_id`, … los fija el runtime). Se conservan los
+    campos legítimos del cliente (p. ej. `image_url`, `pdf_url`, `video_url` de PERSEO). Después
+    el servidor fija empresa y usuario a partir del usuario autenticado.
+    """
+    ctx: Dict[str, Any] = {
+        k: v
+        for k, v in (client_context or {}).items()
+        if k not in _CLIENT_FORBIDDEN_CONTEXT_KEYS and not str(k).startswith("_")
+    }
+    ctx["thread_id"] = thread_id
+    ctx["user_id"] = user.id
+    ctx["user_email"] = user.email
+    ctx["company_id"] = chat_db.resolve_company_id(db, user)
+    return ctx
+
+
 class ChatRequest(BaseModel):
     message: str
     context: Optional[dict] = None
@@ -266,17 +305,15 @@ async def chat_with_agent(
             detail=f"Agente '{agent_name}' no está inicializado correctamente"
         )
 
-    context = request.context or {}
-    thread_id = request.thread_id or context.get("thread_id") or "main"
-    
+    client_context = request.context or {}
+    thread_id = request.thread_id or client_context.get("thread_id") or "main"
+
     try:
         from services.unified_agent_runtime import run_chat
 
+        # H-01: empresa y usuario salen del usuario autenticado, nunca del `context` del cliente.
+        context = build_server_context(db, current_user, client_context, thread_id)
         context["user_message"] = request.message
-        context.setdefault("user_id", current_user.id)
-        context.setdefault("user_email", current_user.email)
-        context["thread_id"] = thread_id
-        context["user_id"] = current_user.id
 
         if agent_name == "ZEUS CORE":
             from services.zeus_global_context import enrich_chat_context
@@ -643,8 +680,18 @@ async def chat_health():
 
 
 @router.get("/panel/executions")
-async def executions_panel():
-    """Panel de control consolidado de ZEUS CORE."""
+async def executions_panel(current_user: User = Depends(get_current_active_user)):
+    """Panel de control consolidado de ZEUS CORE.
+
+    H-04: antes respondía 200 SIN token y exponía estado compartido entre tenants
+    (`execution_snapshots` en memoria de proceso y qué integraciones están configuradas).
+    Ahora exige autenticación y rol de superusuario. El frontend no lo usa.
+    """
+    if not getattr(current_user, "is_superuser", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Solo un superusuario puede consultar el panel de ejecuciones.",
+        )
     await asyncio.to_thread(ensure_agent_stack)
     if zeus is None:
         raise HTTPException(status_code=500, detail="ZEUS CORE no está disponible")

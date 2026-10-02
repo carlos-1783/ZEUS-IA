@@ -58,8 +58,11 @@ def enrich_chat_context(
 ) -> Dict[str, Any]:
     ctx = dict(context or {})
     gc = build_global_context(db, user)
-    if ctx.get("company_id") is None and gc.get("company_id") is not None:
-        ctx["company_id"] = gc["company_id"]
+    # H-01 (ZEUS_JARVIS_INTERACTION_AUDIT.md): la empresa y el usuario los fija SIEMPRE el
+    # servidor (JWT -> BD). Un `company_id` enviado por el cliente nunca prevalece: antes se
+    # usaba como clave del pending de ZEUS y de la memoria, lo que permitía actuar sobre el
+    # estado de otra empresa.
+    ctx["company_id"] = gc.get("company_id")
     ctx["user_id"] = user.id
     ctx["zeus_global_context"] = gc
     return ctx

@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, File, UploadFile, Query
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from decimal import Decimal
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, and_
 from sqlalchemy.orm import Session
 import logging
 from pathlib import Path
@@ -1395,10 +1395,23 @@ async def get_quarterly_vat(
     # Comparar con inicio/fin de día para DateTime(timezone=True)
     start_ts = dt.combine(start_d, dt.min.time())
     end_ts = dt.combine(end_d, dt.min.time())
+    # Modelo 303 es por EMPRESA, no por usuario individual: agrega todas las ventas
+    # de la(s) empresa(s) del usuario (no solo las que él mismo registró), para que
+    # el total trimestral sea correcto en empresas con varios usuarios/socios.
+    # Fallback a ventas propias (company_id NULL, legado) si el usuario no pertenece
+    # a ninguna empresa, siguiendo el mismo patrón que _customer_scope_filter.
+    company_ids = _company_ids_for_user(db, current_user)
+    if company_ids:
+        scope_filter = or_(
+            TPVSale.company_id.in_(company_ids),
+            and_(TPVSale.company_id.is_(None), TPVSale.user_id == current_user.id),
+        )
+    else:
+        scope_filter = TPVSale.user_id == current_user.id
     sales = (
         db.query(TPVSale)
         .filter(
-            TPVSale.user_id == current_user.id,
+            scope_filter,
             TPVSale.sale_date >= start_ts,
             TPVSale.sale_date < end_ts,
         )

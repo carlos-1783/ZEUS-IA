@@ -29,7 +29,7 @@
         <button :disabled="loading.forms" @click="runForms">Generar Excel 303</button>
       </div>
       <p v-if="formsResult" class="tool-text">{{ formsResult }}</p>
-      <a v-if="formsFileUrl" class="download-link" :href="formsFileUrl" target="_blank" rel="noopener">Descargar archivo</a>
+      <button v-if="formsFileUrl" type="button" class="download-link" @click="downloadFormsFile">Descargar archivo</button>
     </div>
 
     <p v-if="error" class="tool-error">{{ error }}</p>
@@ -38,7 +38,7 @@
 
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
-import { API_BASE_URL } from '@/config/index'
+import { downloadAuthenticatedFile, resolveFiscalFileEndpoint } from '@/utils/fiscalFileDownload'
 import { workspaceTools } from '@/api/workspaceTools'
 import ScannerQR from '@/components/scan/ScannerQR.vue'
 import RafaelScannerNFC from '@/components/scan/RafaelScannerNFC.vue'
@@ -82,6 +82,16 @@ function onScanError(msg: string) {
   lastMessage.value = ''
 }
 
+const downloadFormsFile = async () => {
+  if (!formsFileUrl.value) return
+  error.value = ''
+  try {
+    await downloadAuthenticatedFile(formsFileUrl.value, 'modelo-303.xlsx')
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  }
+}
+
 const runForms = async () => {
   error.value = ''
   loading.forms = true
@@ -91,7 +101,8 @@ const runForms = async () => {
     formsResult.value = String((out as any)?.text || 'Modelo 303 generado.')
     const url = (out as any)?.file_url || (out as any)?.result?.file_url
     if (url) {
-      formsFileUrl.value = url.startsWith('http') ? url : `${API_BASE_URL}${url}`
+      // Descarga autenticada (blob): el endpoint exige token; un <a href> no lo enviaría.
+      formsFileUrl.value = resolveFiscalFileEndpoint(String(url)) || null
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
@@ -229,5 +240,10 @@ header p { margin: 4px 0 0; color: var(--zeus-text-secondary, #52607a); font-siz
   color: var(--zeus-accent, #4f46e5);
   font-weight: 600;
   font-size: 13px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
 }
 </style>

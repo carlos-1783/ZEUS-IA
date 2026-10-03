@@ -19,6 +19,16 @@ else:
     _PKG_STATIC_DIR = os.path.abspath(
         os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "static")
     )
+# Ficheros privados (fiscales, etc.): NUNCA bajo STATIC_DIR (se sirve sin auth en /static).
+# Punto único de configuración; la persistencia real entre deploys (volumen/S3) es tarea aparte.
+_PKG_ROOT_DIR = _app_root or os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+
+
+def _resolve_private_files_dir() -> str:
+    raw = (os.getenv("ZEUS_PRIVATE_FILES_DIR") or os.getenv("PRIVATE_FILES_DIR") or "").strip()
+    return os.path.abspath(raw or os.path.join(_PKG_ROOT_DIR, "private_files"))
+
+
 # Volumen persistente (p. ej. Railway /data/static): subidas, sin index.html del SPA.
 _MAX_STATIC_PATH_LEN = 240
 _EMBEDDED_FLAG_RE = re.compile(
@@ -143,6 +153,8 @@ class Settings(BaseSettings):
     STATIC_URL: str = "/static"
     STATIC_DIR: str = _RESOLVED_STATIC_DIR
     SPA_STATIC_DIR: str = _RESOLVED_SPA_STATIC_DIR
+    # Ficheros privados servidos solo por endpoints autenticados (p. ej. /api/v1/rafael-fiscal/fiscal-files/...).
+    PRIVATE_FILES_DIR: str = _resolve_private_files_dir()
     # Origen público del API (sin barra final). Subidas: URL absoluta del vídeo/imagen. Ej. https://tu-app.up.railway.app
     PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
     PERSEO_IMAGES_ENABLED: bool = os.getenv("PERSEO_IMAGES_ENABLED", "true").lower() in ("true", "1", "yes")

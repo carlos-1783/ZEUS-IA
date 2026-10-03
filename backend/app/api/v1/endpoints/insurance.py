@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user
+from app.core.module_access import require_module
 from app.core.validators_es import validar_nif_cif
 from app.db.tenant_context import get_db_scoped, set_tenant_context
 from app.models.customer import Customer
@@ -37,7 +38,14 @@ from services.zeus_office_mode import require_company_id
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+# Gating real de vertical: hasta que Carlos confirme qué `company_type`
+# tendrán las empresas aseguradoras/correduría (ver
+# app.core.verticals_registry, entrada "insurance" deliberadamente vacía),
+# esta vertical queda cerrada por defecto -- solo accesible para
+# superusuario. Aplicado a nivel de router: cubre TODOS los endpoints de
+# abajo, no requiere recordar añadirlo endpoint por endpoint (y el test de
+# guardia en tests/test_verticals_module_access.py falla si se quita).
+router = APIRouter(dependencies=[Depends(require_module("insurance"))])
 
 
 def _company_ids(db: Session, user: User) -> list:

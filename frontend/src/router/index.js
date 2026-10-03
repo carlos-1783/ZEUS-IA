@@ -342,8 +342,15 @@ const router = createRouter({
       }
     },
 
-    // Vertical Seguros — Multirriesgo (pólizas + siniestros). Sin gating por
-    // company_type: ver AUDIT_VERTICAL_SEGUROS.md para la decisión de diseño.
+    // Vertical Seguros — Multirriesgo (pólizas + siniestros). Gating real
+    // por módulo (hallazgo A): cerrada por defecto, solo superusuario hasta
+    // que Carlos confirme qué company_type la tendrá contratada (ver
+    // ROUTE_MODULE_MAP['Insurance'] en utils/companyModules.ts y el guard
+    // de abajo que lo usa vía routeAllowed; el backend aplica el mismo
+    // cierre de verdad con `require_module("insurance")` en
+    // backend/app/api/v1/endpoints/insurance.py, así que escribir la URL a
+    // mano sin ser superusuario sigue devolviendo 403 aunque este guard
+    // fallase).
     {
       path: '/insurance',
       name: 'Insurance',

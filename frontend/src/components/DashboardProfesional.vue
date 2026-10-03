@@ -108,9 +108,14 @@
           <span class="icon">📁</span>
           <span>{{ t('dashboardPro.nav.officeCrm') }}</span>
         </button>
-        <!-- Seguros: sin gating por company_type (vertical nueva, ver AUDIT_VERTICAL_SEGUROS.md) -->
+        <!-- Seguros: gating real por módulo (hallazgo A). Cerrado por defecto
+             -- solo superusuario hasta que Carlos confirme qué company_type
+             tendrá la vertical contratada (ver app/core/verticals_registry.py
+             en backend, entrada "insurance" deliberadamente vacía). El
+             backend también devuelve 403 real vía require_module("insurance")
+             aunque esta comprobación de frontend fallase. -->
         <button
-          v-if="!isEmployee"
+          v-if="showModule('insurance') && !isEmployee"
           type="button"
           class="nav-item"
           @click="closeSidebarOnMobile(); goToInsurance()"
@@ -709,6 +714,7 @@ const availableModules = ref({
   agents: true,
   admin: false,
   settings: true,
+  insurance: false,
 })
 
 // Computed para verificar si el usuario es admin (reactivo) - múltiples formas de verificación
@@ -742,6 +748,10 @@ const mergedModules = computed(() => {
     crm: !!(fromAuth.crm || fromMetrics.crm),
     payroll: !!(fromAuth.payroll || fromMetrics.payroll),
     admin: !!(fromAuth.admin || fromMetrics.admin),
+    // Hoy siempre false salvo superusuario (bypass en isModuleVisible): ver
+    // VERTICAL_COMPANY_TYPES en utils/companyModules.ts, entrada "insurance"
+    // deliberadamente vacía hasta decisión de Carlos.
+    insurance: !!(fromAuth.insurance || fromMetrics.insurance),
   }
 })
 

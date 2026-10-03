@@ -9,15 +9,29 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.db.base import Base, SessionLocal, engine
+from app.models.company import Company, UserCompany
 from app.models.user import User
 from app.models.zeus_transaction import ZeusTransaction
-from services.zeus_transaction_system_v1 import create_transaction, execute_transaction, get_health
+from services.zeus_transaction_system_v1 import (
+    create_transaction,
+    execute_transaction,
+    get_health,
+    get_transaction,
+)
 
 
 @pytest.fixture()
 def db():
     ZeusTransaction.__table__.drop(bind=engine, checkfirst=True)
-    Base.metadata.create_all(bind=engine, tables=[ZeusTransaction.__table__, User.__table__])
+    Base.metadata.create_all(
+        bind=engine,
+        tables=[
+            ZeusTransaction.__table__,
+            User.__table__,
+            Company.__table__,
+            UserCompany.__table__,
+        ],
+    )
     session = SessionLocal()
     try:
         yield session

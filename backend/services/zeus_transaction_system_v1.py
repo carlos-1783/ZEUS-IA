@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.models.user import User
 from app.models.zeus_transaction import ZeusTransaction
+from services.crm_office_service import company_ids_for_user, primary_company_id
 from services.zeus_execution_controller_v1 import assert_execution_writes, get_execution_status
 from services.zeus_transaction_context_v1 import TransactionContext, reset_transaction_context, set_transaction_context
 from services.zeus_transaction_events_v1 import append_event, emit_event
@@ -100,6 +101,35 @@ def _load_row(db: Session, transaction_id: str) -> ZeusTransaction:
     return row
 
 
+def _assert_transaction_access(db: Session, user: User, row: ZeusTransaction) -> None:
+    """N2: una transacción solo es legible/ejecutable por la empresa que la
+    originó (o por superusuario). `row.company_id` se fija en
+    `create_transaction` a partir de la empresa primaria del creador; si es
+    NULL (usuario sin empresa vinculada en el momento de crearla, o fila
+    heredada de antes de esta columna) cae de vuelta al `user_id` embebido en
+    `context_json`, que `create_transaction` fija siempre server-side.
+    Nunca confía en nada que venga del cliente en la petición HTTP."""
+    if getattr(user, "is_superuser", False):
+        return
+
+    if row.company_id is not None:
+        if row.company_id in company_ids_for_user(db, user):
+            return
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes acceso a esta transacción.",
+        )
+
+    ctx = _json_load(row.context_json, {})
+    owner_user_id = ctx.get("user_id") if isinstance(ctx, dict) else None
+    if owner_user_id is not None and str(owner_user_id) == str(user.id):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="No tienes acceso a esta transacción.",
+    )
+
+
 def create_transaction(
     db: Session,
     user: User,
@@ -145,6 +175,7 @@ def create_transaction(
         transaction_id=tx_id,
         status="PENDING",
         execution_mode_at_start=exec_at_start,
+        company_id=primary_company_id(db, user),
         initiator_json=_json_dump(initiator),
         context_json=_json_dump(ctx),
         modules_involved_json=_json_dump(modules),
@@ -162,12 +193,15 @@ def create_transaction(
     return _serialize_row(row)
 
 
-def get_transaction(db: Session, transaction_id: str) -> Dict[str, Any]:
-    return _serialize_row(_load_row(db, transaction_id))
+def get_transaction(db: Session, user: User, transaction_id: str) -> Dict[str, Any]:
+    row = _load_row(db, transaction_id)
+    _assert_transaction_access(db, user, row)
+    return _serialize_row(row)
 
 
 def execute_transaction(db: Session, user: User, transaction_id: str) -> Dict[str, Any]:
     row = _load_row(db, transaction_id)
+    _assert_transaction_access(db, user, row)
     if row.status in TERMINAL_STATUSES:
         return _serialize_row(row)
     if row.status == "IN_PROGRESS":

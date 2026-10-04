@@ -63,34 +63,6 @@ const publicRoutes = [
   'PublicStore'
 ]
 
-// Navigation guard to check authentication
-const setupNavigationGuards = (router) => {
-  router.beforeEach(async (to, from, next) => {
-    const authStore = useAuthStore()
-    
-    // Check if the route requires authentication
-    const isPublicRoute = publicRoutes.includes(to.name)
-    const isAuthenticated = authStore.isAuthenticated
-
-    // If trying to access a protected route without being authenticated
-    if (!isPublicRoute && !isAuthenticated) {
-      return next({ name: 'AuthLogin', query: { redirect: to.fullPath } })
-    }
-
-    // If already authenticated and trying to access auth pages
-    if ((to.name === 'AuthLogin' || to.name === 'Register') && isAuthenticated) {
-      // Redirigir a la ruta original o al dashboard
-      const redirectTo = to.query.redirect || '/dashboard'
-      console.log('🔄 Usuario autenticado, redirigiendo a:', redirectTo)
-      // Forzar redirección con window.location
-      window.location.href = redirectTo
-      return
-    }
-
-    next()
-  })
-}
-
 // Configuración del router
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),

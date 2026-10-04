@@ -9,6 +9,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
+from sqlalchemy import or_, and_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -21,6 +22,7 @@ from services.control_horario_singleton import control_horario_service
 from services.event_bus import emit_time_control_event
 from services.tpv_operator_context import (
     active_operator_company_employee,
+    company_ids_for_user,
     primary_company_id,
     session_company_employee,
 )
@@ -104,10 +106,22 @@ def _close_active_sessions_and_records(
         except Exception as e:
             logger.warning("check_out memoria previo: %s", e)
 
+    # E1 (backlog ejecutor-produccion): cerrar sesiones activas de ESTE empleado en la
+    # empresa, no solo las que el propio `user` registro -- evita fichajes ACTIVE
+    # duplicados cuando un segundo usuario de la misma empresa (vinculado via
+    # UserCompany) hace login/switch de operador TPV.
+    cids = company_ids_for_user(db, user)
+    if cids:
+        scope = or_(
+            TimeTrackingRecord.company_id.in_(cids),
+            and_(TimeTrackingRecord.company_id.is_(None), TimeTrackingRecord.user_id == user.id),
+        )
+    else:
+        scope = TimeTrackingRecord.user_id == user.id
     rows = (
         db.query(TimeTrackingRecord)
         .filter(
-            TimeTrackingRecord.user_id == user.id,
+            scope,
             TimeTrackingRecord.employee_id == employee_code,
             TimeTrackingRecord.status == RecordStatus.ACTIVE,
         )
@@ -188,9 +202,11 @@ def begin_work_session_on_login(db: Session, user: User) -> Dict[str, Any]:
         db, user, employee_code, now_ts, "duplicate_login"
     )
 
+    cid = primary_company_id(db, user)
     row = TimeTrackingRecord(
         employee_id=employee_code,
         user_id=user.id,
+        company_id=cid,
         check_in_time=now_ts,
         check_in_method=CheckInMethod.REMOTE,
         check_in_location="login_automatico",
@@ -216,7 +232,6 @@ def begin_work_session_on_login(db: Session, user: User) -> Dict[str, Any]:
         extra_payload={"source": "login"},
     )
 
-    cid = primary_company_id(db, user)
     ews = EmployeeWorkSession(
         user_id=user.id,
         company_id=cid,
@@ -508,9 +523,11 @@ def ensure_active_shift_for_tpv_operator_login(
         db, user, employee_code, now_ts, "tpv_operator_switch"
     )
 
+    cid = primary_company_id(db, user) or operator_ce.company_id
     row = TimeTrackingRecord(
         employee_id=employee_code,
         user_id=user.id,
+        company_id=cid,
         check_in_time=now_ts,
         check_in_method=CheckInMethod.REMOTE,
         check_in_location="tpv_employee_login",
@@ -536,7 +553,6 @@ def ensure_active_shift_for_tpv_operator_login(
         extra_payload={"source": "tpv_employee_login", "shift_started": True},
     )
 
-    cid = primary_company_id(db, user) or operator_ce.company_id
     ews = EmployeeWorkSession(
         user_id=user.id,
         company_id=cid,

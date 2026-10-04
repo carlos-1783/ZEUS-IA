@@ -9,7 +9,7 @@ import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import func
+from sqlalchemy import func, or_, and_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -27,6 +27,22 @@ from app.models.company import UserCompany
 logger = logging.getLogger(__name__)
 
 EVENT_TYPES = frozenset({"check-in", "check-out", "break-start", "break-end"})
+
+
+def _tt_scope_filter(user: User, cids: List[int]):
+    """
+    E1 (backlog ejecutor-produccion): mismo patron que _tt_scope_filter de
+    control_horario.py -- TimeTrackingRecord.user_id == user.id excluia a un
+    segundo usuario de la misma empresa (UserCompany) de ver/cerrar los
+    fichajes de otro usuario de esa empresa. Fallback a company_id IS NULL
+    AND user_id == user.id para filas legado sin company_id.
+    """
+    if cids:
+        return or_(
+            TimeTrackingRecord.company_id.in_(cids),
+            and_(TimeTrackingRecord.company_id.is_(None), TimeTrackingRecord.user_id == user.id),
+        )
+    return TimeTrackingRecord.user_id == user.id
 
 
 def _utc_now() -> datetime:
@@ -94,10 +110,11 @@ def geo_payload_for_event(
 
 def today_completed_hours_by_employee(db: Session, user: User) -> Dict[str, float]:
     start, end = _today_range_utc()
+    cids = _company_ids(db, user)
     rows = (
         db.query(TimeTrackingRecord)
         .filter(
-            TimeTrackingRecord.user_id == user.id,
+            _tt_scope_filter(user, cids),
             TimeTrackingRecord.status == RecordStatus.COMPLETED,
             TimeTrackingRecord.check_in_time >= start,
             TimeTrackingRecord.check_in_time < end,
@@ -113,10 +130,11 @@ def today_completed_hours_by_employee(db: Session, user: User) -> Dict[str, floa
 
 def sync_runtime_active_records(db: Session, user: User, control_horario_service: Any) -> None:
     """Hidrata active_records del servicio desde BD (reinicios / multi-worker)."""
+    cids = _company_ids(db, user)
     rows = (
         db.query(TimeTrackingRecord)
         .filter(
-            TimeTrackingRecord.user_id == user.id,
+            _tt_scope_filter(user, cids),
             TimeTrackingRecord.status == RecordStatus.ACTIVE,
         )
         .all()
@@ -236,10 +254,11 @@ def build_employees_smart_status(
     total_active: empleados dentro o en pausa (no fuera).
     """
     start, end = _today_range_utc()
+    cids = _company_ids(db, user)
     rows = (
         db.query(TimeTrackingRecord)
         .filter(
-            TimeTrackingRecord.user_id == user.id,
+            _tt_scope_filter(user, cids),
             TimeTrackingRecord.status == RecordStatus.ACTIVE,
             TimeTrackingRecord.check_in_time >= start,
             TimeTrackingRecord.check_in_time < end,
@@ -414,13 +433,22 @@ def tpv_sales_window(db: Session, user: User, hours: float = 4.0) -> Dict[str, A
 
 
 def detect_patterns(db: Session, user: User, employee_ids: List[str]) -> Dict[str, Any]:
+    """
+    E1 (backlog ejecutor-produccion): mismo bug que el resto de este archivo -- filtraba
+    por TimeTrackingRecord.user_id == user.id, por lo que un segundo usuario de la misma
+    empresa (UserCompany) obtenia 0 retrasos/horas extra/ausencias para fichajes
+    registrados bajo la cuenta del primer usuario. Usa _tt_scope_filter (mismo patron
+    que today_completed_hours_by_employee / sync_runtime_active_records en este mismo
+    modulo).
+    """
     since = _utc_now() - timedelta(days=14)
+    cids = _company_ids(db, user)
     out: Dict[str, Any] = {"retrasos": {}, "horas_extra_recurrentes": {}, "ausencias_proxies": {}}
     for eid in employee_ids:
         late = (
             db.query(func.count(TimeTrackingRecord.id))
             .filter(
-                TimeTrackingRecord.user_id == user.id,
+                _tt_scope_filter(user, cids),
                 TimeTrackingRecord.employee_id == str(eid),
                 TimeTrackingRecord.check_in_time >= since,
                 TimeTrackingRecord.is_late_check_in.is_(True),
@@ -431,7 +459,7 @@ def detect_patterns(db: Session, user: User, employee_ids: List[str]) -> Dict[st
         extra_days = (
             db.query(func.count(TimeTrackingRecord.id))
             .filter(
-                TimeTrackingRecord.user_id == user.id,
+                _tt_scope_filter(user, cids),
                 TimeTrackingRecord.employee_id == str(eid),
                 TimeTrackingRecord.check_in_time >= since,
                 TimeTrackingRecord.extra_hours.isnot(None),
@@ -443,7 +471,7 @@ def detect_patterns(db: Session, user: User, employee_ids: List[str]) -> Dict[st
         completed = (
             db.query(func.count(TimeTrackingRecord.id))
             .filter(
-                TimeTrackingRecord.user_id == user.id,
+                _tt_scope_filter(user, cids),
                 TimeTrackingRecord.employee_id == str(eid),
                 TimeTrackingRecord.check_in_time >= since,
                 TimeTrackingRecord.status == RecordStatus.COMPLETED,
@@ -507,6 +535,7 @@ def evaluate_alerts(
     now = _utc_now()
     dow = now.weekday()
     alerts_out: List[Dict[str, Any]] = []
+    cids = _company_ids(db, user)
 
     for emp in roster:
         eid = str(emp.get("id") or "")
@@ -541,7 +570,7 @@ def evaluate_alerts(
         active = (
             db.query(TimeTrackingRecord)
             .filter(
-                TimeTrackingRecord.user_id == user.id,
+                _tt_scope_filter(user, cids),
                 TimeTrackingRecord.employee_id == eid,
                 TimeTrackingRecord.status == RecordStatus.ACTIVE,
             )

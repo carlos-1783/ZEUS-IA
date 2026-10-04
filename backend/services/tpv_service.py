@@ -657,7 +657,7 @@ class TPVService:
         )
         from services.rafael_service import RafaelFiscalError, persist_sale as rafael_persist_sale
 
-        profile = get_fiscal_profile(db, user_id)
+        profile = get_fiscal_profile(db, user_id, company_id=company_id)
         apply_recargo = getattr(profile, "apply_recargo_equivalencia", False) if profile else False
         recargo_rate = getattr(profile, "recargo_rate", None)
         ct = consumption_type or "onsite"

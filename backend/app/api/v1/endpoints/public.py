@@ -13,6 +13,7 @@ from typing import Optional
 from app.db.session import get_db
 from app.models.user import User
 from app.models.reservation import Reservation
+from services.tpv_operator_context import primary_company_id
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -80,6 +81,7 @@ async def create_reservation(slug: str, body: CreateReservationRequest, db: Sess
         raise HTTPException(status_code=400, detail="Número de comensales no válido")
     r = Reservation(
         user_id=user.id,
+        company_id=primary_company_id(db, user),
         guest_name=body.guest_name.strip(),
         guest_phone=body.guest_phone.strip(),
         guest_email=body.guest_email.strip() if body.guest_email else None,

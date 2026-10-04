@@ -1,4 +1,4 @@
-"""Reservas web + TPV: multi-tenant por user_id (dueño del negocio)."""
+"""Reservas web + TPV: multi-tenant por company_id, con fallback a user_id para filas legado."""
 from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -10,6 +10,8 @@ class Reservation(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    # 0058: empresa de la reserva. Nullable para filas legado (fallback a user_id en query, ver tpv.py).
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True)
 
     guest_name = Column(String(200), nullable=False)
     guest_phone = Column(String(50), nullable=False)

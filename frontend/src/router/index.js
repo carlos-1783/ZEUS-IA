@@ -22,7 +22,6 @@ const decodeParam = (param) => {
 import AuthLayout from '../layouts/AuthLayout.vue'
 
 // Lazy loading de componentes pesados
-const MainLayout = () => import('../layouts/MainLayout.vue')
 const OlymposDashboard = () => import('../views/OlymposDashboard.vue')
 const Login = () => import('../views/auth/Login.vue')
 const Register = () => import('../views/auth/Register.vue')

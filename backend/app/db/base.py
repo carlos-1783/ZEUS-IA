@@ -1261,8 +1261,30 @@ def _migrate_firewall_columns_legacy():
         import traceback
         traceback.print_exc()
 
-# get_db está ahora en session.py con manejo de errores mejorado
-# Mantener esta función por compatibilidad, pero usar session.py
+# get_db está ahora en session.py con manejo de errores mejorado.
+# Mantener esta función por compatibilidad (nadie en app/ la importa ya tras
+# E5: los dos únicos consumidores que quedaban -- app/core/auth.py y
+# app/api/v1/endpoints/commands.py -- se migraron a `from app.db.session
+# import get_db`), pero NO convertirla en un simple re-export
+# (`from app.db.session import get_db`) a nivel de módulo: `session.py` hace
+# `from app.db.base import SessionLocal` en su propia cabecera, así que un
+# re-export a nivel de módulo aquí crearía un import circular que revienta
+# o no según qué módulo se importe primero en el arranque. Por eso el import
+# se mantiene diferido dentro de la función (solo se ejecuta cuando FastAPI
+# ya resolvió ambos módulos).
+#
+# Aviso importante para quien reintroduzca un import de este `get_db`: esta
+# función NO es el mismo objeto que `app.db.session.get_db`, aunque delega
+# en ella. FastAPI cachea dependencias dentro de una misma request por
+# identidad de función (`Dependant.cache_key = (self.call, scopes)`,
+# ver fastapi/dependencies/models.py) -- si en la misma request conviven
+# `Depends(app.db.base.get_db)` y `Depends(app.db.session.get_db)` (p.ej.
+# porque un endpoint usa `Depends(get_current_active_user)` que depende de
+# uno de los dos, y el propio endpoint declara `db: Session = Depends(...)`
+# con el otro), FastAPI NO las deduplica y se crean DOS sesiones de
+# SQLAlchemy independientes para la misma request (la causa raíz exacta del
+# 500 de doble sesión corregido puntualmente en onboarding, commit 038096f).
+# Usa siempre `from app.db.session import get_db` en código nuevo.
 def get_db():
     """Función de compatibilidad - usar session.get_db() en su lugar"""
     from app.db.session import get_db as get_db_with_retry

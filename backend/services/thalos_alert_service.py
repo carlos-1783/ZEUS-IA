@@ -63,16 +63,24 @@ def create_alert(
     )
     db.add(row)
     db.flush()
-    _emit_ws(row)
+    _emit_ws(db, row)
     return row
 
 
-def _emit_ws(alert: ThalosAlert) -> None:
+def _emit_ws(db: Session, alert: ThalosAlert) -> None:
     try:
-        from services.thalos_events_v1 import emit_thalos_event
+        from services.thalos_events_v1 import emit_thalos_event_for_company
 
-        emit_thalos_event(
-            0,
+        # Seguridad multi-tenant: la alerta solo se difunde en tiempo real a
+        # los usuarios de la empresa a la que pertenece (`alert.company_id`).
+        # Si no se pudo resolver empresa, no se difunde por WS (ver docstring
+        # de `emit_thalos_event_for_company`) -- antes se hacía
+        # `emit_thalos_event(0, ...)` que terminaba en `manager.broadcast`,
+        # enviando la alerta de seguridad de esta empresa a TODOS los
+        # tenants conectados.
+        emit_thalos_event_for_company(
+            db,
+            alert.company_id,
             "thalos_alert_created",
             {
                 "alert_id": alert.id,

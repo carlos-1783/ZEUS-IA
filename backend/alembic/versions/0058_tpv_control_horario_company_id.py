@@ -1,20 +1,16 @@
 """fiscal_profiles/reservations/time_tracking_records: add company_id for tenant scoping
 
 Revision ID: 0058
-Revises: 0056
+Revises: 0057
 Create Date: 2026-10-04
 
-Nota de numeración: el head de "main" en el momento de crear esta migración
-era "0056". La revisión "0057" ya está reservada en la rama
-feature/transacciones-zeus-por-tenant (mismo loop de producción, otra tarea
-en paralelo) para evitar bloquear ese trabajo. Para no colisionar Revision
-IDs al fusionar ambas ramas en main (mismo problema que forzó la renumeración
-0043->0048 documentada en 0048_products_company_id_tenant_isolation.py), esta
-cadena usa "0058", encadenada directamente tras "0056". Si al fusionar
-feature/transacciones-zeus-por-tenant resulta que 0057 reclama un down_revision
-distinto, Carlos deberá re-encadenar manualmente (down_revision de 0057 o de
-esta 0058) antes de aplicar en producción -- no asumir que el orden final es
-este sin revisar el merge.
+Nota de numeración: esta migración se creó en paralelo a 0057
+(feature/transacciones-zeus-por-tenant) y ambas apuntaban a "0056", lo que
+dejaba DOS heads al fusionarlas (release/seguridad-nucleo). Se re-encadena
+0058 detrás de 0057 para dejar una cadena lineal 0056 -> 0057 -> 0058.
+Ambas migraciones tocan tablas disjuntas (0057: zeus_transactions; 0058:
+fiscal_profiles/reservations/time_tracking_records), así que el orden no
+cambia lo que hace ninguna de las dos.
 
 Contexto (hallazgo E1, auditoría final del núcleo, severidad Media):
 varios endpoints de TPV y Control Horario filtraban por
@@ -41,7 +37,7 @@ import sqlalchemy as sa
 from sqlalchemy import inspect
 
 revision = "0058"
-down_revision = "0056"
+down_revision = "0057"
 branch_labels = None
 depends_on = None
 

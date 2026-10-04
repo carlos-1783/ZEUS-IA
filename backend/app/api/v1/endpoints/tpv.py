@@ -271,6 +271,14 @@ class FiscalProfileCreate(BaseModel):
     """ZEUS_TPV_FULL_FISCAL_INFRASTRUCTURE_ES_003"""
     vat_regime: str = "general"  # general | recargo_equivalencia | exento
     apply_recargo_equivalencia: bool = False
+    # Porcentaje tal como lo introduce el usuario/formulario, ej. 5.2 para 5.2%.
+    # NUNCA se guarda asi en BD: FiscalProfile.recargo_rate almacena la FRACCION
+    # (0.052), como documenta app/models/fiscal.py y consume
+    # services/fiscal_engine.py (multiplica base_amount * recargo_rate
+    # directamente). La conversion porcentaje -> fraccion ocurre en
+    # set_fiscal_profile(); la conversion inversa (fraccion -> porcentaje) ocurre
+    # al responder en get_fiscal_profile()/set_fiscal_profile(), para que la API
+    # HTTP siempre hable en porcentaje de cara al cliente/formulario.
     recargo_rate: Optional[float] = None  # e.g. 5.2 for 5.2%
 
 
@@ -1355,6 +1363,23 @@ async def close_register(
 
 # ----- ZEUS_TPV_FULL_FISCAL_INFRASTRUCTURE_ES_003: perfil fiscal y exportación modelo 303 -----
 
+def _recargo_fraction_to_percent(value) -> Optional[float]:
+    """FiscalProfile.recargo_rate guarda la FRACCION (0.052). La API HTTP habla
+    siempre en PORCENTAJE (5.2) de cara al cliente/formulario."""
+    if value is None:
+        return None
+    return float(Decimal(str(value)) * 100)
+
+
+def _recargo_percent_to_fraction(value: Optional[float]) -> Optional[Decimal]:
+    """Convierte el porcentaje recibido por HTTP (5.2) a la fraccion que exige
+    el modelo (0.052) y que consume services/fiscal_engine.py sin dividir entre
+    100. Unico punto de conversion porcentaje -> fraccion de toda la cadena."""
+    if value is None:
+        return None
+    return Decimal(str(value)) / 100
+
+
 @router.get("/fiscal-profile")
 async def get_fiscal_profile(
     current_user: User = Depends(get_current_active_user),
@@ -1372,7 +1397,7 @@ async def get_fiscal_profile(
             "id": profile.id,
             "vat_regime": profile.vat_regime,
             "apply_recargo_equivalencia": profile.apply_recargo_equivalencia,
-            "recargo_rate": float(profile.recargo_rate) if profile.recargo_rate is not None else None,
+            "recargo_rate": _recargo_fraction_to_percent(profile.recargo_rate),
         }
     }
 
@@ -1383,25 +1408,35 @@ async def set_fiscal_profile(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Crear o actualizar perfil fiscal de la empresa (régimen IVA y recargo de equivalencia)."""
+    """Crear o actualizar perfil fiscal de la empresa (régimen IVA y recargo de equivalencia).
+
+    request.recargo_rate llega en PORCENTAJE (ej. 5.2 para 5.2%), tal como
+    documenta el schema FiscalProfileCreate. Se convierte a FRACCION (0.052)
+    antes de guardar, porque FiscalProfile.recargo_rate y
+    services.fiscal_engine.build_fiscal_items_from_cart asumen la fraccion
+    (multiplican base_amount * recargo_rate directamente, sin dividir entre
+    100). Sin esta conversion, un recargo de equivalencia del 5.2% guardado
+    tal cual se traduciria en un recargo real del 520% en cada venta.
+    """
     company_ids = _company_ids_for_user(db, current_user)
     profile = db.query(FiscalProfile).filter(
         _fiscal_profile_scope_filter(current_user, company_ids)
     ).first()
-    recargo = request.recargo_rate
-    if request.apply_recargo_equivalencia and recargo is None:
-        recargo = 5.2  # 5.2% típico recargo equivalencia
+    recargo_percent = request.recargo_rate
+    if request.apply_recargo_equivalencia and recargo_percent is None:
+        recargo_percent = 5.2  # 5.2% típico recargo equivalencia (porcentaje)
+    recargo_fraction = _recargo_percent_to_fraction(recargo_percent)
     if profile:
         profile.vat_regime = request.vat_regime
         profile.apply_recargo_equivalencia = request.apply_recargo_equivalencia
-        profile.recargo_rate = recargo
+        profile.recargo_rate = recargo_fraction
     else:
         profile = FiscalProfile(
             user_id=current_user.id,
             company_id=_primary_company_id(db, current_user),
             vat_regime=request.vat_regime,
             apply_recargo_equivalencia=request.apply_recargo_equivalencia,
-            recargo_rate=recargo,
+            recargo_rate=recargo_fraction,
         )
         db.add(profile)
     db.commit()
@@ -1412,7 +1447,7 @@ async def set_fiscal_profile(
             "id": profile.id,
             "vat_regime": profile.vat_regime,
             "apply_recargo_equivalencia": profile.apply_recargo_equivalencia,
-            "recargo_rate": float(profile.recargo_rate) if profile.recargo_rate is not None else None,
+            "recargo_rate": _recargo_fraction_to_percent(profile.recargo_rate),
         },
     }
 

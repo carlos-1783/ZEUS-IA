@@ -47,11 +47,15 @@ async def execute_agent_action(
     agent: str,
     action: str,
     payload: Optional[Dict[str, Any]] = None,
-    force_execute: bool = False,
+    approval_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
-    Ejecuta acción de agente. Si requiere aprobación y force_execute=False → cola HITL.
+    Ejecuta acción de agente. Si requiere aprobación → cola HITL (pendiente
+    persistido). La unica via de saltarse la cola es `approval_id`, que SOLO
+    pasa el servidor (zeus_human_approval_v1.execute_approval) tras una
+    aprobacion del mismo usuario; nunca viene del cliente.
     """
+    force_execute = approval_id is not None
     agent_u = (agent or "ZEUS").strip().upper()
     if agent_u == "ZEUS CORE":
         agent_u = "ZEUS"
@@ -119,12 +123,39 @@ async def execute_agent_action(
         requires_confirmation=act in ("send_campaign", "launch_campaign") and not force_execute,
     )
 
-    result = await _dispatch(db, user, agent_u, act, zeus_action, data, force_execute=force_execute)
-    if not result.get("executed") and result.get("success"):
-        return result
-    if result.get("executed") is False and not result.get("needs_approval"):
-        pass
+    try:
+        result = await _dispatch(db, user, agent_u, act, zeus_action, data, force_execute=force_execute)
+    except Exception as exc:
+        _log_execution(agent_u, act, user, cid, approval_id, "failed", {"error": str(exc)})
+        raise
+    ok = bool(result.get("success")) and bool(result.get("executed"))
+    _log_execution(
+        agent_u, act, user, cid, approval_id,
+        "completed" if ok else "failed",
+        {"message": result.get("message"), "executed": result.get("executed")},
+    )
     return result
+
+
+def _log_execution(
+    agent: str, action: str, user: User, company_id: Optional[int],
+    approval_id: Optional[int], st: str, extra: Dict[str, Any],
+) -> None:
+    try:
+        from services.activity_logger import ActivityLogger
+
+        ActivityLogger.log_activity(
+            agent_name=agent,
+            action_type=f"agent_action_{action}",
+            action_description=f"Ejecucion de {action} por {agent}"
+            + (f" (aprobacion {approval_id})" if approval_id else ""),
+            details={"action": action, "approval_id": approval_id, **extra},
+            user_email=getattr(user, "email", None),
+            status=st,
+            company_id=company_id,
+        )
+    except Exception:
+        logger.exception("No se pudo registrar la ejecucion de %s", action)
 
 
 def _map_action_to_zeus_type(action: str) -> str:

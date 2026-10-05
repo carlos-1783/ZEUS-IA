@@ -31,6 +31,9 @@ def db():
             AgentActivity.__table__,
         ],
     )
+    from app.db.base import _migrate_zeus_approvals_execution_columns
+
+    _migrate_zeus_approvals_execution_columns()  # BD local pre-J2 sin las columnas nuevas
     session = SessionLocal()
     try:
         yield session
@@ -69,10 +72,24 @@ def _seed(db: Session, tag: str, role: str = "owner", superuser: bool = False, c
     return user, company
 
 
+@pytest.fixture()
+def fake_invoice_flow(monkeypatch):
+    """J2: aprobar ahora EJECUTA la accion. Se sustituye solo la generacion del PDF
+    (pesada) por un registrador; el executor/aprobacion son reales."""
+    calls = []
+
+    def _flow(db, *, user, invoice_id, company_id=None):
+        calls.append(invoice_id)
+        return {"pdf": "fake.pdf"}
+
+    monkeypatch.setattr("services.rafael_fiscal_engine_v2.generate_invoice_pdf_flow", _flow)
+    return calls
+
+
 def _req(db, user, company):
     return request_approval(
         db, user=user, company_id=company.id, agent_name="RAFAEL",
-        action_type="generate_invoice", payload={"amount": 900},
+        action_type="generate_invoice", payload={"invoice_id": 1},
     )
 
 
@@ -141,19 +158,19 @@ def test_resolve_insufficient_role_403(db, client):
     assert db.get(ZeusPendingApproval, row.id).status == "pending"
 
 
-def test_resolve_happy_path_and_double_resolve_409(db, client):
+def test_resolve_happy_path_and_double_resolve_409(db, client, fake_invoice_flow):
     owner, cb = _seed(db, "b")
     row = _req(db, owner, cb)
     _as(owner)
     r = client.post(f"/api/v1/zeus-core/approvals/{row.id}/resolve", json={"approve": True})
-    assert r.status_code == 200 and r.json()["status"] == "approved"
+    assert r.status_code == 200 and r.json()["status"] == "executed"
     db.expire_all()
     got = db.get(ZeusPendingApproval, row.id)
-    assert got.status == "approved" and got.resolved_by_user_id == owner.id
+    assert got.status == "executed" and got.resolved_by_user_id == owner.id
     r = client.post(f"/api/v1/zeus-core/approvals/{row.id}/resolve", json={"approve": False})
     assert r.status_code == 409
     db.expire_all()
-    assert db.get(ZeusPendingApproval, row.id).status == "approved"
+    assert db.get(ZeusPendingApproval, row.id).status == "executed"
 
 
 def test_company_admin_can_reject(db, client):
@@ -165,7 +182,7 @@ def test_company_admin_can_reject(db, client):
     assert r.status_code == 200 and r.json()["status"] == "rejected"
 
 
-def test_activity_log_recorded_with_company(db, client):
+def test_activity_log_recorded_with_company(db, client, fake_invoice_flow):
     owner, cb = _seed(db, "b")
     row = _req(db, owner, cb)
     _as(owner)
@@ -174,6 +191,7 @@ def test_activity_log_recorded_with_company(db, client):
     acts = db.query(AgentActivity).filter(AgentActivity.company_id == cb.id).all()
     by_type = {a.action_type: a for a in acts}
     assert "approval_requested" in by_type and "approval_approved" in by_type
+    assert "approval_executed" in by_type
     a = by_type["approval_approved"]
     assert a.user_email == owner.email and a.agent_name == "RAFAEL"
     assert a.details["approval_id"] == row.id and a.status == "completed"

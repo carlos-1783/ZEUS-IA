@@ -64,6 +64,11 @@ def assert_company_access(db: Session, user: User, company_id: int) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin acceso a esta empresa")
 
 
+def role_allows(role: Optional[str], role_required: Optional[str]) -> bool:
+    allowed = _ROLE_MAP.get((role_required or "ceo").lower(), _STRICT_ROLES)
+    return role in allowed
+
+
 def _log(agent: str, action: str, desc: str, user: User, company_id: Optional[int], details: Dict[str, Any], st: str) -> None:
     try:
         from services.activity_logger import ActivityLogger
@@ -105,6 +110,22 @@ def request_approval(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No se puede solicitar aprobacion: el usuario no tiene empresa asociada",
         )
+    # Regla J2: solo el solicitante puede aprobar/ejecutar. Si el solicitante no
+    # tiene el rol requerido nadie podria ejecutarla: se rechaza ya, sin crear fila.
+    if not _is_superuser(user):
+        role = user_company_role(db, user, company_id)
+        if not role_allows(role, role_required):
+            _log(
+                agent_name, "approval_request_denied",
+                f"Solicitud denegada por rol insuficiente: {action_type}",
+                user, company_id,
+                {"action_type": action_type, "user_role": role, "role_required": role_required},
+                "failed",
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Tu rol no permite solicitar la accion {action_type} (requiere {role_required}).",
+            )
     row = ZeusPendingApproval(
         company_id=company_id,
         user_id=user.id,
@@ -158,23 +179,39 @@ def resolve_approval(
     user: User,
     approve: bool,
 ) -> ZeusPendingApproval:
-    """404 si no existe o es de otra empresa (sin revelar existencia); 403 rol
-    insuficiente; 409 ya resuelta. El superusuario es global."""
+    """404 si no existe o es de otra empresa (sin revelar existencia); 403 si no
+    puede resolver; 409 ya resuelta.
+
+    - approve: solo el usuario que solicito la accion (row.user_id) y con el rol
+      requerido. Ni el superusuario aprueba en nombre de otro.
+    - reject: el solicitante, un owner/company_admin de la empresa o el superusuario.
+    Solo transiciona estado (pending -> approved/rejected, UPDATE condicional
+    atomico); la ejecucion la hace execute_approval()."""
     row = db.query(ZeusPendingApproval).filter(ZeusPendingApproval.id == approval_id).first()
     role = user_company_role(db, user, row.company_id) if row else None
     if not row or (role is None and not _is_superuser(user)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solicitud no encontrada")
-    if not _is_superuser(user):
-        allowed = _ROLE_MAP.get((row.role_required or "ceo").lower(), _STRICT_ROLES)
-        if role not in allowed:
-            _log(
-                row.agent_name, "approval_resolve_denied",
-                f"Resolucion denegada por rol insuficiente (ID {row.id})",
-                user, row.company_id,
-                {"approval_id": row.id, "user_role": role, "role_required": row.role_required},
-                "failed",
-            )
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Rol insuficiente para resolver esta solicitud")
+
+    is_requester = row.user_id == user.id
+    deny: Optional[str] = None
+    if approve:
+        if not is_requester:
+            deny = "Solo quien solicito la accion puede confirmarla"
+        elif not _is_superuser(user) and not role_allows(role, row.role_required):
+            deny = "Rol insuficiente para resolver esta solicitud"
+    else:
+        if not (is_requester or _is_superuser(user) or role in _STRICT_ROLES):
+            deny = "Sin permiso para rechazar esta solicitud"
+    if deny:
+        _log(
+            row.agent_name, "approval_resolve_denied",
+            f"Resolucion denegada (ID {row.id}): {deny}",
+            user, row.company_id,
+            {"approval_id": row.id, "user_role": role, "role_required": row.role_required,
+             "requested_by_user_id": row.user_id, "approve": approve},
+            "failed",
+        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=deny)
 
     new_status = "approved" if approve else "rejected"
     # UPDATE condicional atomico: evita doble resolucion concurrente.
@@ -200,5 +237,72 @@ def resolve_approval(
         user, row.company_id,
         {"approval_id": row.id, "action_type": row.action_type, "resolved_by_user_id": user.id},
         "completed",
+    )
+    return row
+
+
+async def execute_approval(db: Session, *, row: ZeusPendingApproval, user: User) -> ZeusPendingApproval:
+    """Ejecuta en el servidor la accion almacenada de una aprobacion ya aprobada.
+
+    approved -> executing (UPDATE condicional: una sola ejecucion aunque lleguen
+    dos peticiones) -> executed | failed. El resultado/error real queda en
+    result_json. Se ejecuta como el usuario solicitante (ya verificado == user)."""
+    from services.zeus_agent_executor_v1 import execute_agent_action
+    import services.crm_office_service as crm_svc
+
+    claimed = (
+        db.query(ZeusPendingApproval)
+        .filter(ZeusPendingApproval.id == row.id, ZeusPendingApproval.status == "approved")
+        .update({"status": "executing"}, synchronize_session=False)
+    )
+    db.commit()
+    if not claimed:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Solicitud ya ejecutada o en ejecucion")
+
+    final_status = "failed"
+    outcome: Dict[str, Any]
+    try:
+        if row.user_id != user.id:
+            raise RuntimeError("El ejecutor no es el usuario solicitante")
+        if crm_svc.primary_company_id(db, user) != row.company_id:
+            raise RuntimeError("La empresa de la aprobacion no coincide con la empresa activa del solicitante")
+        result = await execute_agent_action(
+            db,
+            user=user,
+            agent=row.agent_name,
+            action=row.action_type,
+            payload=json.loads(row.payload_json or "{}"),
+            approval_id=row.id,
+        )
+        if result.get("success") and result.get("executed"):
+            final_status = "executed"
+            outcome = {"result": result}
+        else:
+            outcome = {"error": result.get("message") or "La accion no se ejecuto", "result": result}
+    except HTTPException as exc:
+        db.rollback()
+        outcome = {"error": str(exc.detail), "http_status": exc.status_code}
+    except Exception as exc:  # error real: se registra como failed
+        db.rollback()
+        logger.exception("Fallo ejecutando aprobacion %s", row.id)
+        outcome = {"error": f"{type(exc).__name__}: {exc}"}
+
+    db.query(ZeusPendingApproval).filter(ZeusPendingApproval.id == row.id).update(
+        {
+            "status": final_status,
+            "result_json": json.dumps(outcome, ensure_ascii=False, default=str),
+            "executed_at": datetime.now(timezone.utc),
+        },
+        synchronize_session=False,
+    )
+    db.commit()
+    db.refresh(row)
+    _log(
+        row.agent_name, f"approval_{final_status}",
+        f"Aprobacion {final_status}: {row.action_type} (ID {row.id})",
+        user, row.company_id,
+        {"approval_id": row.id, "action_type": row.action_type,
+         "error": outcome.get("error"), "executed_by_user_id": user.id},
+        "completed" if final_status == "executed" else "failed",
     )
     return row

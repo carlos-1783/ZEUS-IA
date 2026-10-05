@@ -15,7 +15,7 @@ class ZeusPendingApproval(Base):
     agent_name = Column(String(64), nullable=False)
     action_type = Column(String(64), nullable=False, index=True)
     payload_json = Column(Text, nullable=False)
-    status = Column(String(32), nullable=False, default="pending", index=True)  # pending|approved|executing|executed|failed|rejected
+    status = Column(String(32), nullable=False, default="pending", index=True)  # pending|approved|executing|executed|failed|audit_failed|rejected
     role_required = Column(String(32), nullable=True, default="ceo")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     resolved_at = Column(DateTime(timezone=True), nullable=True)

@@ -204,6 +204,16 @@ async def _confirm_pending(db: Session, user: User, row: ZeusPendingApproval) ->
             "message": result.get("message") or "Acción ejecutada.",
             "execution": result,
         }
+    if done.status == "audit_failed":
+        return {
+            **fail,
+            "approval_id": done.id,
+            "status": "audit_failed",
+            "message": (
+                "La acción pudo producirse pero no se ha podido verificar. "
+                "Se ha avisado al equipo de seguridad; no la repitas hasta que se revise."
+            ),
+        }
     return {
         **fail,
         "approval_id": done.id,
@@ -249,7 +259,32 @@ async def execute_action(
     *,
     force_execute: bool = False,
 ) -> ZeusExecutionResult:
-    """Ejecuta una ZeusAction en los módulos indicados."""
+    """Ejecuta una ZeusAction en los módulos indicados.
+
+    J5b: el resultado lleva `company_id` = empresa con la que se ejecuto realmente la accion
+    (la de la accion, resuelta en servidor, o la primaria del usuario como hacen los
+    handlers), para que la auditoria THALOS post-accion compruebe un tenant real."""
+    import services.crm_office_service as crm_svc
+
+    exec_company = action.company_id
+    if exec_company is None:
+        try:
+            exec_company = crm_svc.primary_company_id(db, user)
+        except Exception:
+            logger.exception("execute_action: no se pudo resolver la empresa de ejecucion")
+            exec_company = None
+    result = await _dispatch_action(db, user, action, force_execute=force_execute)
+    result.company_id = exec_company
+    return result
+
+
+async def _dispatch_action(
+    db: Session,
+    user: User,
+    action: ZeusAction,
+    *,
+    force_execute: bool = False,
+) -> ZeusExecutionResult:
     at = action.action_type
 
     if at == "list_customers":
@@ -429,7 +464,7 @@ async def try_handle_zeus_chat(
         audit = thalos_audit_result(
             db, user=user, company_id=company_int, agent="ZEUS", action=action.action_type,
             result={"success": result.success, "executed": result.executed,
-                    "company_id": (result.model_dump().get("company_id"))},
+                    "company_id": result.company_id},
             source="thalos_audit_chat",
         )
         if not audit["ok"]:

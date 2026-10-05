@@ -313,20 +313,55 @@ async def execute_approval(db: Session, *, row: ZeusPendingApproval, user: User)
             payload=json.loads(row.payload_json or "{}"),
             approval_id=row.id,
         )
-        # THALOS (J5): auditoria post-accion. Sin veredicto OK no se declara "executed".
-        from services.thalos_request_guard_v1 import thalos_audit_result
+        # THALOS (J5/J5b): auditoria post-accion. Sin veredicto OK no se declara "executed".
+        from services.thalos_request_guard_v1 import record_security_event, thalos_audit_result
 
-        audit = thalos_audit_result(
-            db, user=user, company_id=row.company_id, agent=row.agent_name,
-            action=row.action_type, result=result, approval_id=row.id,
-        )
+        really_executed = bool(isinstance(result, dict) and result.get("success") and result.get("executed"))
+        try:
+            audit = thalos_audit_result(
+                db, user=user, company_id=row.company_id, agent=row.agent_name,
+                action=row.action_type, result=result, approval_id=row.id,
+            )
+        except Exception as exc:
+            if not really_executed:
+                raise
+            logger.exception("Fallo de la auditoria THALOS tras ejecutar la aprobacion %s", row.id)
+            audit = {"ok": False, "reason": f"audit_error:{type(exc).__name__}"}
         if audit["ok"]:
             final_status = "executed"
             outcome = {"result": result, "audit": audit}
-        elif result.get("success") and result.get("executed"):
-            # La accion se ejecuto pero la auditoria falla: no se responde "hecho"
-            # ni se expone el resultado (podria ser de otra empresa).
-            outcome = {"error": f"Auditoria THALOS fallida: {audit['reason']}", "audit": audit}
+        elif really_executed:
+            # La accion YA se ejecuto (efecto posiblemente producido) pero no se pudo verificar:
+            # estado propio `audit_failed`, resultado conservado MARCADO como no verificado y
+            # nunca devuelto al cliente (podria ser de otra empresa), evento critical.
+            final_status = "audit_failed"
+            outcome = {
+                "unverified": True,
+                "error": (
+                    "La accion pudo producirse pero no se ha podido verificar "
+                    f"(auditoria THALOS: {audit['reason']}). Se ha avisado al equipo de seguridad; "
+                    "no la repitas hasta que se revise."
+                ),
+                "audit": audit,
+                "unverified_result": result,
+            }
+            try:
+                record_security_event(
+                    db,
+                    event_type="audit_failed_after_execution",
+                    severity="critical",
+                    source="zeus_human_approval",
+                    details={
+                        "approval_id": row.id, "agent": row.agent_name, "action": row.action_type,
+                        "reason": audit["reason"], "executed": True, "verified": False,
+                    },
+                    user=user,
+                    company_id=row.company_id,
+                    action_taken="alert",
+                    decision_rule=audit["reason"],
+                )
+            except Exception:
+                logger.exception("No se pudo registrar el evento critical de audit_failed %s", row.id)
         else:
             outcome = {"error": result.get("message") or "La accion no se ejecuto", "result": result}
     except HTTPException as exc:

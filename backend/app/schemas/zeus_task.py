@@ -53,3 +53,6 @@ class ZeusExecutionResult(BaseModel):
     needs_confirmation: bool = False
     steps: List[ZeusExecutionStepResult] = Field(default_factory=list)
     metrics: Dict[str, Any] = Field(default_factory=dict)
+    # Empresa con la que realmente se ejecuto la accion (la rellena execute_action desde el
+    # contexto de servidor). La usa la auditoria THALOS post-accion.
+    company_id: Optional[int] = None

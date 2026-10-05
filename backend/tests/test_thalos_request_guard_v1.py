@@ -285,11 +285,13 @@ def test_execute_approval_audit_ok_executed(db, client, monkeypatch):
     assert _events(db, u, "post_action_audit")[-1].action_taken == "audit_pass"
 
 
-@pytest.mark.parametrize("bad", [
-    {"success": True, "executed": True, "company_id": 424242, "message": "hecho", "secret": "otra-empresa"},
-    {"success": True, "executed": False, "execution_mode": "simulated", "message": "simulado"},
+@pytest.mark.parametrize("bad,expected_status", [
+    # J5b: la accion SE EJECUTO pero la auditoria falla -> audit_failed (no "failed" generico)
+    ({"success": True, "executed": True, "company_id": 424242, "message": "hecho", "secret": "otra-empresa"},
+     "audit_failed"),
+    ({"success": True, "executed": False, "execution_mode": "simulated", "message": "simulado"}, "failed"),
 ])
-def test_execute_approval_audit_failure_not_executed(db, client, monkeypatch, bad):
+def test_execute_approval_audit_failure_not_executed(db, client, monkeypatch, bad, expected_status):
     u, co = _user(db)
 
     async def fake(db_, **kw):
@@ -302,8 +304,8 @@ def test_execute_approval_audit_failure_not_executed(db, client, monkeypatch, ba
     r = client.post(RESOLVE.format(row.id), json={"approve": True})
     assert r.status_code == 422
     body = r.json()
-    assert body["success"] is False and body["status"] == "failed"
+    assert body["success"] is False and body["status"] == expected_status
     assert "otra-empresa" not in r.text
     db.expire_all()
-    assert db.get(ZeusPendingApproval, row.id).status == "failed"
+    assert db.get(ZeusPendingApproval, row.id).status == expected_status
     assert _events(db, u, "post_action_audit")[-1].action_taken == "audit_fail"

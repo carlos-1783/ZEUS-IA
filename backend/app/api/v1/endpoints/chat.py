@@ -215,6 +215,7 @@ class ChatResponse(BaseModel):
     executed_action: Optional[bool] = None
     needs_confirmation: Optional[bool] = None
     execution: Optional[dict] = None
+    approval_id: Optional[int] = None
 
 class AgentCommunicationRequest(BaseModel):
     from_agent: str
@@ -391,6 +392,7 @@ async def chat_with_agent(
                     executed_action=bool(bridge.get("executed")),
                     needs_confirmation=bool(bridge.get("needs_confirmation")),
                     execution=bridge.get("execution") if isinstance(bridge.get("execution"), dict) else None,
+                    approval_id=bridge.get("approval_id"),
                     error=None if bridge.get("success") else bridge.get("message"),
                 )
 

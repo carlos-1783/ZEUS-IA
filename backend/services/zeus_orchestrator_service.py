@@ -7,26 +7,34 @@ Toda acción operativa pasa por aquí; el chat no invoca agentes directamente.
 
 from __future__ import annotations
 
+import json
 import logging
-import time
 from typing import Any, Dict, Optional
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.user import User
-from pydantic import ValidationError
-
+from app.models.zeus_pending_approval import ZeusPendingApproval
 from app.schemas.zeus_action import ZeusAction
-from app.schemas.zeus_task import ZeusExecutionResult, ZeusTaskObject
+from app.schemas.zeus_task import ZeusExecutionResult
 from services.agent_memory_service import load as memory_load, persist_operational_state
 from services.intent_parser_service import (
     build_action,
     is_affirmative_message,
+    is_cancel_message,
     is_confirmation_message,
     looks_like_operational,
     parse_message,
 )
 from services.zeus_global_context import attach_context_to_action_payload, enrich_chat_context
+from services.zeus_human_approval_v1 import (
+    CHAT_APPROVAL_TTL_SECONDS,
+    execute_approval,
+    is_expired,
+    request_approval,
+    resolve_approval,
+)
 from services import zeus_orchestrator_handlers as handlers
 
 logger = logging.getLogger(__name__)
@@ -35,8 +43,7 @@ PENDING_ACTION_KEY = "pending_zeus_action"
 LEGACY_PENDING_KEY = "pending_zeus_task"
 AGENT_ZEUS = "ZEUS CORE"
 MIN_CONFIDENCE = 0.7
-PENDING_TTL_SECONDS = 15 * 60
-PENDING_AT_KEY = "_pending_at"
+PENDING_TTL_SECONDS = CHAT_APPROVAL_TTL_SECONDS
 # Acciones con consecuencias (envían emails / crean datos): exigen vista previa + confirmación.
 CONFIRMABLE_ACTIONS = frozenset({"send_campaign", "create_customer"})
 
@@ -51,7 +58,7 @@ _OPERATIONAL_HELP = (
 
 
 def _company_key(user: User, context: Optional[Dict[str, Any]]) -> str:
-    """Clave de empresa para la memoria/pending de ZEUS.
+    """Clave de empresa para la memoria de ZEUS.
 
     H-01: sale SOLO del contexto construido por el servidor (`zeus_global_context`), nunca de
     un `company_id` que envíe el cliente. El respaldo para usuarios sin empresa lleva prefijo
@@ -69,7 +76,7 @@ def _thread_id(context: Optional[Dict[str, Any]]) -> str:
 
 
 def _pending_thread_key(user: User, context: Optional[Dict[str, Any]]) -> str:
-    """Hilo bajo el que se guarda el pending: atado al usuario que lo solicitó.
+    """Hilo bajo el que se guarda la solicitud: atado al usuario que la pidió.
 
     H-01: antes el pending se indexaba solo por (empresa, hilo), así que cualquier usuario que
     escribiera «confirmar» en ese hilo ejecutaba la acción de otro. La columna `thread_id` es
@@ -78,19 +85,111 @@ def _pending_thread_key(user: User, context: Optional[Dict[str, Any]]) -> str:
     return f"{_thread_id(context)[:100]}:u{user.id}"
 
 
-def _get_pending(company_id: str, thread_id: str) -> Optional[Dict[str, Any]]:
+def _discard_legacy_pending(company_id: str, thread_id: str) -> None:
+    """J3b: el único estado de confirmación es zeus_pending_approvals. Un pending legado en
+    AgentOperationalState (versiones previas) jamás se ejecuta: se descarta si existe."""
     mem = memory_load(company_id, AGENT_ZEUS, thread_id)
     artifacts = (mem.get("operational") or {}).get("artifacts") or {}
-    pending = artifacts.get(PENDING_ACTION_KEY) or artifacts.get(LEGACY_PENDING_KEY)
-    return pending if isinstance(pending, dict) else None
+    if artifacts.get(PENDING_ACTION_KEY) or artifacts.get(LEGACY_PENDING_KEY):
+        persist_operational_state(
+            company_id,
+            AGENT_ZEUS,
+            thread_id,
+            current_task=None,
+            status="idle",
+            next_action=None,
+            artifacts={},
+            blocked=None,
+        )
 
 
-def _pending_expired(pending: Dict[str, Any]) -> bool:
-    """Un pending sin marca temporal (legado) o más antiguo que el TTL no es ejecutable."""
-    at = pending.get(PENDING_AT_KEY)
-    if not isinstance(at, (int, float)):
-        return True
-    return (time.time() - at) > PENDING_TTL_SECONDS
+def _find_chat_pending(
+    db: Session, company_id: Optional[int], user: User, thread_key: str
+) -> Optional[ZeusPendingApproval]:
+    """Solicitud pending más reciente del MISMO usuario, empresa e hilo de chat."""
+    if company_id is None:
+        return None
+    return (
+        db.query(ZeusPendingApproval)
+        .filter(
+            ZeusPendingApproval.company_id == company_id,
+            ZeusPendingApproval.user_id == user.id,
+            ZeusPendingApproval.thread_id == thread_key,
+            ZeusPendingApproval.status == "pending",
+        )
+        .order_by(ZeusPendingApproval.id.desc())
+        .first()
+    )
+
+
+def _reject_pending(db: Session, user: User, row: ZeusPendingApproval, reason: str) -> None:
+    approval_id = row.id
+    try:
+        resolve_approval(db, approval_id=approval_id, user=user, approve=False, reason=reason)
+    except HTTPException as exc:
+        # 409: otro worker o la barra del workspace ya la resolvió; nada que hacer.
+        logger.info("zeus_chat_reject_skipped approval=%s status=%s", approval_id, exc.status_code)
+    except Exception:
+        db.rollback()
+        logger.exception("No se pudo rechazar la aprobacion %s (%s)", approval_id, reason)
+
+
+def _clean_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: v for k, v in (payload or {}).items() if not str(k).startswith("_")}
+
+
+async def _confirm_pending(db: Session, user: User, row: ZeusPendingApproval) -> Dict[str, Any]:
+    """Resuelve (pending→approved, atómico) y ejecuta (approved→executing→executed|failed)."""
+    fail = {"handled": True, "success": False, "executed": False}
+    approval_id = row.id
+    try:
+        resolved = resolve_approval(db, approval_id=approval_id, user=user, approve=True)
+    except HTTPException as exc:
+        db.rollback()
+        if exc.status_code == 403:
+            return {**fail, "message": f"No tienes permiso para confirmar esta acción: {exc.detail}"}
+        if "caducada" in str(exc.detail):
+            return {**fail, "message": "La confirmación caducó (15 min). Describe de nuevo la acción."}
+        return {**fail, "message": "Esa acción ya fue resuelta; no se ejecuta de nuevo."}
+    except Exception:
+        db.rollback()
+        logger.exception("zeus_chat: fallo al aprobar %s; no se ejecuta nada", approval_id)
+        return {
+            **fail,
+            "message": "No se pudo registrar tu confirmación. No se ha ejecutado nada; inténtalo de nuevo.",
+        }
+
+    try:
+        done = await execute_approval(db, row=resolved, user=user)
+    except HTTPException:
+        db.rollback()
+        return {**fail, "message": "Esa acción ya está en ejecución o ejecutada; no se ejecuta de nuevo."}
+    except Exception:
+        db.rollback()
+        logger.exception("zeus_chat: fallo ejecutando aprobacion %s", approval_id)
+        return {**fail, "message": "Error al ejecutar la acción confirmada."}
+
+    outcome = json.loads(done.result_json or "{}")
+    logger.info(
+        "zeus_chat_confirmed_execution user=%s company=%s action=%s approval=%s status=%s",
+        user.id, done.company_id, done.action_type, done.id, done.status,
+    )
+    if done.status == "executed":
+        result = outcome.get("result") or {}
+        return {
+            "handled": True,
+            "success": True,
+            "executed": True,
+            "approval_id": done.id,
+            "message": result.get("message") or "Acción ejecutada.",
+            "execution": result,
+        }
+    return {
+        **fail,
+        "approval_id": done.id,
+        "message": f"No se pudo ejecutar la acción: {outcome.get('error') or 'error desconocido'}",
+        "execution": outcome.get("result"),
+    }
 
 
 def _preview_create_customer(action: ZeusAction) -> Optional[Dict[str, Any]]:
@@ -103,46 +202,6 @@ def _preview_create_customer(action: ZeusAction) -> Optional[Dict[str, Any]]:
         "name": name,
         "email": email,
     }
-
-
-def _pending_to_action(
-    db: Session,
-    user: User,
-    pending_raw: Dict[str, Any],
-    global_context: Dict[str, Any],
-) -> ZeusAction:
-    try:
-        action = ZeusAction.model_validate(pending_raw)
-    except ValidationError:
-        task = ZeusTaskObject.model_validate(pending_raw)
-        action = build_action(db, user, task)
-    action.payload = attach_context_to_action_payload(action.payload, global_context)
-    return action
-
-
-def _set_pending(company_id: str, thread_id: str, action: Optional[ZeusAction]) -> None:
-    if action is None:
-        persist_operational_state(
-            company_id,
-            AGENT_ZEUS,
-            thread_id,
-            current_task=None,
-            status="idle",
-            next_action=None,
-            artifacts={},
-            blocked=None,
-        )
-        return
-    persist_operational_state(
-        company_id,
-        AGENT_ZEUS,
-        thread_id,
-        current_task=action.action_type,
-        status="awaiting_confirmation",
-        next_action="Escribe «confirmar» para ejecutar",
-        artifacts={PENDING_ACTION_KEY: {**action.model_dump(), PENDING_AT_KEY: time.time()}},
-        blocked=None,
-    )
 
 
 def _with_global_context(action: ZeusAction, global_context: Dict[str, Any]) -> ZeusAction:
@@ -228,52 +287,56 @@ async def try_handle_zeus_chat(
     Si el mensaje dispara una acción ejecutable, devuelve respuesta estructurada.
     Si no, devuelve None (continuar con LLM solo para consultas no operativas).
 
-    J3: la ejecución de acciones con consecuencias (enviar campaña, crear cliente) SOLO ocurre
-    cuando el mismo usuario, en el mismo hilo y empresa, confirma explícitamente un pending
-    persistido y vigente. Ningún flag del cliente (force_execute, confirm_action,
+    J3/J3b: la ejecución de acciones con consecuencias (enviar campaña, crear cliente) SOLO
+    ocurre cuando el mismo usuario, en el mismo hilo y empresa, confirma explícitamente una
+    fila vigente de zeus_pending_approvals (único estado de confirmación, compartido con la
+    barra de decisión del workspace). Ningún flag del cliente (force_execute, confirm_action,
     skip_action_execution) influye: este módulo no los lee.
     """
     ctx = enrich_chat_context(db, user, context)
     global_context = ctx["zeus_global_context"]
     company_id = _company_key(user, ctx)
     thread_id = _pending_thread_key(user, ctx)
+    company_int = global_context.get("company_id")
 
-    pending_raw = _get_pending(company_id, thread_id)
-    if pending_raw and _pending_expired(pending_raw):
-        _set_pending(company_id, thread_id, None)
-        pending_raw = None
+    _discard_legacy_pending(company_id, thread_id)
+
+    pending_row = _find_chat_pending(db, company_int, user, thread_id)
+    expired_notice = False
+    if pending_row is not None and is_expired(pending_row):
+        _reject_pending(db, user, pending_row, "caducada")
+        pending_row, expired_notice = None, True
 
     explicit = is_confirmation_message(message)
-    affirmative = bool(pending_raw) and is_affirmative_message(message)
+    affirmative = is_affirmative_message(message)
 
-    if explicit or affirmative:
-        if not pending_raw:
+    if pending_row is not None:
+        if explicit or affirmative:
+            return await _confirm_pending(db, user, pending_row)
+        if is_cancel_message(message):
+            cancelled_id = pending_row.id
+            _reject_pending(db, user, pending_row, "cancelado por el usuario")
             return {
                 "handled": True,
-                "success": False,
-                "message": "No hay ninguna acción pendiente de confirmar. Describe lo que quieres hacer.",
+                "success": True,
                 "executed": False,
+                "approval_id": cancelled_id,
+                "message": "Acción cancelada. No se ha ejecutado nada.",
             }
-        action = _pending_to_action(db, user, pending_raw, global_context)
-        # El pending se consume ANTES de ejecutar: una sola ejecución por confirmación.
-        _set_pending(company_id, thread_id, None)
-        if action.action_type not in CONFIRMABLE_ACTIONS:
-            return {
-                "handled": True,
-                "success": False,
-                "executed": False,
-                "message": "La acción pendiente no es válida. Describe de nuevo lo que quieres hacer.",
-            }
-        result = await execute_action(db, user, action, force_execute=True)
-        logger.info(
-            "zeus_chat_confirmed_execution user=%s company=%s action=%s success=%s",
-            user.id, company_id, action.action_type, result.success,
-        )
-        return _to_chat_payload(result)
-
-    if pending_raw:
-        # Cambio de tema: cualquier mensaje que no confirma invalida el pending anterior.
-        _set_pending(company_id, thread_id, None)
+        # Cambio de tema: se rechaza la solicitud para que la barra de decisión del workspace
+        # no muestre algo que el chat ya abandonó.
+        _reject_pending(db, user, pending_row, "cambio de tema")
+    elif explicit:
+        return {
+            "handled": True,
+            "success": False,
+            "executed": False,
+            "message": (
+                "La confirmación caducó (15 min). Describe de nuevo lo que quieres hacer."
+                if expired_notice
+                else "No hay ninguna acción pendiente de confirmar. Describe lo que quieres hacer."
+            ),
+        }
 
     task = parse_message(message)
     if task.intent == "unknown" or task.confidence < MIN_CONFIDENCE:
@@ -296,15 +359,42 @@ async def try_handle_zeus_chat(
             preview = _preview_create_customer(action)
             if preview is None:
                 return _to_chat_payload(await execute_action(db, user, action, force_execute=False))
-        _set_pending(company_id, thread_id, action)
+        refusal = {"handled": True, "success": False, "executed": False}
+        try:
+            row = request_approval(
+                db,
+                user=user,
+                company_id=company_int,
+                agent_name="ZEUS",
+                action_type=action.action_type,
+                payload=_clean_payload(action.payload),
+                thread_id=thread_id,
+                ttl_seconds=PENDING_TTL_SECONDS,
+            )
+        except HTTPException as exc:
+            db.rollback()
+            if exc.status_code == 403:
+                return {**refusal, "message": f"No tienes permiso para esta acción: {exc.detail}"}
+            return {**refusal, "message": str(exc.detail)}
+        except Exception:
+            db.rollback()
+            logger.exception("zeus_chat: no se pudo persistir la solicitud; no se ejecuta nada")
+            return {
+                **refusal,
+                "message": (
+                    "No se pudo registrar la solicitud de confirmación. "
+                    "No se ha ejecutado nada; inténtalo de nuevo."
+                ),
+            }
         return {
             "handled": True,
             "success": True,
             "executed": False,
             "needs_confirmation": True,
+            "approval_id": row.id,
             "message": preview["message"],
             "execution": preview,
-            "action": action.model_dump(),
+            "action": {**action.model_dump(), "payload": _clean_payload(action.payload)},
         }
 
     result = await execute_action(db, user, action, force_execute=False)

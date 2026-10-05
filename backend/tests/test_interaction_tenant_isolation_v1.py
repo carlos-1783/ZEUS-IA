@@ -45,7 +45,11 @@ CAMPAIGN_77 = "crea una oferta del 77% y envíala a los clientes"
 
 @pytest.fixture()
 def db():
+    from app.db.base import _migrate_zeus_approvals_chat_columns, _migrate_zeus_approvals_execution_columns
+
     Base.metadata.create_all(bind=engine)
+    _migrate_zeus_approvals_execution_columns()
+    _migrate_zeus_approvals_chat_columns()
     session = SessionLocal()
     try:
         yield session
@@ -75,13 +79,36 @@ def _seed_user(db: Session, company: Company | None = None, *, tag: str = "u"):
 
 
 def _pending_for(user: User, company_id: int, thread: str = "main"):
-    """Lee el *pending* de ZEUS con las mismas claves que usa el orquestador."""
+    """Lee la solicitud pending de ZEUS (J3b: zeus_pending_approvals, unico estado) con las
+    mismas claves que usa el orquestador. Devuelve el mismo formato que antes."""
+    import json
+
+    from app.models.zeus_pending_approval import ZeusPendingApproval
+
     ctx = {"zeus_global_context": {"company_id": company_id}, "thread_id": thread}
-    key = orch._company_key(user, ctx)
     thread_key = orch._pending_thread_key(user, ctx)
-    mem = memory_load(key, orch.AGENT_ZEUS, thread_key)
-    artifacts = (mem.get("operational") or {}).get("artifacts") or {}
-    return artifacts.get(orch.PENDING_ACTION_KEY)
+    s = SessionLocal()
+    try:
+        row = (
+            s.query(ZeusPendingApproval)
+            .filter(
+                ZeusPendingApproval.company_id == company_id,
+                ZeusPendingApproval.user_id == user.id,
+                ZeusPendingApproval.thread_id == thread_key,
+                ZeusPendingApproval.status == "pending",
+            )
+            .order_by(ZeusPendingApproval.id.desc())
+            .first()
+        )
+        if row is None:
+            return None
+        return {
+            "user_id": row.user_id,
+            "company_id": row.company_id,
+            "payload": json.loads(row.payload_json),
+        }
+    finally:
+        s.close()
 
 
 # --------------------------------------------------------------------------- H-01

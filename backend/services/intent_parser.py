@@ -7,12 +7,19 @@ from typing import Optional
 
 from app.schemas.zeus_task import ZeusTaskObject
 
+# J3b: frase COMPLETA. "confirmar que no", "ejecuta el informe", "adelante con otra cosa" no confirman.
 _CONFIRM_RE = re.compile(
-    r"^(confirmar|confirmo|sí\s*confirmo|si\s*confirmo|ejecutar|ejecuta|adelante|ok\s*confirmar)\b",
+    r"^\s*(confirmar|confirmo|s[ií],?\s*confirmo|ejecutar|ejecuta|adelante|ok,?\s*confirmar)\s*[.!]?\s*$",
     re.I,
 )
 
-_AFFIRMATIVE_RE = re.compile(r"^\s*s[ií]\s*[.!]?\s*$", re.I)
+# «sí» / «ok» solos: solo valen como confirmacion si hay un pending (lo decide el orquestador).
+_AFFIRMATIVE_RE = re.compile(r"^\s*(s[ií]|ok)\s*[.!]?\s*$", re.I)
+
+_CANCEL_RE = re.compile(
+    r"^\s*(no|cancelar|cancela|cancelo|descartar|descarta|rechazar|rechazo)(,?\s*(cancelar|cancela|gracias))?\s*[.!]?\s*$",
+    re.I,
+)
 
 _CAMPAIGN_SEND_RE = re.compile(
     r"(crea|crear|lanza|lanzar|genera|generar|haz|hacer|monta|montar|prepara|preparar)"
@@ -96,12 +103,17 @@ def is_confirmation_message(message: str) -> bool:
     text = (message or "").strip()
     if not text:
         return False
-    return bool(_CONFIRM_RE.search(text))
+    return bool(_CONFIRM_RE.match(text))
 
 
 def is_affirmative_message(message: str) -> bool:
-    """«sí» / «si» exactos. Solo vale como confirmación si hay un pending (lo decide el orquestador)."""
+    """«sí» / «ok» exactos. Solo vale como confirmación si hay un pending (lo decide el orquestador)."""
     return bool(_AFFIRMATIVE_RE.match(message or ""))
+
+
+def is_cancel_message(message: str) -> bool:
+    """«no» / «cancelar» explicitos (frase completa)."""
+    return bool(_CANCEL_RE.match(message or ""))
 
 
 def parse_intent(message: str) -> ZeusTaskObject:

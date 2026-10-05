@@ -31,7 +31,11 @@ CONTROL_KEYS = ("force_execute", "confirm_action", "skip_action_execution", "tas
 
 @pytest.fixture()
 def db():
+    from app.db.base import _migrate_zeus_approvals_chat_columns, _migrate_zeus_approvals_execution_columns
+
     Base.metadata.create_all(bind=engine)
+    _migrate_zeus_approvals_execution_columns()  # BD local anterior a J2/J3b sin columnas nuevas
+    _migrate_zeus_approvals_chat_columns()
     s = SessionLocal()
     try:
         yield s
@@ -62,7 +66,7 @@ def sent(monkeypatch):
     return calls
 
 
-def _seed(db: Session, company=None, tag="u", with_customer=True):
+def _seed(db: Session, company=None, tag="u", with_customer=True, role="owner"):
     suf = uuid.uuid4().hex[:8]
     if company is None:
         company = Company(company_name=f"J3 {suf}", slug=f"j3-{suf}")
@@ -78,7 +82,7 @@ def _seed(db: Session, company=None, tag="u", with_customer=True):
     )
     db.add(user)
     db.flush()
-    db.add(UserCompany(user_id=user.id, company_id=company.id, role="owner"))
+    db.add(UserCompany(user_id=user.id, company_id=company.id, role=role))
     db.commit()
     db.refresh(user)
     db.refresh(company)
@@ -169,14 +173,21 @@ def test_topic_change_invalidates_pending(db, client, sent):
     assert sent == []
 
 
-def test_expired_pending_is_not_executed(db, client, sent, monkeypatch):
+def test_expired_pending_is_not_executed(db, client, sent):
+    from datetime import datetime, timedelta, timezone
+
+    from app.models.zeus_pending_approval import ZeusPendingApproval
+
     user, _ = _seed(db)
     thread = "ttl-" + uuid.uuid4().hex[:6]
-    _chat(client, user, CAMPAIGN, thread=thread)
-    real = orch.time.time
-    monkeypatch.setattr(orch.time, "time", lambda: real() + orch.PENDING_TTL_SECONDS + 5)
+    aid = _chat(client, user, CAMPAIGN, thread=thread).json()["approval_id"]
+    row = db.query(ZeusPendingApproval).filter(ZeusPendingApproval.id == aid).one()
+    row.expires_at = datetime.now(timezone.utc) - timedelta(seconds=5)
+    db.commit()
     assert _chat(client, user, "confirmar", thread=thread).json()["executed_action"] is False
     assert sent == []
+    db.expire_all()
+    assert db.query(ZeusPendingApproval).filter(ZeusPendingApproval.id == aid).one().status == "rejected"
 
 
 def _count_customers(db, company_id):

@@ -6,6 +6,7 @@ import json
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from services.thalos_request_guard_v1 import thalos_request_guard
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -132,7 +133,7 @@ def thalos_alerts(
     return wrap_response({"alerts": alerts, "count": len(alerts)}, "events", data_origin="backend", real_execution=True)
 
 
-@router.post("/alerts/{alert_id}/resolve")
+@router.post("/alerts/{alert_id}/resolve", dependencies=[Depends(thalos_request_guard)])
 def thalos_resolve_alert(
     alert_id: int,
     current_user: User = Depends(get_current_active_user),

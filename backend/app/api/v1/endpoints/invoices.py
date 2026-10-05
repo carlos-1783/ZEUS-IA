@@ -1,5 +1,6 @@
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Path, Body
+from services.thalos_request_guard_v1 import thalos_request_guard
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_
 from datetime import date, datetime, time
@@ -355,7 +356,7 @@ def update_invoice(
     
     return {"success": True, "data": invoice}
 
-@router.post("/{invoice_id}/payments", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/{invoice_id}/payments", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(thalos_request_guard)])
 def create_payment(
     *,
     invoice_id: int = Path(..., description="ID of the invoice to pay"),
@@ -471,7 +472,7 @@ def list_invoice_payments(
     
     return invoice.payments
 
-@router.post("/{invoice_id}/send", response_model=InvoiceResponse)
+@router.post("/{invoice_id}/send", response_model=InvoiceResponse, dependencies=[Depends(thalos_request_guard)])
 def send_invoice(
     invoice_id: int = Path(..., description="ID of the invoice to send"),
     db: Session = Depends(get_db_scoped),
@@ -498,7 +499,7 @@ def send_invoice(
     
     return {"success": True, "data": invoice}
 
-@router.post("/{invoice_id}/void", response_model=InvoiceResponse)
+@router.post("/{invoice_id}/void", response_model=InvoiceResponse, dependencies=[Depends(thalos_request_guard)])
 def void_invoice(
     invoice_id: int = Path(..., description="ID of the invoice to void"),
     db: Session = Depends(get_db_scoped),

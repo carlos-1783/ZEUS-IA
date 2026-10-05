@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, Path, Query, UploadFile, status
+from services.thalos_request_guard_v1 import thalos_request_guard
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from io import BytesIO
@@ -132,7 +133,7 @@ def crm_delete_record(
     return None
 
 
-@router.post("/records/{record_id}/charge", response_model=RecordChargeOut)
+@router.post("/records/{record_id}/charge", response_model=RecordChargeOut, dependencies=[Depends(thalos_request_guard)])
 def crm_register_charge(
     record_id: int = Path(..., ge=1),
     body: RecordChargeIn = ...,

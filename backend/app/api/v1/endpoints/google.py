@@ -3,6 +3,7 @@
 Endpoints para Google Calendar, Gmail, Drive, Sheets
 """
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from services.thalos_request_guard_v1 import thalos_request_guard
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any, List
 from datetime import datetime
@@ -55,7 +56,7 @@ class SpreadsheetRead(BaseModel):
 # GOOGLE CALENDAR ENDPOINTS
 # ============================================================================
 
-@router.post("/calendar/event")
+@router.post("/calendar/event", dependencies=[Depends(thalos_request_guard)])
 async def create_calendar_event(
     event: CalendarEvent,
     current_user: User = Depends(get_current_active_user),
@@ -98,7 +99,7 @@ async def list_calendar_events(
 # GMAIL ENDPOINTS
 # ============================================================================
 
-@router.post("/gmail/send")
+@router.post("/gmail/send", dependencies=[Depends(thalos_request_guard)])
 async def send_gmail(
     message: GmailMessage,
     current_user: User = Depends(get_current_active_user),
@@ -137,7 +138,7 @@ async def read_gmail_inbox(
 # GOOGLE DRIVE ENDPOINTS
 # ============================================================================
 
-@router.post("/drive/upload")
+@router.post("/drive/upload", dependencies=[Depends(thalos_request_guard)])
 async def upload_to_drive(
     upload: DriveUpload,
     current_user: User = Depends(get_current_active_user),
@@ -175,7 +176,7 @@ async def list_drive_files(
 # GOOGLE SHEETS ENDPOINTS
 # ============================================================================
 
-@router.post("/sheets/create")
+@router.post("/sheets/create", dependencies=[Depends(thalos_request_guard)])
 async def create_spreadsheet(
     spreadsheet: SpreadsheetCreate,
     current_user: User = Depends(get_current_active_user),
@@ -191,7 +192,7 @@ async def create_spreadsheet(
     
     return result
 
-@router.post("/sheets/write")
+@router.post("/sheets/write", dependencies=[Depends(thalos_request_guard)])
 async def write_to_sheet(
     data: SpreadsheetWrite,
     current_user: User = Depends(get_current_active_user),
@@ -209,7 +210,7 @@ async def write_to_sheet(
     
     return result
 
-@router.post("/sheets/read")
+@router.post("/sheets/read", dependencies=[Depends(thalos_request_guard)])
 async def read_from_sheet(
     data: SpreadsheetRead,
     current_user: User = Depends(get_current_active_user),

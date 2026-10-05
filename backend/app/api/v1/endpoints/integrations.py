@@ -188,7 +188,7 @@ async def email_status(
 # HACIENDA ENDPOINTS
 # ============================================================================
 
-@router.post("/hacienda/factura")
+@router.post("/hacienda/factura", dependencies=[Depends(thalos_request_guard)])
 async def enviar_factura(
     factura: FacturaEmitida,
     _: User = Depends(require_scopes(["tax:write"])),
@@ -201,7 +201,7 @@ async def enviar_factura(
     
     return result
 
-@router.post("/hacienda/modelo-303")
+@router.post("/hacienda/modelo-303", dependencies=[Depends(thalos_request_guard)])
 async def presentar_modelo_303(
     modelo: Modelo303,
     _: User = Depends(require_scopes(["tax:write"])),
@@ -229,7 +229,7 @@ async def hacienda_status(
 # STRIPE ENDPOINTS
 # ============================================================================
 
-@router.post("/stripe/payment-intent")
+@router.post("/stripe/payment-intent", dependencies=[Depends(thalos_request_guard)])
 async def create_payment(
     payment: PaymentIntent,
     _: User = Depends(require_scopes(["tax:write"])),

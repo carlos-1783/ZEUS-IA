@@ -206,7 +206,7 @@ def perseo_v2_ads_create(
     )}
 
 
-@router.post("/publish")
+@router.post("/publish", dependencies=[Depends(thalos_request_guard)])
 def perseo_v2_publish(
     body: PublishBody,
     current_user: User = Depends(get_current_active_user),
@@ -309,7 +309,7 @@ def perseo_pipeline_status(
     return {"success": True, **pipeline_status(db)}
 
 
-@router.post("/pipeline/run")
+@router.post("/pipeline/run", dependencies=[Depends(thalos_request_guard)])
 def perseo_pipeline_run(
     body: PipelineRunBody,
     current_user: User = Depends(get_current_active_user),

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends
+from services.thalos_request_guard_v1 import thalos_request_guard
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -74,7 +75,7 @@ def workspace_playbook_create(
     )
 
 
-@router.post("/playbooks/run")
+@router.post("/playbooks/run", dependencies=[Depends(thalos_request_guard)])
 def workspace_playbook_run(
     body: PlaybookRunRequest,
     current_user: User = Depends(get_current_active_user),

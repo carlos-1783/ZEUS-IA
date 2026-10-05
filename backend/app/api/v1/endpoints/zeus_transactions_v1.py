@@ -48,7 +48,7 @@ class TransactionCreateRequest(BaseModel):
     idempotency_key: Optional[str] = None
 
 
-@router.post("/transactions")
+@router.post("/transactions", dependencies=[Depends(thalos_request_guard)])
 def zeus_transaction_create(
     body: TransactionCreateRequest,
     current_user: User = Depends(get_current_active_user),

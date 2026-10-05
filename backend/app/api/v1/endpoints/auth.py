@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request, Form, Bo
 from fastapi.responses import Response
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 
-from app.core.auth import get_current_active_user, resolve_user_scopes
+from app.core.auth import get_current_active_superuser, get_current_active_user, resolve_user_scopes
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -1310,9 +1310,12 @@ async def test_token(current_user: User = Depends(get_current_active_user)):
 )
 async def debug_verify_token(
     token: str = Body(..., embed=True),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _superuser: User = Depends(get_current_active_superuser),
 ):
     """
+    Solo superusuario (J5c): sin autenticacion devolvia claims sin verificar de cualquier
+    token y existencia/estado/rol de usuarios (enumeracion).
     Debug endpoint to verify a JWT token and return detailed information.
     This helps diagnose issues with token verification.
     

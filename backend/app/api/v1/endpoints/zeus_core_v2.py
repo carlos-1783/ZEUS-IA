@@ -176,7 +176,7 @@ def agenda_schedule(
     return {"success": True, **schedule_meeting(db, user=current_user, lead_id=lead_id, start_iso=body.start_iso)}
 
 
-@router.post("/leads/{lead_id}/convert")
+@router.post("/leads/{lead_id}/convert", dependencies=[Depends(thalos_request_guard)])
 def leads_convert(
     lead_id: int,
     current_user: User = Depends(get_current_active_user),

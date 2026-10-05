@@ -313,9 +313,20 @@ async def execute_approval(db: Session, *, row: ZeusPendingApproval, user: User)
             payload=json.loads(row.payload_json or "{}"),
             approval_id=row.id,
         )
-        if result.get("success") and result.get("executed"):
+        # THALOS (J5): auditoria post-accion. Sin veredicto OK no se declara "executed".
+        from services.thalos_request_guard_v1 import thalos_audit_result
+
+        audit = thalos_audit_result(
+            db, user=user, company_id=row.company_id, agent=row.agent_name,
+            action=row.action_type, result=result, approval_id=row.id,
+        )
+        if audit["ok"]:
             final_status = "executed"
-            outcome = {"result": result}
+            outcome = {"result": result, "audit": audit}
+        elif result.get("success") and result.get("executed"):
+            # La accion se ejecuto pero la auditoria falla: no se responde "hecho"
+            # ni se expone el resultado (podria ser de otra empresa).
+            outcome = {"error": f"Auditoria THALOS fallida: {audit['reason']}", "audit": audit}
         else:
             outcome = {"error": result.get("message") or "La accion no se ejecuto", "result": result}
     except HTTPException as exc:

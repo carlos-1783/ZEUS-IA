@@ -421,7 +421,21 @@ async def try_handle_zeus_chat(
         }
 
     result = await execute_action(db, user, action, force_execute=False)
-    return _to_chat_payload(result)
+    payload = _to_chat_payload(result)
+    if result.executed:
+        # THALOS (J5): auditoria post-accion de la rama directa del chat.
+        from services.thalos_request_guard_v1 import thalos_audit_result
+
+        audit = thalos_audit_result(
+            db, user=user, company_id=company_int, agent="ZEUS", action=action.action_type,
+            result={"success": result.success, "executed": result.executed,
+                    "company_id": (result.model_dump().get("company_id"))},
+            source="thalos_audit_chat",
+        )
+        if not audit["ok"]:
+            return {"handled": True, "success": False, "executed": False,
+                    "message": f"No se puede confirmar la accion: auditoria THALOS fallida ({audit['reason']})."}
+    return payload
 
 
 __all__ = ["try_handle_zeus_chat", "execute_action", "AGENT_ZEUS", "enrich_chat_context"]

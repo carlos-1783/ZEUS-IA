@@ -770,8 +770,18 @@ const getActivityIcon = (actionType) => {
 const getStatusText = (status) => {
   const texts = {
     completed: 'Completado',
+    success: 'Completado',
+    executed: 'Ejecutado',
     failed: 'Fallido',
-    pending: 'Pendiente'
+    pending: 'Pendiente',
+    needs_confirmation: 'Pendiente de confirmar',
+    needs_more_data: 'Faltan datos',
+    not_understood: 'No entendido',
+    rejected: 'Rechazado',
+    audit_failed: 'Auditoría fallida',
+    blocked_no_company: 'Bloqueado: sin empresa',
+    blocked_client_origin: 'Bloqueado',
+    blocked_missing_handler: 'Bloqueado'
   }
   return texts[status] || status
 }
@@ -1387,6 +1397,23 @@ const formatMetricValue = (value) => {
 .activity-status.failed {
   background: var(--zeus-danger-soft, #fdecec);
   color: #dc2626;
+}
+
+.activity-status.failed,
+.activity-status.audit_failed {
+  background: var(--zeus-danger-soft, #fdecec);
+  color: var(--zeus-danger, #dc2626);
+}
+
+.activity-status.needs_confirmation,
+.activity-status.needs_more_data,
+.activity-status.not_understood,
+.activity-status.rejected,
+.activity-status.blocked_no_company,
+.activity-status.blocked_client_origin,
+.activity-status.blocked_missing_handler {
+  background: var(--zeus-warning-soft, #fef6e7);
+  color: var(--zeus-warning, #f59e0b);
 }
 
 .activity-metrics {

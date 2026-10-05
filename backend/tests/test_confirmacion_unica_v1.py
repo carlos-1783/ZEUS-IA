@@ -302,6 +302,15 @@ def test_queued_campaign_sent_activity_never_sends(db, client, sent, agent):
     })
     assert r.status_code == 200, r.text
     aid = r.json()["activity_id"]
+    # J3c: via /activities/log un no superusuario ya no deja la actividad ejecutable.
+    db.expire_all()
+    act = db.query(AgentActivity).filter(AgentActivity.id == aid).one()
+    assert act.status == "logged" and act.details["_origin"] == "client_log"
+    # Defensa en profundidad J3b: aunque llegara al handler (origen interno simulado, sin marca
+    # de cliente), campaign_sent encolado sigue sin enviar.
+    act.status = "pending"
+    act.details = {k: v for k, v in act.details.items() if k != "_origin"}
+    db.commit()
     _run_executor_on(aid)
     assert sent == []
     db.expire_all()

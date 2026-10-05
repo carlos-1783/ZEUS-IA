@@ -147,6 +147,11 @@ app.include_router(api_router, prefix="/api/v1")
 # Alias spec zeus_time_cost_engine_v1: POST /api/checkin
 app.include_router(checkin_v1.router, prefix="/api/checkin", tags=["checkin"])
 
+# THALOS J5e: cobertura estructural de TODA ruta mutante /api/* (guard de ruta existente o global).
+from services.thalos_request_guard_v1 import install_global_thalos_guard  # noqa: E402
+
+install_global_thalos_guard(app)
+
 
 @app.get("/api/v1", include_in_schema=False)
 async def api_v1_prefix_probe():

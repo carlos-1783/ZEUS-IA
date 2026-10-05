@@ -176,12 +176,31 @@ def _client_ip(request: Request) -> Optional[str]:
         return request.client.host if request.client else None
 
 
-async def thalos_request_guard(
-    request: Request,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
+def _body_verdict_sync_meta(request: Request) -> Optional[tuple]:
+    """Veredicto para cuerpos NO JSON (solo Content-Length declarado).
+
+    None si el cuerpo es JSON/sin tipo (hay que validarlo); (0, "") si es no-JSON valido."""
+    ctype = (request.headers.get("content-type") or "").lower()
+    if ctype and "json" not in ctype:
+        try:
+            declared = int(request.headers.get("content-length") or 0)
+        except ValueError:
+            declared = MAX_UPLOAD_BYTES + 1
+        return (413, "body_too_large") if declared > MAX_UPLOAD_BYTES else (0, "")
+    return None
+
+
+async def _incoming_verdict(request: Request) -> Optional[tuple]:
+    """(status, motivo) si la entrada se rechaza; None si es valida (reutiliza validate_request_body)."""
+    meta = _body_verdict_sync_meta(request)
+    if meta is not None:
+        return meta if meta[0] else None
+    return validate_request_body(await request.body())
+
+
+async def _run_request_guard(
+    request: Request, current_user: User, db: Session, *, require_company: bool
 ) -> User:
-    """Dependencia THALOS por peticion. Devuelve el usuario si se permite; 4xx si se deniega."""
     import services.crm_office_service as crm_svc
 
     route = request.scope.get("route")
@@ -200,19 +219,11 @@ async def thalos_request_guard(
         except Exception:
             logger.exception("THALOS guard: fallo resolviendo empresa")
             company_id = None
-        if company_id is None and not getattr(current_user, "is_superuser", False):
+        if require_company and company_id is None and not getattr(current_user, "is_superuser", False):
             reason = "no_company"
 
     if reason is None:
-        ctype = (request.headers.get("content-type") or "").lower()
-        if ctype and "json" not in ctype:
-            try:
-                declared = int(request.headers.get("content-length") or 0)
-            except ValueError:
-                declared = MAX_UPLOAD_BYTES + 1
-            verdict = (413, "body_too_large") if declared > MAX_UPLOAD_BYTES else None
-        else:
-            verdict = validate_request_body(await request.body())
+        verdict = await _incoming_verdict(request)
         if verdict:
             code, reason = verdict
 
@@ -228,6 +239,7 @@ async def thalos_request_guard(
             "decision": decision,
             "reason": reason or "ok",
             "superuser": bool(getattr(current_user, "is_superuser", False)),
+            "company_required": require_company,
         },
         user=current_user,
         company_id=company_id,
@@ -238,6 +250,185 @@ async def thalos_request_guard(
     if reason:
         raise HTTPException(status_code=code, detail=_DENY_DETAIL.get(reason, "Peticion rechazada por THALOS."))
     return current_user
+
+
+async def thalos_request_guard(
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> User:
+    """Dependencia THALOS por peticion. Devuelve el usuario si se permite; 4xx si se deniega."""
+    return await _run_request_guard(request, current_user, db, require_company=True)
+
+
+async def thalos_request_guard_no_company(
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> User:
+    """Igual que `thalos_request_guard` pero sin exigir empresa (flujos previos a tener empresa)."""
+    return await _run_request_guard(request, current_user, db, require_company=False)
+
+
+async def _best_effort_user(request: Request, db: Session) -> Optional[User]:
+    """Usuario del token si viene uno valido; nunca falla (rutas anonimas)."""
+    if not request.headers.get("authorization"):
+        return None
+    try:
+        from app.core.auth import get_current_user
+
+        user = await get_current_user(request=request, db=db)
+        return user if getattr(user, "is_active", True) else None
+    except Exception:
+        return None
+
+
+async def _run_anonymous_guard(request: Request, db: Session, *, validate_body: bool) -> None:
+    import services.crm_office_service as crm_svc
+
+    route = request.scope.get("route")
+    route_path = getattr(route, "path", None) or request.url.path
+    user = await _best_effort_user(request, db)
+    company_id: Optional[int] = None
+    if user is not None:
+        try:
+            company_id = crm_svc.primary_company_id(db, user)
+        except Exception:
+            company_id = None
+
+    reason: Optional[str] = None
+    code = status.HTTP_400_BAD_REQUEST
+    if validate_body:
+        verdict = await _incoming_verdict(request)
+        if verdict:
+            code, reason = verdict
+    decision = "deny" if reason else "allow"
+    record_security_event(
+        db,
+        event_type="request_guard",
+        severity="warning" if reason else "info",
+        source="thalos_anonymous_guard",
+        details={
+            "route": route_path,
+            "method": request.method,
+            "decision": decision,
+            "reason": reason or "ok",
+            "anonymous": user is None,
+            "body_validated": validate_body,
+        },
+        user=user,
+        company_id=company_id,
+        ip_address=_client_ip(request),
+        action_taken=decision,
+        decision_rule=reason or "anonymous_route_allowlisted",
+    )
+    if reason:
+        raise HTTPException(status_code=code, detail=_DENY_DETAIL.get(reason, "Peticion rechazada por THALOS."))
+
+
+async def thalos_anonymous_guard(request: Request, db: Session = Depends(get_db)) -> None:
+    """Guard para rutas publicas de la allowlist: valida cuerpo y registra evento, sin exigir usuario."""
+    await _run_anonymous_guard(request, db, validate_body=True)
+
+
+async def thalos_anonymous_event_only_guard(request: Request, db: Session = Depends(get_db)) -> None:
+    """Webhooks firmados por proveedor: SOLO evento. El cuerpo no se lee ni se valida aqui para que
+    llegue intacto a la verificacion de firma del handler."""
+    await _run_anonymous_guard(request, db, validate_body=False)
+
+
+# ------------------------------------------------------------- cobertura global
+
+MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+# Rutas publicas / con otra autenticacion. Guard ANONIMO con validacion de cuerpo + evento.
+ANON_BODY_ROUTES = frozenset(
+    {
+        "/api/v1/auth/login",  # credenciales
+        "/api/v1/auth/token",  # OAuth2 form (no JSON: solo tope de tamano)
+        "/api/v1/auth/register",
+        "/api/v1/auth/reset-password",
+        "/api/v1/auth/new-password",
+        "/api/v1/auth/refresh",  # refresh token en cuerpo, sin access token
+        "/api/v1/auth/logout",  # recibe refresh token; tolera access token caducado
+        "/api/v1/integrations/stripe/checkout/payment-intent",  # publica por diseno (checkout)
+        "/api/v1/onboarding/create-account",  # post-pago, verifica PaymentIntent contra Stripe
+        "/api/v1/onboarding/complete-onboarding",  # previo a empresa, sin sesion
+        "/api/v1/p/{slug}/reservations",  # web publica por cliente
+        "/api/v1/afrodita/ops/v1/routes/simulate",  # stub 410 sin auth ni cuerpo
+    }
+)
+# Webhooks firmados por el proveedor: solo evento (cuerpo intacto para verificar firma).
+ANON_EVENT_ONLY_ROUTES = frozenset(
+    {
+        "/api/v1/integrations/stripe/webhook",
+        "/api/v1/integrations/whatsapp/webhook",
+        "/api/v1/integrations/email/webhook",
+        "/api/v1/webhooks/stripe",
+        "/api/v1/webhooks/twilio",
+    }
+)
+# Autenticadas pero legitimas SIN empresa (onboarding previo a empresa, ajustes de usuario).
+AUTH_NO_COMPANY_ROUTES = frozenset(
+    {
+        "/api/v1/auth/onboarding/questionnaire",  # crea/vincula la primera empresa
+        "/api/v1/auth/onboarding/profile",
+        "/api/v1/auth/debug/verify-token",  # diagnostico de token
+        "/api/v1/settings",  # preferencias de usuario (PATCH)
+    }
+)
+
+_GUARD_CALLS = (
+    thalos_request_guard,
+    thalos_request_guard_no_company,
+    thalos_anonymous_guard,
+    thalos_anonymous_event_only_guard,
+)
+
+
+def _dependant_has_guard(dependant: Any) -> bool:
+    for sub in getattr(dependant, "dependencies", []) or []:
+        if sub.call in _GUARD_CALLS or _dependant_has_guard(sub):
+            return True
+    return False
+
+
+def route_is_thalos_covered(route: Any) -> bool:
+    return _dependant_has_guard(route.dependant)
+
+
+def _global_dependency_for(path: str):
+    if path in ANON_EVENT_ONLY_ROUTES:
+        return thalos_anonymous_event_only_guard
+    if path in ANON_BODY_ROUTES:
+        return thalos_anonymous_guard
+    if path in AUTH_NO_COMPANY_ROUTES:
+        return thalos_request_guard_no_company
+    return thalos_request_guard
+
+
+def install_global_thalos_guard(app: Any, *, prefixes: tuple = ("/api/",)) -> int:
+    """Inyecta, de forma estructural, el guard THALOS en toda ruta mutante bajo `prefixes` que
+    aun no lo tenga (la dependencia de ruta ya existente cuenta como cobertura: no hay doble
+    evento). Reutiliza las mismas dependencias (compatible con dependency_overrides).
+    Idempotente. Devuelve cuantas rutas se han cubierto."""
+    from fastapi import params
+    from fastapi.dependencies.utils import get_parameterless_sub_dependant
+    from fastapi.routing import APIRoute
+
+    added = 0
+    for route in app.routes:
+        if not isinstance(route, APIRoute) or not route.path_format.startswith(prefixes):
+            continue
+        if not (set(route.methods or ()) & MUTATING_METHODS) or route_is_thalos_covered(route):
+            continue
+        dep = params.Depends(_global_dependency_for(route.path_format))
+        route.dependencies.insert(0, dep)
+        route.dependant.dependencies.insert(
+            0, get_parameterless_sub_dependant(depends=dep, path=route.path_format)
+        )
+        added += 1
+    return added
 
 
 # ----------------------------------------------------------------- post-accion

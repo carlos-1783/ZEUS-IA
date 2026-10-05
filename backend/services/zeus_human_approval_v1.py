@@ -96,17 +96,24 @@ def role_allows(role: Optional[str], role_required: Optional[str]) -> bool:
 
 
 def _log(agent: str, action: str, desc: str, user: User, company_id: Optional[int], details: Dict[str, Any], st: str) -> None:
+    """Registra aprobaciones/ejecuciones como pasos de la cadena JARVIS (J7): la ejecucion
+    (approval_executed/failed/audit_failed) es ACTUAR; el resto, ORQUESTAR. Lleva el
+    correlation_id de la peticion si existe; empresa y usuario explicitos."""
     try:
-        from services.activity_logger import ActivityLogger
+        from services.chain_log import log_chain_step
 
-        ActivityLogger.log_activity(
-            agent_name=agent,
-            action_type=action,
-            action_description=desc,
-            details=details,
-            user_email=getattr(user, "email", None),
-            status=st,
+        step = "ACTUAR" if action in ("approval_executed", "approval_failed", "approval_audit_failed") else "ORQUESTAR"
+        log_chain_step(
+            step,
             company_id=company_id,
+            user=user,
+            agent=agent,
+            action=action,
+            action_type=action,
+            description=desc,
+            status=st,
+            details=details,
+            visible_to_client=True,
         )
     except Exception:
         logger.exception("No se pudo registrar actividad de aprobacion (%s)", action)

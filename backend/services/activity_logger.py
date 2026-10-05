@@ -106,6 +106,7 @@ class ActivityLogger:
         priority: str = "normal",
         visible_to_client: bool = True,
         company_id: Optional[int] = None,
+        infer_company: bool = True,
         _retry: bool = True,
     ) -> AgentActivity:
         """
@@ -122,7 +123,8 @@ class ActivityLogger:
             priority: Prioridad (low, normal, high, critical)
             visible_to_client: Si el cliente puede ver esta actividad
             company_id: Empresa/tenant propietaria. Si no se pasa, se infiere
-                de la empresa principal del usuario resuelto por user_email.
+                de la empresa principal del usuario resuelto por user_email
+                (salvo infer_company=False: J7, empresa explicita o NULL).
 
         Returns:
             AgentActivity creada
@@ -136,11 +138,14 @@ class ActivityLogger:
                 details=details,
                 metrics=metrics,
             )
-            resolved_company_id = ActivityLogger._resolve_company_id(
-                db=db,
-                company_id=company_id,
-                user_email=resolved_email,
-            )
+            if infer_company:
+                resolved_company_id = ActivityLogger._resolve_company_id(
+                    db=db,
+                    company_id=company_id,
+                    user_email=resolved_email,
+                )
+            else:
+                resolved_company_id = company_id
             normalized_agent = (agent_name or "").strip().upper()
             activity = AgentActivity(
                 agent_name=normalized_agent or agent_name,
@@ -153,7 +158,7 @@ class ActivityLogger:
                 status=status,
                 priority=priority,
                 visible_to_client=visible_to_client,
-                completed_at=datetime.utcnow() if status == "completed" else None
+                completed_at=datetime.utcnow() if status in ("completed", "success") else None
             )
             
             db.add(activity)
@@ -179,6 +184,8 @@ class ActivityLogger:
                     status,
                     priority,
                     visible_to_client,
+                    company_id=company_id,
+                    infer_company=infer_company,
                     _retry=False,
                 )
             print(f"[ERROR] Error al registrar actividad (OperationalError): {e}")

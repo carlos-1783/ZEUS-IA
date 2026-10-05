@@ -502,17 +502,20 @@ def thalos_audit_result(
         decision_rule=reason or "result_verified",
     )
     try:
-        from services.activity_logger import ActivityLogger
+        from services.chain_log import log_chain_step
 
-        ActivityLogger.log_activity(
-            agent_name="THALOS",
-            action_type="thalos_audit_result",
-            action_description=f"Auditoria THALOS de {agent}.{action}: {'OK' if ok else 'FALLIDA (' + str(reason) + ')'}",
-            details=details,
-            user_email=getattr(user, "email", None),
-            status="completed" if ok else "failed",
-            priority="normal" if ok else "high",
+        log_chain_step(
+            "AUDITAR",
             company_id=company_id,
+            user=user,
+            agent="THALOS",
+            action="thalos_audit_result",
+            action_type="thalos_audit_result",
+            description=f"Auditoria THALOS de {agent}.{action}: {'OK' if ok else 'FALLIDA (' + str(reason) + ')'}",
+            status="completed" if ok else "failed",
+            details=details,
+            priority="normal" if ok else "high",
+            visible_to_client=True,
         )
     except Exception:
         logger.exception("THALOS: no se pudo registrar agent_activity de auditoria")

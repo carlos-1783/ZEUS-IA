@@ -130,6 +130,7 @@ def ensure_schema_patches():
         _migrate_zeus_domain_events()
         _migrate_zeus_analytics_tables()
         _migrate_agent_activities_company_id()
+        _migrate_zeus_approvals_execution_columns()
         _migrate_role_check_constraints()
         _migrate_rename_misleading_company_id_columns()
         _migrate_company_billing_fields()
@@ -768,6 +769,36 @@ def _migrate_company_employees_tpv_pin_hash():
         print(f"[MIGRATION] [WARN] No se pudo verificar company_employees.tpv_pin_hash: {e}")
         import traceback
         traceback.print_exc()
+
+
+def _migrate_zeus_approvals_execution_columns():
+    """result_json / executed_at en zeus_pending_approvals (J2, alembic 0059).
+    Igual que otros parches: en despliegues con `stamp head` este parche
+    idempotente es el que realmente anade las columnas."""
+    from sqlalchemy import inspect, text
+
+    try:
+        inspector = inspect(engine)
+        table_name = "zeus_pending_approvals"
+        if table_name not in inspector.get_table_names():
+            return
+        is_postgres = "postgres" in settings.DATABASE_URL.lower()
+        cols = {c["name"] for c in inspector.get_columns(table_name)}
+        wanted = {
+            "result_json": "TEXT",
+            "executed_at": "TIMESTAMP WITH TIME ZONE" if is_postgres else "DATETIME",
+        }
+        for col, ddl in wanted.items():
+            if col in cols:
+                continue
+            with engine.begin() as conn:
+                if is_postgres:
+                    conn.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "{col}" {ddl}'))
+                else:
+                    conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col} {ddl}"))
+            print(f"[MIGRATION] [OK] {table_name}.{col} agregada")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] zeus_pending_approvals ejecucion: {e}")
 
 
 def _migrate_agent_activities_company_id():

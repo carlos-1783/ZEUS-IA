@@ -205,6 +205,8 @@ def build_server_context(
     ctx["user_id"] = user.id
     ctx["user_email"] = user.email
     ctx["company_id"] = chat_db.resolve_company_id(db, user)
+    # Servidor-only (prefijo `_`: no llega al prompt): habilita el espacio "platform" de memoria.
+    ctx["_is_superuser"] = bool(getattr(user, "is_superuser", False))
     return ctx
 
 

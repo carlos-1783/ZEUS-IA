@@ -16,6 +16,7 @@ from services.agent_memory_service import (
     persist_short_term,
     persist_operational_state,
     append_decision_log,
+    scoped_thread_id,
 )
 from services.activity_logger import ActivityLogger
 from services.automation.handlers import resolve_handler
@@ -47,10 +48,31 @@ def _get_agents():
     return chat_mod.AGENTS
 
 
-def _company_from_context(context: Optional[Dict]) -> str:
-    if not context:
-        return "default"
-    return str(context.get("company_id") or context.get("user_email") or "default")
+PLATFORM_SCOPE = "platform"
+
+
+class MemoryScopeError(ValueError):
+    """No hay empresa/usuario resueltos en servidor: no existe clave de memoria segura."""
+
+
+def _memory_scope(company_id: Any, context: Optional[Dict]) -> tuple:
+    """(company_key, user_id) de la memoria conversacional. Sin fallbacks compartidos.
+
+    - user_id: lo fija el servidor en el contexto; sin el no hay aislamiento por usuario.
+    - company_id: la empresa resuelta en servidor. Sin empresa solo el superusuario
+      (`_is_superuser`, fijado por el servidor) opera, en el espacio "platform" y siempre
+      acotado a su propio user_id. Cualquier otro caso es un error (nunca "default" ni email).
+    """
+    ctx = context or {}
+    user_id = ctx.get("user_id")
+    if user_id in (None, ""):
+        raise MemoryScopeError("Sesion de usuario requerida para la memoria de conversacion.")
+    cid = company_id if company_id not in (None, "") else ctx.get("company_id")
+    if cid not in (None, ""):
+        return str(cid), user_id
+    if ctx.get("_is_superuser") is True:
+        return PLATFORM_SCOPE, user_id
+    raise MemoryScopeError("El usuario no tiene empresa asignada: no se puede abrir la conversacion.")
 
 
 def _safe_append_decision_log(*args: Any, **kwargs: Any) -> None:
@@ -78,9 +100,14 @@ def run_chat(
     """
     Unified chat: load memory, append user message, call agent, persist, return.
     """
-    company_id = company_id or _company_from_context(context)
     agent_name = agent_name.upper().replace("-", " ").replace("_", " ")
-    thread_id = thread_id or "main"
+    try:
+        company_id, user_id = _memory_scope(company_id, context)
+    except MemoryScopeError as exc:
+        logger.warning("run_chat rechazado (%s): agente=%s", exc, agent_name)
+        return {"success": False, "error": "memory_scope_required", "message": str(exc)}
+    # Memoria aislada por empresa + usuario + agente + hilo (R6).
+    thread_id = scoped_thread_id(thread_id, user_id)
     agents = _get_agents()
 
     if agent_name not in agents or agents[agent_name] is None:

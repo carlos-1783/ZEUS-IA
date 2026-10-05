@@ -340,8 +340,8 @@ def run_global_autonomous_bootstrap(
                 agent_name="ZEUS CORE",
                 thread_id="auto_bootstrap_selftest",
                 message="Hola",
-                company_id=user.email,
-                context={"source": "auto_bootstrap", "company_id": user.email},
+                company_id=str(company.id),
+                context={"source": "auto_bootstrap", "company_id": company.id, "user_id": user.id},
             )
             result["self_test_ok"] = bool(chat.get("success"))
 

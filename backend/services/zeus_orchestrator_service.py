@@ -18,7 +18,11 @@ from app.models.user import User
 from app.models.zeus_pending_approval import ZeusPendingApproval
 from app.schemas.zeus_action import ZeusAction
 from app.schemas.zeus_task import ZeusExecutionResult
-from services.agent_memory_service import load as memory_load, persist_operational_state
+from services.agent_memory_service import (
+    load as memory_load,
+    persist_operational_state,
+    scoped_thread_id,
+)
 from services.intent_parser_service import (
     build_action,
     is_affirmative_message,
@@ -82,7 +86,7 @@ def _pending_thread_key(user: User, context: Optional[Dict[str, Any]]) -> str:
     escribiera «confirmar» en ese hilo ejecutaba la acción de otro. La columna `thread_id` es
     String(128): se recorta la parte del cliente para dejar sitio al sufijo.
     """
-    return f"{_thread_id(context)[:100]}:u{user.id}"
+    return scoped_thread_id(_thread_id(context), user.id)
 
 
 def _discard_legacy_pending(company_id: str, thread_id: str) -> None:

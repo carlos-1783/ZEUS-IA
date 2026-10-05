@@ -56,19 +56,17 @@ export type ScanIngestBody = {
   phone?: string
   employee_id?: string
   checkin_type?: string
-  force_execute?: boolean
 }
 
 export const scanFlowApi = {
   /** Pipeline unificado v2 — producción */
   ingest: (body: ScanIngestBody) => postScan('/ingest', body),
 
-  scanQr: (data: string, companyId?: number, forceExecute = false) =>
+  scanQr: (data: string, companyId?: number) =>
     scanFlowApi.ingest({
       scan_type: 'QR_SCAN',
       payload: data,
       company_id: companyId,
-      force_execute: forceExecute,
     }),
 
   scanNfc: (opts: {

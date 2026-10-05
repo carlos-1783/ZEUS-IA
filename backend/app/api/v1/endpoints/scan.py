@@ -21,7 +21,7 @@ router = APIRouter()
 class QrScanRequest(BaseModel):
     data: str = Field(..., min_length=1, description="Contenido decodificado del QR")
     company_id: Optional[int] = None
-    force_execute: bool = False
+    force_execute: bool = Field(False, description="DEPRECATED: ignorado por el servidor")
 
 
 class NfcScanRequest(BaseModel):
@@ -56,7 +56,7 @@ class ScanIngestRequest(BaseModel):
     phone: Optional[str] = None
     employee_id: Optional[str] = None
     checkin_type: str = "entrada"
-    force_execute: bool = False
+    force_execute: bool = Field(False, description="DEPRECATED: ignorado por el servidor")
 
 
 @router.post("/ingest")
@@ -78,7 +78,7 @@ def scan_ingest(
         phone=body.phone,
         checkin_type=body.checkin_type,
         employee_id=body.employee_id,
-        force_execute=body.force_execute,
+        force_execute=False,  # el cliente no puede saltarse la aprobacion humana
     )
 
 
@@ -94,7 +94,7 @@ def scan_qr(
         current_user,
         data=body.data,
         company_id=body.company_id,
-        force_execute=body.force_execute,
+        force_execute=False,  # el cliente no puede saltarse la aprobacion humana
     )
 
 

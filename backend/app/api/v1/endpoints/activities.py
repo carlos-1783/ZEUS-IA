@@ -14,6 +14,9 @@ from app.core.auth import get_current_active_user
 from app.models.user import User
 from services.activity_logger import ActivityLogger, ensure_tables_initialized, tables_ready
 
+CLIENT_LOG_ORIGIN = "client_log"
+EXECUTABLE_STATUSES = frozenset({"pending", "in_progress"})
+
 router = APIRouter()
 
 # ============================================================================
@@ -189,14 +192,28 @@ async def log_activity(
         effective_user_email = (
             activity.user_email if (is_superuser and activity.user_email) else current_user.email
         )
+        # J3c: este endpoint es un LOG, no una cola de ejecucion para clientes. La marca de
+        # origen la fija SIEMPRE el servidor (sobrescribe cualquier `_origin` del cliente) y
+        # el executor rechaza `client_log`. Ademas, un no superusuario no puede dejar la
+        # actividad en un estado ejecutable (pending/in_progress): se registra como "logged".
+        # Un superusuario conserva la capacidad de encolar (uso administrativo documentado).
+        safe_details = dict(activity.details) if isinstance(activity.details, dict) else {}
+        safe_status = activity.status
+        if is_superuser:
+            safe_details["_origin"] = "superuser_log"
+        else:
+            safe_details["_origin"] = CLIENT_LOG_ORIGIN
+            if (safe_status or "").strip().lower() in EXECUTABLE_STATUSES:
+                safe_details["_requested_status"] = safe_status
+                safe_status = "logged"
         result = ActivityLogger.log_activity(
             agent_name=activity.agent_name.upper(),
             action_type=activity.action_type,
             action_description=activity.action_description,
-            details=activity.details,
+            details=safe_details,
             metrics=activity.metrics,
             user_email=effective_user_email,
-            status=activity.status,
+            status=safe_status,
             priority=activity.priority
         )
         

@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+from pydantic import ValidationError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -435,11 +436,18 @@ def execute_create_customer(db: Session, user: User, action: ZeusAction) -> Zeus
             message="Indica nombre y email del cliente (ej: crear cliente Juan juan@empresa.com).",
             executed=False,
         )
-    cust = crm_svc.create_customer(
-        db,
-        user,
-        CustomerCreate(name=name, email=email, phone=action.payload.get("phone")),
-    )
+    try:
+        data = CustomerCreate(name=name, email=email, phone=action.payload.get("phone"))
+    except ValidationError as exc:
+        first = (exc.errors() or [{}])[0]
+        field = ".".join(str(x) for x in first.get("loc", ())) or "datos"
+        return ZeusExecutionResult(
+            success=False,
+            intent="create_customer",
+            message=f"No se creó el cliente: {field} no es válido ({first.get('msg', 'valor incorrecto')}).",
+            executed=False,
+        )
+    cust = crm_svc.create_customer(db, user, data)
     return ZeusExecutionResult(
         success=True,
         intent="create_customer",

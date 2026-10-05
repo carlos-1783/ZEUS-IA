@@ -23,3 +23,7 @@ class ZeusPendingApproval(Base):
     # Resultado real de la ejecucion tras la aprobacion (JSON de exito, o error si status=failed).
     result_json = Column(Text, nullable=True)
     executed_at = Column(DateTime(timezone=True), nullable=True)
+    # J3b: estado unico de confirmacion. Si la solicitud nace en el chat, hilo
+    # (con sufijo de usuario) y caducidad; None para solicitudes no conversacionales.
+    thread_id = Column(String(128), nullable=True, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)

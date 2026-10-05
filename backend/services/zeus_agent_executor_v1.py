@@ -10,7 +10,6 @@ from typing import Any, Dict, Optional
 from sqlalchemy.orm import Session
 
 from app.models.user import User
-from app.schemas.customer import CustomerCreate
 from app.schemas.zeus_action import ZeusAction
 from services import zeus_orchestrator_handlers as orch
 from services.cashflow_ledger_service import get_balance, get_summary
@@ -189,19 +188,9 @@ async def _dispatch(
 
     # ZEUS
     if action == "create_customer":
-        name = str(payload.get("name") or "").strip()
-        email = str(payload.get("email") or "").strip()
-        if not name or not email:
-            return {"success": False, "executed": False, "message": "name y email requeridos."}
-        cust = crm_svc.create_customer(
-            db, user, CustomerCreate(name=name, email=email, phone=payload.get("phone"))
-        )
-        return {
-            "success": True,
-            "executed": True,
-            "message": f"Cliente creado: {cust.name} (ID {cust.id})",
-            "data": {"customer_id": cust.id},
-        }
+        # Misma logica que el chat: execute_create_customer (valida email, errores controlados).
+        r = await execute_action(db, user, zeus_action, force_execute=force_execute)
+        return r.model_dump()
 
     if action in ("get_customers", "list_customers"):
         r = orch.execute_list_customers(db, user, zeus_action)

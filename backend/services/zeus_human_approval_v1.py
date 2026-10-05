@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set
 
 from fastapi import HTTPException, status
@@ -18,6 +18,7 @@ from app.models.user import User
 
 CRITICAL_ACTIONS: Set[str] = frozenset({
     "send_campaign",
+    "create_customer",
     "launch_campaign",
     "generate_invoice",
     "generate_model_303",
@@ -26,6 +27,31 @@ CRITICAL_ACTIONS: Set[str] = frozenset({
 })
 
 HIGH_VALUE_THRESHOLD_EUR = 500.0
+
+# Rol minimo para PEDIR (y confirmar) cada accion; el resto usa "ceo" (owner/company_admin).
+# send_campaign envia correos a terceros -> owner/company_admin.
+# create_customer solo crea un registro de la propia empresa -> cualquier miembro.
+ACTION_ROLE_REQUIRED: Dict[str, str] = {
+    "send_campaign": "ceo",
+    "create_customer": "member",
+}
+# Caducidad de las solicitudes nacidas en el chat.
+CHAT_APPROVAL_TTL_SECONDS = 15 * 60
+
+
+def role_required_for(action_type: str) -> str:
+    return ACTION_ROLE_REQUIRED.get(action_type, "ceo")
+
+
+def _aware(dt: Optional[datetime]) -> Optional[datetime]:
+    if dt is None:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def is_expired(row: ZeusPendingApproval) -> bool:
+    exp = _aware(row.expires_at)
+    return exp is not None and datetime.now(timezone.utc) > exp
 
 logger = logging.getLogger(__name__)
 
@@ -103,8 +129,11 @@ def request_approval(
     agent_name: str,
     action_type: str,
     payload: Dict[str, Any],
-    role_required: str = "ceo",
+    role_required: Optional[str] = None,
+    thread_id: Optional[str] = None,
+    ttl_seconds: Optional[int] = None,
 ) -> ZeusPendingApproval:
+    role_required = role_required or role_required_for(action_type)
     if company_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -134,6 +163,8 @@ def request_approval(
         payload_json=json.dumps(payload, ensure_ascii=False),
         status="pending",
         role_required=role_required,
+        thread_id=thread_id,
+        expires_at=(datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)) if ttl_seconds else None,
     )
     db.add(row)
     db.commit()
@@ -159,6 +190,7 @@ def list_pending(db: Session, *, user: User, company_id: int) -> List[Dict[str, 
         .order_by(ZeusPendingApproval.created_at.desc())
         .all()
     )
+    rows = [r for r in rows if not is_expired(r)]
     return [
         {
             "id": r.id,
@@ -167,6 +199,7 @@ def list_pending(db: Session, *, user: User, company_id: int) -> List[Dict[str, 
             "payload": json.loads(r.payload_json or "{}"),
             "role_required": r.role_required,
             "created_at": r.created_at.isoformat() if r.created_at else None,
+            "expires_at": r.expires_at.isoformat() if r.expires_at else None,
         }
         for r in rows
     ]
@@ -178,6 +211,7 @@ def resolve_approval(
     approval_id: int,
     user: User,
     approve: bool,
+    reason: Optional[str] = None,
 ) -> ZeusPendingApproval:
     """404 si no existe o es de otra empresa (sin revelar existencia); 403 si no
     puede resolver; 409 ya resuelta.
@@ -213,23 +247,28 @@ def resolve_approval(
         )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=deny)
 
+    expired = approve and is_expired(row)
+    if expired:
+        approve, reason = False, "caducada"
     new_status = "approved" if approve else "rejected"
+    values: Dict[str, Any] = {
+        "status": new_status,
+        "resolved_at": datetime.now(timezone.utc),
+        "resolved_by_user_id": user.id,
+    }
+    if not approve and reason:
+        values["result_json"] = json.dumps({"reason": reason}, ensure_ascii=False)
     # UPDATE condicional atomico: evita doble resolucion concurrente.
     updated = (
         db.query(ZeusPendingApproval)
         .filter(ZeusPendingApproval.id == approval_id, ZeusPendingApproval.status == "pending")
-        .update(
-            {
-                "status": new_status,
-                "resolved_at": datetime.now(timezone.utc),
-                "resolved_by_user_id": user.id,
-            },
-            synchronize_session=False,
-        )
+        .update(values, synchronize_session=False)
     )
     db.commit()
     if not updated:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Solicitud ya resuelta")
+    if expired:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Solicitud caducada")
     db.refresh(row)
     _log(
         row.agent_name, f"approval_{new_status}",

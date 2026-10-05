@@ -63,9 +63,30 @@ def current_correlation_id() -> Optional[str]:
     return c.correlation_id if c else None
 
 
+CHAIN_ACTION_PREFIX = "chain_"
+SUCCESS_STATUSES = ("completed", "success")
+
+
+def is_chain_step(activity: Any) -> bool:
+    """True para las filas internas de la cadena (action_type chain_*): son trazas de auditoria,
+    no actividades de negocio, y no deben contar en metricas/uptime."""
+    return str(getattr(activity, "action_type", "") or "").startswith(CHAIN_ACTION_PREFIX)
+
+
+def business_activities(activities: Any) -> list:
+    """Actividades sin las filas internas de la cadena (para metricas, uptime y success_rate)."""
+    return [a for a in activities if not is_chain_step(a)]
+
+
+def is_success_status(status: Any) -> bool:
+    return status in SUCCESS_STATUSES
+
+
 def summarize_text(text: Optional[str]) -> str:
     """Resumen truncado y enmascarado del texto del usuario: emails -> [email], secuencias
-    numericas largas (telefonos, DNI, tarjetas) -> [num], maximo PREVIEW_MAX caracteres."""
+    numericas largas (telefonos, DNI, tarjetas) -> [num], maximo PREVIEW_MAX caracteres.
+    LIMITE CONOCIDO: nombres propios y direcciones en texto libre NO se enmascaran; por eso el
+    resumen es corto (60 caracteres) y el texto completo nunca se guarda en la cadena."""
     t = " ".join((text or "").split())
     t = _EMAIL_RE.sub("[email]", t)
     t = _NUM_RE.sub("[num]", t)

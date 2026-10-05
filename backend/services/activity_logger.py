@@ -283,11 +283,13 @@ class ActivityLogger:
             if user_email:
                 query = query.filter(AgentActivity.user_email == user_email)
             
-            activities = query.all()
+            from services.chain_log import business_activities, is_success_status
+
+            activities = business_activities(query.all())  # J7: sin trazas chain_*
             
             # Calcular métricas
             total_actions = len(activities)
-            completed = len([a for a in activities if a.status == "completed"])
+            completed = len([a for a in activities if is_success_status(a.status)])
             failed = len([a for a in activities if a.status == "failed"])
             
             # Métricas específicas del agente

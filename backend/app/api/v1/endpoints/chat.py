@@ -205,8 +205,6 @@ def build_server_context(
     ctx["user_id"] = user.id
     ctx["user_email"] = user.email
     ctx["company_id"] = chat_db.resolve_company_id(db, user)
-    # Servidor-only (prefijo `_`: no llega al prompt): habilita el espacio "platform" de memoria.
-    ctx["_is_superuser"] = bool(getattr(user, "is_superuser", False))
     return ctx
 
 
@@ -406,6 +404,10 @@ async def chat_with_agent(
                     approval_id=bridge.get("approval_id"),
                     error=None if bridge.get("success") else bridge.get("message"),
                 )
+
+        # Servidor-only (prefijo `_`: no llega al prompt): habilita el espacio "platform" de memoria
+        # para superusuarios sin empresa. Se fija aqui, tras build_server_context.
+        context["_is_superuser"] = bool(getattr(current_user, "is_superuser", False))
 
         # CRÍTICO (Railway / Gunicorn): run_chat es síncrono y largo (LLM). No en el event loop.
         result = await asyncio.to_thread(

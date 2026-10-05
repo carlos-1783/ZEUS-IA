@@ -38,6 +38,8 @@ from fastapi.testclient import TestClient
 from app.core.config import settings
 from app.main import app
 
+pytestmark = pytest.mark.usefixtures("no_external_messaging")
+
 
 @pytest.fixture
 def client():

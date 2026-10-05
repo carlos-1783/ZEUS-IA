@@ -31,3 +31,56 @@ def test_token(test_client, test_user):
 def authorized_client(test_client, test_token):
     test_client.headers.update({"Authorization": f"Bearer {test_token}"})
     return test_client
+
+
+class _FakeSendGridResponse:
+    status_code = 202
+    headers = {"X-Message-Id": "test-message-id"}
+
+
+class _FakeSendGridClient:
+    """Sustituye SOLO al cliente externo de SendGrid: no abre red."""
+
+    def __init__(self):
+        self.sent = []
+
+    def send(self, message):
+        self.sent.append(message)
+        return _FakeSendGridResponse()
+
+
+class _FakeTwilioMessage:
+    sid = "SMtest000000000000000000000000000"
+    status = "queued"
+
+
+class _FakeTwilioMessages:
+    def __init__(self):
+        self.created = []
+
+    def create(self, **kwargs):
+        self.created.append(kwargs)
+        return _FakeTwilioMessage()
+
+
+class _FakeTwilioClient:
+    def __init__(self):
+        self.messages = _FakeTwilioMessages()
+
+
+@pytest.fixture(scope="module")
+def no_external_messaging():
+    """Aisla de SendGrid/Twilio reales (DNS y envios con credenciales del entorno).
+
+    Solo reemplaza `client` en los singletons email_service / whatsapp_service; el resto de
+    la logica (flags, registro de actividad, resultado) sigue ejecutandose igual."""
+    from services.email_service import email_service
+    from services.whatsapp_service import whatsapp_service
+
+    old_email, old_wa = email_service.client, whatsapp_service.client
+    email_service.client = _FakeSendGridClient()
+    whatsapp_service.client = _FakeTwilioClient()
+    try:
+        yield
+    finally:
+        email_service.client, whatsapp_service.client = old_email, old_wa

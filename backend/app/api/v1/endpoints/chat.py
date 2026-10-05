@@ -170,6 +170,14 @@ _CLIENT_FORBIDDEN_CONTEXT_KEYS = frozenset(
         "phase",
         "workflow_id",
         "user_message",
+        # J4: claves que ZEUS CORE fija al comunicar/coordinar agentes; el cliente no las impone.
+        "requested_by",
+        "workflow_payload",
+        "from_agent",
+        "inter_agent_communication",
+        "multi_agent_task",
+        "other_agents",
+        "shared_context",
     }
 )
 
@@ -583,92 +591,134 @@ async def chat_with_agent(
             error=str(e),
         )
 
-@router.post("/agents/communicate")
-async def communicate_agents(
-    request: AgentCommunicationRequest,
-    current_user: User = Depends(get_current_active_user),
-):
-    """
-    Endpoint para comunicación entre agentes
-    
-    Args:
-        request: Solicitud de comunicación entre agentes
-    
-    Returns:
-        Respuesta del agente destino
-    """
-    await asyncio.to_thread(ensure_agent_stack)
-    if zeus is None:
-        raise HTTPException(
-            status_code=500,
-            detail="ZEUS CORE no está inicializado"
-        )
-    
-    result = zeus.communicate_between_agents(
-        from_agent=request.from_agent,
-        to_agent=request.to_agent,
-        message=request.message,
-        context=request.context or {}
-    )
+# J4: communicate/coordinate ejecutan agent.process_request directamente. Autorizacion:
+# usuario autenticado CON empresa; THALOS (agente de seguridad) solo para superusuario. No existe
+# un mapa agente->modulo contratado por empresa (require_module trabaja por vertical/company_type,
+# no por agente), asi que no se filtra por modulo. El frontend no usa estas rutas.
+_SUPERUSER_ONLY_AGENTS = frozenset({"THALOS"})
+
+
+def _norm_agent(name: str) -> str:
+    return (name or "").strip().upper().replace("-", " ").replace("_", " ")
+
+
+def _authorize_agent_call(
+    db: Session, user: User, agent_names: List[str], include_origin: Optional[str] = None
+) -> Dict[str, Any]:
+    """Valida empresa del usuario y agentes; devuelve el contexto base del servidor.
+
+    404 si algun agente no existe, 403 si THALOS sin superusuario, 403 si no hay empresa."""
+    company_id = chat_db.resolve_company_id(db, user)
+    if company_id is None:
+        raise HTTPException(status_code=403, detail="Se requiere una empresa asociada al usuario.")
+    names = [_norm_agent(n) for n in agent_names]
+    if not names:
+        raise HTTPException(status_code=422, detail="Debes indicar al menos un agente.")
+    registered = {k for k, v in AGENTS.items() if v is not None and k != "ZEUS CORE"}
+    to_check = names + ([_norm_agent(include_origin)] if include_origin else [])
+    for n in to_check:
+        if n not in registered:
+            raise HTTPException(status_code=404, detail="Agente no encontrado.")
+    for n in names:
+        if n in _SUPERUSER_ONLY_AGENTS and not getattr(user, "is_superuser", False):
+            raise HTTPException(status_code=403, detail=f"Solo un superusuario puede dirigirse a {n}.")
+    return {"company_id": company_id}
+
+
+def _server_agent_context(db: Session, user: User, client_context: Optional[dict]) -> Dict[str, Any]:
+    ctx = build_server_context(db, user, client_context, "agents")
+    ctx["requested_by"] = user.email
+    ctx.pop("workflow_id", None)
+    return ctx
+
+
+def _log_agent_call(user: User, company_id: int, action: str, description: str, details: dict, ok: bool) -> None:
     try:
         ActivityLogger.log_activity(
             agent_name="ZEUS CORE",
-            action_type="agents_communicate",
-            action_description=f"Comunicación entre agentes {request.from_agent} -> {request.to_agent}",
-            details={"context": request.context or {}},
-            user_email=current_user.email,
-            status="completed",
-            priority="normal",
+            action_type=action,
+            action_description=description,
+            details={**details, "user_id": user.id},
+            user_email=user.email,
+            company_id=company_id,
+            status="completed" if ok else "failed",
+            priority="normal" if ok else "high",
             visible_to_client=True,
         )
     except Exception:
-        logger.exception("ActivityLogger agents_communicate omitido")
-    
+        logger.exception("ActivityLogger %s omitido", action)
+
+
+@router.post("/agents/communicate")
+async def communicate_agents(
+    request: AgentCommunicationRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Comunicacion entre agentes. Identidad/empresa/control los fija el servidor."""
+    await asyncio.to_thread(ensure_agent_stack)
+    if zeus is None:
+        raise HTTPException(status_code=500, detail="ZEUS CORE no está inicializado")
+
+    base = _authorize_agent_call(db, current_user, [request.to_agent], include_origin=request.from_agent)
+    company_id = base["company_id"]
+    context = _server_agent_context(db, current_user, request.context)
+    from_a, to_a = _norm_agent(request.from_agent), _norm_agent(request.to_agent)
+    details = {"from_agent": from_a, "to_agent": to_a, "message": request.message[:500]}
+    try:
+        result = await asyncio.to_thread(
+            zeus.communicate_between_agents,
+            from_agent=from_a,
+            to_agent=to_a,
+            message=request.message,
+            context=context,
+        )
+    except Exception:
+        logger.exception("agents_communicate fallo %s -> %s", from_a, to_a)
+        _log_agent_call(current_user, company_id, "agents_communicate",
+                        f"Comunicación entre agentes {from_a} -> {to_a} fallida",
+                        {**details, "error": "exception"}, False)
+        raise HTTPException(status_code=500, detail="Error interno al comunicar con el agente.")
+    ok = isinstance(result, dict) and result.get("success") is not False and not result.get("error")
+    _log_agent_call(current_user, company_id, "agents_communicate",
+                    f"Comunicación entre agentes {from_a} -> {to_a}", details, ok)
     return result
+
 
 @router.post("/agents/coordinate")
 async def coordinate_agents(
     request: MultiAgentTaskRequest,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """
-    Endpoint para coordinar tareas multi-agente
-    
-    Args:
-        request: Solicitud de coordinación multi-agente
-    
-    Returns:
-        Resultados de todos los agentes
-    """
+    """Coordinacion multi-agente. Identidad/empresa/workflow los fija el servidor."""
     await asyncio.to_thread(ensure_agent_stack)
     if zeus is None:
-        raise HTTPException(
-            status_code=500,
-            detail="ZEUS CORE no está inicializado"
-        )
-    
-    result = zeus.coordinate_multi_agent_task(
-        task_description=request.task_description,
-        required_agents=request.required_agents,
-        context=request.context or {}
-    )
+        raise HTTPException(status_code=500, detail="ZEUS CORE no está inicializado")
+
+    base = _authorize_agent_call(db, current_user, request.required_agents)
+    company_id = base["company_id"]
+    context = _server_agent_context(db, current_user, request.context)
+    agents = [_norm_agent(a) for a in request.required_agents]
+    details = {"required_agents": agents, "task_description": request.task_description[:500]}
     try:
-        ActivityLogger.log_activity(
-            agent_name="ZEUS CORE",
-            action_type="agents_coordinate",
-            action_description="Coordinación multiagente ejecutada",
-            details={
-                "required_agents": request.required_agents,
-                "task_description": request.task_description[:500],
-            },
-            user_email=current_user.email,
-            status="completed",
-            priority="normal",
-            visible_to_client=True,
+        result = await asyncio.to_thread(
+            zeus.coordinate_multi_agent_task,
+            task_description=request.task_description,
+            required_agents=agents,
+            context=context,
         )
     except Exception:
-        logger.exception("ActivityLogger agents_coordinate omitido")
-    
+        logger.exception("agents_coordinate fallo %s", agents)
+        _log_agent_call(current_user, company_id, "agents_coordinate",
+                        "Coordinación multiagente fallida", {**details, "error": "exception"}, False)
+        raise HTTPException(status_code=500, detail="Error interno al coordinar agentes.")
+    results = result.get("results", {}) if isinstance(result, dict) else {}
+    ok = bool(results) and all(
+        isinstance(r, dict) and r.get("success") is not False and not r.get("error") for r in results.values()
+    )
+    _log_agent_call(current_user, company_id, "agents_coordinate",
+                    "Coordinación multiagente ejecutada", details, ok)
     return result
 
 @router.get("/health")

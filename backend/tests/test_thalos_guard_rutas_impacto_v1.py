@@ -43,6 +43,7 @@ GUARDED = {
     ("POST", "/google/sheets/read"),
     ("POST", "/perseo/v2/publish"),
     ("POST", "/perseo/v2/pipeline/run"),
+    ("PUT", "/invoices/{invoice_id}"),
     ("POST", "/invoices/{invoice_id}/send"),
     ("POST", "/invoices/{invoice_id}/void"),
     ("POST", "/invoices/{invoice_id}/payments"),

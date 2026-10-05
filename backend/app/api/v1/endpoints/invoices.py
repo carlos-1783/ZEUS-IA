@@ -27,6 +27,9 @@ from services.zeus_office_mode import (
     validate_payment_logical,
 )
 
+import logging
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 def _invoice_tenant_scope(current_user: User, cids: List[int]):
@@ -327,7 +330,7 @@ def get_invoice(
     invoice = get_invoice_or_404(db, invoice_id, current_user)
     return {"success": True, "data": invoice}
 
-@router.put("/{invoice_id}", response_model=InvoiceResponse)
+@router.put("/{invoice_id}", response_model=InvoiceResponse, dependencies=[Depends(thalos_request_guard)])
 def update_invoice(
     *,
     invoice_id: int = Path(..., description="ID of the invoice to update"),
@@ -342,15 +345,21 @@ def update_invoice(
 
     # Lista blanca (misma que InvoiceUpdate): evita mass-assignment de
     # company_id, created_by, totales, etc.
-    allowed = {"customer_id", "status", "due_date", "notes"}
+    # `status` NO se puede cambiar por PUT: las transiciones van por
+    # /send, /void y /payments (con sus reglas).
+    if "status" in invoice_in:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invoice status cannot be changed via PUT; use /send, /void or /payments",
+        )
+    allowed = {"customer_id", "due_date", "notes"}
     for field, value in invoice_in.items():
         if field not in allowed:
             continue
-        if field == "status" and value is not None:
-            try:
-                value = ModelInvoiceStatus(getattr(value, "value", value))
-            except ValueError:
-                raise HTTPException(status_code=422, detail=f"Invalid status: {value}")
+        if field == "customer_id" and value is not None:
+            # Mismo control de tenant que create_invoice: 404 si el cliente
+            # es de otra empresa.
+            crm_svc.resolve_customer(db, current_user, value)
         if field == "due_date" and isinstance(value, str):
             try:
                 value = datetime.fromisoformat(value)
@@ -464,7 +473,7 @@ def create_payment(
             )
     except Exception:
         # No bloquear el flujo de facturación por trazabilidad/evento
-        pass
+        logger.warning("create_payment: fallo al emitir eventos de pago (factura %s)", invoice_id, exc_info=True)
     
     return {"success": True, "data": payment}
 

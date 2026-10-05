@@ -117,7 +117,33 @@ def test_update_persists_whitelisted_fields_and_ignores_company_id(client):
         assert row.company_id == cid_before
     finally:
         db.close()
-    assert client.put(f"{API}/invoices/{inv}", headers=h, json={"status": "bogus"}).status_code == 422
+
+
+def test_update_cannot_change_status_via_put(client):
+    h = _login(client)
+    inv = _create_invoice(client, h)
+    for st in ("paid", "void", "bogus"):
+        assert client.put(f"{API}/invoices/{inv}", headers=h, json={"status": st}).status_code == 400
+    assert _db_status(inv) == InvoiceStatus.DRAFT
+
+
+def test_update_customer_of_other_company_404_unchanged(client):
+    h_a, h_b = _login(client), _login(client)
+    inv = _create_invoice(client, h_a)
+    other = client.post(f"{API}/customers", headers=h_b, json={"name": "Cliente Ajeno", "email": f"aj_{uuid.uuid4().hex[:8]}@example.com"})
+    assert other.status_code == 201, other.text
+    db = SessionLocal()
+    try:
+        before = db.query(Invoice).filter(Invoice.id == inv).one().customer_id
+    finally:
+        db.close()
+    r = client.put(f"{API}/invoices/{inv}", headers=h_a, json={"customer_id": other.json()["data"]["id"]})
+    assert r.status_code == 404, r.text
+    db = SessionLocal()
+    try:
+        assert db.query(Invoice).filter(Invoice.id == inv).one().customer_id == before
+    finally:
+        db.close()
 
 
 def test_payment_persists_and_marks_paid(client):

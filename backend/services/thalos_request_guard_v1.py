@@ -353,7 +353,6 @@ ANON_BODY_ROUTES = frozenset(
         "/api/v1/auth/logout",  # recibe refresh token; tolera access token caducado
         "/api/v1/integrations/stripe/checkout/payment-intent",  # publica por diseno (checkout)
         "/api/v1/onboarding/create-account",  # post-pago, verifica PaymentIntent contra Stripe
-        "/api/v1/onboarding/complete-onboarding",  # previo a empresa, sin sesion
         "/api/v1/p/{slug}/reservations",  # web publica por cliente
         "/api/v1/afrodita/ops/v1/routes/simulate",  # stub 410 sin auth ni cuerpo
     }
@@ -373,6 +372,7 @@ AUTH_NO_COMPANY_ROUTES = frozenset(
     {
         "/api/v1/auth/onboarding/questionnaire",  # crea/vincula la primera empresa
         "/api/v1/auth/onboarding/profile",
+        "/api/v1/onboarding/complete-onboarding",  # legacy 410, autenticada, previa a empresa
         "/api/v1/auth/debug/verify-token",  # diagnostico de token
         "/api/v1/settings",  # preferencias de usuario (PATCH)
     }

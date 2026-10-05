@@ -79,6 +79,21 @@ Configura en Twilio Sandbox:
 https://zeus-ia-production-16d8.up.railway.app/api/v1/integrations/whatsapp/webhook
 ```
 
+**Verificacion de firma (obligatoria):** el backend valida `X-Twilio-Signature` con `TWILIO_AUTH_TOKEN`
+(sin token responde 503; firma ausente o invalida, 403). La URL firmada se reconstruye con
+`PUBLIC_BASE_URL` si esta definida (ej. `https://zeus-ia-production-16d8.up.railway.app`), si no con
+`X-Forwarded-Proto`/`X-Forwarded-Host`. Debe coincidir EXACTAMENTE con la URL puesta en Twilio.
+Tambien aplica a `/api/v1/webhooks/twilio`.
+
+### **Webhook de email entrante (SendGrid Inbound Parse):**
+
+Variable nueva (sin valor en el repo): `EMAIL_INBOUND_WEBHOOK_SECRET`. En SendGrid, Destination URL:
+```
+https://<backend>/api/v1/integrations/email/webhook?secret=<EMAIL_INBOUND_WEBHOOK_SECRET>
+```
+(tambien se acepta la cabecera `X-Inbound-Secret`). Sin variable configurada responde 503; secreto incorrecto, 403.
+Variables nuevas: `PUBLIC_BASE_URL` (opcional), `EMAIL_INBOUND_WEBHOOK_SECRET`.
+
 ### **Costo:**
 - **Sandbox:** Gratis (para pruebas)
 - **Producción:** ~$0.005 por mensaje (~$10-30/mes uso moderado)

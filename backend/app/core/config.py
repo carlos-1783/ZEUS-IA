@@ -195,6 +195,12 @@ class Settings(BaseSettings):
     )
     PERSEO_IMAGE_MAX_BYTES: int = int(os.getenv("PERSEO_IMAGE_MAX_BYTES", str(5 * 1024 * 1024)))
 
+    # Webhooks entrantes firmados (fail-closed si falta el secreto). Sin valores por defecto.
+    TWILIO_AUTH_TOKEN: str = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
+    EMAIL_INBOUND_WEBHOOK_SECRET: str = os.getenv("EMAIL_INBOUND_WEBHOOK_SECRET", "").strip()
+    # URL publica del backend (https://api.midominio.com) para reconstruir la URL firmada por Twilio.
+    PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+
     # PERSEO V2 — cloud storage, transactional engines, queue workers
     PERSEO_V2_ENABLED: bool = os.getenv("PERSEO_V2_ENABLED", "false").lower() in ("true", "1", "yes")
     PERSEO_STORAGE_BACKEND: str = os.getenv("PERSEO_STORAGE_BACKEND", "local").strip().lower()

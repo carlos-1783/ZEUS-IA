@@ -22,6 +22,7 @@ from services.event_bus import emit_payment_registered
 from services.global_company_bootstrap import run_global_autonomous_bootstrap
 from services.stripe_service import stripe_service
 from services.whatsapp_service import whatsapp_service
+from services.webhook_signature_v1 import verify_twilio_request
 
 
 router = APIRouter(tags=["webhooks"])
@@ -401,6 +402,8 @@ async def twilio_webhook_handler(request: Request):
     
     try:
         form_data = await request.form()
+        # Autenticidad ANTES de procesar nada (403 firma invalida, 503 token no configurado).
+        verify_twilio_request(request, form_data)
         
         from_number = form_data.get("From", "").replace("whatsapp:", "")
         to_number = form_data.get("To", "").replace("whatsapp:", "")

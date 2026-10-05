@@ -7,7 +7,7 @@ from typing import List, Optional
 from app.models.user import User
 from app.schemas.zeus_action import ZeusAction
 from app.schemas.zeus_task import ZeusTaskObject
-from services.intent_parser import is_confirmation_message, looks_like_operational, parse_intent
+from services.intent_parser import is_affirmative_message, is_confirmation_message, looks_like_operational, parse_intent
 import services.crm_office_service as crm_svc
 
 from sqlalchemy.orm import Session
@@ -93,6 +93,7 @@ def _modules_for_intent(intent: str) -> List[str]:
 __all__ = [
     "parse_message",
     "build_action",
+    "is_affirmative_message",
     "is_confirmation_message",
     "looks_like_operational",
     "parse_intent",

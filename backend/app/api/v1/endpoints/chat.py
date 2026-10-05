@@ -162,6 +162,14 @@ _CLIENT_FORBIDDEN_CONTEXT_KEYS = frozenset(
         "user_email",
         "zeus_global_context",
         "conversation_history",
+        # J3: control de ejecucion/enrutado que decide solo el servidor.
+        "force_execute",
+        "confirm_action",
+        "skip_action_execution",
+        "task_type",
+        "phase",
+        "workflow_id",
+        "user_message",
     }
 )
 
@@ -338,13 +346,13 @@ async def chat_with_agent(
         if agent_name == "ZEUS CORE":
             from services.zeus_orchestrator_service import try_handle_zeus_chat
 
-            force = bool(context.get("confirm_action") or context.get("force_execute"))
+            # J3: la ejecucion la decide el servidor (pending persistido + "confirmar" del mismo
+            # usuario); ningun flag del cliente influye.
             bridge = await try_handle_zeus_chat(
                 db,
                 current_user,
                 request.message,
                 context,
-                force_execute=force,
             )
             if bridge and bridge.get("handled"):
                 bridge_msg = bridge.get("message", "") or ""

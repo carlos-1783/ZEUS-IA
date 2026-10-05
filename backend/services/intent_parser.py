@@ -12,6 +12,8 @@ _CONFIRM_RE = re.compile(
     re.I,
 )
 
+_AFFIRMATIVE_RE = re.compile(r"^\s*s[ií]\s*[.!]?\s*$", re.I)
+
 _CAMPAIGN_SEND_RE = re.compile(
     r"(crea|crear|lanza|lanzar|genera|generar|haz|hacer|monta|montar|prepara|preparar)"
     r".{0,80}?"
@@ -95,6 +97,11 @@ def is_confirmation_message(message: str) -> bool:
     if not text:
         return False
     return bool(_CONFIRM_RE.search(text))
+
+
+def is_affirmative_message(message: str) -> bool:
+    """«sí» / «si» exactos. Solo vale como confirmación si hay un pending (lo decide el orquestador)."""
+    return bool(_AFFIRMATIVE_RE.match(message or ""))
 
 
 def parse_intent(message: str) -> ZeusTaskObject:

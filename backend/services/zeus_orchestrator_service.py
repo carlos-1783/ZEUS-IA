@@ -8,6 +8,7 @@ Toda acción operativa pasa por aquí; el chat no invoca agentes directamente.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
@@ -20,6 +21,7 @@ from app.schemas.zeus_task import ZeusExecutionResult, ZeusTaskObject
 from services.agent_memory_service import load as memory_load, persist_operational_state
 from services.intent_parser_service import (
     build_action,
+    is_affirmative_message,
     is_confirmation_message,
     looks_like_operational,
     parse_message,
@@ -33,6 +35,10 @@ PENDING_ACTION_KEY = "pending_zeus_action"
 LEGACY_PENDING_KEY = "pending_zeus_task"
 AGENT_ZEUS = "ZEUS CORE"
 MIN_CONFIDENCE = 0.7
+PENDING_TTL_SECONDS = 15 * 60
+PENDING_AT_KEY = "_pending_at"
+# Acciones con consecuencias (envían emails / crean datos): exigen vista previa + confirmación.
+CONFIRMABLE_ACTIONS = frozenset({"send_campaign", "create_customer"})
 
 _OPERATIONAL_HELP = (
     "No pude ejecutar esa acción. Prueba con frases concretas, por ejemplo:\n"
@@ -79,6 +85,26 @@ def _get_pending(company_id: str, thread_id: str) -> Optional[Dict[str, Any]]:
     return pending if isinstance(pending, dict) else None
 
 
+def _pending_expired(pending: Dict[str, Any]) -> bool:
+    """Un pending sin marca temporal (legado) o más antiguo que el TTL no es ejecutable."""
+    at = pending.get(PENDING_AT_KEY)
+    if not isinstance(at, (int, float)):
+        return True
+    return (time.time() - at) > PENDING_TTL_SECONDS
+
+
+def _preview_create_customer(action: ZeusAction) -> Optional[Dict[str, Any]]:
+    name = str(action.payload.get("name") or "").strip()
+    email = str(action.payload.get("email") or "").strip()
+    if not name or not email:
+        return None  # faltan datos: execute_action responde pidiéndolos, sin crear nada
+    return {
+        "message": f"Voy a crear el cliente «{name}» ({email}). Responde «confirmar» para crearlo.",
+        "name": name,
+        "email": email,
+    }
+
+
 def _pending_to_action(
     db: Session,
     user: User,
@@ -114,7 +140,7 @@ def _set_pending(company_id: str, thread_id: str, action: Optional[ZeusAction]) 
         current_task=action.action_type,
         status="awaiting_confirmation",
         next_action="Escribe «confirmar» para ejecutar",
-        artifacts={PENDING_ACTION_KEY: action.model_dump()},
+        artifacts={PENDING_ACTION_KEY: {**action.model_dump(), PENDING_AT_KEY: time.time()}},
         blocked=None,
     )
 
@@ -197,35 +223,57 @@ async def try_handle_zeus_chat(
     user: User,
     message: str,
     context: Optional[Dict[str, Any]] = None,
-    *,
-    force_execute: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """
     Si el mensaje dispara una acción ejecutable, devuelve respuesta estructurada.
     Si no, devuelve None (continuar con LLM solo para consultas no operativas).
+
+    J3: la ejecución de acciones con consecuencias (enviar campaña, crear cliente) SOLO ocurre
+    cuando el mismo usuario, en el mismo hilo y empresa, confirma explícitamente un pending
+    persistido y vigente. Ningún flag del cliente (force_execute, confirm_action,
+    skip_action_execution) influye: este módulo no los lee.
     """
     ctx = enrich_chat_context(db, user, context)
     global_context = ctx["zeus_global_context"]
     company_id = _company_key(user, ctx)
     thread_id = _pending_thread_key(user, ctx)
 
-    if ctx.get("skip_action_execution"):
-        return None
+    pending_raw = _get_pending(company_id, thread_id)
+    if pending_raw and _pending_expired(pending_raw):
+        _set_pending(company_id, thread_id, None)
+        pending_raw = None
 
-    if is_confirmation_message(message) or force_execute:
-        pending_raw = _get_pending(company_id, thread_id)
-        if pending_raw:
-            action = _pending_to_action(db, user, pending_raw, global_context)
-            result = await execute_action(db, user, action, force_execute=True)
-            _set_pending(company_id, thread_id, None)
-            return _to_chat_payload(result)
-        if is_confirmation_message(message) and not pending_raw:
+    explicit = is_confirmation_message(message)
+    affirmative = bool(pending_raw) and is_affirmative_message(message)
+
+    if explicit or affirmative:
+        if not pending_raw:
             return {
                 "handled": True,
                 "success": False,
                 "message": "No hay ninguna acción pendiente de confirmar. Describe lo que quieres hacer.",
                 "executed": False,
             }
+        action = _pending_to_action(db, user, pending_raw, global_context)
+        # El pending se consume ANTES de ejecutar: una sola ejecución por confirmación.
+        _set_pending(company_id, thread_id, None)
+        if action.action_type not in CONFIRMABLE_ACTIONS:
+            return {
+                "handled": True,
+                "success": False,
+                "executed": False,
+                "message": "La acción pendiente no es válida. Describe de nuevo lo que quieres hacer.",
+            }
+        result = await execute_action(db, user, action, force_execute=True)
+        logger.info(
+            "zeus_chat_confirmed_execution user=%s company=%s action=%s success=%s",
+            user.id, company_id, action.action_type, result.success,
+        )
+        return _to_chat_payload(result)
+
+    if pending_raw:
+        # Cambio de tema: cualquier mensaje que no confirma invalida el pending anterior.
+        _set_pending(company_id, thread_id, None)
 
     task = parse_message(message)
     if task.intent == "unknown" or task.confidence < MIN_CONFIDENCE:
@@ -240,8 +288,14 @@ async def try_handle_zeus_chat(
 
     action = _with_global_context(build_action(db, user, task), global_context)
 
-    if action.requires_confirmation and not force_execute and action.action_type == "send_campaign":
-        preview = handlers.preview_send_campaign(db, user, action)
+    if action.action_type in CONFIRMABLE_ACTIONS:
+        action.requires_confirmation = True
+        if action.action_type == "send_campaign":
+            preview = handlers.preview_send_campaign(db, user, action)
+        else:
+            preview = _preview_create_customer(action)
+            if preview is None:
+                return _to_chat_payload(await execute_action(db, user, action, force_execute=False))
         _set_pending(company_id, thread_id, action)
         return {
             "handled": True,
@@ -253,7 +307,7 @@ async def try_handle_zeus_chat(
             "action": action.model_dump(),
         }
 
-    result = await execute_action(db, user, action, force_execute=force_execute)
+    result = await execute_action(db, user, action, force_execute=False)
     return _to_chat_payload(result)
 
 

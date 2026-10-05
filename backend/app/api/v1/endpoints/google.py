@@ -34,7 +34,8 @@ class GmailMessage(BaseModel):
     attachments: Optional[List[str]] = None
 
 class DriveUpload(BaseModel):
-    file_path: str
+    # file_path ya NO se acepta del cliente (leia rutas arbitrarias del
+    # servidor). Cuando exista la subida real debe ser multipart (UploadFile).
     folder_id: Optional[str] = None
     file_name: Optional[str] = None
 
@@ -72,7 +73,7 @@ async def create_calendar_event(
     )
     
     if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
     
     return result
 
@@ -91,7 +92,7 @@ async def list_calendar_events(
     )
     
     if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
     
     return result
 
@@ -113,7 +114,7 @@ async def send_gmail(
     )
     
     if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
     
     return result
 
@@ -130,7 +131,7 @@ async def read_gmail_inbox(
     )
     
     if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
     
     return result
 
@@ -144,14 +145,16 @@ async def upload_to_drive(
     current_user: User = Depends(get_current_active_user),
 ):
     """Subir archivo a Google Drive"""
+    # No se lee ninguna ruta del cliente; el servicio responde 501 hasta que
+    # exista la integracion real con Drive.
     result = await google_service.upload_to_drive(
-        file_path=upload.file_path,
+        file_path="",
         folder_id=upload.folder_id,
         file_name=upload.file_name
     )
     
     if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
     
     return result
 
@@ -168,7 +171,7 @@ async def list_drive_files(
     )
     
     if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
     
     return result
 
@@ -188,7 +191,7 @@ async def create_spreadsheet(
     )
     
     if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
     
     return result
 
@@ -206,7 +209,7 @@ async def write_to_sheet(
     )
     
     if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
     
     return result
 
@@ -222,7 +225,7 @@ async def read_from_sheet(
     )
     
     if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
     
     return result
 

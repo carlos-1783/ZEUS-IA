@@ -206,6 +206,21 @@ def _execute_zeus_launch_started():
             logger.warning("No superuser found. Skipping zeus_launch_started action.")
             return
         
+        # J7: run_workspace_task exige empresa real. El superusuario no tiene garantizada una
+        # UserCompany (el bootstrap interno es opcional): se usa su empresa primaria o, si no, la
+        # empresa interna de plataforma. Sin ninguna, no se lanza (nunca una empresa inventada).
+        from services.internal_company_bootstrap import INTERNAL_COMPANY_SLUG
+        from app.models.company import Company
+        import services.crm_office_service as crm_svc
+
+        launch_company_id = crm_svc.primary_company_id(session, superuser)
+        if launch_company_id is None:
+            internal = session.query(Company).filter(Company.slug == INTERNAL_COMPANY_SLUG).first()
+            launch_company_id = internal.id if internal else None
+        if launch_company_id is None:
+            logger.warning("zeus_launch_started omitido: el superusuario no tiene empresa ni existe la empresa interna.")
+            return
+
         # Crear actividad
         activity = ActivityLogger.log_activity(
             agent_name="ZEUS",
@@ -217,6 +232,7 @@ def _execute_zeus_launch_started():
                 "superuser_email": superuser.email,
             },
             user_email=superuser.email,
+            company_id=launch_company_id,
             status="pending",
             priority="high",
             visible_to_client=False,

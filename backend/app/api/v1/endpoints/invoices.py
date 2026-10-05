@@ -45,6 +45,36 @@ def _invoice_tenant_scope(current_user: User, cids: List[int]):
         and_(Invoice.company_id.is_(None), Invoice.created_by == current_user.id),
     )
 
+def get_invoice_orm_or_404(
+    db: Session,
+    invoice_id: int,
+    current_user: User
+) -> Invoice:
+    """
+    Igual que get_invoice_or_404 pero devuelve la entidad ORM (mutable y
+    persistible). Los endpoints que modifican la factura DEBEN usar esta
+    funcion: mutar el InvoiceInDB (pydantic) no persiste nada.
+    Mismo filtro de tenant (_invoice_tenant_scope): 404 si es de otra empresa.
+    """
+    from fastapi import HTTPException, status
+    from sqlalchemy.orm import joinedload
+
+    cids = crm_svc.company_ids_for_user(db, current_user)
+    invoice = db.query(Invoice).options(
+        joinedload(Invoice.items),
+        joinedload(Invoice.payments)
+    ).filter(
+        Invoice.id == invoice_id
+    ).filter(
+        _invoice_tenant_scope(current_user, cids)
+    ).first()
+    if not invoice:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Invoice with ID {invoice_id} not found"
+        )
+    return invoice
+
 def get_invoice_or_404(
     db: Session,
     invoice_id: int,
@@ -65,30 +95,7 @@ def get_invoice_or_404(
     Raises:
         HTTPException: 404 si la factura no existe o no pertenece a la empresa del usuario
     """
-    from fastapi import HTTPException, status
-    from sqlalchemy.orm import joinedload
-
-    cids = crm_svc.company_ids_for_user(db, current_user)
-
-    # Optimizar la consulta cargando relaciones comunes.
-    # NOTA: Invoice.customer no se carga aquí porque esa relación está
-    # comentada en app/models/erp.py (bug preexistente, no introducido por
-    # este cambio) — usarla rompía este endpoint para CUALQUIER factura,
-    # independientemente del tenant.
-    invoice = db.query(Invoice).options(
-        joinedload(Invoice.items),
-        joinedload(Invoice.payments)
-    ).filter(
-        Invoice.id == invoice_id
-    ).filter(
-        _invoice_tenant_scope(current_user, cids)
-    ).first()
-
-    if not invoice:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Invoice with ID {invoice_id} not found"
-        )
+    invoice = get_invoice_orm_or_404(db, invoice_id, current_user)
 
     # Convertir el modelo SQLAlchemy a Pydantic
     return InvoiceInDB.model_validate(invoice)
@@ -109,7 +116,7 @@ def calculate_invoice_totals(invoice: Invoice, db: Session) -> Dict[str, float]:
     total = subtotal + tax_amount - invoice.discount_amount
     
     # Calculate amount paid
-    amount_paid = sum(payment.amount for payment in invoice.payments if payment.status == PaymentStatus.COMPLETED)
+    amount_paid = sum(payment.amount for payment in invoice.payments if payment.status == ModelPaymentStatus.COMPLETED)
     amount_due = max(0.0, total - amount_paid)
     
     return {
@@ -331,30 +338,30 @@ def update_invoice(
     """
     Update an invoice
     """
-    invoice = get_invoice_or_404(db, invoice_id, current_user)
-    
-    # Prevent updates to certain fields
-    for field in ["id", "invoice_number", "created_at", "created_by"]:
-        invoice_in.pop(field, None)
-    
-    # Update fields
+    invoice = get_invoice_orm_or_404(db, invoice_id, current_user)
+
+    # Lista blanca (misma que InvoiceUpdate): evita mass-assignment de
+    # company_id, created_by, totales, etc.
+    allowed = {"customer_id", "status", "due_date", "notes"}
     for field, value in invoice_in.items():
-        if hasattr(invoice, field):
-            setattr(invoice, field, value)
-    
-    # Recalculate totals if items were updated
-    if "items" in invoice_in:
-        # In a real app, you'd want to handle item updates more carefully
-        # This is a simplified version that just recalculates totals
-        totals = calculate_invoice_totals(invoice, db)
-        for key, value in totals.items():
-            setattr(invoice, key, value)
-    
-    invoice.updated_at = func.now()
+        if field not in allowed:
+            continue
+        if field == "status" and value is not None:
+            try:
+                value = ModelInvoiceStatus(getattr(value, "value", value))
+            except ValueError:
+                raise HTTPException(status_code=422, detail=f"Invalid status: {value}")
+        if field == "due_date" and isinstance(value, str):
+            try:
+                value = datetime.fromisoformat(value)
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid due_date")
+        setattr(invoice, field, value)
+
     db.commit()
     db.refresh(invoice)
-    
-    return {"success": True, "data": invoice}
+
+    return {"success": True, "data": InvoiceInDB.model_validate(invoice)}
 
 @router.post("/{invoice_id}/payments", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(thalos_request_guard)])
 def create_payment(
@@ -367,7 +374,7 @@ def create_payment(
     """
     Record a payment for an invoice
     """
-    invoice = get_invoice_or_404(db, invoice_id, current_user)
+    invoice = get_invoice_orm_or_404(db, invoice_id, current_user)
 
     validate_payment_logical(
         invoice_id=invoice_id,
@@ -398,6 +405,9 @@ def create_payment(
 
     db.add(payment)
     db.flush()
+    # La coleccion invoice.payments ya estaba cargada (joinedload) sin este
+    # pago: expirarla para que los totales lo incluyan.
+    db.expire(invoice, ["payments"])
 
     # Update invoice status based on payment (payment now visible in totals)
     totals = calculate_invoice_totals(invoice, db)
@@ -407,9 +417,9 @@ def create_payment(
     # esta comprobacion siga funcionando tras el fix del bug de Enum.
     if payment.status == ModelPaymentStatus.COMPLETED:
         if totals["amount_due"] <= 0:
-            invoice.status = InvoiceStatus.PAID
+            invoice.status = ModelInvoiceStatus.PAID
         elif totals["amount_paid"] > 0:
-            invoice.status = InvoiceStatus.PARTIALLY_PAID
+            invoice.status = ModelInvoiceStatus.PARTIALLY_PAID
 
     # Update invoice amounts
     for key, value in totals.items():
@@ -479,25 +489,27 @@ def send_invoice(
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    Mark an invoice as sent
+    Marca la factura como enviada (borrador -> enviada).
+
+    IMPORTANTE: este endpoint SOLO cambia el estado en BD. NO envia email ni
+    nada a terceros (no hay accion externa, por tanto no pasa por
+    zeus_pending_approvals). Si en el futuro envia al cliente, debe pasar por
+    aprobacion.
     """
-    invoice = get_invoice_or_404(db, invoice_id, current_user)
+    invoice = get_invoice_orm_or_404(db, invoice_id, current_user)
     
-    if invoice.status != InvoiceStatus.DRAFT:
+    if invoice.status != ModelInvoiceStatus.DRAFT:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only draft invoices can be sent"
         )
     
-    invoice.status = InvoiceStatus.SENT
-    invoice.sent_at = func.now()
-    
-    # In a real app, you would also send the invoice via email here
-    
+    invoice.status = ModelInvoiceStatus.SENT
+
     db.commit()
     db.refresh(invoice)
-    
-    return {"success": True, "data": invoice}
+
+    return {"success": True, "data": InvoiceInDB.model_validate(invoice)}
 
 @router.post("/{invoice_id}/void", response_model=InvoiceResponse, dependencies=[Depends(thalos_request_guard)])
 def void_invoice(
@@ -508,15 +520,15 @@ def void_invoice(
     """
     Void an invoice
     """
-    invoice = get_invoice_or_404(db, invoice_id, current_user)
+    invoice = get_invoice_orm_or_404(db, invoice_id, current_user)
     
-    if invoice.status == InvoiceStatus.VOID:
+    if invoice.status == ModelInvoiceStatus.VOID:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invoice is already void"
         )
     
-    if invoice.status == InvoiceStatus.PAID:
+    if invoice.status == ModelInvoiceStatus.PAID:
         # In a real app, you might want to issue a refund
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -524,7 +536,7 @@ def void_invoice(
         )
     
     # Reverse inventory movements if needed
-    if invoice.status in [InvoiceStatus.PAID, InvoiceStatus.PARTIALLY_PAID]:
+    if invoice.status in [ModelInvoiceStatus.PAID, ModelInvoiceStatus.PARTIALLY_PAID]:
         for item in invoice.items:
             if item.product_id:
                 product = db.query(Product).filter(Product.id == item.product_id).first()
@@ -543,11 +555,9 @@ def void_invoice(
                     product.quantity_on_hand += item.quantity
     
     # Update invoice status
-    invoice.status = InvoiceStatus.VOID
-    invoice.voided_at = func.now()
-    invoice.voided_by = current_user.id
+    invoice.status = ModelInvoiceStatus.VOID
     
     db.commit()
     db.refresh(invoice)
     
-    return {"success": True, "data": invoice}
+    return {"success": True, "data": InvoiceInDB.model_validate(invoice)}

@@ -122,16 +122,36 @@ def _find_chat_pending(
     )
 
 
-def _reject_pending(db: Session, user: User, row: ZeusPendingApproval, reason: str) -> None:
+def _reject_pending(db: Session, user: User, row: ZeusPendingApproval, reason: str) -> bool:
+    """Rechaza la solicitud y VERIFICA en BD que ya no esta pending (fail-closed).
+
+    True si deja de estar pending (rechazada, o resuelta por otro actor); False si sigue
+    pending porque el rechazo no se pudo persistir."""
     approval_id = row.id
     try:
         resolve_approval(db, approval_id=approval_id, user=user, approve=False, reason=reason)
     except HTTPException as exc:
-        # 409: otro worker o la barra del workspace ya la resolvió; nada que hacer.
+        # 409: otro worker o la barra del workspace ya la resolvio.
         logger.info("zeus_chat_reject_skipped approval=%s status=%s", approval_id, exc.status_code)
     except Exception:
         db.rollback()
         logger.exception("No se pudo rechazar la aprobacion %s (%s)", approval_id, reason)
+    try:
+        db.expire_all()
+        current = (
+            db.query(ZeusPendingApproval.status).filter(ZeusPendingApproval.id == approval_id).scalar()
+        )
+    except Exception:
+        db.rollback()
+        logger.exception("No se pudo verificar el estado de la aprobacion %s", approval_id)
+        return False
+    return current != "pending"
+
+
+_REJECT_FAILED_MSG = (
+    "No se pudo cancelar la acción pendiente anterior. No he ejecutado nada ni creado otra; "
+    "inténtalo de nuevo."
+)
 
 
 def _clean_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -315,7 +335,8 @@ async def try_handle_zeus_chat(
             return await _confirm_pending(db, user, pending_row)
         if is_cancel_message(message):
             cancelled_id = pending_row.id
-            _reject_pending(db, user, pending_row, "cancelado por el usuario")
+            if not _reject_pending(db, user, pending_row, "cancelado por el usuario"):
+                return {"handled": True, "success": False, "executed": False, "message": _REJECT_FAILED_MSG}
             return {
                 "handled": True,
                 "success": True,
@@ -325,7 +346,9 @@ async def try_handle_zeus_chat(
             }
         # Cambio de tema: se rechaza la solicitud para que la barra de decisión del workspace
         # no muestre algo que el chat ya abandonó.
-        _reject_pending(db, user, pending_row, "cambio de tema")
+        if not _reject_pending(db, user, pending_row, "cambio de tema"):
+            # Fail-closed: no se deja una fila confirmable en silencio ni se encadena otra accion.
+            return {"handled": True, "success": False, "executed": False, "message": _REJECT_FAILED_MSG}
     elif explicit:
         return {
             "handled": True,

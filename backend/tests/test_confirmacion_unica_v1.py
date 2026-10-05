@@ -271,3 +271,75 @@ def test_persistence_failure_is_fail_closed(db, client, sent, monkeypatch):
     assert r2["success"] is False and r2["executed_action"] is False and sent == []
     monkeypatch.setattr(orch, "resolve_approval", real_resolve)
     assert _row(db, aid).status == "pending"
+
+
+# ------------------------------------------------- campaign_sent encolado via /activities/log
+def _run_executor_on(activity_id):
+    from app.db.base import SessionLocal
+    from app.models.agent_activity import AgentActivity
+    from services.automation.agent_executor import AgentAutomationExecutor
+
+    s = SessionLocal()
+    try:
+        act = s.query(AgentActivity).filter(AgentActivity.id == activity_id).one()
+        AgentAutomationExecutor()._handle_activity(s, act)
+    finally:
+        s.close()
+
+
+@pytest.mark.parametrize("agent", ["ZEUS CORE", "ZEUS"])
+def test_queued_campaign_sent_activity_never_sends(db, client, sent, agent):
+    from app.models.agent_activity import AgentActivity
+
+    attacker, _ = _seed(db, tag="att", with_customer=False)
+    victim, _vc = _seed(db, tag="vic")  # empresa ajena con cliente con email
+    _as(attacker)
+    r = client.post("/api/v1/activities/log", json={
+        "agent_name": agent, "action_type": "campaign_sent", "action_description": "envio forzado",
+        "status": "pending",
+        "details": {"user_id": victim.id, "company_id": _vc.id, "zeus_action_type": "send_campaign",
+                    "payload": {"discount_percent": 50}},
+    })
+    assert r.status_code == 200, r.text
+    aid = r.json()["activity_id"]
+    _run_executor_on(aid)
+    assert sent == []
+    db.expire_all()
+    act = db.query(AgentActivity).filter(AgentActivity.id == aid).one()
+    assert act.status == "blocked_requires_approval"
+    assert act.details["blocked_requires_approval"] is True and act.details["executed"] is False
+
+
+def test_user_from_activity_ignores_foreign_user_id(db):
+    from app.models.agent_activity import AgentActivity
+    from services.automation.handlers.zeus_orchestrator import _user_from_activity
+
+    a, _ = _seed(db, tag="a")
+    b, _ = _seed(db, tag="b")
+    act = AgentActivity(agent_name="ZEUS CORE", action_type="x", action_description="x",
+                        user_email=a.email, details={"user_id": b.id}, status="pending")
+    assert _user_from_activity(db, act).id == a.id
+    own = AgentActivity(agent_name="ZEUS CORE", action_type="x", action_description="x",
+                        user_email=a.email, details={"user_id": a.id}, status="pending")
+    assert _user_from_activity(db, own).id == a.id
+
+
+def test_topic_change_reject_failure_is_fail_closed(db, client, sent, monkeypatch):
+    user, _ = _seed(db)
+    thread = "rf-" + uuid.uuid4().hex[:6]
+    aid = _preview(client, user, thread)
+
+    def boom(*a, **k):
+        raise RuntimeError("db caida")
+
+    monkeypatch.setattr(orch, "resolve_approval", boom)
+    r = _chat(client, user, "¿cuántos clientes tengo?", thread=thread).json()
+    assert r["success"] is False and r["executed_action"] is False
+    assert "no he ejecutado nada" in r["message"].lower()
+    assert _row(db, aid).status == "pending"
+    # y un envio nuevo tampoco se encadena
+    r2 = _chat(client, user, CAMPAIGN, thread=thread).json()
+    assert r2["success"] is False and not r2.get("needs_confirmation")
+    db.expire_all()
+    assert db.query(ZeusPendingApproval).filter(ZeusPendingApproval.thread_id.like(f"{thread}:%")).count() == 1
+    assert sent == []

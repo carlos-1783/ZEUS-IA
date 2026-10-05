@@ -17,6 +17,7 @@ from services import chat_persistence_service as chat_db
 from services.activity_logger import ActivityLogger
 from services.teamflow_audit_service_v1 import run_full_audit
 from services.teamflow_engine import teamflow_engine
+from services.thalos_request_guard_v1 import thalos_request_guard
 from services.teamflow_persistence_v1 import create_item, list_items, update_item_status
 
 router = APIRouter(prefix="/teamflow", tags=["teamflow"])
@@ -193,7 +194,7 @@ async def validate_integrations(_: User = Depends(get_current_active_user)):
 async def execute_from_chat(
     request: TeamFlowChatExecuteRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(thalos_request_guard),
 ):
     from app.api.v1.endpoints.chat import build_server_context
     from services.zeus_orchestrator_service import try_handle_zeus_chat

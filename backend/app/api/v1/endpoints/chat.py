@@ -31,6 +31,7 @@ from app.core.auth import get_current_active_user
 from app.core.config import settings as core_settings
 from app.models.user import User
 from services.activity_logger import ActivityLogger
+from services.thalos_request_guard_v1 import thalos_request_guard
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -288,7 +289,7 @@ async def chat_with_agent(
     agent_name: str,
     request: ChatRequest,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(thalos_request_guard),
     db: Session = Depends(get_db),
 ):
     """
@@ -653,7 +654,7 @@ def _log_agent_call(user: User, company_id: int, action: str, description: str, 
 async def communicate_agents(
     request: AgentCommunicationRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(thalos_request_guard),
 ):
     """Comunicacion entre agentes. Identidad/empresa/control los fija el servidor."""
     await asyncio.to_thread(ensure_agent_stack)
@@ -689,7 +690,7 @@ async def communicate_agents(
 async def coordinate_agents(
     request: MultiAgentTaskRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(thalos_request_guard),
 ):
     """Coordinacion multi-agente. Identidad/empresa/workflow los fija el servidor."""
     await asyncio.to_thread(ensure_agent_stack)

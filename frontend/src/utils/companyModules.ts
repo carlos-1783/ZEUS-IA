@@ -14,12 +14,37 @@ export type ModuleKey =
   | 'settings'
   | 'admin'
   | 'agents'
+  | 'insurance'
 
 export type ModuleMap = Partial<Record<ModuleKey, boolean>>
 
 const MODULES_BY_TYPE: Record<string, ModuleKey[]> = {
   bar_restaurant: ['tpv', 'control_horario', 'payroll'],
   office: ['crm', 'analytics'],
+}
+
+/**
+ * Verticales con gating propio (no solo "module true/false" por
+ * company_type, sino una vertical completa que puede no estar contratada
+ * por NADIE todavía). Debe reflejar `VERTICAL_MODULE_COMPANY_TYPES` de
+ * `backend/app/core/verticals_registry.py` -- esa es la fuente de verdad
+ * real (el backend devuelve 403 vía `require_module(...)` sin importar lo
+ * que diga esta copia; esto es solo para no mostrar/bloquear la ruta en el
+ * frontend antes de que el 403 llegue). Si se edita un lado, editar el otro.
+ *
+ * "insurance": deliberadamente vacío de company_types hasta que Carlos
+ * confirme qué tipo(s) de empresa (aseguradora/correduría) la tendrán
+ * contratada. Hoy: SOLO superusuario la ve/usa (ver `isModuleVisible`,
+ * bypass de `opts.isSuperuser`).
+ */
+const VERTICAL_COMPANY_TYPES: Record<string, string[]> = {
+  insurance: [],
+}
+
+function hasVerticalAccess(companyType: CompanyType | null | undefined, vertical: string): boolean {
+  const ct = (companyType || '').toLowerCase()
+  const allowed = VERTICAL_COMPANY_TYPES[vertical] || []
+  return allowed.includes(ct)
 }
 
 const BASE_MODULES: ModuleKey[] = ['dashboard', 'settings', 'agents']
@@ -38,6 +63,7 @@ export function defaultModulesForType(companyType: CompanyType | null | undefine
     settings: true,
     agents: true,
     admin: false,
+    insurance: hasVerticalAccess(companyType, 'insurance'),
   }
 }
 
@@ -56,6 +82,11 @@ export function normalizeModulesFromApi(
       settings: modules.settings !== false,
       agents: modules.agents !== false,
       admin: !!modules.admin,
+      // El backend (/auth/me, /company/config) todavía no envía esta clave
+      // explícitamente -- si en el futuro lo hace, se respeta; mientras
+      // tanto cae al cálculo por company_type (hoy siempre false salvo
+      // decisión de Carlos, ver VERTICAL_COMPANY_TYPES).
+      insurance: modules.insurance !== undefined ? !!modules.insurance : hasVerticalAccess(companyType, 'insurance'),
     }
   }
   return defaultModulesForType(companyType)
@@ -87,6 +118,7 @@ export const ROUTE_MODULE_MAP: Record<string, ModuleKey> = {
   ControlHorario: 'control_horario',
   OfficeCrm: 'crm',
   PayrollDrafts: 'payroll',
+  Insurance: 'insurance',
 }
 
 export function routeAllowed(

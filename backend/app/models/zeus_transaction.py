@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.sql import func
 
 from app.db.base import Base
@@ -14,6 +14,17 @@ class ZeusTransaction(Base):
     id = Column(Integer, primary_key=True, index=True)
     transaction_id = Column(String(36), unique=True, nullable=False, index=True)
     status = Column(String(32), nullable=False, default="PENDING", index=True)
+    # Tenant owner de la transacción (empresa primaria del usuario que la creó
+    # en el momento de la creación). Nullable: filas heredadas de antes de esta
+    # columna, o usuarios sin empresa vinculada, quedan NULL -- en ese caso el
+    # control de acceso cae de vuelta al user_id embebido en context_json (ver
+    # services/zeus_transaction_system_v1.py::_assert_transaction_access).
+    company_id = Column(
+        Integer,
+        ForeignKey("companies.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     execution_mode_at_start = Column(String(32), nullable=True)
     initiator_json = Column(Text, nullable=True)
     context_json = Column(Text, nullable=True)

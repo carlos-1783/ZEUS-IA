@@ -49,13 +49,12 @@
             <p v-if="currentDetails.summary" class="details-summary">{{ currentDetails.summary }}</p>
           </div>
           <div class="actions">
-            <a
+            <button
               v-if="fiscalDownloadUrl"
-              :href="fiscalDownloadUrl"
-              target="_blank"
-              rel="noopener noreferrer"
+              type="button"
               class="btn primary"
-            >{{ fiscalDownloadLabel }}</a>
+              @click="downloadFiscalFile"
+            >{{ fiscalDownloadLabel }}</button>
             <a
               v-if="currentDeliverable?.files.json"
               :href="buildDownloadLink(currentDeliverable.files.json)"
@@ -79,13 +78,13 @@
           <p v-if="!fiscalDownloadUrl" class="note">
             Borrador sin archivo descargable. Regenera desde «Generar Excel 303» o genera el PDF de una factura.
           </p>
-          <a
+          <button
             v-if="fiscalDownloadUrl"
-            :href="fiscalDownloadUrl"
-            target="_blank"
-            rel="noopener noreferrer"
+            type="button"
             class="btn primary"
-          >{{ fiscalDownloadLabel }}</a>
+            @click="downloadFiscalFile"
+          >{{ fiscalDownloadLabel }}</button>
+          <p v-if="fiscalDownloadError" class="note">{{ fiscalDownloadError }}</p>
         </section>
 
         <div class="cards">
@@ -173,7 +172,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue';
-import { API_BASE_URL } from '@/config/index';
+import { downloadAuthenticatedFile, resolveFiscalFileEndpoint } from '@/utils/fiscalFileDownload';
 import { useAutomationDeliverables, type DeliverableItem } from '@/composables/useAutomationDeliverables';
 import RafaelToolsPanel from './RafaelToolsPanel.vue';
 import DocumentApprovalPanel from '@/components/DocumentApprovalPanel.vue';
@@ -254,9 +253,21 @@ const fiscalDownloadUrl = computed(() => {
   const fromContent = workspaceFiscalContent.value?.file_url;
   const raw = (fromItem || fromContent) as string | undefined;
   if (!raw) return '';
-  if (raw.startsWith('http')) return raw;
-  return `${API_BASE_URL}${raw.startsWith('/') ? raw : `/${raw}`}`;
+  // Endpoint autenticado (los ficheros fiscales ya no se sirven por /static).
+  return resolveFiscalFileEndpoint(raw, currentDeliverable.value?.id);
 });
+
+const fiscalDownloadError = ref('');
+
+const downloadFiscalFile = async () => {
+  fiscalDownloadError.value = '';
+  if (!fiscalDownloadUrl.value) return;
+  try {
+    await downloadAuthenticatedFile(fiscalDownloadUrl.value, 'documento-fiscal');
+  } catch (err) {
+    fiscalDownloadError.value = err instanceof Error ? err.message : String(err);
+  }
+};
 
 const fiscalDownloadLabel = computed(() => {
   const mime = currentDeliverable.value?.mimeType || workspaceFiscalContent.value?.mime_type;
@@ -512,6 +523,8 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   box-shadow: none;
+  cursor: pointer;
+  font-size: inherit;
   transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 .btn:hover {

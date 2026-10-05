@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import re
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from sqlalchemy import or_, and_
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 import logging
@@ -30,6 +31,22 @@ logger = logging.getLogger(__name__)
 def _company_ids_for_control_horario(db: Session, user: User) -> List[int]:
     rows = db.query(UserCompany.company_id).filter(UserCompany.user_id == user.id).all()
     return [r[0] for r in rows]
+
+
+def _tt_scope_filter(user: User, cids: List[int]):
+    """
+    E1 (backlog ejecutor-produccion): TimeTrackingRecord.user_id == user.id excluia a
+    cualquier segundo usuario de la misma empresa (vinculado via UserCompany) de ver o
+    cerrar/pausar los fichajes registrados por otro usuario de esa empresa -> fichajes
+    "huerfanos" no visibles y riesgo de sesiones activas duplicadas. Fallback a
+    company_id IS NULL AND user_id == user.id para filas legado sin company_id.
+    """
+    if cids:
+        return or_(
+            TimeTrackingRecord.company_id.in_(cids),
+            and_(TimeTrackingRecord.company_id.is_(None), TimeTrackingRecord.user_id == user.id),
+        )
+    return TimeTrackingRecord.user_id == user.id
 
 
 def _normalize_phone(phone: Optional[str]) -> str:
@@ -182,10 +199,11 @@ def _active_status_from_db(db: Session, user: User) -> Dict[str, Any]:
 
 def _today_records_from_db(db: Session, user: User) -> List[Dict[str, Any]]:
     start, end = _today_range_utc()
+    cids = _company_ids_for_control_horario(db, user)
     rows = (
         db.query(TimeTrackingRecord)
         .filter(
-            TimeTrackingRecord.user_id == user.id,
+            _tt_scope_filter(user, cids),
             TimeTrackingRecord.check_in_time >= start,
             TimeTrackingRecord.check_in_time < end,
         )
@@ -680,11 +698,13 @@ async def check_in(
             method_val = "location"
 
         device = (http_req.headers.get("user-agent") or "")[:512] or None
+        cids = _company_ids_for_control_horario(db, current_user)
+        company_id_for_record = _primary_company_id(db, current_user)
 
         existing_pre = (
             db.query(TimeTrackingRecord)
             .filter(
-                TimeTrackingRecord.user_id == current_user.id,
+                _tt_scope_filter(current_user, cids),
                 TimeTrackingRecord.employee_id == request.employee_id,
                 TimeTrackingRecord.status == RecordStatus.ACTIVE,
             )
@@ -747,7 +767,7 @@ async def check_in(
         existing = (
             db.query(TimeTrackingRecord)
             .filter(
-                TimeTrackingRecord.user_id == current_user.id,
+                _tt_scope_filter(current_user, cids),
                 TimeTrackingRecord.employee_id == request.employee_id,
                 TimeTrackingRecord.status == RecordStatus.ACTIVE,
             )
@@ -769,6 +789,7 @@ async def check_in(
                 TimeTrackingRecord(
                     employee_id=request.employee_id,
                     user_id=current_user.id,
+                    company_id=company_id_for_record,
                     check_in_time=check_in_time,
                     check_in_method=rec.get("check_in_method", method_val),
                     check_in_location=rec.get("check_in_location") or request.location,
@@ -784,7 +805,7 @@ async def check_in(
         row = (
             db.query(TimeTrackingRecord)
             .filter(
-                TimeTrackingRecord.user_id == current_user.id,
+                _tt_scope_filter(current_user, cids),
                 TimeTrackingRecord.employee_id == request.employee_id,
                 TimeTrackingRecord.status == RecordStatus.ACTIVE,
             )
@@ -888,11 +909,13 @@ async def check_out(
 
         device = (http_req.headers.get("user-agent") or "")[:512] or None
         pex = sm.geo_payload_for_event(request.latitude, request.longitude)
+        cids = _company_ids_for_control_horario(db, current_user)
+        company_id_for_record = _primary_company_id(db, current_user)
 
         active = (
             db.query(TimeTrackingRecord)
             .filter(
-                TimeTrackingRecord.user_id == current_user.id,
+                _tt_scope_filter(current_user, cids),
                 TimeTrackingRecord.employee_id == request.employee_id,
                 TimeTrackingRecord.status == RecordStatus.ACTIVE,
             )
@@ -940,6 +963,7 @@ async def check_out(
                 TimeTrackingRecord(
                     employee_id=request.employee_id,
                     user_id=current_user.id,
+                    company_id=company_id_for_record,
                     check_in_time=datetime.now(timezone.utc) - timedelta(hours=float(result.get("hours_worked") or 0)),
                     check_out_time=check_out_time,
                     check_in_method="code",
@@ -1021,10 +1045,11 @@ async def break_start(
             employee_phone=request.employee_phone,
         )
         sm.sync_runtime_active_records(db, current_user, control_horario_service)
+        cids = _company_ids_for_control_horario(db, current_user)
         active = (
             db.query(TimeTrackingRecord)
             .filter(
-                TimeTrackingRecord.user_id == current_user.id,
+                _tt_scope_filter(current_user, cids),
                 TimeTrackingRecord.employee_id == request.employee_id,
                 TimeTrackingRecord.status == RecordStatus.ACTIVE,
             )
@@ -1090,10 +1115,11 @@ async def break_end(
             employee_phone=request.employee_phone,
         )
         sm.sync_runtime_active_records(db, current_user, control_horario_service)
+        cids = _company_ids_for_control_horario(db, current_user)
         active = (
             db.query(TimeTrackingRecord)
             .filter(
-                TimeTrackingRecord.user_id == current_user.id,
+                _tt_scope_filter(current_user, cids),
                 TimeTrackingRecord.employee_id == request.employee_id,
                 TimeTrackingRecord.status == RecordStatus.ACTIVE,
             )

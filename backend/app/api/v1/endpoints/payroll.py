@@ -1,10 +1,12 @@
 """
 📋 Payroll Drafts - Listar y descargar borradores de nómina
 """
+import logging
 from pathlib import Path
+from typing import Optional
 import os
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -14,6 +16,7 @@ from app.models.user import User
 from app.models.payroll_draft import PayrollDraft
 
 router = APIRouter(prefix="/payroll", tags=["payroll"])
+logger = logging.getLogger(__name__)
 
 PAYROLL_OUTPUT_DIR = Path(os.getenv("PAYROLL_OUTPUT_DIR", "storage/outputs/payroll_drafts"))
 
@@ -29,14 +32,38 @@ def _require_owner_or_superuser(current_user: User) -> None:
 
 @router.get("/drafts")
 async def list_payroll_drafts(
+    owner_user_id: Optional[int] = Query(
+        None,
+        description="Solo superuser: filtrar por empresa/owner concreto. Ignorado para usuarios owner normales.",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Lista borradores de nómina del usuario/empresa. Solo owner o superuser."""
+    """
+    Lista borradores de nómina.
+
+    - owner (role != employee, no superuser): SOLO ve los borradores de SU PROPIA
+      empresa (owner_user_id == su propio id). En este modelo de datos "empresa" es
+      el propio usuario owner (ver app/models/payroll_draft.py), por lo que esto es
+      el comportamiento correcto para el caso normal de un único propietario.
+    - superuser: ve TODOS los borradores de TODAS las empresas por defecto (igual
+      alcance que ya tenía el endpoint de descarga, que exime a superuser del
+      filtro de propiedad). Puede acotar a una empresa concreta con ?owner_user_id=.
+    """
     _require_owner_or_superuser(current_user)
+    query = db.query(PayrollDraft)
+    if current_user.is_superuser:
+        if owner_user_id is not None:
+            query = query.filter(PayrollDraft.owner_user_id == owner_user_id)
+        logger.info(
+            "payroll_drafts_list superuser_id=%s scope=%s",
+            current_user.id,
+            owner_user_id if owner_user_id is not None else "all_companies",
+        )
+    else:
+        query = query.filter(PayrollDraft.owner_user_id == current_user.id)
     drafts = (
-        db.query(PayrollDraft)
-        .filter(PayrollDraft.owner_user_id == current_user.id)
+        query
         .order_by(PayrollDraft.generated_at.desc())
         .limit(50)
         .all()

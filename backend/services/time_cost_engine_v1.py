@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, status
+from sqlalchemy import or_, and_
 from sqlalchemy.orm import Session
 
 from app.models.company import UserCompany
@@ -103,13 +104,24 @@ def _verify_pin(emp: CompanyEmployee, pin: str) -> None:
 def _active_record(
     db: Session,
     *,
+    company_id: int,
     user_id: int,
     employee_id: str,
 ) -> Optional[TimeTrackingRecord]:
+    """
+    E1 (backlog ejecutor-produccion): antes filtraba solo por user_id == user_id del
+    llamante -> si el "entrada" lo registraba un usuario y la "salida"/pausa la hacia
+    OTRO usuario de la MISMA empresa (UserCompany), esta query no encontraba la sesion
+    abierta y devolvia "No hay sesion abierta" de forma incorrecta. company_id ya es un
+    parametro validado (_assert_user_company_access) en todos los llamantes.
+    """
     return (
         db.query(TimeTrackingRecord)
         .filter(
-            TimeTrackingRecord.user_id == user_id,
+            or_(
+                TimeTrackingRecord.company_id == company_id,
+                and_(TimeTrackingRecord.company_id.is_(None), TimeTrackingRecord.user_id == user_id),
+            ),
             TimeTrackingRecord.employee_id == str(employee_id),
             TimeTrackingRecord.status == RecordStatus.ACTIVE,
         )
@@ -226,7 +238,7 @@ def register_checkin(
         _verify_pin(emp, str(meta.get("pin") or ""))
 
     now = _now()
-    record = _active_record(db, user_id=user.id, employee_id=employee_id)
+    record = _active_record(db, company_id=cid, user_id=user.id, employee_id=employee_id)
     work_session = _active_work_session(db, company_id=cid, employee_code=employee_id)
 
     if ctype == "entrada":
@@ -238,6 +250,7 @@ def register_checkin(
         record = TimeTrackingRecord(
             employee_id=str(employee_id),
             user_id=user.id,
+            company_id=cid,
             check_in_time=now,
             check_in_method=check_method,
             check_in_latitude=meta.get("lat"),

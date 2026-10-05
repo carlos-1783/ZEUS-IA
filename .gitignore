@@ -112,3 +112,7 @@ railway.env
 # =============================================================================
 *.bak
 *.old
+
+# Ficheros fiscales/privados: nunca al repo (se sirven solo por endpoint autenticado)
+backend/static/fiscal/
+backend/private_files/

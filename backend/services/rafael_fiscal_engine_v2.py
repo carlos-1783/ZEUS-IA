@@ -5,7 +5,7 @@ RAFAEL fiscal engine v2 — facturas PDF y modelo 303 Excel desde datos reales d
 from __future__ import annotations
 
 import logging
-import os
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -30,6 +30,11 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_VAT_RATES = (21, 10, 4, 0)
 FISCAL_SUBDIR = "fiscal"
+# Tipos de fichero fiscal (subcarpeta bajo {PRIVATE_FILES_DIR}/fiscal/{company_id}/).
+FISCAL_KINDS = ("invoices", "model_303")
+# Nombre de fichero permitido en el endpoint de descarga (sin separadores ni "..").
+FISCAL_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,150}\.(pdf|xlsx)$")
+FISCAL_FILES_URL_PREFIX = f"{settings.API_V1_STR}/rafael-fiscal/fiscal-files"
 
 
 @dataclass
@@ -47,10 +52,22 @@ class Model303Result:
     vat_breakdown: Dict[str, float]
 
 
-def _fiscal_root() -> Path:
-    root = Path(settings.STATIC_DIR) / FISCAL_SUBDIR
-    root.mkdir(parents=True, exist_ok=True)
+def fiscal_private_root(create: bool = False) -> Path:
+    """Directorio base PRIVADO de ficheros fiscales (fuera de STATIC_DIR, sin servir en /static)."""
+    root = Path(settings.PRIVATE_FILES_DIR) / FISCAL_SUBDIR
+    if create:
+        root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def _fiscal_root() -> Path:
+    return fiscal_private_root(create=True)
+
+
+def _safe_filename_part(value: Any) -> str:
+    """Solo [A-Za-z0-9_-]: evita separadores de ruta y que with_suffix() trunque el nombre."""
+    cleaned = re.sub(r"[^A-Za-z0-9_-]+", "_", str(value)).strip("_")
+    return cleaned or "doc"
 
 
 def _quarter_bounds(year: int, quarter: int) -> Tuple[datetime, datetime]:
@@ -157,14 +174,17 @@ def fetch_period_financials(
     )
 
 
-def _relative_static_url(abs_path: str) -> str:
-    static_root = Path(settings.STATIC_DIR).resolve()
+def _private_file_url(abs_path: str) -> str:
+    """URL del endpoint autenticado de descarga para un fichero fiscal generado por el motor."""
     resolved = Path(abs_path).resolve()
     try:
-        rel = resolved.relative_to(static_root)
-    except ValueError:
-        rel = Path(os.path.basename(abs_path))
-    return f"/static/{rel.as_posix()}"
+        rel = resolved.relative_to(fiscal_private_root().resolve())
+        company_id, kind, filename = rel.parts
+    except ValueError as exc:
+        raise RuntimeError(
+            f"Fichero fiscal fuera del directorio privado ({fiscal_private_root()}): {resolved.name}"
+        ) from exc
+    return f"{FISCAL_FILES_URL_PREFIX}/{company_id}/{kind}/{filename}"
 
 
 def register_fiscal_workspace_document(
@@ -190,7 +210,7 @@ def register_fiscal_workspace_document(
             "document_type": document_type,
             "fiscal_document_type": fiscal_document_type,
             "file_path": file_path,
-            "file_url": _relative_static_url(file_path),
+            "file_url": _private_file_url(file_path),
             "file_size": file_size,
             "mime_type": mime_type,
             "only_real_file": True,
@@ -291,7 +311,10 @@ def generate_invoice_pdf_flow(
     company_name = (company.company_name if company else f"Empresa {cid}") or f"Empresa {cid}"
 
     out_dir = _fiscal_root() / str(cid) / "invoices"
-    filename = f"invoice_{invoice.invoice_number or invoice.id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+    filename = (
+        f"invoice_{_safe_filename_part(invoice.invoice_number or invoice.id)}"
+        f"_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+    )
     pdf_path = generate_invoice_pdf_v1(
         output_path=out_dir / filename,
         company_name=company_name,
@@ -352,7 +375,7 @@ def generate_invoice_pdf_flow(
         "success": True,
         "document_id": doc.id,
         "file_path": pdf_path,
-        "file_url": _relative_static_url(pdf_path),
+        "file_url": _private_file_url(pdf_path),
         "file_size": file_size,
         "mime_type": "application/pdf",
         "message": translate_activity("invoice_created"),
@@ -392,7 +415,7 @@ def generate_model_303_flow(
     company_name = (company.company_name if company else f"Empresa {cid}") or f"Empresa {cid}"
 
     out_dir = _fiscal_root() / str(cid) / "model_303"
-    filename = f"modelo_303_{model.period}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+    filename = f"modelo_303_{_safe_filename_part(model.period)}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
     try:
         xlsx_path = generate_model_303_xlsx_v1(
             output_path=out_dir / filename,
@@ -460,7 +483,7 @@ def generate_model_303_flow(
         "success": True,
         "document_id": doc.id,
         "file_path": xlsx_path,
-        "file_url": _relative_static_url(xlsx_path),
+        "file_url": _private_file_url(xlsx_path),
         "file_size": file_size,
         "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "modelo_303": {

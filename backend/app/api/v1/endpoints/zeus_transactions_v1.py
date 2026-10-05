@@ -74,8 +74,7 @@ def zeus_transaction_get(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    _ = current_user
-    return {"success": True, **get_transaction(db, transaction_id)}
+    return {"success": True, **get_transaction(db, current_user, transaction_id)}
 
 
 @router.post("/transactions/{transaction_id}/execute")

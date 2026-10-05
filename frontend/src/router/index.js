@@ -22,7 +22,6 @@ const decodeParam = (param) => {
 import AuthLayout from '../layouts/AuthLayout.vue'
 
 // Lazy loading de componentes pesados
-const MainLayout = () => import('../layouts/MainLayout.vue')
 const OlymposDashboard = () => import('../views/OlymposDashboard.vue')
 const Login = () => import('../views/auth/Login.vue')
 const Register = () => import('../views/auth/Register.vue')
@@ -62,34 +61,6 @@ const publicRoutes = [
   'Landing',
   'PublicStore'
 ]
-
-// Navigation guard to check authentication
-const setupNavigationGuards = (router) => {
-  router.beforeEach(async (to, from, next) => {
-    const authStore = useAuthStore()
-    
-    // Check if the route requires authentication
-    const isPublicRoute = publicRoutes.includes(to.name)
-    const isAuthenticated = authStore.isAuthenticated
-
-    // If trying to access a protected route without being authenticated
-    if (!isPublicRoute && !isAuthenticated) {
-      return next({ name: 'AuthLogin', query: { redirect: to.fullPath } })
-    }
-
-    // If already authenticated and trying to access auth pages
-    if ((to.name === 'AuthLogin' || to.name === 'Register') && isAuthenticated) {
-      // Redirigir a la ruta original o al dashboard
-      const redirectTo = to.query.redirect || '/dashboard'
-      console.log('🔄 Usuario autenticado, redirigiendo a:', redirectTo)
-      // Forzar redirección con window.location
-      window.location.href = redirectTo
-      return
-    }
-
-    next()
-  })
-}
 
 // Configuración del router
 const router = createRouter({
@@ -342,8 +313,15 @@ const router = createRouter({
       }
     },
 
-    // Vertical Seguros — Multirriesgo (pólizas + siniestros). Sin gating por
-    // company_type: ver AUDIT_VERTICAL_SEGUROS.md para la decisión de diseño.
+    // Vertical Seguros — Multirriesgo (pólizas + siniestros). Gating real
+    // por módulo (hallazgo A): cerrada por defecto, solo superusuario hasta
+    // que Carlos confirme qué company_type la tendrá contratada (ver
+    // ROUTE_MODULE_MAP['Insurance'] en utils/companyModules.ts y el guard
+    // de abajo que lo usa vía routeAllowed; el backend aplica el mismo
+    // cierre de verdad con `require_module("insurance")` en
+    // backend/app/api/v1/endpoints/insurance.py, así que escribir la URL a
+    // mano sin ser superusuario sigue devolviendo 403 aunque este guard
+    // fallase).
     {
       path: '/insurance',
       name: 'Insurance',

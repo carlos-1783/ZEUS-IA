@@ -580,7 +580,7 @@ def register_record_charge(
 
     work_sid = get_active_work_session_id_for_sale(db, user)
 
-    profile = get_fiscal_profile(db, user.id)
+    profile = get_fiscal_profile(db, user.id, company_id=cid)
     apply_recargo = bool(getattr(profile, "apply_recargo_equivalencia", False)) if profile else False
     recargo_rate = float(getattr(profile, "recargo_rate", 0) or 0) if profile else None
 

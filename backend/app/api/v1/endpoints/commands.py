@@ -11,7 +11,7 @@ import logging
 from app.core.auth import get_current_active_user
 from app.core.config import settings
 from app.core.security import verify_password
-from app.db.base import get_db
+from app.db.session import get_db
 from app.models.user import User
 from app.core.state_manager import state_manager
 

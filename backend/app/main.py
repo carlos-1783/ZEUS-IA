@@ -40,6 +40,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.security_middleware import SecurityMiddleware
+from app.core.static_files import PublicStaticFiles, is_blocked_public_path
 
 # Import your existing app
 from app.core.config import settings, ensure_static_root_ready
@@ -368,7 +369,8 @@ try:
 except OSError:
     pass
 
-app.mount("/static", StaticFiles(directory=static_root), name="static")
+# /static es público: bloquea el prefijo legado fiscal/ (ficheros fiscales solo por endpoint autenticado).
+app.mount("/static", PublicStaticFiles(directory=static_root), name="static")
 
 assets_spa = os.path.join(spa_root, "assets")
 assets_vol = os.path.join(static_root, "assets")
@@ -543,7 +545,7 @@ async def serve_frontend(request: Request, full_path: str):
         )
 
     static_path = os.path.join(spa_root, full_path)
-    if os.path.isfile(static_path):
+    if os.path.isfile(static_path) and not is_blocked_public_path(full_path):
         return FileResponse(static_path)
 
     index_path = os.path.join(spa_root, "index.html")

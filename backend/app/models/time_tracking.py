@@ -37,7 +37,11 @@ class TimeTrackingRecord(Base):
     # Empleado
     employee_id = Column(String(100), index=True, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=True)  # Usuario dueño de la empresa
-    
+    # 0058: empresa del fichaje. Nullable para filas legado (fallback a user_id en query).
+    # Necesario para que un segundo usuario vinculado a la misma empresa (UserCompany) vea y
+    # pueda cerrar/pausar los fichajes de ESA empresa, no solo los que él mismo registró.
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True)
+
     # Fichajes
     check_in_time = Column(DateTime(timezone=True), nullable=False, index=True)
     check_out_time = Column(DateTime(timezone=True), nullable=True, index=True)

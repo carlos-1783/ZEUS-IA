@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, File, UploadFile, Query
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from decimal import Decimal
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, and_
 from sqlalchemy.orm import Session
 import logging
 from pathlib import Path
@@ -142,6 +142,37 @@ def _tpv_table_row_allowed(db: Session, user: User, row: TPVTable) -> bool:
     return row.company_id in _company_ids_for_user(db, user)
 
 
+# E1 (backlog ejecutor-produccion): TPVProduct/FiscalProfile/Reservation filtraban por
+# user_id == current_user.id en vez de por la(s) empresa(s) del usuario -> en una empresa
+# con 2+ usuarios (owner + encargado vinculado via UserCompany), el segundo usuario no veia
+# el catalogo/perfil fiscal/reservas de SU PROPIA empresa. Estos helpers aplican el mismo
+# patron ya usado en list_products/process_sale: company_id IN (empresas del usuario), con
+# fallback a user_id == current_user.id solo para filas legado sin company_id (o si el
+# usuario no esta vinculado a ninguna empresa).
+def _tpv_product_scope_filter(current_user: User, cids: List[int]):
+    if cids:
+        return or_(TPVProduct.user_id == current_user.id, TPVProduct.company_id.in_(cids))
+    return TPVProduct.user_id == current_user.id
+
+
+def _fiscal_profile_scope_filter(current_user: User, cids: List[int]):
+    if cids:
+        return or_(
+            FiscalProfile.company_id.in_(cids),
+            and_(FiscalProfile.company_id.is_(None), FiscalProfile.user_id == current_user.id),
+        )
+    return FiscalProfile.user_id == current_user.id
+
+
+def _reservation_scope_filter(current_user: User, cids: List[int]):
+    if cids:
+        return or_(
+            Reservation.company_id.in_(cids),
+            and_(Reservation.company_id.is_(None), Reservation.user_id == current_user.id),
+        )
+    return Reservation.user_id == current_user.id
+
+
 def _tpv_table_to_api_dict(row: TPVTable) -> Dict[str, Any]:
     return {
         "id": row.id,
@@ -240,6 +271,14 @@ class FiscalProfileCreate(BaseModel):
     """ZEUS_TPV_FULL_FISCAL_INFRASTRUCTURE_ES_003"""
     vat_regime: str = "general"  # general | recargo_equivalencia | exento
     apply_recargo_equivalencia: bool = False
+    # Porcentaje tal como lo introduce el usuario/formulario, ej. 5.2 para 5.2%.
+    # NUNCA se guarda asi en BD: FiscalProfile.recargo_rate almacena la FRACCION
+    # (0.052), como documenta app/models/fiscal.py y consume
+    # services/fiscal_engine.py (multiplica base_amount * recargo_rate
+    # directamente). La conversion porcentaje -> fraccion ocurre en
+    # set_fiscal_profile(); la conversion inversa (fraccion -> porcentaje) ocurre
+    # al responder en get_fiscal_profile()/set_fiscal_profile(), para que la API
+    # HTTP siempre hable en porcentaje de cara al cliente/formulario.
     recargo_rate: Optional[float] = None  # e.g. 5.2 for 5.2%
 
 
@@ -262,12 +301,12 @@ async def _get_tpv_info(db: Session, current_user: User):
             "requires_customer_data": False,
             "superuser_override": True,
         }
+    company_ids = _company_ids_for_user(db, current_user)
     products_count = (
-        db.query(TPVProduct).filter(TPVProduct.user_id == current_user.id).count()
+        db.query(TPVProduct).filter(_tpv_product_scope_filter(current_user, company_ids)).count()
         if current_user
         else 0
     )
-    company_ids = _company_ids_for_user(db, current_user)
     jornada = get_jornada_status(db, current_user)
     tpv_operator_candidates: List[Dict[str, Any]] = []
     if company_ids:
@@ -904,17 +943,19 @@ async def update_product(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Actualizar producto en el TPV - MULTI-TENANCY: Solo productos del usuario"""
+    """Actualizar producto en el TPV - MULTI-TENANCY: productos del usuario o de su(s) empresa(s)"""
     is_superuser = getattr(current_user, 'is_superuser', False)
-    
-    # Permisos: Todos los usuarios autenticados pueden actualizar sus propios productos
-    
+
+    # Permisos: Todos los usuarios autenticados pueden actualizar productos de su empresa
+
     logger.info(f"✏️ Actualizando producto: {product_id} - Usuario: {current_user.id}")
-    
-    # Buscar producto SOLO del usuario actual (multi-tenancy)
+
+    # Buscar producto del usuario o de alguna de sus empresas (E1: antes solo user_id,
+    # un segundo usuario de la misma empresa no podia editar el catalogo compartido)
+    company_ids = _company_ids_for_user(db, current_user)
     db_product = db.query(TPVProduct).filter(
         TPVProduct.product_id == product_id,
-        TPVProduct.user_id == current_user.id
+        _tpv_product_scope_filter(current_user, company_ids),
     ).first()
     
     if not db_product:
@@ -1041,24 +1082,27 @@ async def delete_product(
         )
     
     logger.info(f"🗑️ Eliminando producto: {product_id} - Usuario: {current_user.id}")
-    
-    # Buscar producto SOLO del usuario actual (multi-tenancy)
+
+    # Buscar producto del usuario o de alguna de sus empresas (misma razón que update_product)
+    company_ids = _company_ids_for_user(db, current_user)
     db_product = db.query(TPVProduct).filter(
         TPVProduct.product_id == product_id,
-        TPVProduct.user_id == current_user.id
+        _tpv_product_scope_filter(current_user, company_ids),
     ).first()
-    
+
     if not db_product:
         raise HTTPException(
             status_code=404,
             detail=f"Producto {product_id} no encontrado o no tienes permisos para eliminarlo"
         )
-    
+
     product_name = db_product.name
     db.delete(db_product)
     db.commit()
-    
-    remaining_count = db.query(TPVProduct).filter(TPVProduct.user_id == current_user.id).count()
+
+    remaining_count = db.query(TPVProduct).filter(
+        _tpv_product_scope_filter(current_user, company_ids)
+    ).count()
     
     logger.info(f"✅ Producto eliminado: {product_id} ({product_name}) - Usuario: {current_user.id}")
     logger.info(f"📊 Productos restantes del usuario: {remaining_count}")
@@ -1079,11 +1123,12 @@ async def add_to_cart(
     """Valida producto del usuario y devuelve línea + total de esa línea (no persiste carrito en servidor)."""
     ensure_user_company_link_for_operations(db, current_user)
     _ensure_employee_tpv_jornada(db, current_user)
+    company_ids = _company_ids_for_user(db, current_user)
     db_product = (
         db.query(TPVProduct)
         .filter(
             TPVProduct.product_id == request.product_id,
-            TPVProduct.user_id == current_user.id,
+            _tpv_product_scope_filter(current_user, company_ids),
         )
         .first()
     )
@@ -1318,13 +1363,33 @@ async def close_register(
 
 # ----- ZEUS_TPV_FULL_FISCAL_INFRASTRUCTURE_ES_003: perfil fiscal y exportación modelo 303 -----
 
+def _recargo_fraction_to_percent(value) -> Optional[float]:
+    """FiscalProfile.recargo_rate guarda la FRACCION (0.052). La API HTTP habla
+    siempre en PORCENTAJE (5.2) de cara al cliente/formulario."""
+    if value is None:
+        return None
+    return float(Decimal(str(value)) * 100)
+
+
+def _recargo_percent_to_fraction(value: Optional[float]) -> Optional[Decimal]:
+    """Convierte el porcentaje recibido por HTTP (5.2) a la fraccion que exige
+    el modelo (0.052) y que consume services/fiscal_engine.py sin dividir entre
+    100. Unico punto de conversion porcentaje -> fraccion de toda la cadena."""
+    if value is None:
+        return None
+    return Decimal(str(value)) / 100
+
+
 @router.get("/fiscal-profile")
 async def get_fiscal_profile(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Obtener perfil fiscal del usuario (régimen IVA, recargo equivalencia)."""
-    profile = db.query(FiscalProfile).filter(FiscalProfile.user_id == current_user.id).first()
+    """Obtener perfil fiscal de la empresa del usuario (régimen IVA, recargo equivalencia)."""
+    company_ids = _company_ids_for_user(db, current_user)
+    profile = db.query(FiscalProfile).filter(
+        _fiscal_profile_scope_filter(current_user, company_ids)
+    ).first()
     if not profile:
         return {"profile": None}
     return {
@@ -1332,7 +1397,7 @@ async def get_fiscal_profile(
             "id": profile.id,
             "vat_regime": profile.vat_regime,
             "apply_recargo_equivalencia": profile.apply_recargo_equivalencia,
-            "recargo_rate": float(profile.recargo_rate) if profile.recargo_rate is not None else None,
+            "recargo_rate": _recargo_fraction_to_percent(profile.recargo_rate),
         }
     }
 
@@ -1343,21 +1408,35 @@ async def set_fiscal_profile(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Crear o actualizar perfil fiscal (régimen IVA y recargo de equivalencia)."""
-    profile = db.query(FiscalProfile).filter(FiscalProfile.user_id == current_user.id).first()
-    recargo = request.recargo_rate
-    if request.apply_recargo_equivalencia and recargo is None:
-        recargo = 5.2  # 5.2% típico recargo equivalencia
+    """Crear o actualizar perfil fiscal de la empresa (régimen IVA y recargo de equivalencia).
+
+    request.recargo_rate llega en PORCENTAJE (ej. 5.2 para 5.2%), tal como
+    documenta el schema FiscalProfileCreate. Se convierte a FRACCION (0.052)
+    antes de guardar, porque FiscalProfile.recargo_rate y
+    services.fiscal_engine.build_fiscal_items_from_cart asumen la fraccion
+    (multiplican base_amount * recargo_rate directamente, sin dividir entre
+    100). Sin esta conversion, un recargo de equivalencia del 5.2% guardado
+    tal cual se traduciria en un recargo real del 520% en cada venta.
+    """
+    company_ids = _company_ids_for_user(db, current_user)
+    profile = db.query(FiscalProfile).filter(
+        _fiscal_profile_scope_filter(current_user, company_ids)
+    ).first()
+    recargo_percent = request.recargo_rate
+    if request.apply_recargo_equivalencia and recargo_percent is None:
+        recargo_percent = 5.2  # 5.2% típico recargo equivalencia (porcentaje)
+    recargo_fraction = _recargo_percent_to_fraction(recargo_percent)
     if profile:
         profile.vat_regime = request.vat_regime
         profile.apply_recargo_equivalencia = request.apply_recargo_equivalencia
-        profile.recargo_rate = recargo
+        profile.recargo_rate = recargo_fraction
     else:
         profile = FiscalProfile(
             user_id=current_user.id,
+            company_id=_primary_company_id(db, current_user),
             vat_regime=request.vat_regime,
             apply_recargo_equivalencia=request.apply_recargo_equivalencia,
-            recargo_rate=recargo,
+            recargo_rate=recargo_fraction,
         )
         db.add(profile)
     db.commit()
@@ -1368,7 +1447,7 @@ async def set_fiscal_profile(
             "id": profile.id,
             "vat_regime": profile.vat_regime,
             "apply_recargo_equivalencia": profile.apply_recargo_equivalencia,
-            "recargo_rate": float(profile.recargo_rate) if profile.recargo_rate is not None else None,
+            "recargo_rate": _recargo_fraction_to_percent(profile.recargo_rate),
         },
     }
 
@@ -1395,10 +1474,23 @@ async def get_quarterly_vat(
     # Comparar con inicio/fin de día para DateTime(timezone=True)
     start_ts = dt.combine(start_d, dt.min.time())
     end_ts = dt.combine(end_d, dt.min.time())
+    # Modelo 303 es por EMPRESA, no por usuario individual: agrega todas las ventas
+    # de la(s) empresa(s) del usuario (no solo las que él mismo registró), para que
+    # el total trimestral sea correcto en empresas con varios usuarios/socios.
+    # Fallback a ventas propias (company_id NULL, legado) si el usuario no pertenece
+    # a ninguna empresa, siguiendo el mismo patrón que _customer_scope_filter.
+    company_ids = _company_ids_for_user(db, current_user)
+    if company_ids:
+        scope_filter = or_(
+            TPVSale.company_id.in_(company_ids),
+            and_(TPVSale.company_id.is_(None), TPVSale.user_id == current_user.id),
+        )
+    else:
+        scope_filter = TPVSale.user_id == current_user.id
     sales = (
         db.query(TPVSale)
         .filter(
-            TPVSale.user_id == current_user.id,
+            scope_filter,
             TPVSale.sale_date >= start_ts,
             TPVSale.sale_date < end_ts,
         )
@@ -1479,10 +1571,10 @@ async def get_tpv_status(
     """Obtener estado del TPV - Los superusuarios ven información completa"""
     is_superuser = getattr(current_user, "is_superuser", False)
     svc = _tpv_service_for_user(db, current_user)
-    products_count = (
-        db.query(TPVProduct).filter(TPVProduct.user_id == current_user.id).count()
-    )
     company_ids = _company_ids_for_user(db, current_user)
+    products_count = (
+        db.query(TPVProduct).filter(_tpv_product_scope_filter(current_user, company_ids)).count()
+    )
 
     status = {
         "success": True,
@@ -1552,9 +1644,13 @@ async def get_reservations(
             raise HTTPException(status_code=400, detail="Formato de fecha inválido (YYYY-MM-DD)")
     else:
         day = date.today()
+    company_ids = _company_ids_for_user(db, current_user)
     rows = (
         db.query(Reservation)
-        .filter(Reservation.user_id == current_user.id, Reservation.reservation_date == day)
+        .filter(
+            _reservation_scope_filter(current_user, company_ids),
+            Reservation.reservation_date == day,
+        )
         .order_by(Reservation.reservation_time, Reservation.id)
         .all()
     )
@@ -1594,9 +1690,10 @@ async def seat_reservation(
 ):
     """Marca la reserva como sentada y asigna mesa (abrir como mesa en TPV)."""
     _ensure_employee_tpv_jornada(db, current_user)
+    company_ids = _company_ids_for_user(db, current_user)
     r = db.query(Reservation).filter(
         Reservation.id == reservation_id,
-        Reservation.user_id == current_user.id,
+        _reservation_scope_filter(current_user, company_ids),
     ).first()
     if not r:
         raise HTTPException(status_code=404, detail="Reserva no encontrada")

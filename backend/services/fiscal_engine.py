@@ -11,14 +11,35 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_fiscal_profile(db: Any, user_id: int) -> Optional[Any]:
-    """Obtener perfil fiscal del usuario (régimen IVA, recargo equivalencia)."""
+def get_fiscal_profile(db: Any, user_id: int, company_id: Optional[int] = None) -> Optional[Any]:
+    """Obtener perfil fiscal de la empresa (régimen IVA, recargo equivalencia).
+
+    El perfil fiscal pertenece a la EMPRESA, no al usuario que lo creó: en una
+    empresa con 2+ usuarios (owner + encargado/cajero vinculado vía
+    UserCompany), cualquiera de ellos debe usar el mismo recargo de
+    equivalencia al vender. Mismo patrón que `_fiscal_profile_scope_filter` en
+    tpv.py (E1, migración 0058): si se conoce `company_id` (la empresa de la
+    venta/cobro en curso), se filtra por esa empresa, con fallback a perfiles
+    legado (`company_id IS NULL AND user_id == user_id`) creados antes de la
+    migración 0058. Si no se pasa `company_id`, se mantiene el filtro legado
+    por `user_id` (compatibilidad con callers que aún no lo propagan).
+    """
     try:
         from app.models.erp import FiscalProfile
-        profile = db.query(FiscalProfile).filter(FiscalProfile.user_id == user_id).first()
-        return profile
+        from sqlalchemy import and_, or_
+        query = db.query(FiscalProfile)
+        if company_id:
+            query = query.filter(
+                or_(
+                    FiscalProfile.company_id == company_id,
+                    and_(FiscalProfile.company_id.is_(None), FiscalProfile.user_id == user_id),
+                )
+            )
+        else:
+            query = query.filter(FiscalProfile.user_id == user_id)
+        return query.first()
     except Exception as e:
-        logger.debug(f"FiscalProfile not found for user {user_id}: {e}")
+        logger.debug(f"FiscalProfile not found for user {user_id} company {company_id}: {e}")
         return None
 
 

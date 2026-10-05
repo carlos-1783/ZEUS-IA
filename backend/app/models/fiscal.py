@@ -24,11 +24,18 @@ class TaxRate(Base):
 
 
 class FiscalProfile(Base):
-    """Perfil fiscal del usuario: régimen IVA y recargo de equivalencia."""
+    """Perfil fiscal del usuario: régimen IVA y recargo de equivalencia.
+
+    company_id (0058): empresa a la que pertenece el perfil, para que cualquier
+    usuario vinculado a la misma empresa (UserCompany) lea/escriba el mismo
+    perfil fiscal en vez de uno vacío por usuario. Nullable para filas legado
+    (fallback a user_id en la query, ver tpv.py).
+    """
     __tablename__ = "fiscal_profiles"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True)
     vat_regime = Column(String(30), nullable=False)  # general, recargo_equivalencia, exento
     apply_recargo_equivalencia = Column(Boolean, nullable=False, default=False)
     recargo_rate = Column(Numeric(5, 4), nullable=True)  # ej. 5.2% = 0.052

@@ -90,6 +90,29 @@ def _safe_persist_short_term(*args: Any, **kwargs: Any) -> None:
         logger.exception("unified_agent_runtime: persist_short_term omitido")
 
 
+def _log_memory_context(agent_name, thread_id, company_key, user_id, context, n_messages) -> None:
+    from types import SimpleNamespace
+
+    from services.chain_log import log_chain_step
+
+    ctx = context or {}
+    cid = ctx.get("company_id")
+    log_chain_step(
+        "CONTEXTO",
+        company_id=cid if isinstance(cid, int) else None,
+        user=SimpleNamespace(id=user_id, email=ctx.get("user_email")),
+        agent=agent_name,
+        action="load_conversation_memory",
+        status="success",
+        details={
+            "memory_scope": company_key,
+            "thread_id": thread_id,
+            "memory_messages": n_messages,
+            "memory_turns": n_messages // 2,
+        },
+    )
+
+
 def run_chat(
     agent_name: str,
     thread_id: str,
@@ -118,6 +141,9 @@ def run_chat(
     buf = memory.get("short_term") or []
     if not isinstance(buf, list):
         buf = []
+
+    # CONTEXTO (J7): memoria cargada, solo cardinalidades (nunca contenidos).
+    _log_memory_context(agent_name, thread_id, company_id, user_id, context, len(buf))
 
     ctx = dict(context or {})
     ctx["user_message"] = message
@@ -201,6 +227,30 @@ def run_chat(
     }
 
 
+def _resolve_activity_company(activity) -> Optional[int]:
+    """Empresa de una actividad de workspace: su propio company_id si existe; si no, la empresa
+    primaria del usuario del email (BD). None si no hay ninguna (sin fallback a "default")."""
+    cid = getattr(activity, "company_id", None)
+    if isinstance(cid, int):
+        return cid
+    email = (getattr(activity, "user_email", None) or "").strip()
+    if not email:
+        return None
+    from app.db.session import SessionLocal
+    from app.models.user import User
+    import services.crm_office_service as crm_svc
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        return crm_svc.primary_company_id(db, user) if user else None
+    except Exception:
+        logger.exception("run_workspace_task: no se pudo resolver la empresa del usuario")
+        return None
+    finally:
+        db.close()
+
+
 def run_workspace_task(activity) -> Dict[str, Any]:
     """
     Unified workspace: load memory, run handler (execute), persist state + decision log.
@@ -208,7 +258,33 @@ def run_workspace_task(activity) -> Dict[str, Any]:
     """
     agent_name = (activity.agent_name or "").upper()
     thread_id = f"task_{activity.id}"
-    company_id = (activity.user_email or "default").strip() or "default"
+    resolved = _resolve_activity_company(activity)
+    if resolved is None:
+        # J7: sin empresa no hay clave de memoria segura ni ejecucion: error controlado y
+        # registrado, nunca una empresa "default" compartida ni el email como empresa.
+        logger.error("run_workspace_task: actividad %s sin empresa resoluble; no se ejecuta", activity.id)
+        from types import SimpleNamespace
+
+        from services.chain_log import log_chain_step
+
+        log_chain_step(
+            "ACTUAR",
+            company_id=None,
+            user=SimpleNamespace(id=None, email=activity.user_email),
+            agent=agent_name or "UNKNOWN",
+            action="workspace_task_blocked_no_company",
+            action_type="workspace_task_blocked",
+            description=f"Actividad {activity.id} ({agent_name}, {activity.action_type}) bloqueada: sin empresa resoluble.",
+            status="blocked_no_company",
+            priority="high",
+            details={"original_activity_id": activity.id, "reason": "company_unresolved", "executed": False},
+        )
+        return {
+            "status": "blocked_no_company",
+            "notes": "La actividad no tiene empresa resoluble (company_id ni usuario con empresa). No se ejecuta.",
+            "executed_handler": None,
+        }
+    company_id = str(resolved)
 
     memory = memory_load(company_id, agent_name, thread_id)
     handler = resolve_handler(agent_name, activity.action_type or "")

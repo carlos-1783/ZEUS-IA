@@ -31,6 +31,13 @@ from app.core.auth import get_current_active_user
 from app.core.config import settings as core_settings
 from app.models.user import User
 from services.activity_logger import ActivityLogger
+from services.chain_log import (
+    begin_chain,
+    end_chain,
+    log_chain_step,
+    normalize_channel,
+    summarize_text,
+)
 from services.thalos_request_guard_v1 import thalos_request_guard
 
 router = APIRouter()
@@ -225,6 +232,10 @@ class ChatResponse(BaseModel):
     needs_confirmation: Optional[bool] = None
     execution: Optional[dict] = None
     approval_id: Optional[int] = None
+    # J7: id de correlacion de la peticion (servidor); enlaza todos los pasos en agent_activities.
+    request_id: Optional[str] = None
+    # J7: avisos (p. ej. un paso ACTUAR/AUDITAR que no se pudo registrar). Nunca se ocultan.
+    warnings: Optional[List[str]] = None
 
 class AgentCommunicationRequest(BaseModel):
     from_agent: str
@@ -292,6 +303,79 @@ async def chat_with_agent(
     current_user: User = Depends(thalos_request_guard),
     db: Session = Depends(get_db),
 ):
+    """Chat con un agente. J7: abre la cadena (correlation_id de servidor), registra ESCUCHAR
+    al entrar y RESPONDER/CONTINUAR al salir, y devuelve `request_id` y `warnings`."""
+    chain, token = begin_chain()
+    norm_agent = agent_name.upper().replace("-", " ").replace("_", " ")
+    try:
+        chain_company = chat_db.resolve_company_id(db, current_user)
+    except Exception:
+        logger.exception("chat: no se pudo resolver la empresa para el registro de cadena")
+        chain_company = None
+    try:
+        # ESCUCHAR: canal como dato no sensible (lista blanca text/voice); texto SOLO como resumen
+        # truncado y enmascarado (el mensaje completo ya vive en chat_messages, no se duplica aqui).
+        log_chain_step(
+            "ESCUCHAR", company_id=chain_company, user=current_user, agent=norm_agent,
+            action="message_received", status="success",
+            details={
+                "channel": normalize_channel((request.context or {}).get("channel")),
+                "message_len": len(request.message or ""),
+                "message_preview": summarize_text(request.message),
+                "thread_id": request.thread_id or (request.context or {}).get("thread_id") or "main",
+            },
+        )
+        try:
+            resp = await _chat_impl(norm_agent, request, background_tasks, current_user, db, chain_company)
+        except HTTPException as exc:
+            log_chain_step(
+                "RESPONDER", company_id=chain_company, user=current_user, agent=norm_agent,
+                action="respond", status="rejected", details={"http_status": exc.status_code},
+            )
+            raise
+        status = (
+            "needs_confirmation" if resp.needs_confirmation
+            else "success" if resp.success else "failed"
+        )
+        log_chain_step(
+            "RESPONDER", company_id=chain_company, user=current_user, agent=norm_agent,
+            action="respond", status=status,
+            details={
+                "success": bool(resp.success),
+                "executed_action": bool(resp.executed_action),
+                "approval_id": resp.approval_id,
+                "workspace_document_id": resp.workspace_document_id,
+                "has_evidence": bool(resp.approval_id or resp.workspace_document_id),
+                "response_len": len(resp.message or ""),
+            },
+        )
+        if resp.needs_confirmation and resp.approval_id:
+            log_chain_step(
+                "CONTINUAR", company_id=chain_company, user=current_user, agent=norm_agent,
+                action="pending_confirmation_open", status="needs_confirmation",
+                details={"approval_id": resp.approval_id, "next": "confirm_or_cancel"},
+            )
+        elif resp.hitl_required:
+            log_chain_step(
+                "CONTINUAR", company_id=chain_company, user=current_user, agent=norm_agent,
+                action="human_review_required", status="needs_confirmation",
+                details={"next": "human_review"},
+            )
+        resp.request_id = chain.correlation_id
+        resp.warnings = list(chain.warnings) or None
+        return resp
+    finally:
+        end_chain(token)
+
+
+async def _chat_impl(
+    agent_name: str,
+    request: ChatRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User,
+    db: Session,
+    chain_company: Optional[int],
+) -> ChatResponse:
     """
     Chat con un agente específico
     
@@ -374,26 +458,8 @@ async def chat_with_agent(
                     bridge_msg,
                     company_id=company_id,
                 )
-                try:
-                    ActivityLogger.log_activity(
-                        agent_name=agent_name,
-                        action_type="chat_request_processed",
-                        action_description=f"Chat procesado por {agent_name}",
-                        details={
-                            "request_type": "chat",
-                            "thread_id": thread_id,
-                            "user_id": current_user.id,
-                            "executed_action": bool(bridge.get("executed")),
-                            "needs_confirmation": bool(bridge.get("needs_confirmation")),
-                        },
-                        metrics={"chat_messages": 1},
-                        user_email=current_user.email,
-                        status="completed" if bridge.get("success") else "failed",
-                        priority="normal",
-                        visible_to_client=True,
-                    )
-                except Exception:
-                    logger.exception("ActivityLogger bridge chat omitido")
+                # J7: los pasos de este turno (COMPRENDER/ORQUESTAR/ACTUAR/AUDITAR) los registra el
+                # orquestador y RESPONDER la ruta: ya no hay un registro generico "completed" aqui.
                 return ChatResponse(
                     agent=agent_name,
                     message=bridge_msg,
@@ -408,6 +474,12 @@ async def chat_with_agent(
         # Servidor-only (prefijo `_`: no llega al prompt): habilita el espacio "platform" de memoria
         # para superusuarios sin empresa. Se fija aqui, tras build_server_context.
         context["_is_superuser"] = bool(getattr(current_user, "is_superuser", False))
+
+        log_chain_step(
+            "ORQUESTAR", company_id=chain_company, user=current_user, agent=agent_name,
+            action="route_to_agent", status="success",
+            details={"agent": agent_name, "requires_confirmation": False, "thread_id": thread_id},
+        )
 
         # CRÍTICO (Railway / Gunicorn): run_chat es síncrono y largo (LLM). No en el event loop.
         result = await asyncio.to_thread(
@@ -490,25 +562,14 @@ async def chat_with_agent(
                     "No se pudo persistir entregable workspace tras chat: %s", persist_err
                 )
 
-            try:
-                ActivityLogger.log_activity(
-                    agent_name=agent_name,
-                    action_type="chat_request_processed",
-                    action_description=f"Chat procesado por {agent_name}",
-                    details={
-                        "request_type": "chat",
-                        "thread_id": thread_id,
-                        "user_id": current_user.id,
-                        "workspace_document_id": workspace_document_id,
-                    },
-                    metrics={"chat_messages": 1},
-                    user_email=current_user.email,
-                    status="completed",
-                    priority="normal",
-                    visible_to_client=True,
-                )
-            except Exception:
-                logger.exception("ActivityLogger tras chat OK omitido (BD u otro fallo)")
+            log_chain_step(
+                "ACTUAR", company_id=chain_company, user=current_user, agent=agent_name,
+                action="agent_chat", action_type="chat_request_processed",
+                description=f"Chat procesado por {agent_name}", status="success",
+                details={"request_type": "chat", "thread_id": thread_id,
+                         "workspace_document_id": workspace_document_id},
+                visible_to_client=True,
+            )
             ok_msg = result.get("message", "Sin respuesta") or ""
             _persist_assistant(
                 db,
@@ -526,25 +587,14 @@ async def chat_with_agent(
                 hitl_required=result.get("hitl_required", False),
                 workspace_document_id=workspace_document_id,
             )
-        try:
-            ActivityLogger.log_activity(
-                agent_name=agent_name,
-                action_type="chat_request_failed",
-                action_description=f"Chat fallido en {agent_name}",
-                details={
-                    "error": result.get("error"),
-                    "request_type": "chat",
-                    "thread_id": thread_id,
-                    "user_id": current_user.id,
-                },
-                metrics={"chat_failures": 1},
-                user_email=current_user.email,
-                status="failed",
-                priority="normal",
-                visible_to_client=True,
-            )
-        except Exception:
-            logger.exception("ActivityLogger tras chat fallido omitido")
+        log_chain_step(
+            "ACTUAR", company_id=chain_company, user=current_user, agent=agent_name,
+            action="agent_chat", action_type="chat_request_failed",
+            description=f"Chat fallido en {agent_name}", status="failed", priority="normal",
+            details={"error": str(result.get("error"))[:300], "request_type": "chat",
+                     "thread_id": thread_id},
+            visible_to_client=True,
+        )
         fail_msg = (result.get("message") or "").strip() or (
             result.get("error") or ""
         ).strip() or f"Error: {result.get('error', 'Error desconocido')}"
@@ -566,20 +616,13 @@ async def chat_with_agent(
         print(f"❌ Error en chat con {agent_name}: {e}")
         import traceback
         traceback.print_exc()
-        try:
-            ActivityLogger.log_activity(
-                agent_name=agent_name,
-                action_type="chat_request_exception",
-                action_description=f"Excepción en chat {agent_name}",
-                details={"error": str(e), "request_type": "chat", "user_id": current_user.id},
-                metrics={"chat_exceptions": 1},
-                user_email=current_user.email,
-                status="failed",
-                priority="high",
-                visible_to_client=True,
-            )
-        except Exception:
-            logger.exception("ActivityLogger tras excepción chat omitido")
+        log_chain_step(
+            "ACTUAR", company_id=chain_company, user=current_user, agent=agent_name,
+            action="agent_chat", action_type="chat_request_exception",
+            description=f"Excepción en chat {agent_name}", status="failed", priority="high",
+            details={"error": str(e)[:300], "request_type": "chat"},
+            visible_to_client=True,
+        )
         exc_msg = f"Error interno: {str(e)}"
         _persist_assistant(
             db,
@@ -638,20 +681,16 @@ def _server_agent_context(db: Session, user: User, client_context: Optional[dict
 
 
 def _log_agent_call(user: User, company_id: int, action: str, description: str, details: dict, ok: bool) -> None:
-    try:
-        ActivityLogger.log_activity(
-            agent_name="ZEUS CORE",
-            action_type=action,
-            action_description=description,
-            details={**details, "user_id": user.id},
-            user_email=user.email,
-            company_id=company_id,
-            status="completed" if ok else "failed",
-            priority="normal" if ok else "high",
-            visible_to_client=True,
-        )
-    except Exception:
-        logger.exception("ActivityLogger %s omitido", action)
+    """communicate/coordinate: un paso ACTUAR con empresa/usuario explicitos y status real.
+    Cada llamada lleva su propio correlation_id (no hay cadena conversacional)."""
+    import uuid
+
+    log_chain_step(
+        "ACTUAR", company_id=company_id, user=user, agent="ZEUS CORE", action=action,
+        action_type=action, description=description, status="completed" if ok else "failed",
+        details=details, correlation_id=uuid.uuid4().hex,
+        priority="normal" if ok else "high", visible_to_client=True,
+    )
 
 
 @router.post("/agents/communicate")

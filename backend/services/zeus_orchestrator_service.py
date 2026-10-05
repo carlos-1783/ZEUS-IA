@@ -32,6 +32,7 @@ from services.intent_parser_service import (
     parse_message,
 )
 from services.zeus_global_context import attach_context_to_action_payload, enrich_chat_context
+from services.chain_log import log_chain_step
 from services.zeus_human_approval_v1 import (
     CHAT_APPROVAL_TTL_SECONDS,
     execute_approval,
@@ -360,22 +361,50 @@ async def try_handle_zeus_chat(
 
     _discard_legacy_pending(company_id, thread_id)
 
+    def _step(step: str, action: str, status: str, **details: Any) -> bool:
+        return log_chain_step(
+            step, company_id=company_int, user=user, agent="ZEUS CORE",
+            action=action, status=status, details=details,
+        )
+
     pending_row = _find_chat_pending(db, company_int, user, thread_id)
     expired_notice = False
     if pending_row is not None and is_expired(pending_row):
         _reject_pending(db, user, pending_row, "caducada")
         pending_row, expired_notice = None, True
 
+    # CONTEXTO (J7): que contexto de empresa se uso; sin contenidos (ni clientes ni textos).
+    _step(
+        "CONTEXTO", "load_company_context", "success",
+        company_id=company_int,
+        company_type=global_context.get("company_type"),
+        modules=sorted(k for k, v in (global_context.get("permissions") or {}).items() if v),
+        pending_open=pending_row is not None,
+        pending_expired=expired_notice,
+        thread_id=thread_id,
+    )
+
     explicit = is_confirmation_message(message)
     affirmative = is_affirmative_message(message)
 
     if pending_row is not None:
         if explicit or affirmative:
-            return await _confirm_pending(db, user, pending_row)
+            confirmed_id, confirmed_action = pending_row.id, pending_row.action_type
+            out = await _confirm_pending(db, user, pending_row)
+            _step(
+                "ORQUESTAR", "confirm_pending",
+                "audit_failed" if out.get("status") == "audit_failed"
+                else "success" if out.get("success") else "failed",
+                approval_id=confirmed_id, pending_action=confirmed_action,
+                executed=bool(out.get("executed")),
+            )
+            return out
         if is_cancel_message(message):
             cancelled_id = pending_row.id
             if not _reject_pending(db, user, pending_row, "cancelado por el usuario"):
+                _step("ORQUESTAR", "cancel_pending", "failed", approval_id=cancelled_id)
                 return {"handled": True, "success": False, "executed": False, "message": _REJECT_FAILED_MSG}
+            _step("ORQUESTAR", "cancel_pending", "rejected", approval_id=cancelled_id)
             return {
                 "handled": True,
                 "success": True,
@@ -385,10 +414,14 @@ async def try_handle_zeus_chat(
             }
         # Cambio de tema: se rechaza la solicitud para que la barra de decisión del workspace
         # no muestre algo que el chat ya abandonó.
-        if not _reject_pending(db, user, pending_row, "cambio de tema"):
+        topic_ok = _reject_pending(db, user, pending_row, "cambio de tema")
+        _step("ORQUESTAR", "reject_pending_topic_change", "rejected" if topic_ok else "failed",
+              approval_id=pending_row.id)
+        if not topic_ok:
             # Fail-closed: no se deja una fila confirmable en silencio ni se encadena otra accion.
             return {"handled": True, "success": False, "executed": False, "message": _REJECT_FAILED_MSG}
     elif explicit:
+        _step("ORQUESTAR", "confirm_without_pending", "rejected", pending_expired=expired_notice)
         return {
             "handled": True,
             "success": False,
@@ -401,7 +434,12 @@ async def try_handle_zeus_chat(
         }
 
     task = parse_message(message)
-    if task.intent == "unknown" or task.confidence < MIN_CONFIDENCE:
+    understood = not (task.intent == "unknown" or task.confidence < MIN_CONFIDENCE)
+    _step(
+        "COMPRENDER", "parse_intent", "success" if understood else "not_understood",
+        intent=task.intent, confidence=float(task.confidence), min_confidence=float(MIN_CONFIDENCE),
+    )
+    if not understood:
         if looks_like_operational(message):
             return {
                 "handled": True,
@@ -412,6 +450,7 @@ async def try_handle_zeus_chat(
         return None
 
     action = _with_global_context(build_action(db, user, task), global_context)
+    _step("COMPRENDER", "derive_action", "success", intent=task.intent, action_type=action.action_type)
 
     if action.action_type in CONFIRMABLE_ACTIONS:
         action.requires_confirmation = True
@@ -420,6 +459,7 @@ async def try_handle_zeus_chat(
         else:
             preview = _preview_create_customer(action)
             if preview is None:
+                _step("ORQUESTAR", action.action_type, "needs_more_data", requires_confirmation=True)
                 return _to_chat_payload(await execute_action(db, user, action, force_execute=False))
         refusal = {"handled": True, "success": False, "executed": False}
         try:
@@ -435,12 +475,15 @@ async def try_handle_zeus_chat(
             )
         except HTTPException as exc:
             db.rollback()
+            _step("ORQUESTAR", action.action_type, "rejected" if exc.status_code == 403 else "failed",
+                  requires_confirmation=True, http_status=exc.status_code)
             if exc.status_code == 403:
                 return {**refusal, "message": f"No tienes permiso para esta acción: {exc.detail}"}
             return {**refusal, "message": str(exc.detail)}
         except Exception:
             db.rollback()
             logger.exception("zeus_chat: no se pudo persistir la solicitud; no se ejecuta nada")
+            _step("ORQUESTAR", action.action_type, "failed", requires_confirmation=True)
             return {
                 **refusal,
                 "message": (
@@ -448,6 +491,8 @@ async def try_handle_zeus_chat(
                     "No se ha ejecutado nada; inténtalo de nuevo."
                 ),
             }
+        _step("ORQUESTAR", action.action_type, "needs_confirmation",
+              requires_confirmation=True, approval_id=row.id)
         return {
             "handled": True,
             "success": True,
@@ -459,8 +504,13 @@ async def try_handle_zeus_chat(
             "action": {**action.model_dump(), "payload": _clean_payload(action.payload)},
         }
 
+    _step("ORQUESTAR", action.action_type, "success", requires_confirmation=False)
     result = await execute_action(db, user, action, force_execute=False)
     payload = _to_chat_payload(result)
+    if result.executed or not result.success:
+        # ACTUAR de la rama directa (las acciones confirmables las registra approval_executed).
+        _step("ACTUAR", action.action_type, "success" if result.executed else "failed",
+              executed=bool(result.executed), result_company_id=result.company_id)
     if result.executed:
         # THALOS (J5): auditoria post-accion de la rama directa del chat.
         from services.thalos_request_guard_v1 import thalos_audit_result

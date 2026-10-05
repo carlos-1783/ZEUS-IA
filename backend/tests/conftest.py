@@ -68,9 +68,9 @@ class _FakeTwilioClient:
         self.messages = _FakeTwilioMessages()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="module", autouse=True)
 def no_external_messaging():
-    """Aisla de SendGrid/Twilio reales (DNS y envios con credenciales del entorno).
+    """Autouse en toda la suite: ningun test debe alcanzar SendGrid/Twilio reales. Aisla de SendGrid/Twilio reales (DNS y envios con credenciales del entorno).
 
     Solo reemplaza `client` en los singletons email_service / whatsapp_service; el resto de
     la logica (flags, registro de actividad, resultado) sigue ejecutandose igual."""

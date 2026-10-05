@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.security import verify_password
 from app.db.session import get_db
 from app.models.user import User
+from services.thalos_request_guard_v1 import thalos_request_guard
 from app.core.state_manager import state_manager
 
 router = APIRouter()
@@ -81,17 +82,26 @@ async def get_status():
     "/execute",
     operation_id="commands_execute_api_v1",
     summary="Execute Command",
-    description="Execute a system command. Requires authentication.",
+    description=(
+        "Execute a system command on the (global) system state. Requires authentication, "
+        "THALOS request guard and superuser role."
+    ),
     response_description="Command execution result"
 )
 async def execute_command(
     command_data: CommandData,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(thalos_request_guard),
 ):
     """
-    Ejecuta un comando y devuelve una respuesta.
-    Requiere autenticación.
+    Ejecuta un comando sobre el estado GLOBAL del sistema (`state_manager`, compartido entre
+    empresas). J5b: guard THALOS + usuario activo + solo superusuario (antes bastaba cualquier
+    token valido). El frontend no usa este endpoint.
     """
+    if not getattr(current_user, "is_superuser", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo un superusuario puede ejecutar comandos sobre el estado global del sistema.",
+        )
     logger = logging.getLogger(__name__)
     logger.info(f"Received command: {command_data.command} from user: {current_user.email}")
     
@@ -160,60 +170,14 @@ async def execute_command(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Comando no reconocido: {command}"
         )
+    except HTTPException:
+        # 400 "comando no reconocido" / "falta empresa": no convertir en 500.
+        raise
     except Exception as e:
         logger.error(f"Error in execute_command: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing command: {str(e)}"
-        )
-    
-    try:
-        # Comando para activar el sistema (configuración por defecto)
-        if command.lower() in ["estás en casa", "estas en casa"]:
-            logger.info("Activando sistema con configuración por defecto (PER-SEO)")
-            return activate_company("PER-SEO")
-            
-        # Comando para activar una empresa específica
-        elif command.lower().startswith("activar:"):
-            empresa = command.split(":")[1].strip().upper()
-            logger.info(f"Intentando activar empresa: {empresa}")
-            return activate_company(empresa)
-                
-        # Comando para obtener el estado actual
-        elif command.lower() == "estado":
-            return {
-                "status": "success",
-                "data": state_manager.get_state()
-            }
-            
-        # Comando para reiniciar el estado
-        elif command.lower() == "reiniciar" and current_user.is_superuser:
-            logger.warning(f"Usuario {current_user.email} está reiniciando el estado del sistema")
-            state_manager.reset_state()
-            return {
-                "status": "success",
-                "message": "Estado del sistema reiniciado correctamente",
-                "data": state_manager.get_state()
-            }
-            
-        # Comando no reconocido
-        else:
-            return {
-                "status": "error",
-                "message": "Comando no reconocido",
-                "suggestions": [
-                    "Estás en casa",
-                    "activar: PER-SEO",
-                    "activar: THALOS",
-                    "estado"
-                ]
-            }
-            
-    except Exception as e:
-        logger.error(f"Error al procesar el comando: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al procesar el comando: {str(e)}"
         )
 
 

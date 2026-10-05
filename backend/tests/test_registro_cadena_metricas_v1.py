@@ -111,3 +111,31 @@ def test_zeus_launch_started_uses_explicit_company(db, monkeypatch):
     row = (db.query(AgentActivity).filter(AgentActivity.user_email == su.email,
                                           AgentActivity.action_type == "zeus_launch_started").first())
     assert row.company_id == internal.id and row.status == "completed"
+
+
+def _seed_rows(db, user, co):
+    """1 actividad de negocio completada + 5 trazas de cadena ocultas del mismo usuario."""
+    ActivityLogger.log_activity("RAFAEL", "j7_biz", "negocio", user_email=user.email, company_id=co.id,
+                                status="completed")
+    for i in range(5):
+        ActivityLogger.log_activity("RAFAEL", "chain_escuchar", f"[ESCUCHAR] {i}", user_email=user.email,
+                                    company_id=co.id, status="success", visible_to_client=False,
+                                    infer_company=False)
+
+
+def test_orchestrator_analytics_summary_ignores_chain_rows(db):
+    from types import SimpleNamespace
+
+    user, co = _seed(db)
+    _seed_rows(db, user, co)
+    res = orch.handlers.execute_analytics_summary(db, user, SimpleNamespace(payload={"days": 30}, company_id=co.id))
+    assert "1 actividades registradas" in res.message and "1 completadas (100% éxito)" in res.message
+
+
+def test_analytics_service_activity_total_ignores_chain_rows(db):
+    from services.analytics_service import build_analytics_summary
+
+    user, co = _seed(db)
+    _seed_rows(db, user, co)
+    out = build_analytics_summary(db, user, days=30)
+    assert out["activity"]["total_events"] == 1

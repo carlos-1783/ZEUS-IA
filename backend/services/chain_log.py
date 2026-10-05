@@ -78,6 +78,13 @@ def business_activities(activities: Any) -> list:
     return [a for a in activities if not is_chain_step(a)]
 
 
+def exclude_chain_steps(query: Any) -> Any:
+    """Filtro SQL equivalente a `business_activities` para una query de AgentActivity."""
+    from app.models.agent_activity import AgentActivity
+
+    return query.filter(AgentActivity.action_type.notlike(r"chain\_%", escape="\\"))
+
+
 def is_success_status(status: Any) -> bool:
     return status in SUCCESS_STATUSES
 

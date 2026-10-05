@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from services.chain_log import business_activities, is_success_status
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -303,9 +304,9 @@ def execute_analytics_summary(db: Session, user: User, action: ZeusAction) -> Ze
     )
     if not getattr(user, "is_superuser", False):
         q = q.filter(AgentActivity.user_email == user.email)
-    activities = q.all()
+    activities = business_activities(q.all())  # J7: sin trazas chain_*
     total = len(activities)
-    completed = sum(1 for a in activities if a.status == "completed")
+    completed = sum(1 for a in activities if is_success_status(a.status))
     rate = (completed / total * 100) if total else 0.0
     msg = (
         f"Resumen últimos {days} días: {total} actividades registradas, "

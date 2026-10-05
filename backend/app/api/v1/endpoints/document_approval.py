@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 
 from app.db.session import get_db
+from services.thalos_request_guard_v1 import thalos_request_guard
 from app.core.auth import get_current_active_user
 from app.models.user import User
 from services.legal_fiscal_firewall import firewall
@@ -39,7 +40,7 @@ class ApprovalResponse(BaseModel):
 @router.post("/approve", response_model=ApprovalResponse)
 async def approve_document(
     request: ApprovalRequest,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(thalos_request_guard),
     db: Session = Depends(get_db)
 ):
     """

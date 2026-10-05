@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from services.thalos_request_guard_v1 import thalos_request_guard
 from app.core.auth import get_current_active_user
 from app.core.config import settings
 from app.db.session import get_db
@@ -99,7 +100,7 @@ def justice_document_detail(
 @router.post("/sign")
 def justice_sign(
     body: SignBody,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(thalos_request_guard),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     result = apply_signature(

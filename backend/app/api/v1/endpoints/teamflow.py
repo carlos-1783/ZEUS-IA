@@ -165,7 +165,7 @@ async def get_workflow(workflow_id: str, _: User = Depends(get_current_active_us
 async def run_workflow(
     workflow_id: str,
     request: TeamFlowRunRequest,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(thalos_request_guard),
     db: Session = Depends(get_db),
 ):
     try:

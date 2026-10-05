@@ -14,6 +14,7 @@ from services.whatsapp_service import whatsapp_service
 from services.email_service import email_service
 from services.hacienda_service import hacienda_service
 from services.stripe_service import stripe_service
+from services.thalos_request_guard_v1 import thalos_request_guard
 from app.core.auth import require_scopes
 from app.core.auth import get_current_active_superuser
 from app.models.user import User
@@ -82,7 +83,7 @@ class PublicCheckoutPaymentIntent(BaseModel):
 # WHATSAPP ENDPOINTS
 # ============================================================================
 
-@router.post("/whatsapp/send")
+@router.post("/whatsapp/send", dependencies=[Depends(thalos_request_guard)])
 async def send_whatsapp(
     message: WhatsAppMessage,
     _: User = Depends(require_scopes(["marketing:write"])),
@@ -133,7 +134,7 @@ async def whatsapp_status(
 # EMAIL ENDPOINTS
 # ============================================================================
 
-@router.post("/email/send")
+@router.post("/email/send", dependencies=[Depends(thalos_request_guard)])
 async def send_email(
     message: EmailMessage,
     _: User = Depends(require_scopes(["marketing:write"])),

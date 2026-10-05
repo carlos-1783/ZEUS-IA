@@ -37,6 +37,9 @@ from app.models.user import User
 logger = logging.getLogger(__name__)
 
 MAX_BODY_BYTES = 256 * 1024
+# Cuerpos NO JSON (multipart/ficheros): no se parsean ni se leen en memoria desde el guard;
+# solo se limita el tamano declarado (Content-Length). Ninguna ruta guardada recibe hoy ficheros.
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 MAX_MESSAGE_CHARS = 8000
 MAX_CONTEXT_JSON_CHARS = 20000
 _TEXT_FIELDS = ("message", "task_description")
@@ -201,7 +204,15 @@ async def thalos_request_guard(
             reason = "no_company"
 
     if reason is None:
-        verdict = validate_request_body(await request.body())
+        ctype = (request.headers.get("content-type") or "").lower()
+        if ctype and "json" not in ctype:
+            try:
+                declared = int(request.headers.get("content-length") or 0)
+            except ValueError:
+                declared = MAX_UPLOAD_BYTES + 1
+            verdict = (413, "body_too_large") if declared > MAX_UPLOAD_BYTES else None
+        else:
+            verdict = validate_request_body(await request.body())
         if verdict:
             code, reason = verdict
 

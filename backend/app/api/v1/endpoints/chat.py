@@ -458,8 +458,24 @@ async def _chat_impl(
                     bridge_msg,
                     company_id=company_id,
                 )
-                # J7: los pasos de este turno (COMPRENDER/ORQUESTAR/ACTUAR/AUDITAR) los registra el
-                # orquestador y RESPONDER la ruta: ya no hay un registro generico "completed" aqui.
+                # J7: los pasos de la cadena (ocultos) los registran el orquestador y la ruta. Aqui se
+                # conserva la fila VISIBLE del turno que ve el cliente en su panel. Si la accion se
+                # ejecuto via aprobacion, ya existe la fila visible approval_executed: no se duplica.
+                if not (bridge.get("executed") and bridge.get("approval_id")):
+                    log_chain_step(
+                        "ACTUAR", company_id=chain_company, user=current_user, agent=agent_name,
+                        action="zeus_chat_turn", action_type="chat_request_processed",
+                        description=f"Chat procesado por {agent_name}",
+                        status="completed" if bridge.get("success") else "failed",
+                        details={
+                            "request_type": "chat",
+                            "thread_id": thread_id,
+                            "executed_action": bool(bridge.get("executed")),
+                            "needs_confirmation": bool(bridge.get("needs_confirmation")),
+                            "approval_id": bridge.get("approval_id"),
+                        },
+                        visible_to_client=True,
+                    )
                 return ChatResponse(
                     agent=agent_name,
                     message=bridge_msg,
@@ -565,7 +581,7 @@ async def _chat_impl(
             log_chain_step(
                 "ACTUAR", company_id=chain_company, user=current_user, agent=agent_name,
                 action="agent_chat", action_type="chat_request_processed",
-                description=f"Chat procesado por {agent_name}", status="success",
+                description=f"Chat procesado por {agent_name}", status="completed",
                 details={"request_type": "chat", "thread_id": thread_id,
                          "workspace_document_id": workspace_document_id},
                 visible_to_client=True,

@@ -84,3 +84,13 @@ def no_external_messaging():
         yield
     finally:
         email_service.client, whatsapp_service.client = old_email, old_wa
+
+
+@pytest.fixture(autouse=True)
+def no_real_classifier_model(monkeypatch):
+    """J8b: ningun test alcanza el modelo real del clasificador de JARVIS (aunque otro test deje una
+    OPENAI_API_KEY en settings). Sin modelo rige el criterio estricto J8. Los tests del clasificador
+    inyectan su propio cliente simulado con monkeypatch (se aplica despues de este fixture)."""
+    import services.jarvis_model_comprehension as mc
+
+    monkeypatch.setattr(mc, "get_client", lambda: None)

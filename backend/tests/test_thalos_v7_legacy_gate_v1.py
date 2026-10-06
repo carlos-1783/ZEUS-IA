@@ -90,7 +90,7 @@ def _make_pending_activity(db: Session, *, agent_name: str, action_type: str, us
 
 def test_handle_thalos_backup_blocks_normal_user_and_creates_no_file(db: Session):
     attacker, _ = _seed_company(db, is_superuser=False)
-    backup_dir = os.path.join("storage", "backups")
+    backup_dir = os.getenv("AGENT_BACKUP_DIR", os.path.join("storage", "backups"))
     before = set(glob.glob(os.path.join(backup_dir, "*.db")))
 
     activity = _make_pending_activity(
@@ -107,7 +107,7 @@ def test_handle_thalos_backup_blocks_normal_user_and_creates_no_file(db: Session
 
 def test_handle_thalos_backup_passes_gate_for_real_superuser(db: Session):
     admin, _ = _seed_company(db, is_superuser=True)
-    backup_dir = os.path.join("storage", "backups")
+    backup_dir = os.getenv("AGENT_BACKUP_DIR", os.path.join("storage", "backups"))
     before = set(glob.glob(os.path.join(backup_dir, "*.db")))
 
     activity = _make_pending_activity(

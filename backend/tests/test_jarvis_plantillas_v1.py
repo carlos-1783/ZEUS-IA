@@ -1,4 +1,4 @@
-"""J8 vuelta 3: criterio estricto de MENSAJE COMPLETO para acciones confirmables.
+"""J8 vuelta 4: PLANTILLAS COMPLETAS (^...$, NFKC) para acciones confirmables; bateria del revisor.
 
 El mensaje entero debe ser una unica orden afirmativa limpia (vocabulario cerrado de cortesia,
 verbos, argumentos). Retractaciones o condiciones DESPUES del verbo, temporales no soportados u
@@ -19,6 +19,8 @@ from app.models.company import Company, UserCompany
 from app.models.customer import Customer
 from app.models.user import User
 from app.models.zeus_pending_approval import ZeusPendingApproval
+
+from jarvis_r4_phrases import R4_APPROVED_BEFORE  # noqa: E402
 
 JARVIS = "/api/v1/jarvis/message"
 
@@ -112,19 +114,30 @@ def _approvals(db, user):
     return db.query(ZeusPendingApproval).filter(ZeusPendingApproval.user_id == user.id).count()
 
 
-@pytest.mark.parametrize("msg", RETRACTED)
-def test_retractacion_o_condicion_en_cualquier_punto_no_prepara_ni_ejecuta(db, client, msg):
+VARIANTS_OK = [
+    "ENVÍA LA OFERTA DEL 10% A TODOS MIS CLIENTES",
+    "envia la oferta del 10% a todos mis clientes",
+    "Envía la oferta del 10% a todos mis clientes!",
+    "manda una campaña a todos mis clientes con un 10% de descuento",
+    "crea una oferta del 10% y envíala a los clientes",
+    "envía oferta 5% a clientes",
+    "crea el cliente Ana López con email ana@empresa.es y teléfono 612 345 678",
+    "CREA EL CLIENTE Ana López ana@x.es",
+    "crea el cliente Jose Ruiz jose@x.es, gracias",
+]
+
+
+@pytest.mark.parametrize("msg", RETRACTED + R4_APPROVED_BEFORE)
+def test_nada_fuera_de_plantilla_prepara_ni_ejecuta(db, client, msg):
     user, co = _seed(db)
     out = _chat(client, user, msg)
-    assert out["needs_clarification"] is True, msg
-    assert not out["needs_confirmation"] and not out["executed_action"] and out["approval_id"] is None
-    assert _approvals(db, user) == 0
-    assert "no he hecho nada" in out["message"]
+    assert not out["needs_confirmation"] and not out["executed_action"] and out["approval_id"] is None, msg
+    assert _approvals(db, user) == 0, msg
     assert db.query(Customer).filter(Customer.company_id == co.id).count() == 1  # solo el sembrado
 
 
-@pytest.mark.parametrize("msg", ORDERS)
-def test_las_ordenes_limpias_siguen_preparandose(db, client, msg):
+@pytest.mark.parametrize("msg", ORDERS + VARIANTS_OK)
+def test_las_ordenes_que_encajan_en_plantilla_siguen_preparandose(db, client, msg):
     user, co = _seed(db)
     out = _chat(client, user, msg)
     assert out["needs_confirmation"] is True and out["approval_id"], msg

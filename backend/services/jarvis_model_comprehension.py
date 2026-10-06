@@ -26,6 +26,8 @@ VARIABLES DE ENTORNO (todas opcionales; se leen en cada llamada):
   JARVIS_CLASSIFIER_MODEL               modelo (defecto: OPENAI_MODEL).
   JARVIS_CLASSIFIER_TIMEOUT_SEC         defecto 6.
   JARVIS_CLASSIFIER_MIN_CERTAINTY       defecto 0.8 (acotado a [0.7, 1.0]).
+  JARVIS_CLASSIFIER_CONFLICT_CERTAINTY  defecto 0.9: certeza minima (por accion y global) para preparar una vista
+                                        previa cuando el modelo dice affirm y las reglas ven negacion/duda.
   JARVIS_CLASSIFIER_MAX_TOKENS          defecto 350 (tope de salida; acota el sobrecoste de una llamada).
   JARVIS_CLASSIFIER_JSON_MODE           "json_object" (defecto, lo soportan todos los modelos de chat
                                         actuales) o "json_schema" (esquema pydantic en response_format).
@@ -98,6 +100,7 @@ class ClassifierConfig:
     json_mode: str
     company_budget: float
     global_budget: Optional[float]
+    conflict_certainty: float
 
 
 def _f(name: str, default: float) -> float:
@@ -129,6 +132,7 @@ def load_config() -> ClassifierConfig:
         else "json_object",
         company_budget=_f("JARVIS_CLASSIFIER_COMPANY_DAILY_BUDGET_USD", 0.50),
         global_budget=gb,
+        conflict_certainty=min(1.0, max(0.7, _f("JARVIS_CLASSIFIER_CONFLICT_CERTAINTY", 0.9))),
     )
 
 
@@ -225,6 +229,8 @@ class Comprehension:
     used_model: bool = False
     result: str = "skipped"              # ok|timeout|invalid|error|budget_exceeded|skipped
     decision: str = "strict_rules"
+    polarity_conflict: bool = False      # el modelo dijo affirm pero las reglas ven negacion/duda
+    notice: Optional[str] = None         # aviso que el orquestador antepone a la vista previa
 
 
 NOOP_REPLY = "Entendido, no hago nada. Si quieres que haga algo, dímelo de forma explícita."
@@ -240,19 +246,79 @@ _LABEL_OF = {
 }
 
 
+_EXEC_WORDS_RE = re.compile(
+    r"\b(?:confirm\w*|ejecut\w*|proced\w*|actu(?:a|ar|are|o)|respond\w*|contest\w*|escrib\w*|"
+    r"reply|answer|aprueb\w*|autoriz\w*)\b"
+)
+
+
 def _clean_question(q: Optional[str]) -> Optional[str]:
+    """Pregunta del modelo mostrable al usuario; si pudiera inducir a confirmar/ejecutar -> None."""
     if not q:
         return None
     t = " ".join(re.sub(r"[\x00-\x1f]", " ", q).split())
     if not t or len(t) > 300 or re.search(r"https?:|www\.|@|<|>|`", t):
         return None
+    if _EXEC_WORDS_RE.search(ip.fold(t)):
+        return None
     return t if t.endswith("?") else t + "?"
 
 
 # --------------------------------------------------------------------------------- validacion
+# Todas las comprobaciones son por TOKEN completo: una entidad del modelo debe ser EXACTAMENTE la que
+# el usuario escribio, no un trozo de otra («ana.lopez@x.es» no valida «lopez@x.es»).
+_PUNCT = ".,;:!?¡¿()«»\"'"
+
+
 def _num_in_text(x: float, f: str) -> bool:
+    """El numero debe ir pegado a «%» o seguido de «por ciento» (no «10 compras»)."""
     forms = {str(int(x))} if float(x).is_integer() else {str(x), str(x).replace(".", ",")}
-    return any(re.search(rf"(?<![\d.,]){re.escape(s)}(?![\d])", f) for s in forms)
+    return any(
+        re.search(rf"(?<![\d.,]){re.escape(s)}(?![\d.,]\d)\s?(?:%|por\s*ciento\b)", f) for s in forms
+    )
+
+
+def _email_in_text(cand: str, text: str) -> bool:
+    return re.search(rf"(?<![\w.+@-]){re.escape(cand)}(?![\w@-]|\.\w)", text.lower()) is not None
+
+
+def _phone_in_text(cand: str, text: str) -> bool:
+    def norm(d: str) -> str:
+        d = re.sub(r"\D", "", d)
+        return d[2:] if len(d) == 11 and d.startswith("34") else d
+
+    want = norm(cand)
+    return any(norm(m.group(0)) == want
+               for m in re.finditer(rf"(?<![\d+]){ip._PHONE_STRICT}(?!\d)", text))
+
+
+def _name_in_text(cand: str, text: str) -> Optional[str]:
+    """Devuelve el nombre tal como lo escribio el usuario si el del modelo es EXACTAMENTE el run de
+    nombre (palabras completas, sin palabra capitalizada contigua que lo prolongue); si no, None."""
+    words = [w.strip(_PUNCT) for w in text.split()]
+    want = [ip.fold(w) for w in cand.split()]
+    k = len(want)
+    if not 1 <= k <= 4:
+        return None
+
+    def cap(w: str) -> bool:
+        return bool(ip._NAME_WORD_RE.fullmatch(w))
+
+    for i in range(len(words) - k + 1):
+        if [ip.fold(w) for w in words[i:i + k]] != want:
+            continue
+        j = i - 1
+        while j >= 0 and words[j] in ip._NAME_PARTICLES_LOWER:
+            j -= 1
+        if (i >= 1 and cap(words[i - 1])) or (j < i - 1 and j >= 0 and cap(words[j])):
+            continue
+        j = i + k
+        while j < len(words) and words[j] in ip._NAME_PARTICLES_LOWER:
+            j += 1
+        if (i + k < len(words) and cap(words[i + k])) or (j > i + k and j < len(words) and cap(words[j])):
+            continue
+        return " ".join(words[i:i + k])
+    return None
 
 
 def _validate_campaign(act: ClassifierAction, text: str, f: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
@@ -281,17 +347,31 @@ def _validate_customer(act: ClassifierAction, text: str, f: str) -> Dict[str, An
     name = email = phone = None
     if len(ent.names) == 1:
         cand = " ".join(ent.names[0].split())
-        if ip._name_ok(cand) and ip.fold(cand) in f:
-            name = cand
+        written = _name_in_text(cand, text)
+        if written and ip._name_ok(written):
+            name = written
     if len(ent.emails) == 1:
         cand = ent.emails[0].strip().lower()
-        if re.fullmatch(ip._EMAIL_STRICT, cand) and ip._email_ok(cand) and cand in text.lower():
+        if re.fullmatch(ip._EMAIL_STRICT, cand) and ip._email_ok(cand) and _email_in_text(cand, text):
             email = cand
     if len(ent.phones) == 1:
         cand = ent.phones[0].strip()
-        if re.fullmatch(ip._PHONE_STRICT, cand) and re.sub(r"\D", "", cand) in re.sub(r"\D", "", text):
+        if re.fullmatch(ip._PHONE_STRICT, cand) and _phone_in_text(cand, text):
             phone = cand
     return {"name": name, "email": email, "phone": phone}
+
+
+_CONFLICT_RE = re.compile(
+    r"\b(?:tampoco|ni|nada\s+de|deja(?:s)?\s+de|sin|mejor|todavia|aun\s+no|olvida\w*)\b"
+)
+
+
+def _rules_see_negation(f: str) -> bool:
+    return bool(ip._NEGATION_ANY_RE.search(f) or ip._NEGATION_BEFORE_RE.search(f) or _CONFLICT_RE.search(f))
+
+
+def _notice(action_type: str) -> str:
+    return f"He entendido que SÍ quieres {_LABEL_OF[action_type]}. Si no es así, responde \"cancelar\"."
 
 
 def decide(out: ClassifierOutput, text: str, cfg: ClassifierConfig) -> Comprehension:
@@ -320,6 +400,18 @@ def decide(out: ClassifierOutput, text: str, cfg: ClassifierConfig) -> Comprehen
             decision="clarify_multi",
         )
     act = affirm[0]
+    conflict = False
+    if act.action_type != "other_consequential" and _rules_see_negation(f):
+        # El modelo dice affirm pero hay negacion/duda en el texto («no te olvides de…» es legitimo; «no
+        # envies…» con un modelo erroneo no). Solo se prepara con certeza reforzada y aviso explicito.
+        if act.certainty < cfg.conflict_certainty or out.overall_certainty < cfg.conflict_certainty:
+            lab = _LABEL_OF[act.action_type]
+            return Comprehension(
+                task=ZeusTaskObject(), polarity_conflict=True, reply_is_question=True,
+                reply=(f"No tengo claro si quieres que lo haga o no ({lab}). No he hecho nada: dime de forma "
+                       f"explícita si quieres que lo haga ahora."),
+                decision="clarify_polarity_conflict")
+        conflict = True
     if act.action_type == "other_consequential":
         return Comprehension(task=ZeusTaskObject(), decision="model_unsupported_action")  # reglas
     ent_all = ZeusEntities(percentages=list(act.entities.percentages))
@@ -341,7 +433,8 @@ def decide(out: ClassifierOutput, text: str, cfg: ClassifierConfig) -> Comprehen
                                                                       recipients="all_customers"),
             urgency=urgency, confidence_breakdown=base_breakdown,
         )
-        return Comprehension(task=task, decision="affirm_prepare")
+        return Comprehension(task=task, decision="affirm_prepare", polarity_conflict=conflict,
+                             notice=_notice(act.action_type) if conflict else None)
     # create_customer
     v = _validate_customer(act, text, f)
     meta = {"name": v["name"], "email": v["email"]}
@@ -358,7 +451,8 @@ def decide(out: ClassifierOutput, text: str, cfg: ClassifierConfig) -> Comprehen
         task.needs_clarification = True
         task.clarification_question = ip.question_for_customer(v["name"], v["email"])
         return Comprehension(task=task, decision="affirm_missing_entities")
-    return Comprehension(task=task, decision="affirm_prepare")
+    return Comprehension(task=task, decision="affirm_prepare", polarity_conflict=conflict,
+                         notice=_notice(act.action_type) if conflict else None)
 
 
 # --------------------------------------------------------------------------------- llamada
@@ -444,7 +538,7 @@ async def comprehend(
             comp = Comprehension(task=strict_task, result=result, decision="fallback_strict")
         step("COMPRENDER", LOG_ACTION, "success" if comp.result == "ok" else comp.result,
              result=comp.result, decision=comp.decision, cost_usd=cost, cost_known=known, tokens_in=tin,
-             tokens_out=tout, latency_ms=latency, error_type=err,
+             tokens_out=tout, latency_ms=latency, error_type=err, polarity_conflict=comp.polarity_conflict,
              actions=[f"{a.action_type}:{a.polarity}" for a in out.actions] if out else [],
              overall_certainty=out.overall_certainty if out else None, **base)
         return comp

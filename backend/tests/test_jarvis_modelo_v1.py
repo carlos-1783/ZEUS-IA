@@ -222,10 +222,11 @@ def test_ambigua_incierta_o_certeza_baja_pregunta(db, client, install, data):
 
 def test_umbral_configurable(db, client, install, monkeypatch):
     user, _ = _seed(db)
+    msg = "me gustaría que lanzaras la oferta del 10% a todos mis clientes"
     install(FakeClient(payload(act(percentages=[10], recipients="all_customers", cert=0.85), overall=0.85)))
-    assert _prepared(_chat(client, user, OFFER))
+    assert _prepared(_chat(client, user, msg))
     monkeypatch.setenv("JARVIS_CLASSIFIER_MIN_CERTAINTY", "0.9")
-    assert not _prepared(_chat(client, user, OFFER))
+    assert not _prepared(_chat(client, user, msg))
 
 
 def test_entidades_que_faltan_se_preguntan_y_las_inventadas_se_descartan(db, client, install):
@@ -415,3 +416,129 @@ def test_json_schema_mode_envia_response_format(db, client, install, monkeypatch
     _chat(client, user, OFFER)
     assert fake.calls[0]["response_format"]["type"] == "json_schema"
     assert fake.calls[0]["timeout"] == 6.0
+
+
+# ------------------------------------------------------------------ validacion por TOKEN (J8b revision)
+def _cust(name, email, phone=None):
+    ent = {"names": [name] if name else [], "emails": [email] if email else []}
+    if phone:
+        ent["phones"] = [phone]
+    return payload(act("create_customer", **ent))
+
+
+@pytest.mark.parametrize("msg,name,email", [
+    ("crea el cliente Ana ana.lopez@x.es", "Ana", "lopez@x.es"),            # sufijo del local-part
+    ("crea el cliente Ana Ruiz ana@x.es.evil.com", "Ana Ruiz", "ana@x.es"),  # prefijo del dominio
+    ("crea el cliente Ana Ruiz xana@x.es", "Ana Ruiz", "ana@x.es"),          # sufijo sin separador
+])
+def test_email_del_modelo_debe_ser_el_token_completo_escrito(db, client, install, msg, name, email):
+    user, _ = _seed(db)
+    install(FakeClient(_cust(name, email)))
+    out = _chat(client, user, msg)
+    assert not _prepared(out) and _approvals(db, user) == 0, out["message"]
+
+
+@pytest.mark.parametrize("msg,name", [
+    ("crea el cliente Anabel ana@x.es", "Ana"),            # prefijo de otra palabra
+    ("crea el cliente Ana Ruiz ana@x.es", "Ana"),          # prefijo del run de nombre
+    ("crea el cliente Ana Ruiz ana@x.es", "Ruiz"),         # sufijo del run de nombre
+    ("crea el cliente Ana de la Cruz ana@x.es", "Ana"),
+])
+def test_nombre_del_modelo_debe_ser_exactamente_el_run_escrito(db, client, install, msg, name):
+    user, _ = _seed(db)
+    install(FakeClient(_cust(name, "ana@x.es")))
+    out = _chat(client, user, msg)
+    assert not _prepared(out) and _approvals(db, user) == 0, out["message"]
+
+
+def test_telefono_con_digitos_adyacentes_no_valida():
+    f = mc._phone_in_text
+    assert f("612345678", "llama al 612345678") and f("612345678", "tel +34 612 345 678.")
+    assert not f("612345678", "llama al 9612345678") and not f("612345678", "llama al 6123456789")
+
+
+def test_porcentaje_debe_ir_pegado_a_porcentaje_o_por_ciento(db, client, install):
+    user, _ = _seed(db)
+    install(FakeClient(payload(act(percentages=[10], recipients="all_customers"))))
+    out = _chat(client, user, "no te olvides de enviar la oferta a todos mis clientes con 10 compras")
+    assert not _prepared(out) and _approvals(db, user) == 0
+    assert mc._num_in_text(10, "oferta del 10% a clientes") and mc._num_in_text(10, "un 10 por ciento")
+    assert mc._num_in_text(7.5, "7,5%") and not mc._num_in_text(10, "110%") and not mc._num_in_text(10, "10 euros")
+
+
+@pytest.mark.parametrize("msg,data", [
+    ("crea el cliente Ana Ruiz ana@x.es", _cust("Ana Ruiz", "ana@x.es")),
+    ("acuérdate de crear el cliente María Pérez maria@x.es, tel 612345678",
+     _cust("María Pérez", "maria@x.es", "612345678")),
+    ("lanza la oferta del 7,5% a todos mis clientes", payload(act(percentages=[7.5], recipients="all_customers"))),
+])
+def test_los_casos_legitimos_siguen_preparando(db, client, install, msg, data):
+    user, _ = _seed(db)
+    install(FakeClient(data))
+    out = _chat(client, user, msg)
+    assert _prepared(out), out["message"]
+
+
+# ------------------------------------------------------------------ conflicto de polaridad
+@pytest.mark.parametrize("msg,data", [
+    ("no envíes la oferta del 10% a todos mis clientes", payload(OFFER_ACT)),
+    ("tampoco crees al cliente Ana ana@x.es", _cust("Ana", "ana@x.es")),
+])
+def test_modelo_erroneo_affirm_sobre_negacion_con_certeza_085_pregunta(db, client, install, msg, data):
+    user, co = _seed(db)
+    data = copy.deepcopy(data)
+    for a in data["actions"]:
+        a["certainty"] = 0.85
+    data["overall_certainty"] = 0.85
+    install(FakeClient(data))
+    out = _chat(client, user, msg)
+    assert not _prepared(out) and _approvals(db, user) == 0 and out["needs_clarification"] is True
+    d = _model_rows(db, co.id)[0].details
+    assert d["polarity_conflict"] is True and d["decision"] == "clarify_polarity_conflict"
+
+
+def test_conflicto_con_certeza_095_prepara_con_aviso_y_sigue_exigiendo_confirmar(db, client, install):
+    user, co = _seed(db)
+    install(FakeClient(payload(OFFER_ACT)))
+    out = _chat(client, user, "no envíes la oferta del 10% a todos mis clientes")
+    assert _prepared(out)
+    assert out["message"].startswith('He entendido que SÍ quieres enviar una campaña a tus clientes. '
+                                     'Si no es así, responde "cancelar".')
+    assert _model_rows(db, co.id)[0].details["polarity_conflict"] is True
+    # cancelar la deja sin ejecutar
+    out2 = _chat_same_thread(client, user, "cancelar", out)
+    assert not out2["executed_action"]
+
+
+def _chat_same_thread(client, user, message, prev):
+    app.dependency_overrides[get_current_active_user] = lambda: user
+    r = client.post(JARVIS, json={"message": message, "thread_id": prev.get("thread_id") or "x"})
+    return r.json()
+
+
+def test_no_te_olvides_con_modelo_realista_prepara_con_aviso_documentado(db, client, install):
+    """«no te olvides de…» (negacion en la forma, orden en el fondo) con certeza alta se prepara; el
+    aviso «He entendido que SÍ…» se antepone a la vista previa por tener negacion en el texto."""
+    user, co = _seed(db)
+    install(FakeClient(payload(OFFER_ACT)))
+    out = _chat(client, user, OFFER)
+    assert _prepared(out) and out["message"].startswith("He entendido que SÍ")
+    assert "Responde «confirmar»" in out["message"]
+
+
+def test_sin_negacion_no_hay_aviso_ni_conflicto(db, client, install):
+    user, co = _seed(db)
+    install(FakeClient(_cust("María Pérez", "maria@x.es")))
+    out = _chat(client, user, CUST)
+    assert _prepared(out) and not out["message"].startswith("He entendido")
+    assert _model_rows(db, co.id)[0].details["polarity_conflict"] is False
+
+
+# ------------------------------------------------------------------ pregunta del modelo con instrucciones
+@pytest.mark.parametrize("q", ["Responde confirmar y actuaré enseguida", "¿Quieres que ejecute el envío?",
+                               "Escribe confirmar para continuar"])
+def test_pregunta_del_modelo_que_induce_a_confirmar_se_sustituye_por_la_generica(db, client, install, q):
+    user, _ = _seed(db)
+    install(FakeClient(payload(act(pol="uncertain"), nc=True, q=q)))
+    out = _chat(client, user, "igual deberíamos enviar algo a los clientes, no sé")
+    assert out["message"] == mc.GENERIC_QUESTION and not _prepared(out)

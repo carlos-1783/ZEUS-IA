@@ -443,6 +443,7 @@ async def try_handle_zeus_chat(
             ),
         }
 
+    notice = None
     if resumed is not None:
         task = resumed
     else:
@@ -457,6 +458,7 @@ async def try_handle_zeus_chat(
                 "needs_clarification": comp.reply_is_question, "intent": "unknown", "message": comp.reply,
             }
         task = comp.task
+        notice = comp.notice
     understood = task.intent != "unknown" and task.confidence >= MIN_CONFIDENCE and not task.needs_clarification
     if understood:
         comp_status = "success"
@@ -513,6 +515,9 @@ async def try_handle_zeus_chat(
             if preview is None:
                 _step("ORQUESTAR", action.action_type, "needs_more_data", requires_confirmation=True)
                 return _to_chat_payload(await execute_action(db, user, action, force_execute=False))
+        if notice:
+            # J8b: el modelo dijo «sí» sobre un mensaje con negacion/duda: aviso explicito en la vista previa.
+            preview = {**preview, "message": f"{notice} {preview['message']}"}
         refusal = {"handled": True, "success": False, "executed": False}
         try:
             row = request_approval(

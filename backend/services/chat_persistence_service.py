@@ -71,7 +71,10 @@ def list_messages(
     agent_name: str,
     thread_id: str = "main",
     limit: int = MAX_HISTORY,
+    company_id: Optional[int] = None,
 ) -> List[ChatMessage]:
+    """Mensajes del usuario en un hilo. `company_id` (opcional, resuelto en servidor) restringe ademas
+    a la empresa; sin el, el comportamiento es el de siempre (/chat/messages)."""
     agent = normalize_agent_name(agent_name)
     tid = (thread_id or "main").strip() or "main"
     limit = max(1, min(limit, MAX_HISTORY))
@@ -84,6 +87,8 @@ def list_messages(
         )
         .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
     )
+    if company_id is not None:
+        q = q.filter(ChatMessage.company_id == company_id)
     rows = q.limit(limit).all()
     if len(rows) >= limit:
         return rows

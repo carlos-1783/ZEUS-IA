@@ -22,6 +22,28 @@ ZeusIntentType = Literal[
 ]
 
 
+UrgencyType = Literal["low", "normal", "high"]
+
+
+class ZeusEntities(BaseModel):
+    """J8: entidades tipadas extraidas del mensaje. Solo se rellena lo que aparece de verdad."""
+
+    names: List[str] = Field(default_factory=list)
+    emails: List[str] = Field(default_factory=list)
+    phones: List[str] = Field(default_factory=list)
+    # [{"value": 120.5, "currency": "EUR"}]
+    amounts: List[Dict[str, Any]] = Field(default_factory=list)
+    percentages: List[float] = Field(default_factory=list)
+    # {"label": "today|yesterday|week|month|year|last_days|custom", "days": int}
+    period: Optional[Dict[str, Any]] = None
+    # Fechas explicitas normalizadas a ISO (YYYY-MM-DD)
+    dates: List[str] = Field(default_factory=list)
+    invoice_ids: List[str] = Field(default_factory=list)
+    customer_ids: List[int] = Field(default_factory=list)
+    # "all_customers" cuando el mensaje nombra destinatarios (clientes/todos/CRM); None si no.
+    recipients: Optional[str] = None
+
+
 class ZeusTaskObject(BaseModel):
     """Acción estructurada derivada del mensaje del usuario."""
 
@@ -35,6 +57,17 @@ class ZeusTaskObject(BaseModel):
     raw_message: str = ""
     confidence: float = 0.0
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    # J8: comprension estructurada (campos nuevos con valor por defecto: no rompen consumidores).
+    entities: ZeusEntities = Field(default_factory=ZeusEntities)
+    urgency: UrgencyType = "normal"
+    needs_clarification: bool = False
+    clarification_question: Optional[str] = None
+    # Entidades obligatorias para la accion que faltan (p. ej. ["email"]).
+    missing_entities: List[str] = Field(default_factory=list)
+    # Intenciones que compiten con la elegida (ambiguedad).
+    ambiguous_with: List[str] = Field(default_factory=list)
+    # Desglose del calculo de confianza (auditable).
+    confidence_breakdown: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ZeusExecutionStepResult(BaseModel):

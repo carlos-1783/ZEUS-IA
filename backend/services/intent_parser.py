@@ -319,7 +319,7 @@ _PARTIAL_RECIPIENTS_RE = re.compile(
 _NEGATION_ANY_RE = re.compile(r"\b(no|nunca|jamas|evita|evitar|evites)\b")
 
 QUESTION_NEGATED = (
-    "No lo he entendido como una orden clara (hay una negación, una duda o una condición), así que no he hecho nada. "
+    "No lo he entendido como una orden clara y única (hay una negación, duda, condición, retractación u otra cosa añadida), así que no he hecho nada. "
     "Si quieres que lo haga, dímelo de forma explícita (p. ej. «envía oferta 10% a todos mis clientes»)."
 )
 QUESTION_PARTIAL = (
@@ -381,6 +381,48 @@ def _is_affirmative_request(f: str, verb_start: int, verb_text: str) -> bool:
             return False
     if verb_text in _SUBJUNCTIVE and not had_que:
         return False
+    return True
+
+
+# --- Criterio estricto de MENSAJE COMPLETO (J8, red de seguridad hasta J8b: comprension por modelo) ---
+# Para acciones confirmables el mensaje ENTERO debe ser una unica orden afirmativa limpia: todas sus
+# palabras (tras quitar emails, telefonos, numeros/porcentajes y, en «crear cliente», el nombre
+# capitalizado que sigue a «cliente») deben pertenecer a un vocabulario CERRADO de cortesia, formulas
+# de peticion, verbos de la accion y argumentos (objeto, destinatarios, conectores). Cualquier otra
+# palabra en cualquier punto del mensaje (retractaciones tras el verbo: «no, mejor no», «es broma»,
+# «cancela eso»; condiciones: «cuando yo te diga», «solo si», «luego», «de momento»; temporales no
+# soportados: «mañana»; otra frase con otro verbo) => pregunta explicita, nunca vista previa.
+# FALSOS NEGATIVOS CONSERVADORES (se pregunta aunque era una orden valida): «No. Envía la oferta…»,
+# nombres de cliente en minusculas («crea el cliente juan perez …»), palabras de relleno no listadas
+# («envía la oferta del 10% a todos mis clientes cuanto antes»), mensajes con varias frases.
+_ORDER_VOCAB = set(
+    """por favor porfa porfavor zeus jarvis oye hola vale venga ahora ok bien entonces pues gracias perdona
+    disculpa urgente a ver me nos ya y mismo quiero que queremos necesito necesitamos gustaria quisiera te pido
+    pedimos puedes podrias podeis podemos tienes debes hay vamos voy vas
+    envia enviar enviale enviala enviales enviarla enviame mandar manda mandale mandala mandales mandame
+    notifica notificar avisa avisar comunica comunicar difunde lanza lanzar
+    mandes envies lances notifiques avises comuniques difundas
+    crea crear creame genera generar haz hacer monta montar prepara preparar crees generes hagas montes prepares
+    da dar alta anade anadir registra registrar agrega agregar apunta apuntes registres agregues anadas
+    oferta ofertas descuento descuentos promocion promociones promo promos campana campanas cupon cupones
+    cliente clientes crm base datos contactos lista todos todas mis mi nuestros nuestras los las el la un una
+    unos unas del de con para al en ciento euros euro eur email correo mail telefono tel movil nombre llamado
+    llamada se llama es su tu lo le les este esta ese esa cada nuevo nueva por""".split()
+)
+_WORD_RE = re.compile(r"[A-Za-zÀ-ÿ]+")
+_NAME_RUN_RE = re.compile(
+    r"(?i:\bcliente)\s+(?:(?i:llamad[oa]|de\s+nombre|nuevo|nueva)\s+)?"
+    r"([A-ZÁÉÍÓÚÑ][A-Za-zÀ-ÿ'.-]*(?:\s+(?:(?:de|del|la|los|las|van|von|da|di|y)\s+)*[A-ZÁÉÍÓÚÑ][A-Za-zÀ-ÿ'.-]*){0,3})"
+)
+
+
+def _is_clean_order(text: str, customer: bool) -> bool:
+    t = _EMAIL_RE.sub(" ", text or "")
+    if customer:
+        t = _NAME_RUN_RE.sub(lambda m: m.group(0)[: m.start(1) - m.start(0)], t, count=1)
+    for w in _WORD_RE.findall(t):
+        if fold(w) not in _ORDER_VOCAB:
+            return False
     return True
 
 
@@ -523,7 +565,11 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
         if ent.phones:
             meta["phone"] = ent.phones[0]
         question = question_for_customer(name, email)
-        if _is_negated_before(f, m.start(1)) or not _is_affirmative_request(f, m.start(1), m.group(1)):
+        if (
+            _is_negated_before(f, m.start(1))
+            or not _is_affirmative_request(f, m.start(1), m.group(1))
+            or not _is_clean_order(text, True)
+        ):
             missing, question = ["explicit_intent"], QUESTION_NEGATED
         c.append(_Cand("create_customer", "create_customer", 0.85, "create_customer",
                        suppresses={"list_customers_summary", "get_metrics", "tpv_sales_summary",
@@ -557,6 +603,8 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
             missing, question = ["recipients_scope"], QUESTION_SEGMENT
         elif not plural:
             missing, question = ["recipients"], QUESTION_RECIPIENTS
+        if not missing and not _is_clean_order(text, False):
+            missing, question = ["explicit_intent"], QUESTION_NEGATED
         if plural and not missing:
             base = 0.90 if (_CREATE_RE.search(f) or discount) else 0.88
         else:

@@ -24,6 +24,7 @@ from services.agent_memory_service import (
     scoped_thread_id,
 )
 from services.intent_parser_service import (
+    _map_intent_to_action_type,
     build_action,
     is_affirmative_message,
     is_cancel_message,
@@ -34,6 +35,7 @@ from services.intent_parser_service import (
 from services.intent_parser import clarification_for_unknown, has_negation, is_conversational_request
 from services import jarvis_clarification as clarif
 from services import jarvis_model_comprehension as model_comp
+from services import module_gate
 from services.zeus_global_context import attach_context_to_action_payload, enrich_chat_context
 from services.chain_log import log_chain_step
 from services.zeus_human_approval_v1 import (
@@ -271,6 +273,18 @@ async def execute_action(
         except Exception:
             logger.exception("execute_action: no se pudo resolver la empresa de ejecucion")
             exec_company = None
+    # J9a: modulo activo de la empresa (mismo registro que el menu). Sin modulo no se ejecuta nada.
+    blocked = module_gate.check_action(db, user, action.action_type)
+    if blocked:
+        log_chain_step(
+            "ORQUESTAR", company_id=exec_company, user=user, agent=AGENT_ZEUS,
+            action=action.action_type, status="blocked_module",
+            details={"module": blocked["module"], "action_type": action.action_type},
+        )
+        return ZeusExecutionResult(
+            success=False, intent=action.action_type, message=blocked["message"],
+            executed=False, company_id=exec_company,
+        )
     result = await _dispatch_action(db, user, action, force_execute=force_execute)
     result.company_id = exec_company
     return result
@@ -360,6 +374,14 @@ async def try_handle_zeus_chat(
             action=action, status=status, details=details,
         )
 
+    def _module_block(action_type: str) -> Optional[Dict[str, Any]]:
+        """J9a: si la empresa no tiene activo el modulo de la accion, ZEUS lo dice y no ejecuta."""
+        blocked = module_gate.check_action(db, user, action_type)
+        if not blocked:
+            return None
+        _step("ORQUESTAR", action_type, "blocked_module", module=blocked["module"], action_type=action_type)
+        return {"handled": True, "success": False, "executed": False, "message": blocked["message"]}
+
     pending_row = _find_chat_pending(db, company_int, user, thread_id)
     expired_notice = False
     if pending_row is not None and is_expired(pending_row):
@@ -448,6 +470,13 @@ async def try_handle_zeus_chat(
         task = resumed
     else:
         task = parse_message(message)  # criterio estricto J8: red de seguridad y fallback
+        # J9a: intencion clara de un modulo que la empresa no tiene -> se responde ya, sin modelo.
+        if task.intent != "unknown" and not task.ambiguous_with and not (
+            {"explicit_intent", "single_action"} & set(task.missing_entities)
+        ):
+            early = _module_block(_map_intent_to_action_type(task.intent, task.action))
+            if early:
+                return early
         # J8b: si el mensaje PUEDE pedir una accion con consecuencias, la comprension la hace el
         # modelo (salida validada; ante cualquier fallo se conserva `task`). Nunca ejecuta: solo
         # produce una tarea o una respuesta; la aprobacion humana sigue siendo obligatoria.
@@ -505,6 +534,9 @@ async def try_handle_zeus_chat(
 
     action = _with_global_context(build_action(db, user, task), global_context)
     _step("COMPRENDER", "derive_action", "success", intent=task.intent, action_type=action.action_type)
+    blocked_reply = _module_block(action.action_type)
+    if blocked_reply:
+        return blocked_reply
 
     if action.action_type in CONFIRMABLE_ACTIONS:
         action.requires_confirmation = True

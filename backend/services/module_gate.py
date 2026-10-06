@@ -9,7 +9,8 @@ SUPERUSUARIO (coherente con J5/require_module): `modules_for_company_type(is_sup
 todos los modulos activos, asi que el superusuario no queda bloqueado por modulo (sigue exigiendo auth,
 THALOS y rol reales). Es el unico que puede usar THALOS (modulo "admin").
 
-Sin mapeo claro (NO se inventa): acciones `get_cashflow` y `get_metrics` (el ledger de caja es transversal)
+Sin mapeo claro (NO se inventa): `list_customers`, `create_customer`, `send_campaign`, `get_cashflow` y
+`get_metrics` (clientes/campanas existen en ambas verticales; el ledger de caja es transversal)
 y las acciones del ejecutor de agentes que no pasan por execute_action. Quedan permitidas.
 """
 
@@ -37,14 +38,15 @@ MODULE_LABELS: Dict[str, str] = {
 
 # accion de execute_action -> modulo requerido
 ACTION_MODULE: Dict[str, str] = {
-    "list_customers": "crm",
-    "create_customer": "crm",
-    "send_campaign": "crm",  # los destinatarios salen de los clientes del CRM
     "analytics_summary": "analytics",
     "tpv_sales_summary": "tpv",
     "shift_status": "control_horario",
 }
-UNMAPPED_ACTIONS = frozenset({"get_cashflow", "get_metrics"})
+# Sin mapeo claro (decision de producto pendiente; quedan permitidas): clientes y campanas existen en
+# hosteleria y oficina (send_campaign ya lo cubre el rol, J3b); el ledger de caja es transversal.
+UNMAPPED_ACTIONS = frozenset(
+    {"list_customers", "create_customer", "send_campaign", "get_cashflow", "get_metrics"}
+)
 
 # agente destino -> modulo requerido. "agents" esta activo para toda empresa (igual que el menu);
 # THALOS exige "admin" (solo superusuario), igual que J4.
@@ -89,4 +91,6 @@ def check_action(db: Session, user: User, action_type: str) -> Optional[Dict[str
 def check_agent(db: Session, user: User, agent_name: str) -> Optional[Dict[str, Any]]:
     module = AGENT_MODULE.get((agent_name or "").upper())
     msg = check_module(db, user, module)
+    if msg and module == "admin":
+        msg = "THALOS (seguridad) solo está disponible para administradores de la plataforma."
     return {"module": module, "message": msg} if msg else None

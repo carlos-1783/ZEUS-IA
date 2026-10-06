@@ -427,10 +427,31 @@ async def _chat_impl(
         context = build_server_context(db, current_user, client_context, thread_id)
         context["user_message"] = request.message
 
+        # J9a: el agente destino declara su modulo (services.module_gate.AGENT_MODULE); sin modulo
+        # activo no se llama al agente ni al modelo.
+        from services import module_gate
+
+        blocked_agent = module_gate.check_agent(db, current_user, agent_name)
+        if blocked_agent:
+            log_chain_step(
+                "ORQUESTAR", company_id=chain_company, user=current_user, agent=agent_name,
+                action="route_to_agent", status="blocked_module",
+                details={"agent": agent_name, "module": blocked_agent["module"], "thread_id": thread_id},
+            )
+            return ChatResponse(
+                agent=agent_name, message=blocked_agent["message"], success=False,
+                error=blocked_agent["message"],
+            )
+
         if agent_name == "ZEUS CORE":
             from services.zeus_global_context import enrich_chat_context
 
             context = enrich_chat_context(db, current_user, context)
+        else:
+            # J9a: empresa, tipo y modulos activos tambien para PERSEO/RAFAEL/JUSTICIA/AFRODITA/THALOS.
+            from services.zeus_global_context import build_agent_company_context
+
+            context["zeus_global_context"] = build_agent_company_context(db, current_user)
 
         company_id = context.get("company_id")
         if not isinstance(company_id, int):
@@ -705,6 +726,9 @@ def _server_agent_context(db: Session, user: User, client_context: Optional[dict
     ctx = build_server_context(db, user, client_context, "agents")
     ctx["requested_by"] = user.email
     ctx.pop("workflow_id", None)
+    from services.zeus_global_context import build_agent_company_context
+
+    ctx["zeus_global_context"] = build_agent_company_context(db, user)
     return ctx
 
 

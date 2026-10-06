@@ -48,6 +48,33 @@ UNMAPPED_ACTIONS = frozenset(
     {"list_customers", "create_customer", "send_campaign", "get_cashflow", "get_metrics"}
 )
 
+# J9c: acciones del EJECUTOR de agentes (`zeus_agent_executor_v1._dispatch`) -> modulo requerido.
+# Todas las acciones del ejecutor pasan por `check_executor_action`; las que no estan aqui estan
+# en EXECUTOR_UNMAPPED_ACTIONS (permitidas, decision documentada). Criterios:
+# - track_leads: CrmLead es el modulo CRM -> "crm".
+# - get_shift_status (AFRODITA): fichajes/turnos -> "control_horario".
+# - JUSTICIA (auditoria/estado legal): trabaja sobre documentos y eventos de cumplimiento de todos
+#   los agentes, no sobre un modulo de menu -> "agents" (activo en toda empresa; deja la puerta
+#   a desactivarlo por empresa sin tocar el ejecutor).
+EXECUTOR_ACTION_MODULE: Dict[str, str] = {
+    "track_leads": "crm",
+    "get_shift_status": "control_horario",
+    "run_compliance_audit": "agents",
+    "get_legal_status": "agents",
+}
+# Sin mapeo claro (permitidas): clientes/campanas existen en hosteleria y oficina (el rol ya las
+# gobierna, J3b); caja/metricas son transversales; RAFAEL (facturas, 303, resumen fiscal) vive en
+# "payments" solo en oficina pero la facturacion aplica a ambas verticales; AFRODITA inventario y
+# rutas (ERP/TPV/logistica) no tienen un modulo propio en el registro real (company_module_config).
+EXECUTOR_UNMAPPED_ACTIONS = frozenset(
+    {
+        "create_customer", "get_customers", "list_customers", "send_campaign", "launch_campaign",
+        "create_campaign", "get_cashflow", "get_metrics",
+        "generate_invoice", "generate_model_303", "get_tax_summary",
+        "get_inventory_status", "create_inventory_movement", "create_ops_route",
+    }
+)
+
 # agente destino -> modulo requerido. "agents" esta activo para toda empresa (igual que el menu);
 # THALOS exige "admin" (solo superusuario), igual que J4.
 AGENT_MODULE: Dict[str, str] = {
@@ -93,4 +120,13 @@ def check_agent(db: Session, user: User, agent_name: str) -> Optional[Dict[str, 
     msg = check_module(db, user, module)
     if msg and module == "admin":
         msg = "THALOS (seguridad) solo está disponible para administradores de la plataforma."
+    return {"module": module, "message": msg} if msg else None
+
+
+def check_executor_action(db: Session, user: User, action: str) -> Optional[Dict[str, Any]]:
+    """J9c: None si permitido; {module, message} si la empresa no tiene el modulo de la accion
+    del ejecutor. Accion sin mapeo -> permitida (ver EXECUTOR_UNMAPPED_ACTIONS). Fail-closed ante
+    error al resolver los modulos (check_module)."""
+    module = EXECUTOR_ACTION_MODULE.get((action or "").strip().lower())
+    msg = check_module(db, user, module)
     return {"module": module, "message": msg} if msg else None

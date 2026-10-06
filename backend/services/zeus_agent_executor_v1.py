@@ -24,7 +24,18 @@ MANDATORY_ACTIONS = {
     "ZEUS": frozenset({"create_customer", "get_customers", "send_campaign", "get_cashflow", "get_metrics"}),
     "RAFAEL": frozenset({"generate_invoice", "generate_model_303", "get_tax_summary"}),
     "PERSEO": frozenset({"create_campaign", "launch_campaign", "track_leads"}),
+    # J9c. Lectura: sin aprobacion. Escritura (AFRODITA): siempre por aprobacion (CRITICAL_ACTIONS).
+    "JUSTICIA": frozenset({"run_compliance_audit", "get_legal_status"}),
+    "AFRODITA": frozenset(
+        {"get_shift_status", "get_inventory_status", "create_ops_route", "create_inventory_movement"}
+    ),
 }
+# Acciones nuevas (J9c) que solo valen con su agente: un cliente no puede pedir una accion de
+# AFRODITA diciendo que es de otro agente (ni al reves).
+_STRICT_AGENT_ACTIONS: Dict[str, str] = {
+    a: ag for ag in ("JUSTICIA", "AFRODITA") for a in MANDATORY_ACTIONS[ag]
+}
+_MAX_DELIVERIES = 50
 
 
 def track_leads_summary(db: Session, user: User) -> Dict[str, Any]:
@@ -37,6 +48,94 @@ def track_leads_summary(db: Session, user: User) -> Dict[str, Any]:
         "high_priority": sum(1 for l in leads if (l.customer_priority or "") == "high"),
         "with_meeting": sum(1 for l in leads if l.meeting_at is not None),
     }
+
+
+def _fail(message: str, **extra: Any) -> Dict[str, Any]:
+    return {"success": False, "executed": False, "message": message, **extra}
+
+
+def _blocked_module_result(
+    db: Session, user: User, agent: str, act: str, cid: Optional[int]
+) -> Optional[Dict[str, Any]]:
+    """J9c: control de modulos para TODAS las acciones del ejecutor. None si permitida.
+    Bloqueo -> success False, status `blocked_module`, registro J7 (ACTUAR), sin ejecutar."""
+    from services import module_gate
+    from services.chain_log import log_chain_step
+
+    blocked = module_gate.check_executor_action(db, user, act)
+    if not blocked:
+        return None
+    log_chain_step(
+        "ACTUAR", company_id=cid, user=user, agent=agent, action=act, status="blocked_module",
+        details={"module": blocked["module"], "action_type": act, "agent": agent},
+    )
+    return _fail(blocked["message"], status="blocked_module", module=blocked["module"])
+
+
+def _clean_afrodita_payload(db: Session, act: str, data: Dict[str, Any], cid: Optional[int]):
+    """Valida y normaliza el payload de las escrituras AFRODITA (solo claves conocidas; nunca
+    company_id/user_id del cliente). -> (payload_limpio, mensaje_vista_previa) o (None, error)."""
+    if act == "create_ops_route":
+        origin = str(data.get("origin") or "").strip()
+        dest = str(data.get("destination") or "").strip()
+        deliveries = data.get("deliveries") or []
+        if not origin or not dest:
+            return None, "origin y destination son obligatorios."
+        if not isinstance(deliveries, list) or not all(isinstance(d, dict) for d in deliveries):
+            return None, "deliveries debe ser una lista de objetos."
+        if len(deliveries) > _MAX_DELIVERIES:
+            return None, f"Maximo {_MAX_DELIVERIES} entregas por ruta."
+        clean = {"origin": origin[:255], "destination": dest[:255], "deliveries": deliveries}
+        return clean, f"Crear ruta operativa {clean['origin']} -> {clean['destination']} ({len(deliveries)} paradas)."
+
+    # create_inventory_movement
+    try:
+        product_id = int(data.get("product_id"))
+        quantity = float(data.get("quantity"))
+    except (TypeError, ValueError):
+        return None, "product_id (entero) y quantity (numero) son obligatorios."
+    if product_id <= 0 or quantity == 0:
+        return None, "product_id debe ser > 0 y quantity distinto de 0."
+    from fastapi import HTTPException
+
+    from app.models.erp import Product
+    from services.afrodita_ops_service_v1 import _parse_movement_type
+
+    try:
+        mtype = _parse_movement_type(str(data.get("movement_type") or "adjustment"))
+    except HTTPException as exc:
+        return None, str(exc.detail)
+    product = db.query(Product).filter(Product.id == product_id, Product.company_id == cid).first()
+    if not product:
+        return None, f"Producto {product_id} no encontrado en tu empresa."
+    if not product.track_inventory:
+        return None, "El producto no tiene control de inventario activo."
+    after = float(product.quantity_on_hand or 0) + quantity
+    if after < 0:
+        return None, "Stock resultante negativo."
+    clean = {
+        "product_id": product_id,
+        "movement_type": mtype.value,
+        "quantity": quantity,
+        "reference": (str(data["reference"])[:100] if data.get("reference") else None),
+        "notes": (str(data["notes"])[:1000] if data.get("notes") else None),
+    }
+    return clean, (
+        f"Movimiento {mtype.value} de {quantity:g} uds de «{product.name}» ({product.sku}): "
+        f"stock {float(product.quantity_on_hand or 0):g} -> {after:g}."
+    )
+
+
+def _afrodita_writes_blocked() -> Optional[Dict[str, Any]]:
+    from services.afrodita_unified_control import writes_enabled
+
+    if writes_enabled():
+        return None
+    return _fail(
+        "Escritura AFRODITA deshabilitada: configura AFRODITA_EXECUTION_ENABLED=true y "
+        "AFRODITA_READ_ONLY_MODE=false.",
+        status="writes_disabled",
+    )
 
 
 async def execute_agent_action(
@@ -97,6 +196,27 @@ async def execute_agent_action(
 
     cid = crm_svc.primary_company_id(db, user)
 
+    # J9c: accion de un agente concreto pedida con otro agente -> rechazo (antes de aprobar nada).
+    strict_agent = _STRICT_AGENT_ACTIONS.get(act)
+    if strict_agent and agent_u != strict_agent:
+        return _fail(f"La accion «{act}» pertenece a {strict_agent}, no a {agent_u}.", status="agent_mismatch")
+
+    # J9c: control de modulos de la empresa para todas las acciones, tambien antes de pedir aprobacion.
+    blocked = _blocked_module_result(db, user, agent_u, act, cid)
+    if blocked:
+        _log_execution(agent_u, act, user, cid, approval_id, "failed",
+                       {"message": blocked["message"], "status": "blocked_module"})
+        return blocked
+
+    preview_msg: Optional[str] = None
+    if act in ("create_ops_route", "create_inventory_movement") and not force_execute:
+        wb = _afrodita_writes_blocked()
+        if wb:
+            return wb
+        data, preview_msg = _clean_afrodita_payload(db, act, data, cid)
+        if data is None:
+            return _fail(preview_msg, status="invalid_payload")
+
     if requires_approval(act, data) and not force_execute:
         approval = request_approval(
             db,
@@ -111,7 +231,9 @@ async def execute_agent_action(
             "executed": False,
             "needs_approval": True,
             "approval_id": approval.id,
-            "message": f"Acción «{act}» pendiente de aprobación humana (ID {approval.id}).",
+            "message": f"Acción «{act}» pendiente de aprobación humana (ID {approval.id})."
+            + (f" Vista previa: {preview_msg}" if preview_msg else ""),
+            **({"preview": preview_msg} if preview_msg else {}),
         }
 
     zeus_action = ZeusAction(
@@ -170,6 +292,13 @@ def _map_action_to_zeus_type(action: str) -> str:
         "generate_model_303": "generate_model_303",
         "get_tax_summary": "get_tax_summary",
         "track_leads": "track_leads",
+        # J9c: acciones propias del ejecutor; ZeusActionType (orquestador/chat) no las contempla.
+        "get_shift_status": "shift_status",
+        "run_compliance_audit": "unknown",
+        "get_legal_status": "unknown",
+        "get_inventory_status": "unknown",
+        "create_ops_route": "unknown",
+        "create_inventory_movement": "unknown",
     }
     return mapping.get(action, action)
 
@@ -185,6 +314,12 @@ async def _dispatch(
     force_execute: bool,
 ) -> Dict[str, Any]:
     from services.zeus_orchestrator_service import execute_action
+
+    # J9c: modulo activo de la empresa para TODA accion (tambien las ejecutadas tras una aprobacion,
+    # por si el modulo se desactivo entre la solicitud y la confirmacion).
+    blocked = _blocked_module_result(db, user, agent, action, zeus_action.company_id)
+    if blocked:
+        return blocked
 
     # ZEUS
     if action == "create_customer":
@@ -260,6 +395,86 @@ async def _dispatch(
     if action == "create_campaign":
         preview = orch.preview_send_campaign(db, user, zeus_action)
         return {"success": True, "executed": True, "message": preview.get("message"), "data": preview}
+
+    # JUSTICIA (lectura; servicios reales de justice_audit_service, ambito del usuario de la sesion)
+    if action in ("run_compliance_audit", "get_legal_status"):
+        from services import justice_audit_service as justice
+
+        if action == "get_legal_status":
+            body = justice.audit_status(db, user)
+            return {
+                "success": True, "executed": True, "company_id": zeus_action.company_id,
+                "message": f"Documentos legales: {body['legal_documents']}.", "data": body,
+            }
+        audit = justice.run_real_audit(db, user)
+        if not audit.get("real_execution"):
+            return _fail(f"Auditoria JUSTICIA no disponible: {audit.get('error', 'desactivada')}")
+        db.commit()  # run_real_audit sincroniza eventos de cumplimiento (como GET /justice/audit)
+        return {
+            "success": True, "executed": True, "company_id": zeus_action.company_id,
+            "message": "Auditoria de cumplimiento ejecutada.", "data": audit,
+        }
+
+    # AFRODITA
+    if action == "get_shift_status":
+        r = orch.execute_shift_status(db, user, zeus_action)
+        return r.model_dump()
+
+    if action == "get_inventory_status":
+        from fastapi import HTTPException
+
+        from services.afrodita_ops_service_v1 import company_inventory_status
+
+        cid = zeus_action.company_id
+        if cid is None:
+            return _fail("El usuario no tiene empresa asociada.")
+        try:
+            inv = company_inventory_status(db, cid)
+        except HTTPException as exc:
+            return _fail(str(exc.detail))
+        return {
+            "success": True, "executed": True, "company_id": cid,
+            "message": f"Inventario: {inv['total_skus']} referencias, {inv['low_stock_count']} con stock bajo.",
+            "data": inv,
+        }
+
+    if action in ("create_ops_route", "create_inventory_movement"):
+        from fastapi import HTTPException
+
+        from services import afrodita_ops_service_v1 as afro
+
+        cid = zeus_action.company_id
+        wb = _afrodita_writes_blocked()
+        if wb:
+            return wb
+        if cid is None:
+            return _fail("El usuario no tiene empresa asociada.")
+        try:
+            if action == "create_ops_route":
+                out = afro.create_ops_route(
+                    db, user,
+                    origin=str(payload.get("origin") or ""),
+                    destination=str(payload.get("destination") or ""),
+                    deliveries=payload.get("deliveries") or [],
+                )
+            else:
+                out = afro.create_inventory_movement(
+                    db, user,
+                    product_id=int(payload.get("product_id") or 0),
+                    movement_type=str(payload.get("movement_type") or "adjustment"),
+                    quantity=float(payload.get("quantity") or 0),
+                    reference=payload.get("reference"),
+                    notes=payload.get("notes"),
+                    company_id=cid,
+                )
+            db.commit()
+        except HTTPException as exc:
+            db.rollback()
+            return _fail(str(exc.detail))
+        return {
+            "success": True, "executed": True, "company_id": cid,
+            "message": out.get("message") or "Accion AFRODITA ejecutada.", "data": out,
+        }
 
     r = await execute_action(db, user, zeus_action, force_execute=force_execute)
     out = r.model_dump()

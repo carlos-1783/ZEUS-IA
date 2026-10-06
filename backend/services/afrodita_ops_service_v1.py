@@ -262,12 +262,18 @@ def create_inventory_movement(
     quantity: float,
     reference: Optional[str] = None,
     notes: Optional[str] = None,
+    company_id: Optional[int] = None,
 ) -> Dict[str, Any]:
+    """`company_id` (J9c, opcional para no cambiar a los llamadores existentes): si se indica, solo
+    se opera sobre productos de esa empresa (otra empresa o producto sin empresa -> 404)."""
     flags = current_flags()
     if not flags.get("AFRODITA_USE_ERP"):
         raise HTTPException(status_code=503, detail="AFRODITA_USE_ERP=false")
 
-    product = db.query(Product).filter(Product.id == product_id).first()
+    pq = db.query(Product).filter(Product.id == product_id)
+    if company_id is not None:
+        pq = pq.filter(Product.company_id == company_id)
+    product = pq.first()
     if not product:
         raise HTTPException(status_code=404, detail=f"Producto {product_id} no encontrado")
     if not product.track_inventory:
@@ -451,4 +457,31 @@ def warehouse_summary(db: Session, user: User) -> Dict[str, Any]:
             {"id": i.get("id"), "name": i.get("name"), "stock": i.get("stock")} for i in low_stock[:20]
         ],
         "read_only": not writes_enabled(),
+    }
+
+
+def company_inventory_status(db: Session, company_id: int, *, limit: int = 200) -> Dict[str, Any]:
+    """J9c: estado real del inventario ERP de UNA empresa (Product.company_id == company_id)."""
+    flags = current_flags()
+    if not flags.get("AFRODITA_USE_ERP"):
+        raise HTTPException(status_code=503, detail="AFRODITA_USE_ERP=false")
+    rows = (
+        db.query(Product)
+        .filter(Product.company_id == company_id, Product.track_inventory.is_(True))
+        .order_by(Product.name.asc())
+        .limit(min(limit, 500))
+        .all()
+    )
+    items = [_erp_row(p) for p in rows]
+    low = [i for i in items if i["quantity_on_hand"] <= i["low_stock_threshold"]]
+    return {
+        "company_id": company_id,
+        "items": items,
+        "total_skus": len(items),
+        "total_units": round(sum(i["quantity_on_hand"] for i in items), 2),
+        "low_stock_count": len(low),
+        "low_stock_items": [
+            {"sku": i["sku"], "name": i["name"], "stock": i["quantity_on_hand"]} for i in low[:20]
+        ],
+        "source": "products",
     }

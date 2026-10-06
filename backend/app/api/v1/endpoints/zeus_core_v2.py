@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class AgentExecuteRequest(BaseModel):
-    agent: str = Field(..., description="ZEUS|RAFAEL|PERSEO")
+    agent: str = Field(..., description="ZEUS|RAFAEL|PERSEO|JUSTICIA|AFRODITA")
     action: str
     payload: Dict[str, Any] = Field(default_factory=dict)
     # force_execute ya NO existe en el schema: si un cliente lo envia se ignora

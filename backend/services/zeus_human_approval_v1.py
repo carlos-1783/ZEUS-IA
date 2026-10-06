@@ -24,6 +24,9 @@ CRITICAL_ACTIONS: Set[str] = frozenset({
     "generate_model_303",
     "high_value_actions",
     "contract_generation",
+    # J9c AFRODITA: escrituras operativas.
+    "create_ops_route",
+    "create_inventory_movement",
 })
 
 HIGH_VALUE_THRESHOLD_EUR = 500.0
@@ -31,9 +34,14 @@ HIGH_VALUE_THRESHOLD_EUR = 500.0
 # Rol minimo para PEDIR (y confirmar) cada accion; el resto usa "ceo" (owner/company_admin).
 # send_campaign envia correos a terceros -> owner/company_admin.
 # create_customer solo crea un registro de la propia empresa -> cualquier miembro.
+# J9c: create_ops_route crea un registro de planificacion interno de la propia empresa, sin efecto
+# externo ni sobre valor de existencias -> cualquier miembro. create_inventory_movement MODIFICA
+# el stock (y el del TPV), que afecta a valoracion y compras -> owner/company_admin ("ceo").
 ACTION_ROLE_REQUIRED: Dict[str, str] = {
     "send_campaign": "ceo",
     "create_customer": "member",
+    "create_ops_route": "member",
+    "create_inventory_movement": "ceo",
 }
 # Caducidad de las solicitudes nacidas en el chat.
 CHAT_APPROVAL_TTL_SECONDS = 15 * 60

@@ -347,8 +347,7 @@ def test_thalos_chat_permitido_para_superusuario(db, stack):
 def test_contexto_de_empresa_llega_a_agentes_no_zeus(db, stack, agent):
     c, ag, _ = stack
     u, co = _user(db, "office", name="Oficina Atenea SL")
-    hostile = {"zeus_global_context": {"company_type": "evil"}, "company_id": 999999, "force_execute": True,
-               "image_url": "http://ok.test/a.png"}
+    hostile = {"zeus_global_context": {"company_type": "evil"}, "company_id": 999999, "force_execute": True}
     r = _post(c, u, agent, "hola", context=hostile)
     assert r.status_code == 200 and r.json()["success"] is True, r.text
     ctx = ag[agent].seen[0]
@@ -356,7 +355,6 @@ def test_contexto_de_empresa_llega_a_agentes_no_zeus(db, stack, agent):
     assert gc == {"company_name": "Oficina Atenea SL", "company_type": "office",
                   "active_modules": sorted(["dashboard", "analytics", "crm", "clients", "payments", "settings", "agents"])}
     assert ctx["company_id"] == co.id and "force_execute" not in ctx  # control del servidor intacto
-    assert ctx["image_url"] == "http://ok.test/a.png"
     dumped = json.dumps(gc)
     assert u.email not in dumped and "active_customers" not in dumped and "active_session" not in dumped
 

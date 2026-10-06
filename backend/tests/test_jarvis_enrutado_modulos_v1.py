@@ -369,3 +369,95 @@ def test_contexto_aislado_entre_empresas(db, stack):
     assert ga["company_name"] == "Empresa A Oficina" and "tpv" not in ga["active_modules"]
     assert gb["company_name"] == "Empresa B Bar" and "tpv" in gb["active_modules"]
     assert "Empresa A" not in json.dumps(gb) and "Empresa B" not in json.dumps(ga)
+
+
+# --------------------------------------------------------------- revision J9a: ZEUS directo y datos personales
+def _patch_model(monkeypatch):
+    import agents.base_agent as base
+
+    captured = []
+
+    def fake(messages, temperature=0.3, max_tokens=2000, **kw):
+        captured.append(json.loads(json.dumps(messages)))
+        return {"success": True, "content": "ok", "model": "stub", "cost": 0.0, "elapsed_time": 0.0,
+                "usage": {"total_tokens": 1}, "timestamp": "2026-01-01T00:00:00"}
+
+    monkeypatch.setattr(base, "chat_completion", fake)
+    return captured
+
+
+def test_zeus_directo_conserva_historial_y_contexto_de_empresa(monkeypatch):
+    captured = _patch_model(monkeypatch)
+    z = ZeusCore()  # real; sin agentes registrados
+    gc = {"company_name": "Oficina Atenea SL", "company_type": "office", "active_modules": ["agents", "crm"]}
+    out = z.process_request({
+        "user_message": "hola, ¿me recuerdas?",
+        "conversation_history": [{"role": "user", "content": "soy Pepe"},
+                                 {"role": "assistant", "content": "Encantado, Pepe"}],
+        "zeus_global_context": gc,
+    })
+    assert out["selected_agent"] == "ZEUS CORE (directo)"
+    assert len(captured) == 1
+    msgs = captured[0]
+    assert [m["role"] for m in msgs] == ["system", "user", "assistant", "user"]
+    assert msgs[1]["content"] == "soy Pepe"
+    last = msgs[-1]["content"]
+    assert "Oficina Atenea SL" in last and "office" in last and "active_modules" in last
+
+
+def test_thalos_sin_superusuario_responde_zeus_con_contexto(monkeypatch):
+    captured = _patch_model(monkeypatch)
+    z = ZeusCore()
+    out = z.process_request({"user_message": "revisa los logs y la ip", "_is_superuser": False,
+                             "conversation_history": [{"role": "user", "content": "soy Pepe"}],
+                             "zeus_global_context": {"company_name": "Acme"}})
+    assert out["selected_agent"] == "ZEUS CORE (directo)"
+    assert "soy Pepe" in json.dumps(captured[0]) and "Acme" in json.dumps(captured[0])
+
+
+def test_datos_personales_no_llegan_al_modelo_en_ningun_agente(monkeypatch):
+    from agents.afrodita import Afrodita
+    from agents.justicia import Justicia
+    from agents.perseo import Perseo
+    from agents.rafael import Rafael
+    from agents.thalos import Thalos
+
+    captured = _patch_model(monkeypatch)
+    email, uid = "pepe.secreto@example.test", 987654321
+    ctx = {"user_email": email, "user_id": uid, "company_id": 7,
+           "zeus_global_context": {"company_name": "Acme", "company_type": "office", "active_modules": ["agents"]}}
+    agents = [ZeusCore(), Perseo(), Rafael(), Thalos(), Justicia(), Afrodita()]
+    for a in agents:
+        captured.clear()
+        a.make_decision("hola", additional_context=dict(ctx))
+        blob = json.dumps(captured[0], ensure_ascii=False)
+        assert email not in blob and str(uid) not in blob, a.name
+        assert "Acme" in blob, a.name  # el contexto de empresa si llega
+    # el contexto original no se muta: el codigo de los agentes (firewall) sigue viendo user_id
+    assert ctx["user_id"] == uid and ctx["user_email"] == email
+
+
+# --------------------------------------------------------------- company_type nulo
+def test_company_type_nulo_se_infiere_por_sector_y_bloquea_segun_resultado(db, stack):
+    """Documenta (sin cambiar) la inferencia de company_module_config.infer_company_type: con
+    company_type NULL se usa metadata.business_type, luego el sector ('servicio/oficina/profesional'
+    => office) y, si nada casa, bar_restaurant. Consecuencia: analitica solo activa si se infiere oficina."""
+    c, _, _ = stack
+    suf = uuid.uuid4().hex[:8]
+    users = {}
+    for label, sector in (("oficina", "Servicios profesionales"), ("sin_sector", None)):
+        co = Company(company_name=f"J9a nulo {label} {suf}", slug=f"j9a-n-{label}-{suf}", company_type=None, sector=sector)
+        db.add(co)
+        db.flush()
+        u = User(email=f"j9a_n_{label}_{suf}@example.test", hashed_password=get_password_hash("TestPass1"),
+                 full_name="J9a", is_active=True)
+        db.add(u)
+        db.flush()
+        db.add(UserCompany(user_id=u.id, company_id=co.id, role="owner"))
+        db.commit()
+        db.refresh(u)
+        users[label] = u
+    assert module_gate.check_action(db, users["oficina"], "analytics_summary") is None
+    blocked = module_gate.check_action(db, users["sin_sector"], "analytics_summary")
+    assert blocked and "módulo Analítica" in blocked["message"]  # sin pistas => bar_restaurant (defecto)
+    assert module_gate.check_action(db, users["sin_sector"], "tpv_sales_summary") is None

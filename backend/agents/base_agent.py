@@ -105,7 +105,9 @@ class BaseAgent(ABC):
         messages.append({"role": "user", "content": user_message})
 
         if additional_context:
-            skip = {"conversation_history", "_memory", "user_message"}
+            # Datos personales (email/id de usuario) no se envian al proveedor del modelo; siguen en
+            # el contexto para el codigo de los agentes (p. ej. firewall de RAFAEL/JUSTICIA).
+            skip = {"conversation_history", "_memory", "user_message", "user_email", "user_id"}
             extra = {k: v for k, v in additional_context.items() if k not in skip and not k.startswith("_")}
             if extra:
                 context_str = (

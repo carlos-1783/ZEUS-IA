@@ -384,46 +384,120 @@ def _is_affirmative_request(f: str, verb_start: int, verb_text: str) -> bool:
     return True
 
 
-# --- Criterio estricto de MENSAJE COMPLETO (J8, red de seguridad hasta J8b: comprension por modelo) ---
-# Para acciones confirmables el mensaje ENTERO debe ser una unica orden afirmativa limpia: todas sus
-# palabras (tras quitar emails, telefonos, numeros/porcentajes y, en «crear cliente», el nombre
-# capitalizado que sigue a «cliente») deben pertenecer a un vocabulario CERRADO de cortesia, formulas
-# de peticion, verbos de la accion y argumentos (objeto, destinatarios, conectores). Cualquier otra
-# palabra en cualquier punto del mensaje (retractaciones tras el verbo: «no, mejor no», «es broma»,
-# «cancela eso»; condiciones: «cuando yo te diga», «solo si», «luego», «de momento»; temporales no
-# soportados: «mañana»; otra frase con otro verbo) => pregunta explicita, nunca vista previa.
-# FALSOS NEGATIVOS CONSERVADORES (se pregunta aunque era una orden valida): «No. Envía la oferta…»,
-# nombres de cliente en minusculas («crea el cliente juan perez …»), palabras de relleno no listadas
-# («envía la oferta del 10% a todos mis clientes cuanto antes»), mensajes con varias frases.
-_ORDER_VOCAB = set(
-    """por favor porfa porfavor zeus jarvis oye hola vale venga ahora ok bien entonces pues gracias perdona
-    disculpa urgente a ver me nos ya y mismo quiero que queremos necesito necesitamos gustaria quisiera te pido
-    pedimos puedes podrias podeis podemos tienes debes hay vamos voy vas
-    envia enviar enviale enviala enviales enviarla enviame mandar manda mandale mandala mandales mandame
-    notifica notificar avisa avisar comunica comunicar difunde lanza lanzar
-    mandes envies lances notifiques avises comuniques difundas
-    crea crear creame genera generar haz hacer monta montar prepara preparar crees generes hagas montes prepares
-    da dar alta anade anadir registra registrar agrega agregar apunta apuntes registres agregues anadas
-    oferta ofertas descuento descuentos promocion promociones promo promos campana campanas cupon cupones
-    cliente clientes crm base datos contactos lista todos todas mis mi nuestros nuestras los las el la un una
-    unos unas del de con para al en ciento euros euro eur email correo mail telefono tel movil nombre llamado
-    llamada se llama es su tu lo le les este esta ese esa cada nuevo nueva por""".split()
+# --- PLANTILLAS COMPLETAS para acciones confirmables (J8, red de seguridad hasta J8b) -----------
+# CRITERIO: el MENSAJE ENTERO (tras NFKC y espacios colapsados, comparando en minusculas sin
+# acentos) debe encajar EXACTAMENTE, anclado ^...$, en una plantilla de orden afirmativa:
+#   campaña : [prefijo] VERBO [art] (oferta|campaña|promoción|descuento…) [de descuento] [del N%]
+#             a [todos] [mis|los] clientes [con un N% de descuento] [cierre]
+#             (o «crea/genera… <oferta> [N%] y envíala a [los] clientes»)
+#   cliente : [prefijo] (crea|da de alta|añade…) [el|un|al] [nuevo] cliente [NOMBRE] [,] [con]
+#             [email|correo] [EMAIL] [y teléfono TEL] [cierre]
+# - prefijo: solo cortesía y fórmulas de petición («por favor», «zeus,», «quiero que», «puedes»…).
+# - NOMBRE: 1-4 palabras, solo letras latinas, Capitalizadas (partículas de/del/la/los/las/y en
+#   minúscula), ANTES del email y ninguna en la lista de parada (no, nunca, mejor, cancela, stop…).
+# - EMAIL: uno, forma estricta; ningún token del local-part/dominio (separado por . _ + - @) puede
+#   estar en la lista de parada («no.envies@x.es», «no@x.es» se rechazan).
+# - cierre: solo «, gracias» / «gracias» / «por favor» y un único «.» o «!» final.
+# Todo lo demás (emoji, símbolos, números sueltos fuera de N% o teléfono, «?», «...», «!!»,
+# caracteres de otros alfabetos o no convertibles por NFKC, texto añadido, otra frase) => no encaja =>
+# explicit_intent y pregunta, NUNCA vista previa.
+# FALSOS NEGATIVOS CONSERVADORES ESPERADOS: cualquier formulación fuera de plantilla («envía ofertas
+# a mis clientes cuanto antes», «No. Envía…», nombres en minúsculas o con guion/apóstrofo, «…para
+# aumentar las ventas…»). RESIDUO CONOCIDO: un nombre propio extraño pero con forma válida se verá en
+# la vista previa («Voy a crear el cliente X») y requiere confirmación humana explícita.
+_STOP_WORDS = set(
+    """no nunca jamas mejor cancela cancelar cancelo cancel annule stop espera esperar wait broma manana luego
+    despues ya ahora ni nada pas maintenant don nein nope non nao arrete solo si cuando quizas quiza tal vez
+    olvida olvidalo borra borrar lo hagas hagais haga crees creas envies envias tampoco sin deja dejes es hay se
+    te le ok vale bien pues momento jaja jajaja jeje hoy ninguno ninguna ningun lo la los las de del y a al
+    mal peor aun todavia aunque pero o u e""".split()
 )
-_WORD_RE = re.compile(r"[A-Za-zÀ-ÿ]+")
-_NAME_RUN_RE = re.compile(
-    r"(?i:\bcliente)\s+(?:(?i:llamad[oa]|de\s+nombre|nuevo|nueva)\s+)?"
-    r"([A-ZÁÉÍÓÚÑ][A-Za-zÀ-ÿ'.-]*(?:\s+(?:(?:de|del|la|los|las|van|von|da|di|y)\s+)*[A-ZÁÉÍÓÚÑ][A-Za-zÀ-ÿ'.-]*){0,3})"
+_NAME_PARTICLES_LOWER = {"de", "del", "la", "los", "las", "y"}
+_NAME_WORD_RE = re.compile(r"[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+")
+_ART = r"(?:(?:la|las|el|los|una|un|unas|unos|mi|esta|nueva|nuevo)\s+){0,2}"
+_NOUN = r"(?:oferta|ofertas|descuento|descuentos|promocion|promociones|promo|promos|campana|campanas|cupon|cupones)"
+_PCT = r"(?:(?:del|de\s+un|de|con\s+un|con|al)\s+)?\d{1,3}(?:[.,]\d+)?\s?%"
+_DISC = rf"(?:\s+de\s+descuento)?(?:\s+{_PCT})?(?:\s+de\s+descuento)?"
+_RECIP = r"\s+a\s+(?:(?:todos|todas)\s+)?(?:(?:mis|los|las|nuestros|nuestras)\s+)?clientes"
+_RECIP_TAIL = r"(?:\s+(?:con|de)\s+(?:un\s+)?\d{1,3}(?:[.,]\d+)?\s?%(?:\s+de\s+descuento)?)?"
+_SEND_V = (r"(?:envia|enviar|manda|mandar|lanza|lanzar|difunde|envies|mandes|enviame|mandame)"
+           r"(?:la|lo|le|les|me)?")
+_CREATE_V = r"(?:crea|crear|creame|genera|generar|haz|hacer|monta|montar|prepara|preparar|crees|generes|hagas)"
+_CLOSE = r"(?:,?\s+(?:gracias|por\s+favor))?[.!]?"
+_CAMPAIGN_TEMPLATES = (
+    re.compile(rf"^(?P<prefix>.*?)\b(?P<verb>{_SEND_V})\s+{_ART}{_NOUN}{_DISC}{_RECIP}{_RECIP_TAIL}{_CLOSE}$"),
+    re.compile(
+        rf"^(?P<prefix>.*?)\b(?P<verb>{_CREATE_V})\s+{_ART}{_NOUN}{_DISC}(?:\s*,)?\s+y\s+{_SEND_V}{_RECIP}{_CLOSE}$"
+    ),
 )
+_EMAIL_STRICT = r"[a-z0-9]+(?:[._+-][a-z0-9]+)*@[a-z0-9]+(?:[.-][a-z0-9]+)*\.[a-z]{2,}"
+_PHONE_STRICT = r"(?:\+34\s?)?[6-9]\d{2}[\s.-]?\d{3}[\s.-]?\d{3}"
+_NAME_FOLDED = r"[a-z]+(?:\s+(?:(?:de|del|la|los|las|y)\s+)*[a-z]+){0,3}?"
+_CUSTOMER_TEMPLATE = re.compile(
+    r"^(?P<prefix>.*?)\b(?P<verb>crea|crear|creame|da\s+de\s+alta|dar\s+de\s+alta|des\s+de\s+alta|anade|anadir|"
+    r"registra|registrar|agrega|agregar|apunta|crees|registres|agregues|anadas|apuntes)\s+"
+    r"(?:(?:el|un|al|a\s+un)\s+)?(?:nuevo\s+)?cliente"
+    rf"(?:\s+(?:llamado|de\s+nombre))?(?:\s+(?P<name>{_NAME_FOLDED}))??"
+    rf"(?:\s*,)?(?:\s+con)?(?:\s+(?:email|correo|mail))?(?:\s+(?P<email>{_EMAIL_STRICT}))?"
+    rf"(?:(?:\s*,)?\s+(?:y|con)\s+(?:telefono|tel|movil)\s+(?P<tel>{_PHONE_STRICT}))?{_CLOSE}$"
+)
+
+
+def _prefix_ok(prefix: str, verb: str) -> bool:
+    pre = " ".join(re.sub(r",", " ", prefix).split())
+    had_que = False
+    ordered = sorted(_REQUEST_FORMULAS + _COURTESY, key=len, reverse=True)
+    while pre:
+        for tok in ordered:
+            if pre == tok or pre.startswith(tok + " "):
+                had_que = had_que or tok.endswith(" que")
+                pre = pre[len(tok):].strip()
+                break
+        else:
+            return False
+    return not (verb in _SUBJUNCTIVE and not had_que)
+
+
+def _name_ok(original: str) -> bool:
+    words = original.split()
+    if not 1 <= len(words) <= 4:
+        return False
+    for i, w in enumerate(words):
+        fw = fold(w)
+        if fw in _STOP_WORDS and not (i > 0 and w in _NAME_PARTICLES_LOWER):
+            return False
+        if i > 0 and w in _NAME_PARTICLES_LOWER:
+            continue
+        if not _NAME_WORD_RE.fullmatch(w):
+            return False
+    return words[-1] not in _NAME_PARTICLES_LOWER and words[0] not in _NAME_PARTICLES_LOWER
+
+
+def _email_ok(email: str) -> bool:
+    local, _, domain = email.rpartition("@")
+    labels = domain.split(".")[:-1]  # el TLD («.es») no cuenta
+    toks = re.split(r"[._+-]", local) + [x for lab in labels for x in lab.split("-")]
+    return not any(tok in _STOP_WORDS for tok in toks)
 
 
 def _is_clean_order(text: str, customer: bool) -> bool:
-    t = _EMAIL_RE.sub(" ", text or "")
+    """True solo si el mensaje ENTERO encaja en una plantilla de orden afirmativa (ver arriba)."""
+    t = " ".join(unicodedata.normalize("NFKC", text or "").split())
+    f = "".join(fold(ch) for ch in t)
+    if len(f) != len(t) or not t:
+        return False
     if customer:
-        t = _NAME_RUN_RE.sub(lambda m: m.group(0)[: m.start(1) - m.start(0)], t, count=1)
-    for w in _WORD_RE.findall(t):
-        if fold(w) not in _ORDER_VOCAB:
+        m = _CUSTOMER_TEMPLATE.match(f)
+        if not m or not _prefix_ok(m.group("prefix"), m.group("verb")):
             return False
-    return True
+        if m.group("name") is not None and not _name_ok(t[m.start("name"):m.end("name")]):
+            return False
+        return m.group("email") is None or _email_ok(m.group("email"))
+    for tpl in _CAMPAIGN_TEMPLATES:
+        m = tpl.match(f)
+        if m and _prefix_ok(m.group("prefix"), m.group("verb")):
+            return True
+    return False
 
 
 def _is_negated_before(f: str, verb_start: int) -> bool:

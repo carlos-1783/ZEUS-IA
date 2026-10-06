@@ -4,12 +4,37 @@ Clase base para todos los agentes
 """
 
 import json
+import re
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from abc import ABC, abstractmethod
 
 from services.openai_service import chat_completion, parse_json_response
 from config.settings import settings, resolved_openai_context_limit
+
+
+_EMAIL_VALUE_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")
+# Claves de identidad/actor que el servidor fija en el contexto para el CODIGO (TeamFlow, firewall de
+# RAFAEL/JUSTICIA...) y que nunca deben viajar en el texto del prompt al proveedor del modelo.
+_PROMPT_IDENTITY_KEYS = frozenset(
+    {"conversation_history", "_memory", "user_message", "user_email", "user_id",
+     "requested_by", "actor", "owner_email"}
+)
+
+
+def _strip_emails(value: Any) -> Any:
+    """Copia del valor sin ningun elemento (en cualquier nivel de dict/lista) que SEA un email con forma
+    valida. Solo valores completos: un email incrustado en un texto largo no se detecta (limite
+    documentado); el mensaje del usuario no pasa por aqui."""
+    if isinstance(value, dict):
+        return {k: _strip_emails(v) for k, v in value.items() if not _is_email_value(v)}
+    if isinstance(value, (list, tuple)):
+        return [_strip_emails(v) for v in value if not _is_email_value(v)]
+    return value
+
+
+def _is_email_value(v: Any) -> bool:
+    return isinstance(v, str) and bool(_EMAIL_VALUE_RE.match(v.strip()))
 
 
 class BaseAgent(ABC):
@@ -107,8 +132,10 @@ class BaseAgent(ABC):
         if additional_context:
             # Datos personales (email/id de usuario) no se envian al proveedor del modelo; siguen en
             # el contexto para el codigo de los agentes (p. ej. firewall de RAFAEL/JUSTICIA).
-            skip = {"conversation_history", "_memory", "user_message", "user_email", "user_id"}
-            extra = {k: v for k, v in additional_context.items() if k not in skip and not k.startswith("_")}
+            extra = _strip_emails({
+                k: v for k, v in additional_context.items()
+                if k not in _PROMPT_IDENTITY_KEYS and not k.startswith("_")
+            })
             if extra:
                 context_str = (
                     "\n\nContexto adicional:\n"

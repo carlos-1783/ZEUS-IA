@@ -461,3 +461,66 @@ def test_company_type_nulo_se_infiere_por_sector_y_bloquea_segun_resultado(db, s
     blocked = module_gate.check_action(db, users["sin_sector"], "analytics_summary")
     assert blocked and "módulo Analítica" in blocked["message"]  # sin pistas => bar_restaurant (defecto)
     assert module_gate.check_action(db, users["sin_sector"], "tpv_sales_summary") is None
+
+
+# --------------------------------------------------------------- requested_by / emails anidados
+def test_make_decision_omite_requested_by_y_emails_anidados(monkeypatch):
+    from agents.perseo import Perseo
+
+    captured = _patch_model(monkeypatch)
+    ctx = {
+        "requested_by": "jefe@example.test", "actor": "otro@example.test", "owner_email": "dueno@example.test",
+        "nested": {"contact": "anidado@example.test", "ok": "visible-1", "deep": {"e": "profundo@example.test", "n": 5}},
+        "lista": ["lista@example.test", "visible-2"],
+        "zeus_global_context": {"company_name": "Acme"},
+    }
+    Perseo().make_decision("hola", additional_context=ctx)
+    blob = json.dumps(captured[0], ensure_ascii=False)
+    for leaked in ("jefe@", "otro@", "dueno@", "anidado@", "profundo@", "lista@"):
+        assert leaked not in blob, leaked
+    assert "visible-1" in blob and "visible-2" in blob and "Acme" in blob
+    assert ctx["requested_by"] == "jefe@example.test" and ctx["nested"]["contact"] == "anidado@example.test"
+
+
+@pytest.fixture()
+def real_stack(monkeypatch):
+    from agents.afrodita import Afrodita
+    from agents.justicia import Justicia
+    from agents.perseo import Perseo
+    from agents.rafael import Rafael
+    from agents.thalos import Thalos
+
+    captured = _patch_model(monkeypatch)
+    z = ZeusCore()
+    ag = {"PERSEO": Perseo(), "RAFAEL": Rafael(), "THALOS": Thalos(), "JUSTICIA": Justicia(), "AFRODITA": Afrodita()}
+    for a in ag.values():
+        z.register_agent(a)
+    monkeypatch.setattr(chat_endpoint, "ensure_agent_stack", lambda: None)
+    monkeypatch.setattr(chat_endpoint, "zeus", z)
+    monkeypatch.setattr(chat_endpoint, "AGENTS", {"ZEUS CORE": z, **ag})
+    c = TestClient(app)
+    try:
+        yield c, captured
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize("agent", ["PERSEO", "RAFAEL", "THALOS", "JUSTICIA", "AFRODITA"])
+def test_communicate_y_coordinate_no_filtran_el_email_al_modelo(db, real_stack, agent):
+    c, captured = real_stack
+    u, co = _user(db, "office", superuser=True)  # superusuario: THALOS permitido en communicate/coordinate
+    app.dependency_overrides[get_current_active_user] = lambda: u
+    r = c.post("/api/v1/chat/agents/communicate",
+               json={"from_agent": "PERSEO" if agent != "PERSEO" else "RAFAEL", "to_agent": agent, "message": "hola equipo"})
+    assert r.status_code == 200, r.text
+    assert captured, agent
+    blob = json.dumps(captured, ensure_ascii=False)
+    assert u.email not in blob and u.email.split("@")[0] not in blob, f"communicate/{agent}"
+    assert "requested_by" not in blob
+    captured.clear()
+    r = c.post("/api/v1/chat/agents/coordinate",
+               json={"task_description": "tarea", "required_agents": [agent]})
+    assert r.status_code == 200, r.text
+    assert captured, agent
+    blob = json.dumps(captured, ensure_ascii=False)
+    assert u.email not in blob and u.email.split("@")[0] not in blob, f"coordinate/{agent}"

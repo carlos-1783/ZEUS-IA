@@ -55,6 +55,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.schemas.zeus_task import ZeusEntities, ZeusTaskObject
 from services import intent_parser as ip
+from services import jarvis_plan as plan_mod
 from services.jarvis_classifier_prompt import build_messages
 
 logger = logging.getLogger(__name__)
@@ -80,9 +81,20 @@ class ClassifierAction(BaseModel):
     certainty: float = Field(ge=0.0, le=1.0)
 
 
+class ClassifierStep(BaseModel):
+    """J9b: paso del plan multiagente (catalogo cerrado de agentes y tipos)."""
+    model_config = ConfigDict(extra="forbid")
+    agent: Literal["PERSEO", "RAFAEL", "JUSTICIA", "AFRODITA", "THALOS", "ZEUS CORE"]
+    kind: Literal["consulta", "borrador", "accion_con_consecuencias"]
+    objective: str = Field(max_length=400)
+    depends_on: List[int] = Field(default_factory=list, max_length=3)
+    action_type: Optional[Literal["send_campaign", "create_customer"]] = None
+
+
 class ClassifierOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     actions: List[ClassifierAction] = Field(default_factory=list, max_length=6)
+    steps: List[ClassifierStep] = Field(default_factory=list, max_length=6)
     overall_certainty: float = Field(ge=0.0, le=1.0)
     needs_clarification: bool = False
     clarification_question: Optional[str] = Field(default=None, max_length=400)
@@ -231,6 +243,7 @@ class Comprehension:
     decision: str = "strict_rules"
     polarity_conflict: bool = False      # el modelo dijo affirm pero las reglas ven negacion/duda
     notice: Optional[str] = None         # aviso que el orquestador antepone a la vista previa
+    plan: Optional[plan_mod.Plan] = None  # J9b: plan multiagente (el orquestador lo ejecuta)
 
 
 NOOP_REPLY = "Entendido, no hago nada. Si quieres que haga algo, dímelo de forma explícita."
@@ -408,11 +421,61 @@ def _notice(action_type: str) -> str:
     return f"He entendido que SÍ quieres {_LABEL_OF[action_type]}. Si no es así, responde \"cancelar\"."
 
 
+def _build_model_plan(
+    out: ClassifierOutput, text: str, cfg: ClassifierConfig, affirm: List[ClassifierAction]
+) -> Optional[plan_mod.Plan]:
+    """J9b: valida el plan propuesto por el modelo. None => plan invalido (se sigue con el criterio J8b:
+    pregunta si hay varias acciones, o reglas). Las acciones con consecuencias se validan con el MISMO
+    `decide` de una sola accion (entidades literales, certeza, conflicto de polaridad)."""
+    if any(a.action_type == "other_consequential" for a in affirm):
+        return None
+    pool = list(affirm)
+    steps: List[plan_mod.PlanStep] = []
+    for i, s in enumerate(out.steps, 1):
+        obj = plan_mod.clean_objective(s.objective)
+        deps = sorted(set(s.depends_on))
+        if not obj or any(d < 1 or d >= i for d in deps):
+            return None
+        if s.kind == "accion_con_consecuencias":
+            match = next((a for a in pool if a.action_type == s.action_type), None)
+            if match is None:
+                return None
+            pool.remove(match)
+            steps.append(_consequence_step(i, match, obj, deps, out, text, cfg))
+        else:
+            if s.action_type is not None or s.agent == "ZEUS CORE":
+                return None
+            steps.append(plan_mod.PlanStep(n=i, agent=s.agent, objective=obj, kind=s.kind, depends_on=deps))
+    for a in pool:  # accion afirmada que el modelo no incluyo como paso: el servidor la anade al final
+        steps.append(_consequence_step(len(steps) + 1, a, plan_mod.CONSEQUENCE_LABEL[a.action_type], [],
+                                       out, text, cfg))
+    final, omitted, _ = plan_mod.finalize_steps(steps)
+    if final is None or len(final) < 2:
+        return None
+    return plan_mod.Plan(source="model", steps=final, truncated=omitted)
+
+
+def _consequence_step(
+    n: int, act: ClassifierAction, objective: str, deps: List[int], out: ClassifierOutput, text: str,
+    cfg: ClassifierConfig,
+) -> plan_mod.PlanStep:
+    sub = decide(out.model_copy(update={"actions": [act], "steps": []}), text, cfg)
+    step = plan_mod.PlanStep(
+        n=n, agent=plan_mod.CONSEQUENCE_AGENT[act.action_type], objective=objective,
+        kind="accion_con_consecuencias", depends_on=deps, action_type=act.action_type,
+    )
+    if sub.reply is not None:
+        step.question = sub.reply
+    else:
+        step.task, step.notice = sub.task, sub.notice
+    return step
+
+
 def decide(out: ClassifierOutput, text: str, cfg: ClassifierConfig) -> Comprehension:
     """Decision del servidor sobre la salida YA validada del modelo (ver docstring del modulo)."""
     f = ip.fold(" ".join(text.split()))
     acts = out.actions
-    if not acts:
+    if not acts and len(out.steps) < 2:
         return Comprehension(task=ZeusTaskObject(), decision="model_no_actions")  # el llamador cae a reglas
     if any(a.polarity == "negate" for a in acts):
         return Comprehension(task=ZeusTaskObject(), reply=NOOP_REPLY, decision="negate")
@@ -427,6 +490,12 @@ def decide(out: ClassifierOutput, text: str, cfg: ClassifierConfig) -> Comprehen
         q = _clean_question(out.clarification_question) or GENERIC_QUESTION
         return Comprehension(task=ZeusTaskObject(), reply=q, reply_is_question=True, decision="clarify_uncertain")
     affirm = [a for a in acts if a.polarity == "affirm"]
+    if len(out.steps) >= 2:
+        plan = _build_model_plan(out, text, cfg, affirm)
+        if plan is not None:
+            return Comprehension(task=ZeusTaskObject(), plan=plan, decision="plan")
+    if not acts:
+        return Comprehension(task=ZeusTaskObject(), decision="model_no_actions")
     if len(affirm) >= 2:
         parts = " y ".join(_LABEL_OF[a.action_type] for a in affirm)
         return Comprehension(
@@ -520,7 +589,7 @@ async def comprehend(
     fallback = Comprehension(task=strict_task)
     try:
         cfg = load_config()
-        if not cfg.enabled or company_id is None or not passes_gate(message):
+        if not cfg.enabled or company_id is None or not (passes_gate(message) or plan_mod.passes_plan_gate(message)):
             return fallback
         client = get_client()
         if client is None:

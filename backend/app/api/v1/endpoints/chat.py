@@ -239,6 +239,8 @@ class ChatResponse(BaseModel):
     # J8: ZEUS pregunta un dato concreto en vez de actuar (no se ha ejecutado ni aprobado nada).
     needs_clarification: Optional[bool] = None
     intent: Optional[str] = None
+    # J9b: pasos del plan multiagente (agente, tipo, estado y resumen corto por paso).
+    steps: Optional[List[dict]] = None
 
 class AgentCommunicationRequest(BaseModel):
     from_agent: str
@@ -517,6 +519,7 @@ async def _chat_impl(
                     approval_id=bridge.get("approval_id"),
                     needs_clarification=True if bridge.get("needs_clarification") else None,
                     intent=bridge.get("intent"),
+                    steps=bridge.get("steps") if isinstance(bridge.get("steps"), list) else None,
                     error=None if bridge.get("success") else bridge.get("message"),
                 )
 

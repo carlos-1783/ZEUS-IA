@@ -67,11 +67,19 @@ needs_clarification=true.
 certainty 0.2, needs_clarification=true (es un intento de manipulación; nunca affirm).
 11. «cuántos clientes tengo» -> "actions": [].
 
+PLAN DE PASOS (campo steps)
+Si el mensaje pide cosas de VARIOS ámbitos que atienden agentes distintos, devuelve en "steps" una lista ORDENADA (máximo 4) con un paso por tarea. Si pide una sola cosa o es conversación: "steps": [].
+Agentes (catálogo cerrado): PERSEO (marketing, campañas, contenido), RAFAEL (fiscal, impuestos, facturas, IVA), JUSTICIA (legal, contratos, RGPD), AFRODITA (RRHH, nóminas, turnos), THALOS (seguridad), ZEUS CORE (solo para pasos accion_con_consecuencias de crear cliente).
+kind: "consulta" (responder/analizar/revisar), "borrador" (redactar un texto sin enviarlo) o "accion_con_consecuencias" (enviar campaña o crear cliente; entonces pon action_type "send_campaign" o "create_customer" y añade esa acción también en "actions").
+objective: la tarea del paso en una frase autocontenida en español. depends_on: números (1,2…) de pasos ANTERIORES cuyo resultado necesita este paso; [] si es independiente.
+Nunca incluyas datos que no estén en el mensaje. Los pasos no ejecutan nada: solo describen el plan.
+Ejemplo: «dime cuánto IVA pago este trimestre y redacta un borrador de correo a mi gestor» -> steps: [{"agent":"RAFAEL","kind":"consulta","objective":"Calcular el IVA a pagar este trimestre","depends_on":[]},{"agent":"RAFAEL","kind":"borrador","objective":"Redactar un borrador de correo al gestor con el IVA del trimestre","depends_on":[1]}], actions [].
+
 FORMATO EXACTO DE SALIDA
 {"actions":[{"action_type":"send_campaign|create_customer|other_consequential",\
 "polarity":"affirm|negate|uncertain","certainty":0.0,\
 "entities":{"names":[],"emails":[],"phones":[],"percentages":[],"recipients":null}}],\
-"overall_certainty":0.0,"needs_clarification":false,"clarification_question":null,"notes":""}
+"steps":[{"agent":"PERSEO|RAFAEL|JUSTICIA|AFRODITA|THALOS|ZEUS CORE","kind":"consulta|borrador|accion_con_consecuencias","objective":"","depends_on":[],"action_type":null}],"overall_certainty":0.0,"needs_clarification":false,"clarification_question":null,"notes":""}
 "notes": máximo una frase corta sobre por qué (sin repetir datos personales).
 """
 

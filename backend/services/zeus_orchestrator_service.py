@@ -35,6 +35,7 @@ from services.intent_parser_service import (
 from services.intent_parser import clarification_for_unknown, has_negation, is_conversational_request
 from services import jarvis_clarification as clarif
 from services import jarvis_model_comprehension as model_comp
+from services import jarvis_plan as plan_mod
 from services import module_gate
 from services.zeus_global_context import attach_context_to_action_payload, enrich_chat_context
 from services.chain_log import log_chain_step
@@ -344,6 +345,114 @@ async def _dispatch_action(
     )
 
 
+async def _prepare_confirmable(
+    db: Session,
+    user: User,
+    action: ZeusAction,
+    notice: Optional[str],
+    company_int: Optional[int],
+    thread_id: str,
+    _step: Any,
+) -> Dict[str, Any]:
+    """Vista previa + solicitud en zeus_pending_approvals de una accion con consecuencias (J3b).
+    Compartido por el chat directo y por los pasos con consecuencias de un plan (J9b). No ejecuta."""
+    action.requires_confirmation = True
+    if action.action_type == "send_campaign":
+        preview = handlers.preview_send_campaign(db, user, action)
+    else:
+        preview = _preview_create_customer(action)
+        if preview is None:
+            _step("ORQUESTAR", action.action_type, "needs_more_data", requires_confirmation=True)
+            return _to_chat_payload(await execute_action(db, user, action, force_execute=False))
+    if notice:
+        # J8b: el modelo dijo «sí» sobre un mensaje con negacion/duda: aviso explicito en la vista previa.
+        preview = {**preview, "message": f"{notice} {preview['message']}"}
+    refusal = {"handled": True, "success": False, "executed": False}
+    try:
+        row = request_approval(
+            db,
+            user=user,
+            company_id=company_int,
+            agent_name="ZEUS",
+            action_type=action.action_type,
+            payload=_clean_payload(action.payload),
+            thread_id=thread_id,
+            ttl_seconds=PENDING_TTL_SECONDS,
+        )
+    except HTTPException as exc:
+        db.rollback()
+        _step("ORQUESTAR", action.action_type, "rejected" if exc.status_code == 403 else "failed",
+              requires_confirmation=True, http_status=exc.status_code)
+        if exc.status_code == 403:
+            return {**refusal, "message": f"No tienes permiso para esta acción: {exc.detail}"}
+        return {**refusal, "message": str(exc.detail)}
+    except Exception:
+        db.rollback()
+        logger.exception("zeus_chat: no se pudo persistir la solicitud; no se ejecuta nada")
+        _step("ORQUESTAR", action.action_type, "failed", requires_confirmation=True)
+        return {
+            **refusal,
+            "message": (
+                "No se pudo registrar la solicitud de confirmación. "
+                "No se ha ejecutado nada; inténtalo de nuevo."
+            ),
+        }
+    _step("ORQUESTAR", action.action_type, "needs_confirmation",
+          requires_confirmation=True, approval_id=row.id)
+    return {
+        "handled": True,
+        "success": True,
+        "executed": False,
+        "needs_confirmation": True,
+        "approval_id": row.id,
+        "message": preview["message"],
+        "execution": preview,
+        "action": {**action.model_dump(), "payload": _clean_payload(action.payload)},
+    }
+
+
+async def _run_plan(
+    db: Session,
+    user: User,
+    plan: "plan_mod.Plan",
+    ctx: Dict[str, Any],
+    global_context: Dict[str, Any],
+    company_int: Optional[int],
+    thread_id: str,
+    _step: Any,
+) -> Dict[str, Any]:
+    """J9b: ejecuta el plan. Los pasos con consecuencias solo preparan vista previa + aprobacion."""
+
+    async def prepare(step: "plan_mod.PlanStep") -> Dict[str, Any]:
+        if step.question:
+            return {"status": "needs_data", "message": step.question}
+        task = step.task
+        if task is None or task.intent == "unknown" or task.needs_clarification:
+            q = getattr(task, "clarification_question", None) or "Me falta algún dato para preparar esta acción."
+            return {"status": "needs_data", "message": q}
+        action = _with_global_context(build_action(db, user, task), global_context)
+        blocked = module_gate.check_action(db, user, action.action_type)
+        if blocked:
+            _step("ORQUESTAR", action.action_type, "blocked_module", module=blocked["module"],
+                  action_type=action.action_type)
+            return {"status": "blocked", "message": blocked["message"]}
+        if action.action_type not in CONFIRMABLE_ACTIONS:
+            return {"status": "failed", "message": "Esta acción no se puede preparar desde un plan."}
+        out = await _prepare_confirmable(db, user, action, step.notice, company_int, thread_id, _step)
+        if out.get("approval_id"):
+            return {"status": "pending_confirmation", "message": out["message"], "approval_id": out["approval_id"]}
+        return {"status": "needs_data" if out.get("success") else "failed", "message": out.get("message", "")}
+
+    return await plan_mod.execute_plan(
+        db, user, plan, ctx=ctx, company_id=company_int, thread_id=_raw_thread(ctx),
+        prepare_confirmation=prepare,
+    )
+
+
+def _raw_thread(context: Optional[Dict[str, Any]]) -> str:
+    return _thread_id(context)
+
+
 async def try_handle_zeus_chat(
     db: Session,
     user: User,
@@ -488,6 +597,14 @@ async def try_handle_zeus_chat(
             }
         task = comp.task
         notice = comp.notice
+        # J9b: plan multiagente (modelo J8b; en fallback sin modelo, un paso por dominio por reglas).
+        plan = comp.plan
+        if plan is None and not comp.used_model and task.intent == "unknown" and not has_negation(message):
+            plan = plan_mod.plan_from_rules(message, is_superuser=bool(getattr(user, "is_superuser", False)))
+        if plan is not None:
+            return await _run_plan(
+                db, user, plan, ctx, global_context, company_int, thread_id, _step
+            )
     understood = task.intent != "unknown" and task.confidence >= MIN_CONFIDENCE and not task.needs_clarification
     if understood:
         comp_status = "success"
@@ -539,59 +656,7 @@ async def try_handle_zeus_chat(
         return blocked_reply
 
     if action.action_type in CONFIRMABLE_ACTIONS:
-        action.requires_confirmation = True
-        if action.action_type == "send_campaign":
-            preview = handlers.preview_send_campaign(db, user, action)
-        else:
-            preview = _preview_create_customer(action)
-            if preview is None:
-                _step("ORQUESTAR", action.action_type, "needs_more_data", requires_confirmation=True)
-                return _to_chat_payload(await execute_action(db, user, action, force_execute=False))
-        if notice:
-            # J8b: el modelo dijo «sí» sobre un mensaje con negacion/duda: aviso explicito en la vista previa.
-            preview = {**preview, "message": f"{notice} {preview['message']}"}
-        refusal = {"handled": True, "success": False, "executed": False}
-        try:
-            row = request_approval(
-                db,
-                user=user,
-                company_id=company_int,
-                agent_name="ZEUS",
-                action_type=action.action_type,
-                payload=_clean_payload(action.payload),
-                thread_id=thread_id,
-                ttl_seconds=PENDING_TTL_SECONDS,
-            )
-        except HTTPException as exc:
-            db.rollback()
-            _step("ORQUESTAR", action.action_type, "rejected" if exc.status_code == 403 else "failed",
-                  requires_confirmation=True, http_status=exc.status_code)
-            if exc.status_code == 403:
-                return {**refusal, "message": f"No tienes permiso para esta acción: {exc.detail}"}
-            return {**refusal, "message": str(exc.detail)}
-        except Exception:
-            db.rollback()
-            logger.exception("zeus_chat: no se pudo persistir la solicitud; no se ejecuta nada")
-            _step("ORQUESTAR", action.action_type, "failed", requires_confirmation=True)
-            return {
-                **refusal,
-                "message": (
-                    "No se pudo registrar la solicitud de confirmación. "
-                    "No se ha ejecutado nada; inténtalo de nuevo."
-                ),
-            }
-        _step("ORQUESTAR", action.action_type, "needs_confirmation",
-              requires_confirmation=True, approval_id=row.id)
-        return {
-            "handled": True,
-            "success": True,
-            "executed": False,
-            "needs_confirmation": True,
-            "approval_id": row.id,
-            "message": preview["message"],
-            "execution": preview,
-            "action": {**action.model_dump(), "payload": _clean_payload(action.payload)},
-        }
+        return await _prepare_confirmable(db, user, action, notice, company_int, thread_id, _step)
 
     _step("ORQUESTAR", action.action_type, "success", requires_confirmation=False)
     result = await execute_action(db, user, action, force_execute=False)

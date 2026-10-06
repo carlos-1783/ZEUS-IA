@@ -410,7 +410,8 @@ _STOP_WORDS = set(
     despues ya ahora ni nada pas maintenant don nein nope non nao arrete solo si cuando quizas quiza tal vez
     olvida olvidalo borra borrar lo hagas hagais haga crees creas envies envias tampoco sin deja dejes es hay se
     te le ok vale bien pues momento jaja jajaja jeje hoy ninguno ninguna ningun lo la los las de del y a al
-    mal peor aun todavia aunque pero o u e""".split()
+    mal peor aun todavia aunque pero o u e detente aguarda anula frena basta olvidate quieto abortar desiste
+    suspende pausa cese""".split()
 )
 _NAME_PARTICLES_LOWER = {"de", "del", "la", "los", "las", "y"}
 _NAME_WORD_RE = re.compile(r"[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+")

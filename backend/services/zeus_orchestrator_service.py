@@ -33,6 +33,7 @@ from services.intent_parser_service import (
 )
 from services.intent_parser import clarification_for_unknown, has_negation, is_conversational_request
 from services import jarvis_clarification as clarif
+from services import jarvis_model_comprehension as model_comp
 from services.zeus_global_context import attach_context_to_action_payload, enrich_chat_context
 from services.chain_log import log_chain_step
 from services.zeus_human_approval_v1 import (
@@ -442,7 +443,20 @@ async def try_handle_zeus_chat(
             ),
         }
 
-    task = resumed if resumed is not None else parse_message(message)
+    if resumed is not None:
+        task = resumed
+    else:
+        task = parse_message(message)  # criterio estricto J8: red de seguridad y fallback
+        # J8b: si el mensaje PUEDE pedir una accion con consecuencias, la comprension la hace el
+        # modelo (salida validada; ante cualquier fallo se conserva `task`). Nunca ejecuta: solo
+        # produce una tarea o una respuesta; la aprobacion humana sigue siendo obligatoria.
+        comp = await model_comp.comprehend(db, user, company_int, message, task, _step)
+        if comp.reply is not None:
+            return {
+                "handled": True, "success": True, "executed": False,
+                "needs_clarification": comp.reply_is_question, "intent": "unknown", "message": comp.reply,
+            }
+        task = comp.task
     understood = task.intent != "unknown" and task.confidence >= MIN_CONFIDENCE and not task.needs_clarification
     if understood:
         comp_status = "success"

@@ -111,7 +111,7 @@ class ZeusCore(BaseAgent):
         
         if not agent_name or agent_name not in self.agents:
             # Si no hay agente disponible, ZEUS responde directamente
-            return self._handle_directly(user_message)
+            return self._handle_directly(user_message, context)
         
         # Delegar al agente apropiado
         agent = self.agents[agent_name]
@@ -147,11 +147,11 @@ class ZeusCore(BaseAgent):
         print(f"[ZEUS] Routing {decision.scores} -> {decision.agent or 'ZEUS CORE'} ({decision.reason})")
         return decision.task_type
 
-    def _handle_directly(self, user_message: str) -> Dict[str, Any]:
+    def _handle_directly(self, user_message: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """ZEUS maneja la solicitud directamente (cuando no hay agente apropiado)"""
         print("🏛️ [ZEUS] Manejando solicitud directamente")
         
-        result = self.make_decision(user_message)
+        result = self.make_decision(user_message, additional_context=context)
         result["routed_by"] = "ZEUS CORE"
         result["selected_agent"] = "ZEUS CORE (directo)"
         

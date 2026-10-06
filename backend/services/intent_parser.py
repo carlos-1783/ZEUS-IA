@@ -231,7 +231,7 @@ def detect_urgency(text: str) -> str:
 
 _OFFER_NOUN = r"(?:oferta|ofertas|descuento|descuentos|promocion|promociones|promo|promos|campana|campanas|cupon|cupones)"
 _SEND_VERB = (
-    r"(?:envia|enviar|enviale|enviala|enviales|enviarla|mandar|manda|mandale|mandala|mandales|"
+    r"(?:envia|enviar|enviale|enviala|enviales|enviarla|enviame|mandar|manda|mandale|mandala|mandales|mandame|"
     r"notifica|notificar|avisa|avisar|comunica|comunicar|difunde|lanza|lanzar|"
     # subjuntivo (imperativo negado: «no mandes», «no envíes»): se reconoce para poder NEGARLO
     r"mandes|envies|lances|notifiques|avises|comuniques|difundas)"
@@ -319,7 +319,7 @@ _PARTIAL_RECIPIENTS_RE = re.compile(
 _NEGATION_ANY_RE = re.compile(r"\b(no|nunca|jamas|evita|evitar|evites)\b")
 
 QUESTION_NEGATED = (
-    "Parece que NO quieres hacerlo, o no lo tienes claro, así que no he hecho nada. "
+    "No lo he entendido como una orden clara (hay una negación, una duda o una condición), así que no he hecho nada. "
     "Si quieres que lo haga, dímelo de forma explícita (p. ej. «envía oferta 10% a todos mis clientes»)."
 )
 QUESTION_PARTIAL = (
@@ -330,6 +330,58 @@ QUESTION_MULTI = (
     "Me pides varias cosas a la vez ({parts}). Hago una cada vez y no ejecuto nada sin tu confirmación: "
     "dime cuál quieres primero y luego me pides la otra."
 )
+
+
+# --- LISTA BLANCA para acciones con consecuencias (crear cliente, enviar campaña) --------------
+# CRITERIO: la accion solo se PREPARA si el verbo de accion (el primero del mensaje) va en una
+# clausula con forma de ORDEN AFIRMATIVA: verbo en imperativo/infinitivo de peticion y, ANTES de el
+# en esa frase (desde el ultimo . ; : ! ? del texto), como mucho formulas de cortesia/vocativo
+# («por favor», «zeus,», «oye», «vale,», «venga,», «ahora») y formulas de peticion («quiero que»,
+# «necesito», «puedes», «me gustaria que»…). Cualquier OTRO material antes del verbo (negacion,
+# «nada de», «deja de», «sin», «ni se te ocurra», «si quieres», «y si», dudas, subordinadas,
+# condicionales) => NO se prepara: needs_clarification con pregunta explicita.
+# El subjuntivo («envíes», «crees») solo vale tras una formula con «que» («quiero que envíes»).
+# La lista negra (_NEGATION_BEFORE_RE) se mantiene como defensa adicional.
+# FALSOS NEGATIVOS CONSERVADORES CONOCIDOS (se pregunta aunque el usuario si queria hacerlo):
+# «no olvides enviar…», «no dejes de enviar…», «no es que no quiera, envía…», «primero revisa X y
+# luego envía…» (material antes del verbo), «para aumentar ventas, crea una campaña…».
+_COURTESY = (
+    "por favor", "porfa", "porfavor", "zeus", "jarvis", "oye", "hola", "vale", "venga", "ahora", "ok", "bien",
+    "entonces", "pues", "gracias", "perdona", "disculpa", "urgente", "a ver", "me", "nos", "ya", "y",
+)
+_REQUEST_FORMULAS = (
+    "quiero que", "queremos que", "necesito que", "necesitamos que", "me gustaria que", "quisiera que",
+    "te pido que", "te pedimos que", "puedes", "podrias", "podeis", "podemos", "quiero", "queremos",
+    "necesito", "necesitamos", "me gustaria", "quisiera", "tienes que", "debes", "hay que", "vamos a",
+    "voy a", "vas a",
+)
+_SUBJUNCTIVE = {
+    "envies", "mandes", "lances", "notifiques", "avises", "comuniques", "difundas",
+    "crees", "generes", "hagas", "montes", "prepares", "registres", "agregues", "anadas", "apuntes",
+}
+_SENTENCE_BREAK_RE = re.compile(r"[.;:!?¿¡\n]")
+
+
+def _is_affirmative_request(f: str, verb_start: int, verb_text: str) -> bool:
+    """True solo si el prefijo de la frase antes del verbo son formulas de cortesia/peticion."""
+    before = f[:verb_start]
+    parts = _SENTENCE_BREAK_RE.split(before)
+    prefix = re.sub(r"[,\"'«»()]", " ", parts[-1] if parts else "")
+    prefix = " ".join(prefix.split())
+    had_que = False
+    ordered = sorted(_REQUEST_FORMULAS + _COURTESY, key=len, reverse=True)
+    while prefix:
+        for tok in ordered:
+            if prefix == tok or prefix.startswith(tok + " "):
+                if tok.endswith(" que"):
+                    had_que = True
+                prefix = prefix[len(tok):].strip()
+                break
+        else:
+            return False
+    if verb_text in _SUBJUNCTIVE and not had_que:
+        return False
+    return True
 
 
 def _is_negated_before(f: str, verb_start: int) -> bool:
@@ -471,7 +523,7 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
         if ent.phones:
             meta["phone"] = ent.phones[0]
         question = question_for_customer(name, email)
-        if _is_negated_before(f, m.start(1)):
+        if _is_negated_before(f, m.start(1)) or not _is_affirmative_request(f, m.start(1), m.group(1)):
             missing, question = ["explicit_intent"], QUESTION_NEGATED
         c.append(_Cand("create_customer", "create_customer", 0.85, "create_customer",
                        suppresses={"list_customers_summary", "get_metrics", "tpv_sales_summary",
@@ -490,7 +542,12 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
         question = None
         verb = _SEND_RE.search(f)
         cverb = _CREATE_RE.search(f)
-        if _is_negated_before(f, verb.start()) or (cverb and _is_negated_before(f, cverb.start())):
+        first = min((v for v in (verb, cverb) if v), key=lambda v: v.start())
+        if (
+            _is_negated_before(f, verb.start())
+            or (cverb and _is_negated_before(f, cverb.start()))
+            or not _is_affirmative_request(f, first.start(), first.group(0))
+        ):
             missing, question = ["explicit_intent"], QUESTION_NEGATED
         elif _PARTIAL_RECIPIENTS_RE.search(f[verb.end():]):
             missing, question = ["recipients_scope"], QUESTION_PARTIAL

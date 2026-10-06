@@ -33,6 +33,10 @@ logger = logging.getLogger(__name__)
 MAX_STEPS = 4
 MAX_OBJECTIVE_CHARS = 240
 SUMMARY_CHARS = 160
+# Tope documentado del texto completo de un paso `done` (steps[].text y, en consultas, message).
+# Los borradores/entregables no se incrustan en el chat: van solo en steps[].text y J10 los enlazara
+# al workspace del agente. La vista previa de un paso con consecuencias NO se trunca.
+STEP_TEXT_MAX_CHARS = 4000
 DEPENDENCY_CONTEXT_CHARS = 400
 KINDS = ("consulta", "borrador", "accion_con_consecuencias")
 AGENT_CATALOG = ("PERSEO", "RAFAEL", "JUSTICIA", "AFRODITA", "THALOS", "ZEUS CORE")
@@ -77,6 +81,9 @@ class PlanStep:
             "n": self.n, "agent": self.agent, "kind": self.kind, "objective": self.objective,
             "depends_on": list(self.depends_on), "status": self.status, "summary": self.summary,
             "approval_id": self.approval_id,
+            # respuesta completa (done, con tope) o vista previa integra (pending_confirmation)
+            "text": cap_text(self.text) if self.status == "done" else
+            (self.text if self.status == "pending_confirmation" else ""),
         }
 
 
@@ -94,6 +101,11 @@ _CTRL_RE = re.compile(r"[\x00-\x1f\x7f]")
 def clean_objective(text: Optional[str]) -> str:
     t = " ".join(_CTRL_RE.sub(" ", str(text or "")).split())
     return t[:MAX_OBJECTIVE_CHARS]
+
+
+def cap_text(text: Optional[str], limit: int = STEP_TEXT_MAX_CHARS) -> str:
+    t = str(text or "").strip()
+    return t if len(t) <= limit else t[:limit].rstrip() + "\n[... texto truncado]"
 
 
 def short_summary(text: Optional[str], limit: int = SUMMARY_CHARS) -> str:
@@ -257,7 +269,7 @@ async def execute_plan(
         if step.kind == "accion_con_consecuencias":
             res = await prepare_confirmation(step)
             step.status = res.get("status", "failed")
-            step.summary = short_summary(res.get("message"), 240)
+            step.summary = short_summary(res.get("message"), 240)  # solo resumen; la vista previa va integra en text
             step.approval_id = res.get("approval_id")
             step.text = res.get("message") or ""
             _log_step(user, company_id, step,
@@ -289,7 +301,15 @@ def build_response(plan: Plan) -> Dict[str, Any]:
     lines = [f"Plan de {len(steps)} pasos:"]
     for s in steps:
         head = f"{s.n}. {s.agent} ({s.kind.replace('accion_con_consecuencias', 'acción con consecuencias')})"
-        lines.append(f"{head}: {STATUS_LABEL.get(s.status, s.status)}" + (f" — {s.summary}" if s.summary else ""))
+        lines.append(f"{head}: {STATUS_LABEL.get(s.status, s.status)}")
+        if s.status == "done" and s.kind == "consulta":
+            lines.append(cap_text(s.text))  # una consulta es una respuesta: completa (con tope)
+        elif s.status == "done":
+            lines.append(f"{s.summary} (texto completo en el paso {s.n})")  # borrador: no se incrusta
+        elif s.status == "pending_confirmation":
+            lines.append(s.text)  # vista previa integra: el usuario debe verla antes de confirmar
+        elif s.summary:
+            lines.append(s.summary)
     if plan.truncated:
         lines.append(f"(Solo he planificado los {len(steps)} primeros pasos; deja el resto para otra petición.)")
     pending = [s for s in steps if s.status == "pending_confirmation" and s.approval_id]

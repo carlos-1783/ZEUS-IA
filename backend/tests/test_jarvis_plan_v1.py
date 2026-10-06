@@ -81,13 +81,15 @@ class Llm:
     def __init__(self):
         self.calls = []        # [(agente, messages)]
         self.fail_for = set()  # agentes cuyo modelo falla
+        self.content = {}      # agente -> texto fijo de respuesta (p. ej. una respuesta larga)
 
     def __call__(self, messages, temperature=0.3, max_tokens=2000, **kw):
         agent = NAME_OF_PROMPT.get(messages[0]["content"], "ZEUS CORE")
         self.calls.append((agent, json.loads(json.dumps(messages))))
         if agent in self.fail_for:
             return {"success": False, "error": f"fallo simulado {agent}"}
-        return {"success": True, "content": f"Respuesta de {agent} numero {len(self.calls)}.", "model": "stub",
+        text = self.content.get(agent) or f"Respuesta de {agent} numero {len(self.calls)}."
+        return {"success": True, "content": text, "model": "stub",
                 "cost": 0.0, "elapsed_time": 0.0, "usage": {"total_tokens": 1},
                 "timestamp": "2026-01-01T00:00:00"}
 
@@ -213,7 +215,7 @@ def test_dos_dominios_dos_pasos_dos_agentes_cada_uno_con_su_prompt_y_en_orden(db
         if agent in ("PERSEO", "JUSTICIA"):
             assert messages[0] == {"role": "system", "content": PROMPT[agent]}  # prompt integro
     assert "1. PERSEO" in out["message"] and "2. JUSTICIA" in out["message"]
-    assert len(out["message"]) < 900  # mensaje breve: sin entregables incrustados
+    assert len(out["message"]) < 900  # respuestas cortas de los stubs: el mensaje no se infla
     assert approvals(db, u) == []
 
 
@@ -573,3 +575,67 @@ def test_mensaje_simple_sin_plan_sigue_igual(db, stack):
     u, _ = _user(db)
     out = say(stack, u, "hola, ¿qué tal?")
     assert not out.get("steps") and "Plan de" not in out["message"]
+
+
+# ----------------------------------------------------------------------------- texto completo (revision J9b)
+def _long(tag, n=300):
+    return ("palabra " * n) + tag
+
+
+def test_consulta_larga_llega_completa_en_message_y_en_steps_text(db, stack):
+    u, _ = _user(db)
+    stack.llm.content["RAFAEL"] = _long("FINAL_IMPORTANTE")
+    use_model(stack, classifier(step("RAFAEL", "consulta", "Calcular el IVA"),
+                                step("AFRODITA", "consulta", "Resumir los turnos")))
+    out = say(stack, u, "calcula el iva y resume los turnos")
+    st = out["steps"][0]
+    assert st["status"] == "done" and len(st["text"]) > 160 and st["text"].endswith("FINAL_IMPORTANTE")
+    assert "FINAL_IMPORTANTE" in out["message"]
+    assert len(st["summary"]) <= jp.SUMMARY_CHARS
+
+
+def test_borrador_largo_message_corto_y_texto_completo_solo_en_steps(db, stack):
+    u, _ = _user(db)
+    stack.llm.content["RAFAEL"] = _long("FINAL_BORRADOR")
+    use_model(stack, classifier(step("AFRODITA", "consulta", "Resumir los turnos"),
+                                step("RAFAEL", "borrador", "Redactar el correo al gestor", deps=[1])))
+    out = say(stack, u, MSG_IVA_CORREO)
+    st = out["steps"][1]
+    assert st["kind"] == "borrador" and st["text"].endswith("FINAL_BORRADOR")
+    assert "texto completo en el paso 2" in out["message"]
+    assert "FINAL_BORRADOR" not in out["message"]  # el entregable no se incrusta en el chat
+    assert len(out["message"]) < 600 and len(st["summary"]) <= jp.SUMMARY_CHARS
+
+
+def test_vista_previa_con_consecuencias_integra_con_destinatarios_y_porcentaje(db, stack):
+    u, _ = _user(db)
+    use_model(stack, classifier(
+        step("JUSTICIA", "consulta", "Revisar el contrato"),
+        step("PERSEO", "accion_con_consecuencias", "Enviar la oferta", action_type="send_campaign"),
+        actions=[OFFER_ACT]))
+    out = say(stack, u, OFFER)
+    prev = out["steps"][1]
+    assert prev["status"] == "pending_confirmation" and prev["text"] in out["message"]
+    assert "10" in prev["text"] and "%" in prev["text"] and "cliente" in prev["text"].lower()
+    assert "confirmar" in out["message"] and "cancelar" in out["message"]
+
+
+def test_vista_previa_larga_no_se_trunca(monkeypatch):
+    long_preview = "Voy a enviar la oferta del 10% a " + "cliente, " * 80 + "FIN_VISTA_PREVIA"
+    step_ = jp.PlanStep(n=1, agent="PERSEO", objective="x", kind="accion_con_consecuencias",
+                        status="pending_confirmation", approval_id=7, text=long_preview, summary="corto")
+    done = jp.PlanStep(n=2, agent="RAFAEL", objective="y", kind="consulta", status="done", text="ok", summary="ok")
+    out = jp.build_response(jp.Plan(source="model", steps=[step_, done]))
+    assert long_preview in out["message"] and out["steps"][0]["text"] == long_preview
+
+
+def test_tope_de_texto_por_paso(db, stack):
+    u, _ = _user(db)
+    stack.llm.content["RAFAEL"] = "y" * 9000 + "FINAL"
+    use_model(stack, classifier(step("RAFAEL", "consulta", "Calcular el IVA"),
+                                step("AFRODITA", "consulta", "Resumir los turnos")))
+    out = say(stack, u, "calcula el iva y resume los turnos")
+    t = out["steps"][0]["text"]
+    assert t.startswith("y" * 100) and "FINAL" not in t and t.endswith("[... texto truncado]")
+    assert len(t) <= jp.STEP_TEXT_MAX_CHARS + 40 and jp.STEP_TEXT_MAX_CHARS == 4000
+    assert out["message"].count("y") <= jp.STEP_TEXT_MAX_CHARS

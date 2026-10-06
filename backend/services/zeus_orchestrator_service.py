@@ -31,6 +31,8 @@ from services.intent_parser_service import (
     looks_like_operational,
     parse_message,
 )
+from services.intent_parser import clarification_for_unknown, is_conversational_request
+from services import jarvis_clarification as clarif
 from services.zeus_global_context import attach_context_to_action_payload, enrich_chat_context
 from services.chain_log import log_chain_step
 from services.zeus_human_approval_v1 import (
@@ -51,16 +53,6 @@ MIN_CONFIDENCE = 0.7
 PENDING_TTL_SECONDS = CHAT_APPROVAL_TTL_SECONDS
 # Acciones con consecuencias (envían emails / crean datos): exigen vista previa + confirmación.
 CONFIRMABLE_ACTIONS = frozenset({"send_campaign", "create_customer"})
-
-_OPERATIONAL_HELP = (
-    "No pude ejecutar esa acción. Prueba con frases concretas, por ejemplo:\n"
-    "• «¿cuántos clientes tengo?»\n"
-    "• «envía oferta 5% a clientes» (luego «confirmar»)\n"
-    "• «qué ventas hicimos hoy»\n"
-    "• «¿tengo turno activo?»\n"
-    "• «resumen de actividad últimos 30 días»"
-)
-
 
 def _company_key(user: User, context: Optional[Dict[str, Any]]) -> str:
     """Clave de empresa para la memoria de ZEUS.
@@ -387,6 +379,23 @@ async def try_handle_zeus_chat(
     explicit = is_confirmation_message(message)
     affirmative = is_affirmative_message(message)
 
+    # J8: si ZEUS preguntó en este hilo, esta respuesta puede completar el dato. Solo cuando no hay
+    # una aprobación abierta (el «sí/confirmar» de una aprobación tiene siempre prioridad).
+    resumed = None
+    if pending_row is None:
+        clar_state = clarif.load_state(company_id, thread_id)
+        if clar_state is not None:
+            clarif.clear_state(company_id, thread_id)
+            if is_cancel_message(message):
+                _step("COMPRENDER", "clarification_cancelled", "rejected", intent=clar_state.get("intent"))
+                return {"handled": True, "success": True, "executed": False,
+                        "message": "De acuerdo, lo dejo. No he hecho nada."}
+            resumed = clarif.resolve_reply(clar_state, message)
+            _step("COMPRENDER", "clarification_reply",
+                  "success" if resumed is not None else "abandoned",
+                  intent=clar_state.get("intent"), kind=clar_state.get("kind"),
+                  missing=clar_state.get("missing"))
+
     if pending_row is not None:
         if explicit or affirmative:
             confirmed_id, confirmed_action = pending_row.id, pending_row.action_type
@@ -420,7 +429,7 @@ async def try_handle_zeus_chat(
         if not topic_ok:
             # Fail-closed: no se deja una fila confirmable en silencio ni se encadena otra accion.
             return {"handled": True, "success": False, "executed": False, "message": _REJECT_FAILED_MSG}
-    elif explicit:
+    elif explicit and resumed is None:
         _step("ORQUESTAR", "confirm_without_pending", "rejected", pending_expired=expired_notice)
         return {
             "handled": True,
@@ -433,19 +442,34 @@ async def try_handle_zeus_chat(
             ),
         }
 
-    task = parse_message(message)
-    understood = not (task.intent == "unknown" or task.confidence < MIN_CONFIDENCE)
+    task = resumed if resumed is not None else parse_message(message)
+    understood = task.intent != "unknown" and task.confidence >= MIN_CONFIDENCE and not task.needs_clarification
+    if understood:
+        comp_status = "success"
+    elif task.needs_clarification and task.missing_entities and not task.ambiguous_with:
+        comp_status = "needs_more_data"
+    else:
+        comp_status = "not_understood"
     _step(
-        "COMPRENDER", "parse_intent", "success" if understood else "not_understood",
+        "COMPRENDER", "parse_intent", comp_status,
         intent=task.intent, confidence=float(task.confidence), min_confidence=float(MIN_CONFIDENCE),
+        urgency=task.urgency, missing_entities=task.missing_entities, ambiguous_with=task.ambiguous_with,
+        confidence_rule=(task.confidence_breakdown or {}).get("rule"),
+        # solo TIPOS de entidad detectados, nunca sus valores (nombres/emails/importes son datos del cliente)
+        entity_kinds=sorted(k for k, v in task.entities.model_dump().items() if v),
     )
+    if task.needs_clarification and task.intent != "unknown":
+        # J8: NO se ejecuta ni se crea aprobación. Se pregunta algo concreto y se recuerda lo entendido.
+        clarif.save_state(company_id, thread_id, task)
+        return {
+            "handled": True, "success": True, "executed": False, "needs_clarification": True,
+            "intent": task.intent, "message": task.clarification_question,
+        }
     if not understood:
-        if looks_like_operational(message):
+        if looks_like_operational(message) and not is_conversational_request(message):
             return {
-                "handled": True,
-                "success": False,
-                "executed": False,
-                "message": _OPERATIONAL_HELP,
+                "handled": True, "success": True, "executed": False, "needs_clarification": True,
+                "intent": "unknown", "message": clarification_for_unknown(message),
             }
         return None
 

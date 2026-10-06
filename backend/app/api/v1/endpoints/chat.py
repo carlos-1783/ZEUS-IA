@@ -236,6 +236,9 @@ class ChatResponse(BaseModel):
     request_id: Optional[str] = None
     # J7: avisos (p. ej. un paso ACTUAR/AUDITAR que no se pudo registrar). Nunca se ocultan.
     warnings: Optional[List[str]] = None
+    # J8: ZEUS pregunta un dato concreto en vez de actuar (no se ha ejecutado ni aprobado nada).
+    needs_clarification: Optional[bool] = None
+    intent: Optional[str] = None
 
 class AgentCommunicationRequest(BaseModel):
     from_agent: str
@@ -335,6 +338,7 @@ async def chat_with_agent(
             raise
         status = (
             "needs_confirmation" if resp.needs_confirmation
+            else "needs_more_data" if resp.needs_clarification
             else "success" if resp.success else "failed"
         )
         log_chain_step(
@@ -354,6 +358,12 @@ async def chat_with_agent(
                 "CONTINUAR", company_id=chain_company, user=current_user, agent=norm_agent,
                 action="pending_confirmation_open", status="needs_confirmation",
                 details={"approval_id": resp.approval_id, "next": "confirm_or_cancel"},
+            )
+        elif resp.needs_clarification:
+            log_chain_step(
+                "CONTINUAR", company_id=chain_company, user=current_user, agent=norm_agent,
+                action="awaiting_user_clarification", status="needs_more_data",
+                details={"intent": resp.intent, "next": "user_reply_in_same_thread"},
             )
         elif resp.hitl_required:
             log_chain_step(
@@ -484,6 +494,8 @@ async def _chat_impl(
                     needs_confirmation=bool(bridge.get("needs_confirmation")),
                     execution=bridge.get("execution") if isinstance(bridge.get("execution"), dict) else None,
                     approval_id=bridge.get("approval_id"),
+                    needs_clarification=True if bridge.get("needs_clarification") else None,
+                    intent=bridge.get("intent"),
                     error=None if bridge.get("success") else bridge.get("message"),
                 )
 

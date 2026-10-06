@@ -101,17 +101,13 @@ class ZeusCore(BaseAgent):
         
         # Si no se especifica tipo, ZEUS decide qué agente usar
         if not task_type:
-            task_type = self._route_to_agent(user_message)
-        
-        # Mapear tipo a agente
-        agent_mapping = {
-            "marketing": "PERSEO",
-            "fiscal": "RAFAEL",
-            "security": "THALOS",
-            "legal": "JUSTICIA"
-        }
-        
-        agent_name = agent_mapping.get(task_type)
+            task_type = self._route_to_agent(
+                user_message, is_superuser=bool(context.get("_is_superuser"))
+            )
+
+        from services.agent_routing import task_type_to_agent
+
+        agent_name = task_type_to_agent(task_type)
         
         if not agent_name or agent_name not in self.agents:
             # Si no hay agente disponible, ZEUS responde directamente
@@ -142,55 +138,15 @@ class ZeusCore(BaseAgent):
         
         return result
     
-    def _route_to_agent(self, user_message: str) -> str:
-        """
-        Decidir qué agente debe manejar la solicitud
-        (Heurística simple por ahora, se puede mejorar con embedding search)
-        """
-        message_lower = user_message.lower()
-        
-        # Keywords para cada agente
-        marketing_keywords = [
-            "marketing", "campaña", "anuncio", "seo", "sem", "ventas", 
-            "cliente", "lead", "conversión", "tráfico", "contenido",
-            "redes sociales", "instagram", "facebook", "google ads"
-        ]
-        
-        fiscal_keywords = [
-            "factura", "impuesto", "iva", "irpf", "modelo", "hacienda",
-            "contable", "gasto", "ingreso", "deducible", "declaración",
-            "fiscal", "tributario", "gastos", "ingresos"
-        ]
-        
-        security_keywords = [
-            "seguridad", "ataque", "amenaza", "vulnerabilidad", "hackeo",
-            "ip", "firewall", "log", "incidente", "malware", "ransomware"
-        ]
-        
-        legal_keywords = [
-            "legal", "contrato", "gdpr", "privacidad", "datos personales",
-            "consentimiento", "política", "términos", "condiciones", "ley"
-        ]
-        
-        # Contar matches
-        scores = {
-            "marketing": sum(1 for kw in marketing_keywords if kw in message_lower),
-            "fiscal": sum(1 for kw in fiscal_keywords if kw in message_lower),
-            "security": sum(1 for kw in security_keywords if kw in message_lower),
-            "legal": sum(1 for kw in legal_keywords if kw in message_lower)
-        }
-        
-        # Seleccionar el que tenga más matches
-        selected_type = max(scores, key=scores.get)
-        
-        if scores[selected_type] == 0:
-            # Si no hay matches, default a marketing (PERSEO)
-            selected_type = "marketing"
-        
-        print(f"🧠 [ZEUS] Routing scores: {scores} → {selected_type}")
-        
-        return selected_type
-    
+    def _route_to_agent(self, user_message: str, is_superuser: bool = False) -> Optional[str]:
+        """J9a: tabla unica `services.agent_routing` (palabras completas). Devuelve el task_type o
+        None si no hay agente claro (ZEUS responde directamente; ya no hay default a PERSEO)."""
+        from services.agent_routing import route_message
+
+        decision = route_message(user_message, is_superuser=is_superuser)
+        print(f"[ZEUS] Routing {decision.scores} -> {decision.agent or 'ZEUS CORE'} ({decision.reason})")
+        return decision.task_type
+
     def _handle_directly(self, user_message: str) -> Dict[str, Any]:
         """ZEUS maneja la solicitud directamente (cuando no hay agente apropiado)"""
         print("🏛️ [ZEUS] Manejando solicitud directamente")

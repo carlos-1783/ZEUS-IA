@@ -53,6 +53,7 @@ INTENT_LABELS: Dict[str, str] = {
     "get_cashflow": "el estado de caja / tesorería (cashflow)",
     "get_metrics": "las métricas del negocio (ingresos, costes, margen)",
     "tpv_sales_summary": "las ventas del TPV",
+    "tpv": "las ventas del TPV",
     "tpv_sales_today": "las ventas del TPV de hoy",
     "list_customers_summary": "cuántos clientes tienes",
     "analytics_summary": "el resumen de actividad de los agentes",
@@ -231,9 +232,14 @@ def detect_urgency(text: str) -> str:
 _OFFER_NOUN = r"(?:oferta|ofertas|descuento|descuentos|promocion|promociones|promo|promos|campana|campanas|cupon|cupones)"
 _SEND_VERB = (
     r"(?:envia|enviar|enviale|enviala|enviales|enviarla|mandar|manda|mandale|mandala|mandales|"
-    r"notifica|notificar|avisa|avisar|comunica|comunicar|difunde|lanza|lanzar)"
+    r"notifica|notificar|avisa|avisar|comunica|comunicar|difunde|lanza|lanzar|"
+    # subjuntivo (imperativo negado: «no mandes», «no envíes»): se reconoce para poder NEGARLO
+    r"mandes|envies|lances|notifiques|avises|comuniques|difundas)"
 )
-_CREATE_VERB = r"(?:crea|crear|creame|genera|generar|haz|hacer|monta|montar|prepara|preparar)"
+_CREATE_VERB = (
+    r"(?:crea|crear|creame|genera|generar|haz|hacer|monta|montar|prepara|preparar|"
+    r"crees|generes|hagas|montes|prepares)"
+)
 _OFFER_RE = re.compile(rf"\b{_OFFER_NOUN}\b")
 _SEND_RE = re.compile(rf"\b{_SEND_VERB}\b")
 _CREATE_RE = re.compile(rf"\b{_CREATE_VERB}\b")
@@ -248,7 +254,7 @@ _SEGMENT_RE = re.compile(
 
 _CREATE_CUSTOMER_RE = re.compile(
     r"\b(crea|crear|creame|da\s+de\s+alta|dar\s+de\s+alta|alta\s+de|alta|anade|anadir|registra|registrar|"
-    r"agrega|agregar|apunta|nuevo|nueva)\b(.{0,30}?)\bcliente\b"
+    r"agrega|agregar|apunta|nuevo|nueva|crees|registres|agregues|anadas|apuntes|des\s+de\s+alta)\b(.{0,30}?)\bcliente\b"
 )
 _CREATE_CUSTOMER_BLOCK = re.compile(
     r"\b(campana|oferta|descuento|promo|factura|informe|presupuesto|email|correo|pedido|mensaje)\b"
@@ -285,7 +291,7 @@ _SHIFT_RE = re.compile(
     r"|\b(estoy|sigo)\s+fichad[oa]\b"
 )
 _OPERATIONAL_RE = re.compile(
-    r"(envi[aá]|mandar|campa[nñ]a|oferta|descuento|cliente|venta|tpv|caja|turno|"
+    r"(env[ií][aáe]s?|mand(?:ar|a|es)\b|campa[nñ]a|oferta|descuento|cliente|venta|tpv|caja|turno|"
     r"jornada|fichaje|importar|confirmar|promoci[oó]n)",
     re.I,
 )
@@ -294,6 +300,73 @@ _CONVERSATIONAL_RE = re.compile(
     r"\b(redacta|redactame|escribe|escribeme|explica|explicame|idea|ideas|consejo|consejos|recomienda|"
     r"recomiendame|que\s+opinas|por\s+que|como\s+puedo\s+mejorar|sugiere|sugerencias)\b"
 )
+
+
+# --- H2: negacion / duda / mensajes de varias acciones --------------------------------------
+# DISEÑO: una orden de accion (crear cliente, enviar campaña) precedida en la misma frase (hasta 40
+# caracteres, sin punto/interrogacion/punto y coma de por medio) por una negacion o duda NO se
+# ejecuta ni genera vista previa: ZEUS pregunta. Incluye «no, envía oferta…» (un «no» que contesta
+# y luego ordena): se decide lo SEGURO, preguntar, porque el mensaje es contradictorio.
+_NEGATION_BEFORE_RE = re.compile(
+    r"(?:\b(?:no|nunca|jamas|tampoco|evita|evitar|evites|evitemos|dudo|quiza|quizas)\b"
+    r"|\btal\s+vez\b|\ba\s+lo\s+mejor\b|\bsin\s+necesidad\s+de\b)[^.?!;]{0,40}$"
+)
+# Destinatarios parciales dichos DESPUES del verbo: «envía la oferta pero no a todos», «solo a…».
+_PARTIAL_RECIPIENTS_RE = re.compile(
+    r"\bpero\s+no\b|\bno\s+a\s+(?:todos|todas|los|las)\b|\bsolo\b|\bunicamente\b|\bexcepto\b|"
+    r"(?<!al\s)\bmenos\b|\bsalvo\b|\bsin\s+(?:los|las)\b"
+)
+_NEGATION_ANY_RE = re.compile(r"\b(no|nunca|jamas|evita|evitar|evites)\b")
+
+QUESTION_NEGATED = (
+    "Parece que NO quieres hacerlo, o no lo tienes claro, así que no he hecho nada. "
+    "Si quieres que lo haga, dímelo de forma explícita (p. ej. «envía oferta 10% a todos mis clientes»)."
+)
+QUESTION_PARTIAL = (
+    "Solo puedo enviar campañas a TODOS los clientes del CRM: no sé excluir a nadie ni enviar a un "
+    "subconjunto o a una sola persona. No he hecho nada. ¿La envío a todos tus clientes o prefieres no enviarla?"
+)
+QUESTION_MULTI = (
+    "Me pides varias cosas a la vez ({parts}). Hago una cada vez y no ejecuto nada sin tu confirmación: "
+    "dime cuál quieres primero y luego me pides la otra."
+)
+
+
+def _is_negated_before(f: str, verb_start: int) -> bool:
+    return bool(_NEGATION_BEFORE_RE.search(f[:verb_start]))
+
+
+def has_negation(message: str) -> bool:
+    return bool(_NEGATION_ANY_RE.search(fold(message)))
+
+
+# Particion en clausulas para detectar varias peticiones en un mismo mensaje.
+_CLAUSE_SPLIT_RE = re.compile(
+    r"\s+(?:y|e|ademas|tambien|luego|despues|y\s+luego|y\s+despues)\s+|[;?]", re.I
+)
+_FAMILY = {"tpv_sales_today": "tpv", "tpv_sales_summary": "tpv"}
+
+
+def _multi_action(text: str) -> List[str]:
+    """Familias de intencion DISTINTAS pedidas en clausulas distintas (en orden). Vacio si es una sola."""
+    found: List[str] = []
+    for clause in _CLAUSE_SPLIT_RE.split(text):
+        if not clause or not clause.strip():
+            continue
+        cf = fold(clause)
+        cands = [cd for cd in _candidates(clause, cf, extract_entities(clause)) if cd.base >= 0.72]
+        sup: set = set()
+        for cd in cands:
+            if cd.base >= 0.8:
+                sup |= cd.suppresses
+        cands = [cd for cd in cands if cd.intent not in sup]
+        if not cands:
+            continue
+        top = max(cands, key=lambda x: x.base).intent
+        fam = _FAMILY.get(top, top)
+        if fam not in found:
+            found.append(fam)
+    return found if len(found) >= 2 else []
 
 
 class _Cand:
@@ -397,10 +470,13 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
         meta: Dict[str, Any] = {"name": name, "email": email}
         if ent.phones:
             meta["phone"] = ent.phones[0]
+        question = question_for_customer(name, email)
+        if _is_negated_before(f, m.start(1)):
+            missing, question = ["explicit_intent"], QUESTION_NEGATED
         c.append(_Cand("create_customer", "create_customer", 0.85, "create_customer",
                        suppresses={"list_customers_summary", "get_metrics", "tpv_sales_summary",
                                    "tpv_sales_today"},
-                       metadata=meta, missing=missing, question=question_for_customer(name, email)))
+                       metadata=meta, missing=missing, question=question))
 
     # --- campana: oferta + verbo de envio, sin otros canales
     if _OFFER_RE.search(f) and not _OTHER_CHANNEL_RE.search(f) and _SEND_RE.search(f):
@@ -412,7 +488,13 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
         segment = bool(_SEGMENT_RE.search(f))
         missing: List[str] = []
         question = None
-        if specific and not plural:
+        verb = _SEND_RE.search(f)
+        cverb = _CREATE_RE.search(f)
+        if _is_negated_before(f, verb.start()) or (cverb and _is_negated_before(f, cverb.start())):
+            missing, question = ["explicit_intent"], QUESTION_NEGATED
+        elif _PARTIAL_RECIPIENTS_RE.search(f[verb.end():]):
+            missing, question = ["recipients_scope"], QUESTION_PARTIAL
+        elif specific and not plural:
             missing, question = ["recipients"], QUESTION_SEGMENT
         elif segment:
             missing, question = ["recipients_scope"], QUESTION_SEGMENT
@@ -480,9 +562,8 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
     return c
 
 
-def parse_intent(message: str, force_intent: Optional[str] = None) -> ZeusTaskObject:
-    """Comprension estructurada. `force_intent` (uso del flujo de aclaracion) elige esa intencion
-    entre las candidatas sin ambiguedad: el usuario ya desambiguo."""
+def parse_intent(message: str) -> ZeusTaskObject:
+    """Comprension estructurada del mensaje (ver criterio de confianza arriba)."""
     text = (message or "").strip()
 
     if is_confirmation_message(text):
@@ -495,10 +576,19 @@ def parse_intent(message: str, force_intent: Optional[str] = None) -> ZeusTaskOb
     ent = extract_entities(text)
     urgency = detect_urgency(text)
     cands = _candidates(text, f, ent)
-    if force_intent:
-        cands = [cd for cd in cands if cd.intent == force_intent]
-        for cd in cands:
-            cd.suppresses = set()
+
+    # H3: varias peticiones distintas en un mensaje: se avisa y se pregunta cual primero; no se
+    # ejecuta ni se prepara ninguna (antes la mas fuerte suprimia a la otra en silencio).
+    multi = _multi_action(text)
+    if multi:
+        parts = " y ".join(INTENT_LABELS.get(i, i) for i in multi)
+        first = "tpv_sales_summary" if multi[0] == "tpv" else multi[0]
+        return ZeusTaskObject(
+            intent=first, raw_message=text, confidence=0.8, entities=ent, urgency=urgency,
+            needs_clarification=True, missing_entities=["single_action"],
+            clarification_question=QUESTION_MULTI.format(parts=parts),
+            confidence_breakdown={"rule": "multi_action", "actions": multi},
+        )
 
     # Supresion por dominancia (una intencion fuerte explica a otras: «campaña para aumentar ventas»).
     suppressed: set = set()

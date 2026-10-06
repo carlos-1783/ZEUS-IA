@@ -124,7 +124,9 @@ def test_falsos_positivos_antiguos_ya_no_disparan(msg):
 
 def test_campana_que_menciona_ventas_no_es_consulta_tpv():
     t = parse_intent("crea una campaña para aumentar las ventas y envíala a todos mis clientes")
-    assert t.intent == "create_campaign_send" and not t.needs_clarification
+    # la campaña suprime la consulta TPV; pero «para aumentar las ventas» es material ajeno a la orden
+    # y el criterio estricto de mensaje completo (falso negativo conservador documentado) pregunta.
+    assert t.intent == "create_campaign_send" and t.missing_entities == ["explicit_intent"]
 
 
 def test_ingreso_suelto_no_basta_para_metricas():

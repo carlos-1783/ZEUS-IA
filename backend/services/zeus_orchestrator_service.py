@@ -31,7 +31,7 @@ from services.intent_parser_service import (
     looks_like_operational,
     parse_message,
 )
-from services.intent_parser import clarification_for_unknown, is_conversational_request
+from services.intent_parser import clarification_for_unknown, has_negation, is_conversational_request
 from services import jarvis_clarification as clarif
 from services.zeus_global_context import attach_context_to_action_payload, enrich_chat_context
 from services.chain_log import log_chain_step
@@ -460,12 +460,26 @@ async def try_handle_zeus_chat(
     )
     if task.needs_clarification and task.intent != "unknown":
         # J8: NO se ejecuta ni se crea aprobación. Se pregunta algo concreto y se recuerda lo entendido.
-        clarif.save_state(company_id, thread_id, task)
+        question = task.clarification_question
+        # Negacion/duda y varias peticiones no esperan un dato: no hay estado que continuar.
+        if not ({"explicit_intent", "single_action"} & set(task.missing_entities)):
+            if not clarif.save_state(company_id, thread_id, task):
+                question += (
+                    " (Aviso: no he podido recordar esta conversación; si respondes, incluye todos los "
+                    "datos en un solo mensaje.)"
+                )
         return {
             "handled": True, "success": True, "executed": False, "needs_clarification": True,
-            "intent": task.intent, "message": task.clarification_question,
+            "intent": task.intent, "message": question,
         }
     if not understood:
+        if looks_like_operational(message) and has_negation(message):
+            # «nunca envíes», «no mandes…» sin objeto reconocible: se entiende como NO hacer nada.
+            return {
+                "handled": True, "success": True, "executed": False, "needs_clarification": True,
+                "intent": "unknown",
+                "message": "Entendido, no hago nada. Si quieres que haga algo, dímelo de forma explícita.",
+            }
         if looks_like_operational(message) and not is_conversational_request(message):
             return {
                 "handled": True, "success": True, "executed": False, "needs_clarification": True,

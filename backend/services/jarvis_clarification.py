@@ -6,10 +6,16 @@ aprobacion) lo que ya entendio. La siguiente respuesta del MISMO usuario en el M
 empresa puede completar el dato; si no lo completa se descarta el estado y el mensaje se trata
 como una peticion nueva.
 
-LIMITES (documentados): el estado dura CLARIFICATION_TTL_SECONDS (15 min) y guarda como maximo el
-mensaje original truncado (300 caracteres) y los datos ya extraidos (nombre/email/descuento) del
-propio usuario; se borra al resolverse, abandonarse o cancelarse. La aclaracion solo completa
-datos de UNA accion; no encadena varias preguntas de intenciones distintas.
+RETENCION / PRIVACIDAD (H4): NO se guarda el mensaje original. Solo lo ya derivado y necesario
+para continuar: intencion, opciones ambiguas, dias del periodo, descuento y, para «crear cliente», el
+nombre/email/telefono que el propio usuario ya dio. El estado se borra al resolverse, abandonarse
+(cambio de tema), cancelarse ("no") y tambien cuando se lee caducado (15 min). LIMITE: si el usuario
+no vuelve a escribir en ese hilo, la fila caducada permanece hasta la proxima lectura de ese hilo
+(no hay purga programada); solo contiene los datos mencionados arriba.
+
+OTROS LIMITES: la aclaracion solo completa datos de UNA accion; no encadena varias preguntas de
+intenciones distintas. Si no se pudo guardar el estado (save_state devuelve False) ZEUS lo avisa en
+vez de prometer continuidad (H7).
 """
 
 from __future__ import annotations
@@ -22,6 +28,7 @@ from typing import Any, Dict, Optional
 from app.schemas.zeus_task import ZeusTaskObject
 from services.agent_memory_service import load as memory_load, persist_operational_state
 from services.intent_parser import (
+    QUESTION_PARTIAL,
     _default_offer_message,
     _extract_campaign_name,
     extract_entities,
@@ -43,6 +50,37 @@ _YES_RE = re.compile(
     r"(a\s+todos|a\s+todos\s+mis\s+clientes)?[\s.!]*$"
 )
 _ALL_RE = re.compile(r"\b(todos|todas|todos\s+mis\s+clientes|a\s+los\s+clientes|crm|toda\s+la\s+base)\b")
+# H1: una respuesta con negacion/exclusion o con un destinatario concreto NO es «sí, a todos».
+_REJECT_RECIPIENTS_RE = re.compile(
+    r"\b(no|nunca|jamas|tampoco|solo|solamente|unicamente|excepto|salvo|pero|aunque|sin)\b|(?<!al\s)\bmenos\b"
+)
+# H5: palabras de orden/relleno que nunca son un nombre de cliente.
+_NOT_A_NAME = {
+    "borra", "borrar", "elimina", "eliminar", "todo", "todos", "toda", "todas", "nada", "cancela",
+    "cancelar", "olvida", "olvidalo", "hola", "gracias", "vale", "ok", "si", "no", "envia", "manda",
+    "crea", "crear", "haz", "hazlo", "dame", "dime", "muestra", "cuantos", "cuantas", "ventas", "venta",
+    "caja", "cliente", "clientes", "factura", "facturas", "urgente", "ya", "ahora", "oferta", "campana",
+    "descuento", "turno", "tpv", "confirmar", "confirmo", "adelante", "ayuda", "stop", "para", "deja",
+    "dejalo", "nuevo", "nueva", "algo", "cosa", "cosas", "lo", "la", "el", "los", "las", "un", "una",
+}
+_NAME_PARTICLES = {"de", "del", "la", "los", "las", "van", "von", "da", "di", "y"}
+_NAME_TOKEN_RE = re.compile(r"[A-ZÁÉÍÓÚÑÜ][A-Za-zÀ-ÿ'.-]{1,}")
+
+
+def _reasonable_name(raw: str) -> bool:
+    """Forma de nombre razonable: 1-4 palabras, cada una Capitalizada (salvo particulas de/del/la…),
+    sin digitos y sin palabras de orden. Un nombre en minusculas se vuelve a pedir."""
+    toks = raw.split()
+    if not 1 <= len(toks) <= 4:
+        return False
+    for i, t in enumerate(toks):
+        if fold(t) in _NOT_A_NAME and not (i > 0 and fold(t) in _NAME_PARTICLES):
+            return False
+        if i > 0 and fold(t) in _NAME_PARTICLES:
+            continue
+        if not _NAME_TOKEN_RE.fullmatch(t):
+            return False
+    return fold(toks[-1]) not in _NAME_PARTICLES
 
 # Pista por intencion para elegir entre opciones ambiguas.
 _FAMILY_HINTS = {
@@ -65,9 +103,14 @@ def _artifacts(company_key: str, thread_key: str) -> Dict[str, Any]:
     return dict((mem.get("operational") or {}).get("artifacts") or {})
 
 
-def save_state(company_key: str, thread_key: str, task: ZeusTaskObject) -> None:
-    """Guarda lo ya entendido para completarlo con la siguiente respuesta del usuario."""
+def save_state(company_key: str, thread_key: str, task: ZeusTaskObject) -> bool:
+    """Guarda lo ya entendido para completarlo con la siguiente respuesta del usuario.
+
+    Devuelve True solo si el estado QUEDO persistido (se relee); si no, avisa en log y el
+    orquestador no promete continuidad al usuario (H7). persist_operational_state silencia sus
+    errores, por eso se verifica leyendo."""
     ambiguity = bool(task.ambiguous_with)
+    period_days = (task.entities.period or {}).get("days") if task.entities else None
     state = {
         "intent": task.intent,
         "kind": "ambiguity" if ambiguity else "missing",
@@ -79,13 +122,22 @@ def save_state(company_key: str, thread_key: str, task: ZeusTaskObject) -> None:
             "phone": (task.metadata or {}).get("phone"),
             "discount_percent": task.discount_percent,
         },
-        "original": (task.raw_message or "")[:300],
+        "period_days": period_days,
         "urgency": task.urgency,
         "asked_at": _now().isoformat(),
     }
-    arts = _artifacts(company_key, thread_key)
-    arts[KEY] = state
-    persist_operational_state(company_key, AGENT, thread_key, artifacts=arts)
+    try:
+        arts = _artifacts(company_key, thread_key)
+        arts[KEY] = state
+        persist_operational_state(company_key, AGENT, thread_key, artifacts=arts)
+        ok = load_state(company_key, thread_key) is not None
+    except Exception:
+        logger.exception("jarvis_clarification: fallo guardando el estado de aclaracion")
+        return False
+    if not ok:
+        logger.warning("jarvis_clarification: el estado de aclaracion no quedo persistido (intent=%s)",
+                       task.intent)
+    return ok
 
 
 def clear_state(company_key: str, thread_key: str) -> None:
@@ -104,8 +156,10 @@ def load_state(company_key: str, thread_key: str) -> Optional[Dict[str, Any]]:
         if asked.tzinfo is None:
             asked = asked.replace(tzinfo=timezone.utc)
     except Exception:
+        clear_state(company_key, thread_key)  # estado corrupto: no se conserva
         return None
     if _now() - asked > timedelta(seconds=CLARIFICATION_TTL_SECONDS):
+        clear_state(company_key, thread_key)  # H4: caducado -> se borra, no se deja huerfano
         return None
     return state
 
@@ -122,16 +176,14 @@ def _resume_customer(state: Dict[str, Any], reply: str) -> Optional[ZeusTaskObje
     new_email = ent.emails[0] if ent.emails else None
     new_name = None
     if not name:
-        if ent.names:
+        if ent.names and _reasonable_name(ent.names[0]) and not _is_new_command(reply, "create_customer"):
             new_name = ent.names[0]
         elif not _is_new_command(reply, "create_customer"):
             # Respuesta corta tipo «Ana López» (con o sin email): lo que queda sin el email y sin relleno.
             rest = re.sub(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.\w{2,}", " ", reply)
-            rest = re.sub(r"\b(con|el|su|email|correo|mail|es|se\s+llama|llamado|de|y)\b", " ", rest, flags=re.I)
+            rest = re.sub(r"\b(con|el|su|email|correo|mail|es|se\s+llama|llamado)\b", " ", rest, flags=re.I)
             rest = " ".join(re.sub(r"[,;:]", " ", rest).split())
-            toks = rest.split()
-            if 1 <= len(toks) <= 5 and all(re.fullmatch(r"[A-Za-zÀ-ÿ'.-]{2,}", t) for t in toks) \
-                    and parse_intent(reply).intent == "unknown":
+            if _reasonable_name(rest) and parse_intent(reply).intent == "unknown":
                 new_name = rest
     if not new_email and not new_name:
         return None
@@ -156,19 +208,50 @@ def _resume_customer(state: Dict[str, Any], reply: str) -> Optional[ZeusTaskObje
 
 def _resume_campaign(state: Dict[str, Any], reply: str) -> Optional[ZeusTaskObject]:
     f = fold(reply)
-    if not (_YES_RE.match(f) or _ALL_RE.search(f)):
-        return None
     if _is_new_command(reply, "create_campaign_send"):
+        return None  # cambio de tema
+    ent = extract_entities(reply)
+    named = bool(ent.emails) or re.search(r"\b(?:a|para)\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+", reply) is not None
+    if _REJECT_RECIPIENTS_RE.search(f) or named:
+        # H1: «no a todos», «solo a Juan», «todos menos…»: NO es un sí. Se vuelve a preguntar
+        # (el estado se re-guarda) y se dice que no hay envío parcial.
+        discount = (state.get("slots") or {}).get("discount_percent")
+        return ZeusTaskObject(
+            intent="create_campaign_send", action="create_campaign", discount_percent=discount,
+            raw_message=reply, confidence=0.8, entities=ent, urgency=state.get("urgency") or "normal",
+            needs_clarification=True, missing_entities=["recipients_scope"],
+            clarification_question=QUESTION_PARTIAL,
+            confidence_breakdown={"rule": "clarification_rejected_partial"},
+        )
+    if not (_YES_RE.match(f) or _ALL_RE.search(f)):
         return None
     discount = (state.get("slots") or {}).get("discount_percent")
     return ZeusTaskObject(
         intent="create_campaign_send", action="create_campaign", discount_percent=discount,
-        target="all_customers", campaign_name=_extract_campaign_name(state.get("original") or "", discount),
+        target="all_customers", campaign_name=_extract_campaign_name("", discount),
         message_template=_default_offer_message(discount), requires_confirmation=True,
         raw_message=reply, confidence=0.9, entities=extract_entities(reply),
         urgency=state.get("urgency") or "normal",
         confidence_breakdown={"rule": "clarification_completed", "base": 0.9},
     )
+
+
+_ACTIONS = {
+    "get_cashflow": "get_cashflow", "get_metrics": "get_metrics", "analytics_summary": "analytics_summary",
+    "tpv_sales_today": "tpv_sales_summary", "tpv_sales_summary": "tpv_sales_summary",
+    "list_customers_summary": "list_customers", "shift_status": "shift_status",
+}
+
+
+def _option_metadata(intent: str, period_days: Optional[int]) -> Dict[str, Any]:
+    """Metadatos de la intencion elegida, derivados de los dias guardados (sin el mensaje original)."""
+    if intent == "tpv_sales_today":
+        return {"period": "today", "days": 1}
+    if intent == "tpv_sales_summary":
+        return {"days": period_days or 7}
+    if intent in ("get_cashflow", "get_metrics", "analytics_summary"):
+        return {"days": period_days or 30}
+    return {}
 
 
 def _resume_ambiguity(state: Dict[str, Any], reply: str) -> Optional[ZeusTaskObject]:
@@ -179,11 +262,12 @@ def _resume_ambiguity(state: Dict[str, Any], reply: str) -> Optional[ZeusTaskObj
     if len(fam) != 1:
         return None
     intent = chosen[0]
-    task = parse_intent(state.get("original") or "", force_intent=intent)
-    if task.intent == "unknown" or task.needs_clarification:
-        return None
-    task.confidence_breakdown = {**task.confidence_breakdown, "rule": "clarification_ambiguity_resolved"}
-    return task
+    return ZeusTaskObject(
+        intent=intent, action=_ACTIONS[intent], raw_message=reply, confidence=0.85,
+        metadata=_option_metadata(intent, state.get("period_days")), entities=extract_entities(reply),
+        urgency=state.get("urgency") or "normal",
+        confidence_breakdown={"rule": "clarification_ambiguity_resolved", "base": 0.85},
+    )
 
 
 def resolve_reply(state: Dict[str, Any], reply: str) -> Optional[ZeusTaskObject]:

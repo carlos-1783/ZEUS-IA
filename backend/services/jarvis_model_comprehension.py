@@ -252,6 +252,19 @@ _EXEC_WORDS_RE = re.compile(
 )
 
 
+# Instrucciones disfrazadas: la pregunta pide al usuario que diga/escriba/pulse/ponga/mande un «sí/ok/vale».
+# El «sí» con tilde es afirmacion; sin tilde solo cuenta si cierra la frase («di si», «di si y listo»), para no
+# vetar «dime si quieres…». Se evalua sobre texto plegado (el «sí» acentuado se marca antes de plegar).
+_AFFIRM_W = r"(?:siaff|ok|okay|vale|dale|adelante|hazlo|yes|de\s+acuerdo|si(?=\s*(?:[?.!,;]|$|y\b|para\b)))"
+_SAY_VERBS = (r"(?:di|dime|digas|diga|decir|escribe|escribas|escribir|escribeme|teclea\w*|pulsa\w*|pon|ponme|"
+              r"pongas|ponga|poner|contesta\w*|responde\w*|marca\w*|clica\w*|haz\s+clic\s+en)")
+_DISGUISED_RE = re.compile(
+    rf"\b{_SAY_VERBS}\b[^?.!]{{0,25}}?\b{_AFFIRM_W}"
+    rf"|\b(?:manda\w*|mande\w*|envia\w*)(?:me|te)?\s+(?:un|el|tu)?\s*(?:siaff|ok|okay|vale)\b"
+)
+_BARE_CONFIRM_RE = re.compile(rf"[¿¡\s]*{_AFFIRM_W}[\s?!.]*")
+
+
 def _clean_question(q: Optional[str]) -> Optional[str]:
     """Pregunta del modelo mostrable al usuario; si pudiera inducir a confirmar/ejecutar -> None."""
     if not q:
@@ -259,9 +272,11 @@ def _clean_question(q: Optional[str]) -> Optional[str]:
     t = " ".join(re.sub(r"[\x00-\x1f]", " ", q).split())
     if not t or len(t) > 300 or re.search(r"https?:|www\.|@|<|>|`", t):
         return None
-    if _EXEC_WORDS_RE.search(ip.fold(t)):
+    f = ip.fold(t.lower().replace("sí", "siaff"))
+    if _EXEC_WORDS_RE.search(f) or _DISGUISED_RE.search(f) or _BARE_CONFIRM_RE.fullmatch(f):
         return None
-    return t if t.endswith("?") else t + "?"
+    t = t.rstrip(".!,;: ").rstrip("?").rstrip(".!,;: ")
+    return t + "?"
 
 
 # --------------------------------------------------------------------------------- validacion
@@ -365,9 +380,28 @@ _CONFLICT_RE = re.compile(
     r"\b(?:tampoco|ni|nada\s+de|deja(?:s)?\s+de|sin|mejor|todavia|aun\s+no|olvida\w*)\b"
 )
 
+# Negaciones/retractaciones SIN «no» (texto plegado): cancelar, detener, pausar, posponer, abstenerse...
+# en imperativo, subjuntivo, infinitivo y forma nominal. Ver _PARA_VERB_RE para «para» como verbo.
+_CANCEL_LEX_RE = re.compile(
+    r"\b(?:cancel\w*|anul\w*|abort\w*|deten\w*|deteng\w*|abstente|abstenerte|abstengas|abstenga\w*|"
+    r"abstencion|fren(?:a|as|e|es|ar|o)|suspend\w*|suspension|aplaz\w*|"
+    r"posp(?:on|ones|oner|ongas|onga|ongamos|osicion)|pospues\w*|"
+    r"deja(?:r|s|me)?\s+estar|espera(?:s|r)?\s+(?:antes|un\s+poco|a\s+que)|"
+    r"retir(?:a|as|e|es|ar)\s+(?:el|la|los|las)\s+(?:envio|oferta|campana|mensaje|promocion)\w*)\b"
+)
+# «para» solo es verbo (parar) al inicio de clausula y seguido de articulo + sustantivo de accion/envio;
+# «envia la oferta para mis clientes» (preposicion) no casa.
+_PARA_VERB_RE = re.compile(
+    r"(?:^|[.,;:!?¡¿]\s*|\b(?:y|pero|oye|ahora|mejor|porfa|favor)\s+)"
+    r"para\s+(?:el|la|los|las|este|esta|ese|esa)\s+"
+    r"(?:envio|envios|oferta|ofertas|campana|campanas|mensaje|mensajes|promocion|promociones|mailing|difusion|"
+    r"correo|correos|proceso|mandar|enviar)\b"
+)
+
 
 def _rules_see_negation(f: str) -> bool:
-    return bool(ip._NEGATION_ANY_RE.search(f) or ip._NEGATION_BEFORE_RE.search(f) or _CONFLICT_RE.search(f))
+    return bool(ip._NEGATION_ANY_RE.search(f) or ip._NEGATION_BEFORE_RE.search(f) or _CONFLICT_RE.search(f)
+                or _CANCEL_LEX_RE.search(f) or _PARA_VERB_RE.search(f))
 
 
 def _notice(action_type: str) -> str:

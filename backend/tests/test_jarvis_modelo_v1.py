@@ -542,3 +542,71 @@ def test_pregunta_del_modelo_que_induce_a_confirmar_se_sustituye_por_la_generica
     install(FakeClient(payload(act(pol="uncertain"), nc=True, q=q)))
     out = _chat(client, user, "igual deberíamos enviar algo a los clientes, no sé")
     assert out["message"] == mc.GENERIC_QUESTION and not _prepared(out)
+
+
+# ------------------------------------------------------------------ J8c: pulido (negaciones sin «no», preguntas disfrazadas)
+_NEG_SIN_NO = [
+    "cancela la oferta del 10% a todos mis clientes",
+    "detén el envío de la oferta del 10% a todos mis clientes",
+    "abstente de enviar la oferta del 10% a todos mis clientes",
+    "para el envío de la oferta del 10% a todos mis clientes",
+    "frena el envío de la oferta del 10% a todos mis clientes",
+    "suspende la campaña de la oferta del 10% a todos mis clientes",
+    "anula la oferta del 10% a todos mis clientes",
+    "aborta el envío de la oferta del 10% a todos mis clientes",
+    "aplaza el envío de la oferta del 10% a todos mis clientes",
+    "pospón el envío de la oferta del 10% a todos mis clientes",
+    "espera antes de enviar la oferta del 10% a todos mis clientes",
+    "deja estar la oferta del 10% a todos mis clientes",
+    "no lo mandes aún, la oferta del 10% a todos mis clientes",
+]
+
+
+def _with_cert(c):
+    d = copy.deepcopy(payload(OFFER_ACT))
+    d["actions"][0]["certainty"] = c
+    d["overall_certainty"] = c
+    return d
+
+
+@pytest.mark.parametrize("msg", _NEG_SIN_NO)
+def test_j8c_negacion_sin_no_con_modelo_erroneo_085_pregunta(db, client, install, msg):
+    user, co = _seed(db)
+    install(FakeClient(_with_cert(0.85)))
+    out = _chat(client, user, msg)
+    assert not _prepared(out) and _approvals(db, user) == 0 and out["needs_clarification"] is True
+    assert _model_rows(db, co.id)[0].details["decision"] == "clarify_polarity_conflict"
+
+
+@pytest.mark.parametrize("msg", _NEG_SIN_NO)
+def test_j8c_negacion_sin_no_con_modelo_erroneo_095_vista_previa_con_aviso(db, client, install, msg):
+    user, co = _seed(db)
+    install(FakeClient(_with_cert(0.95)))
+    out = _chat(client, user, msg)
+    assert _prepared(out) and out["message"].startswith("He entendido que SÍ quieres")
+    assert _model_rows(db, co.id)[0].details["polarity_conflict"] is True
+
+
+def test_j8c_para_preposicion_no_es_conflicto(db, client, install):
+    user, co = _seed(db)
+    install(FakeClient(_with_cert(0.95)))
+    out = _chat(client, user, "envía la oferta del 10% para todos mis clientes")
+    assert _prepared(out) and not out["message"].startswith("He entendido")
+    assert _model_rows(db, co.id)[0].details["polarity_conflict"] is False
+
+
+@pytest.mark.parametrize("q", ["¿Lo hago ya? Di sí", "OK?", "pon ok y listo", "Dime sí", "Pulsa sí",
+                               "Teclea sí para enviar", "Basta con decir sí", "Mándame un ok y lo hago",
+                               "Di sí?"])
+def test_j8c_pregunta_disfrazada_de_instruccion_usa_la_generica(db, client, install, q):
+    user, _ = _seed(db)
+    install(FakeClient(payload(act(pol="uncertain"), nc=True, q=q)))
+    out = _chat(client, user, "igual deberíamos enviar algo a los clientes, no sé")
+    assert out["message"] == mc.GENERIC_QUESTION and not _prepared(out) and _approvals(db, user) == 0
+
+
+def test_j8c_clean_question_legitima_y_puntuacion():
+    assert mc._clean_question("¿Qué descuento aplico??.") == "¿Qué descuento aplico?"
+    assert mc._clean_question("¿A quién se la envío!") == "¿A quién se la envío?"
+    assert mc._clean_question("Dime si quieres que lo haga") == "Dime si quieres que lo haga?"
+    assert mc._clean_question("¿Es para todos tus clientes?") == "¿Es para todos tus clientes?"

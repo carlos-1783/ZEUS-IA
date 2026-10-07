@@ -231,6 +231,15 @@ def _preview_create_customer(action: ZeusAction) -> Optional[Dict[str, Any]]:
     email = str(action.payload.get("email") or "").strip()
     if not name or not email:
         return None  # faltan datos: execute_action responde pidiéndolos, sin crear nada
+    # J12b: mismo validador que usa la ejecucion (CustomerCreate/email-validator). Un email invalido
+    # no abre aprobacion: execute_action (force_execute=False) responde con el motivo y no crea nada.
+    from pydantic import ValidationError
+    from app.schemas.customer import CustomerCreate
+
+    try:
+        CustomerCreate(name=name, email=email, phone=action.payload.get("phone"))
+    except ValidationError:
+        return None
     return {
         "message": f"Voy a crear el cliente «{name}» ({email}). Responde «confirmar» para crearlo.",
         "name": name,

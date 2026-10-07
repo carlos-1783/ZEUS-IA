@@ -34,8 +34,8 @@ MAX_STEPS = 4
 MAX_OBJECTIVE_CHARS = 240
 SUMMARY_CHARS = 160
 # Tope documentado del texto completo de un paso `done` (steps[].text y, en consultas, message).
-# Los borradores/entregables no se incrustan en el chat: van solo en steps[].text y J10 los enlazara
-# al workspace del agente. La vista previa de un paso con consecuencias NO se trunca.
+# Los borradores/entregables no se incrustan en el chat: J10 los guarda en el workspace del agente y
+# los enlaza en `evidence` (steps[].text solo conserva el texto si no se pudo guardar). La vista previa de un paso con consecuencias NO se trunca.
 AGENT_FAILURE_TEXT = "El agente no pudo completar este paso. Inténtalo de nuevo."
 STEP_TEXT_MAX_CHARS = 4000
 DEPENDENCY_CONTEXT_CHARS = 400
@@ -82,14 +82,19 @@ class PlanStep:
     task: Any = None          # ZeusTaskObject ya validada (pasos con consecuencias)
     question: Optional[str] = None
     notice: Optional[str] = None
+    # J10: evidencia del borrador (DocumentApproval draft del agente). Si existe, el texto largo no va en el chat.
+    evidence: Optional[Dict[str, Any]] = None
 
     def public(self) -> Dict[str, Any]:
         return {
             "n": self.n, "agent": self.agent, "kind": self.kind, "objective": self.objective,
             "depends_on": list(self.depends_on), "status": self.status, "summary": self.summary,
             "approval_id": self.approval_id,
-            # respuesta completa (done, con tope) o vista previa integra (pending_confirmation)
-            "text": cap_text(self.text) if self.status == "done" else
+            "evidence": self.evidence,
+            # respuesta completa (done, con tope) o vista previa integra (pending_confirmation).
+            # J10: un borrador ya guardado en el workspace NO se incrusta (se enlaza en `evidence`).
+            "text": "" if self.evidence is not None and self.kind == "borrador" else
+            cap_text(self.text) if self.status == "done" else
             (self.text if self.status == "pending_confirmation" else ""),
         }
 
@@ -238,12 +243,14 @@ async def execute_plan(
     prepare_confirmation: PrepareConfirmation,
     run_read: Optional[PrepareConfirmation] = None,
     step_context: Optional[Callable[[PlanStep, List[PlanStep]], Dict[str, Any]]] = None,
+    persist_draft: Optional[Callable[[PlanStep], Optional[Dict[str, Any]]]] = None,
 ) -> Dict[str, Any]:
     """Ejecuta el plan paso a paso (ver docstring del modulo). Nunca ejecuta pasos con consecuencias.
 
     J9e: `run_read` ejecuta los pasos `consulta` con `action_type` (consultas REALES de JUSTICIA/AFRODITA
     via ejecutor, sin aprobacion); `step_context` anade claves de contexto del servidor por paso
-    (p. ej. `multi_agent_task` en /chat/agents/coordinate)."""
+    (p. ej. `multi_agent_task` en /chat/agents/coordinate). J10: `persist_draft` guarda el texto de cada
+    paso `borrador` hecho en el workspace del agente y devuelve su evidencia (o None si no se pudo)."""
     from services.unified_agent_runtime import run_chat
     from services.zeus_global_context import build_agent_company_context
 
@@ -318,7 +325,11 @@ async def execute_plan(
         if out.get("success") and str(out.get("message") or "").strip():
             step.status, step.text = "done", str(out["message"])
             step.summary = short_summary(step.text)
-            _log_step(user, company_id, step, "success", response_chars=len(step.text))
+            step_evidence = None
+            if step.kind == "borrador" and persist_draft is not None:
+                step.evidence = step_evidence = persist_draft(step)
+            _log_step(user, company_id, step, "success", response_chars=len(step.text),
+                      **({"workspace_document_id": step_evidence["id"]} if step_evidence else {}))
         else:
             step.status = "failed"
             # El detalle (puede traer rutas, SQL o trazas) solo va al registro J7 del servidor; al usuario,
@@ -343,7 +354,10 @@ def build_response(plan: Plan) -> Dict[str, Any]:
         if s.status == "done" and s.kind == "consulta":
             lines.append(cap_text(s.text))  # una consulta es una respuesta: completa (con tope)
         elif s.status == "done":
-            lines.append(f"{s.summary} (texto completo en el paso {s.n})")  # borrador: no se incrusta
+            if s.evidence is not None:  # borrador guardado: resumen corto, el enlace va en `evidence`
+                lines.append(f"{s.summary} Ver en el workspace de {s.agent}.")
+            else:
+                lines.append(f"{s.summary} (texto completo en el paso {s.n}; no se pudo guardar en el workspace)")
         elif s.status == "pending_confirmation":
             lines.append(s.text)  # vista previa integra: el usuario debe verla antes de confirmar
         elif s.summary:
@@ -366,5 +380,6 @@ def build_response(plan: Plan) -> Dict[str, Any]:
         "approval_id": pending[0].approval_id if pending else None,
         "message": "\n".join(lines),
         "plan_source": plan.source,
+        "evidence": [s.evidence for s in steps if s.evidence is not None],
         "steps": [s.public() for s in steps],
     }

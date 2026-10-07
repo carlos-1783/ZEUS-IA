@@ -594,15 +594,16 @@ def test_consulta_larga_llega_completa_en_message_y_en_steps_text(db, stack):
     assert len(st["summary"]) <= jp.SUMMARY_CHARS
 
 
-def test_borrador_largo_message_corto_y_texto_completo_solo_en_steps(db, stack):
+def test_borrador_largo_message_corto_y_enlazado_al_workspace(db, stack):
     u, _ = _user(db)
     stack.llm.content["RAFAEL"] = _long("FINAL_BORRADOR")
     use_model(stack, classifier(step("AFRODITA", "consulta", "Resumir los turnos"),
                                 step("RAFAEL", "borrador", "Redactar el correo al gestor", deps=[1])))
     out = say(stack, u, MSG_IVA_CORREO)
     st = out["steps"][1]
-    assert st["kind"] == "borrador" and st["text"].endswith("FINAL_BORRADOR")
-    assert "texto completo en el paso 2" in out["message"]
+    # J10: el borrador se guarda en el workspace del agente y se enlaza; no se incrusta ni en message ni en steps
+    assert st["kind"] == "borrador" and st["text"] == "" and st["evidence"]["kind"] == "document"
+    assert "Ver en el workspace de RAFAEL" in out["message"]
     assert "FINAL_BORRADOR" not in out["message"]  # el entregable no se incrusta en el chat
     assert len(out["message"]) < 600 and len(st["summary"]) <= jp.SUMMARY_CHARS
 

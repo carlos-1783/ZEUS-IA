@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -241,6 +241,13 @@ class ChatResponse(BaseModel):
     intent: Optional[str] = None
     # J9b: pasos del plan multiagente (agente, tipo, estado y resumen corto por paso).
     steps: Optional[List[dict]] = None
+    # J10: evidencia enlazada (documento/aprobacion/recurso creado/registro J7): {kind, id, agent, title,
+    # url, status}. Los entregables no se incrustan en `message`: se enlazan aqui.
+    evidence: Optional[List[dict]] = None
+    # J10 CONTINUAR: propuesta concreta del siguiente paso, o None si no hay nada logico que proponer.
+    next_step: Optional[str] = None
+    # Solo servidor: tipo del siguiente paso (se registra en J7; no sale en la respuesta).
+    next_step_type: Optional[str] = Field(default=None, exclude=True)
 
 class AgentCommunicationRequest(BaseModel):
     from_agent: str
@@ -355,29 +362,52 @@ async def chat_with_agent(
                 "response_len": len(resp.message or ""),
             },
         )
+        step_type = resp.next_step_type  # solo el TIPO (nunca texto del usuario ni del paso)
         if resp.needs_confirmation and resp.approval_id:
             log_chain_step(
                 "CONTINUAR", company_id=chain_company, user=current_user, agent=norm_agent,
                 action="pending_confirmation_open", status="needs_confirmation",
-                details={"approval_id": resp.approval_id, "next": "confirm_or_cancel"},
+                details={"approval_id": resp.approval_id, "next": "confirm_or_cancel", "next_step_type": step_type},
             )
         elif resp.needs_clarification:
             log_chain_step(
                 "CONTINUAR", company_id=chain_company, user=current_user, agent=norm_agent,
                 action="awaiting_user_clarification", status="needs_more_data",
-                details={"intent": resp.intent, "next": "user_reply_in_same_thread"},
+                details={"intent": resp.intent, "next": "user_reply_in_same_thread", "next_step_type": step_type},
             )
         elif resp.hitl_required:
             log_chain_step(
                 "CONTINUAR", company_id=chain_company, user=current_user, agent=norm_agent,
                 action="human_review_required", status="needs_confirmation",
-                details={"next": "human_review"},
+                details={"next": "human_review", "next_step_type": step_type},
+            )
+        elif step_type:
+            log_chain_step(
+                "CONTINUAR", company_id=chain_company, user=current_user, agent=norm_agent,
+                action="next_step_proposed", status="success",
+                details={"next_step_type": step_type,
+                         "evidence_kinds": sorted({e.get("kind") for e in resp.evidence or []})},
             )
         resp.request_id = chain.correlation_id
         resp.warnings = list(chain.warnings) or None
+        _attach_audit_evidence(db, current_user, chain_company, resp)
         return resp
     finally:
         end_chain(token)
+
+
+def _attach_audit_evidence(db: Session, user: User, company_id: Optional[int], resp: ChatResponse) -> None:
+    """J10: enlace al registro J7 de esta peticion (solo si se persistio algun paso de la cadena)."""
+    if not resp.request_id or company_id is None:
+        return
+    try:
+        from services import jarvis_evidence as jev
+
+        item = jev.evidence_item(db, user, company_id, "audit", resp.request_id)
+        if item is not None:
+            resp.evidence = jev.dedupe(list(resp.evidence or []) + [item])
+    except Exception:
+        logger.exception("chat: no se pudo adjuntar la evidencia del registro J7")
 
 
 async def _chat_impl(
@@ -509,9 +539,16 @@ async def _chat_impl(
                         },
                         visible_to_client=True,
                     )
+                from services import jarvis_evidence as jev
+
+                ev_items = jev.bridge_evidence(db, current_user, company_id, bridge)
+                ns_type, ns_text = jev.next_step(db, current_user, company_id, bridge, ev_items)
                 return ChatResponse(
                     agent=agent_name,
                     message=bridge_msg,
+                    evidence=ev_items or None,
+                    next_step=ns_text,
+                    next_step_type=ns_type,
                     success=bool(bridge.get("success")),
                     executed_action=bool(bridge.get("executed")),
                     needs_confirmation=bool(bridge.get("needs_confirmation")),
@@ -623,6 +660,19 @@ async def _chat_impl(
                 visible_to_client=True,
             )
             ok_msg = result.get("message", "Sin respuesta") or ""
+            from services import jarvis_evidence as jev
+
+            ev_items: List[dict] = []
+            ns_type = ns_text = None
+            if workspace_document_id is not None:
+                doc_ev = jev.evidence_item(db, current_user, company_id, "document", workspace_document_id)
+                if doc_ev is not None:
+                    ev_items.append(doc_ev)
+                    if jev.is_long_deliverable(ok_msg):
+                        # entregable: el chat lleva un resumen breve; el texto completo vive en el workspace
+                        ok_msg = jev.brief(ok_msg, agent_name)
+                        ns_type = "review_draft"
+                        ns_text = f"Revisa el borrador en el workspace de {agent_name} y apruébalo."
             _persist_assistant(
                 db,
                 current_user,
@@ -638,6 +688,9 @@ async def _chat_impl(
                 confidence=result.get("confidence"),
                 hitl_required=result.get("hitl_required", False),
                 workspace_document_id=workspace_document_id,
+                evidence=ev_items or None,
+                next_step=ns_text,
+                next_step_type=ns_type,
             )
         log_chain_step(
             "ACTUAR", company_id=chain_company, user=current_user, agent=agent_name,

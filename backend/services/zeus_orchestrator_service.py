@@ -36,6 +36,7 @@ from services.intent_parser import clarification_for_unknown, has_negation, is_c
 from services import jarvis_clarification as clarif
 from services import jarvis_model_comprehension as model_comp
 from services import jarvis_plan as plan_mod
+from services import jarvis_evidence
 from services import jarvis_ops_actions as ops_actions
 from services import module_gate
 from services.zeus_global_context import attach_context_to_action_payload, enrich_chat_context
@@ -480,9 +481,13 @@ async def _run_plan(
             return {"status": "done", "message": result.message}
         return {"status": "failed", "message": result.message}
 
+    def persist_draft(step: "plan_mod.PlanStep") -> Optional[Dict[str, Any]]:
+        # J10: el borrador de cada paso se guarda como DocumentApproval draft del agente responsable
+        return jarvis_evidence.persist_draft_evidence(db, user, company_int, step.agent, step.text)
+
     return await plan_mod.execute_plan(
         db, user, plan, ctx=ctx, company_id=company_int, thread_id=_raw_thread(ctx),
-        prepare_confirmation=prepare, run_read=run_read,
+        prepare_confirmation=prepare, run_read=run_read, persist_draft=persist_draft,
     )
 
 

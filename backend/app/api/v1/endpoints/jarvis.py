@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -76,3 +76,27 @@ async def jarvis_thread(
         agent_name=chat_db.normalize_agent_name(JARVIS_AGENT),
         thread_id=tid,
     )
+
+
+@router.get("/evidence/{kind}/{item_id}")
+async def jarvis_evidence(
+    kind: str,
+    item_id: str,
+    current_user: User = Depends(thalos_request_guard),
+    db: Session = Depends(get_db),
+) -> dict:
+    """J10: recurso enlazado desde `evidence` (documento, aprobacion, cliente, ruta, movimiento, factura,
+    actividad o registro J7 de una peticion). Sesion obligatoria (THALOS) y filtro por la empresa del
+    usuario resuelta en servidor: un recurso de otra empresa responde 404 (igual que uno inexistente)."""
+    from services import jarvis_evidence as jev
+
+    company_id = chat_db.resolve_company_id(db, current_user)
+    if company_id is None:
+        raise HTTPException(status_code=403, detail="Se requiere una empresa asociada al usuario.")
+    if kind not in jev.KINDS:
+        raise HTTPException(status_code=404, detail="Recurso no encontrado.")
+    res = jev.load_resource(db, current_user, company_id, kind, item_id)
+    if res is None:
+        raise HTTPException(status_code=404, detail="Recurso no encontrado.")
+    evidence, detail = res
+    return {"success": True, **evidence, "detail": detail}

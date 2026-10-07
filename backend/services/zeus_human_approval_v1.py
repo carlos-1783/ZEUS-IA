@@ -375,6 +375,62 @@ def resolve_approval(
     return row
 
 
+def _finish_after_recovery(
+    db: Session, *, row: ZeusPendingApproval, user: User, final_status: str, outcome: Dict[str, Any]
+) -> str:
+    """La ejecucion termino DESPUES de que recover_stuck_approvals la marcara `failed`
+    (interrupted). Comportamiento elegido: el resultado REAL manda. Se pasa de `failed`
+    (interrumpida) a `final_status` real mediante UPDATE condicional (`status='failed'` y marca
+    `interrupted`), de modo que no queda un `failed` falso si el efecto se produjo. result_json
+    conserva el resultado real y la marca `recovered_then_completed`. Siempre deja log
+    (agent_activities) y evento THALOS con lo ocurrido. Devuelve el estado final real."""
+    merged = dict(outcome)
+    merged["recovered_then_completed"] = True
+    merged["note"] = "La ejecucion termino tras haber sido marcada como interrumpida."
+    updated = (
+        db.query(ZeusPendingApproval)
+        .filter(
+            ZeusPendingApproval.id == row.id,
+            ZeusPendingApproval.status == "failed",
+            ZeusPendingApproval.result_json.like('%"interrupted": true%'),
+        )
+        .update(
+            {"status": final_status, "result_json": json.dumps(merged, ensure_ascii=False, default=str),
+             "executed_at": datetime.now(timezone.utc)},
+            synchronize_session=False,
+        )
+    )
+    db.commit()
+    try:
+        from services.thalos_request_guard_v1 import record_security_event
+
+        record_security_event(
+            db,
+            event_type="approval_completed_after_interruption",
+            severity="warning",
+            source="zeus_human_approval",
+            details={"approval_id": row.id, "agent": row.agent_name, "action": row.action_type,
+                     "final_status": final_status, "state_updated": bool(updated)},
+            user=user,
+            company_id=row.company_id,
+            action_taken="status_corrected" if updated else "none",
+            decision_rule="late_completion",
+        )
+    except Exception:
+        logger.exception("No se pudo registrar el evento THALOS de finalizacion tardia %s", row.id)
+    _log(
+        row.agent_name, "approval_late_completion",
+        f"Ejecucion de {row.action_type} (ID {row.id}) terminó tras ser marcada interrumpida: {final_status}",
+        user, row.company_id,
+        {"approval_id": row.id, "action_type": row.action_type, "final_status": final_status,
+         "error": outcome.get("error"), "state_updated": bool(updated)},
+        "completed" if final_status == "executed" else "failed",
+    )
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="La solicitud ya fue resuelta por otra via")
+    return final_status
+
+
 async def execute_approval(db: Session, *, row: ZeusPendingApproval, user: User) -> ZeusPendingApproval:
     """Ejecuta en el servidor la accion almacenada de una aprobacion ya aprobada.
 
@@ -467,15 +523,21 @@ async def execute_approval(db: Session, *, row: ZeusPendingApproval, user: User)
         logger.exception("Fallo ejecutando aprobacion %s", row.id)
         outcome = {"error": f"{type(exc).__name__}: {exc}"}
 
-    db.query(ZeusPendingApproval).filter(ZeusPendingApproval.id == row.id).update(
-        {
-            "status": final_status,
-            "result_json": json.dumps(outcome, ensure_ascii=False, default=str),
-            "executed_at": datetime.now(timezone.utc),
-        },
-        synchronize_session=False,
+    # J2b: UPDATE final CONDICIONAL a `executing`. Si recover_stuck_approvals ya la marco
+    # `failed` (ejecucion viva > umbral) no se sobrescribe a ciegas: ver _finish_after_recovery.
+    result_payload = json.dumps(outcome, ensure_ascii=False, default=str)
+    finished = (
+        db.query(ZeusPendingApproval)
+        .filter(ZeusPendingApproval.id == row.id, ZeusPendingApproval.status == "executing")
+        .update(
+            {"status": final_status, "result_json": result_payload,
+             "executed_at": datetime.now(timezone.utc)},
+            synchronize_session=False,
+        )
     )
     db.commit()
+    if not finished:
+        final_status = _finish_after_recovery(db, row=row, user=user, final_status=final_status, outcome=outcome)
     db.refresh(row)
     _log(
         row.agent_name, f"approval_{final_status}",

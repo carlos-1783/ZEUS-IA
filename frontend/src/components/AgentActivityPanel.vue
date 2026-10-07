@@ -81,6 +81,21 @@
             :class="{ user: message.sender === 'user', agent: message.sender === 'agent' }"
           >
             <div class="message-content">{{ message.content }}</div>
+            <ul v-if="message.evidence && message.evidence.length" class="message-evidence">
+              <li v-for="ev in message.evidence" :key="`${ev.kind}-${ev.id}`">
+                <a
+                  :href="ev.url"
+                  class="evidence-link"
+                  :title="`${ev.agent} · ${ev.status}`"
+                  @click.prevent="openEvidenceLink(ev)"
+                >{{ ev.title }}</a>
+              </li>
+            </ul>
+            <p v-if="message.nextStep" class="message-next-step">{{ message.nextStep }}</p>
+            <div v-if="message.needsConfirmation" class="message-confirm">
+              <button type="button" class="confirm-btn" @click="answerConfirmation(message, 'confirmar')">Confirmar</button>
+              <button type="button" class="cancel-btn" @click="answerConfirmation(message, 'cancelar')">Cancelar</button>
+            </div>
             <div class="message-time">{{ formatTime(message.timestamp) }}</div>
           </div>
         </div>
@@ -243,7 +258,13 @@ import JusticiaWorkspace from './agent-workspaces/JusticiaWorkspace.vue'
 import ZeusCoreWorkspace from './agent-workspaces/ZeusCoreWorkspace.vue'
 import ImageUploader from '@/components/ImageUploader.jsx'
 import { isForbiddenAiFallback, sanitizeAgentChatForMediaFlow } from '@/utils/mediaUploadPolicy'
-import { getAgentChatUrl, getChatMessagesUrl, AGENT_CHAT_TIMEOUT_MS } from '@/utils/chatApi'
+import {
+  getAgentChatUrl,
+  getChatMessagesUrl,
+  AGENT_CHAT_TIMEOUT_MS,
+  extractChatExtras,
+  openEvidence,
+} from '@/utils/chatApi'
 
 const props = defineProps({
   agent: {
@@ -711,7 +732,10 @@ const sendTextMessage = async () => {
     }
     
     await loadChatHistory()
-    
+    // J10: el historial persistido trae solo texto; la evidencia y el siguiente paso de ESTA respuesta
+    // se vuelven a colgar del último mensaje del agente.
+    if (data.success !== false) attachChatExtras(data)
+
   } catch (error) {
     console.error('Error al comunicarse con el agente:', error)
     lastTextChatSentAt.value = 0
@@ -726,6 +750,35 @@ const sendTextMessage = async () => {
       timestamp: new Date()
     })
   }
+}
+
+function attachChatExtras(data) {
+  const extras = extractChatExtras(data)
+  if (!extras.evidence.length && !extras.nextStep && !extras.needsConfirmation) return
+  const last = [...messages.value].reverse().find((m) => m.sender === 'agent')
+  if (last) Object.assign(last, extras)
+}
+
+async function openEvidenceLink(ev) {
+  try {
+    const token = authStore.getToken?.() ?? authStore.token ?? null
+    await openEvidence(ev, token)
+  } catch (error) {
+    messages.value.push({
+      id: Date.now(),
+      sender: 'agent',
+      content: `No se pudo abrir «${ev.title}»: ${formatChatFetchError(error)}`,
+      timestamp: new Date(),
+    })
+  }
+}
+
+// Confirmar/Cancelar una acción pendiente: se responde en el MISMO hilo con «confirmar»/«cancelar».
+async function answerConfirmation(message, word) {
+  message.needsConfirmation = false
+  lastTextChatSentAt.value = 0
+  textInput.value = word
+  await sendTextMessage()
 }
 
 const toggleVoiceChat = () => {
@@ -1022,6 +1075,52 @@ const formatMetricValue = (value) => {
 
 .message.agent .message-content {
   background: var(--zeus-accent-2-soft, #f3ecfd);
+}
+
+.message-evidence {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.evidence-link {
+  color: var(--zeus-accent, #4f46e5);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.message-next-step {
+  margin: 6px 0 0;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--zeus-text-secondary, #52607a);
+}
+
+.message-confirm {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 0 8px;
+}
+
+.confirm-btn,
+.cancel-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--zeus-border-strong, #d7dce5);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  color: var(--zeus-text, #0f172a);
+  cursor: pointer;
+}
+
+.confirm-btn {
+  background: var(--zeus-accent, #4f46e5);
+  border-color: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-on-accent, #ffffff);
 }
 
 .message-time {

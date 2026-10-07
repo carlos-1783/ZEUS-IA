@@ -150,6 +150,16 @@
           <div v-if="agentResponse" class="subtitle agent" :class="{ 'speaking': agentSpeaking }">
             <strong>{{ activeAgent.name }}:</strong> {{ agentResponse }}
           </div>
+          <ul v-if="agentEvidence.length" class="agent-evidence">
+            <li v-for="ev in agentEvidence" :key="`${ev.kind}-${ev.id}`">
+              <a :href="ev.url" class="evidence-link" :title="`${ev.agent} · ${ev.status}`" @click.prevent="openAgentEvidence(ev)">{{ ev.title }}</a>
+            </li>
+          </ul>
+          <div v-if="agentNextStep" class="agent-next-step">{{ agentNextStep }}</div>
+          <div v-if="agentNeedsConfirmation" class="agent-confirm">
+            <button type="button" class="confirm-btn" @click="answerAgentConfirmation('confirmar')">Confirmar</button>
+            <button type="button" class="cancel-btn" @click="answerAgentConfirmation('cancelar')">Cancelar</button>
+          </div>
         </div>
 
         <!-- Controles de voz -->
@@ -287,7 +297,7 @@ import { useAuthStore } from '@/stores/auth'
 import Agent3DAvatar from '@/components/Agent3DAvatar.vue'
 import DashboardProfesional from '@/components/DashboardProfesional.vue'
 import { usePWA } from '@/composables/usePWA'
-import { getAgentChatUrl, AGENT_CHAT_TIMEOUT_MS } from '@/utils/chatApi'
+import { getAgentChatUrl, AGENT_CHAT_TIMEOUT_MS, extractChatExtras, openEvidence } from '@/utils/chatApi'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -354,6 +364,9 @@ const listening = ref(false)
 const agentSpeaking = ref(false)
 const currentTranscript = ref('')
 const agentResponse = ref('')
+const agentEvidence = ref([])
+const agentNextStep = ref('')
+const agentNeedsConfirmation = ref(false)
 
 // Web Speech API
 let recognition = null
@@ -611,7 +624,10 @@ const sendVoiceMessage = async (transcript) => {
   if (!transcript.trim() || !activeAgent.value) return
   
   stopListening()
-  
+  agentEvidence.value = []
+  agentNextStep.value = ''
+  agentNeedsConfirmation.value = false
+
   try {
     const token = authStore.getToken?.() ?? authStore.token ?? null
     const headers = { 'Content-Type': 'application/json' }
@@ -643,6 +659,10 @@ const sendVoiceMessage = async (transcript) => {
     // Mostrar y hablar la respuesta
     const responseText = data.message || 'Lo siento, no pude procesar tu solicitud.'
     agentResponse.value = responseText
+    const extras = extractChatExtras(data)  // J10: evidencia enlazada, siguiente paso y confirmación
+    agentEvidence.value = extras.evidence
+    agentNextStep.value = extras.nextStep || ''
+    agentNeedsConfirmation.value = extras.needsConfirmation
     speakText(responseText)
     
     if (data.hitl_required) {
@@ -656,6 +676,21 @@ const sendVoiceMessage = async (transcript) => {
     speakText(errorMsg)
     showNotification('error', '❌ Error al comunicarse con el agente')
   }
+}
+
+const openAgentEvidence = async (ev) => {
+  try {
+    const token = authStore.getToken?.() ?? authStore.token ?? null
+    await openEvidence(ev, token)
+  } catch (error) {
+    showNotification('error', `❌ ${error?.message || 'No se pudo abrir el recurso'}`)
+  }
+}
+
+// Confirmar/Cancelar la acción pendiente: se responde en el mismo hilo con «confirmar»/«cancelar»
+const answerAgentConfirmation = async (word) => {
+  agentNeedsConfirmation.value = false
+  await sendVoiceMessage(word)
 }
 
 // Hablar texto (Text-to-Speech)
@@ -1874,6 +1909,47 @@ const showNotification = (type, message) => {
   padding: 12px 18px;
   border-radius: 15px;
   word-wrap: break-word;
+}
+
+.agent-evidence {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.evidence-link {
+  color: var(--zeus-accent, #4f46e5);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.agent-next-step {
+  margin-top: 6px;
+  font-size: 0.85rem;
+  color: var(--zeus-text-secondary, #52607a);
+}
+
+.agent-confirm {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.agent-confirm .confirm-btn,
+.agent-confirm .cancel-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--zeus-border-strong, #d7dce5);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  color: var(--zeus-text, #0f172a);
+  cursor: pointer;
+}
+
+.agent-confirm .confirm-btn {
+  background: var(--zeus-accent, #4f46e5);
+  border-color: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-on-accent, #ffffff);
 }
 
 .chat-message.user .message-content {

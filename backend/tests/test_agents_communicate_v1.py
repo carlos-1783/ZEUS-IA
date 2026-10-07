@@ -179,8 +179,11 @@ def test_agent_failure_logs_failed_without_leak(db, stack):
     assert r.status_code == 500 and "secreto-interno" not in r.text
     log = _last_log(db, "agents_communicate", u.email)
     assert log.status == "failed" and log.company_id == co.id
+    # J9e: coordinate usa el ejecutor de planes (J9b): un fallo del agente NO tumba la peticion; se
+    # devuelve 200 con el paso `failed` (sin el texto interno del error) y el registro queda `failed`.
     r = c.post(COORD, json={"task_description": "t", "required_agents": ["RAFAEL"]})
-    assert r.status_code == 500 and "secreto-interno" not in r.text
+    assert r.status_code == 200 and "secreto-interno" not in r.text
+    assert r.json()["success"] is False and r.json()["results"]["RAFAEL"]["status"] == "failed"
     assert _last_log(db, "agents_coordinate", u.email).status == "failed"
 
 

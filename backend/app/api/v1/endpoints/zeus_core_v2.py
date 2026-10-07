@@ -267,7 +267,7 @@ async def get_zeus_status(
         logger.error(f"Error obteniendo estado ZEUS: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error obteniendo estado: {str(e)}",
+            detail="Error interno obteniendo el estado de ZEUS.",
         )
 
 

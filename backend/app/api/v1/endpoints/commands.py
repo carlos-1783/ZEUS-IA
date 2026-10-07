@@ -160,7 +160,7 @@ async def execute_command(
         logger.error(f"Error in execute_command: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing command: {str(e)}"
+            detail="Error interno procesando el comando."
         )
 
 

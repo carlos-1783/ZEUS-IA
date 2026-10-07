@@ -11,7 +11,9 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 from sqlalchemy.orm import Session
+from fastapi.responses import JSONResponse
 
 from app.db.session import get_db
 from app.schemas.chat_message import ChatMessageListResponse, ChatMessageOut
@@ -33,6 +35,7 @@ from app.models.user import User
 from services.activity_logger import ActivityLogger
 from services.chain_log import (
     begin_chain,
+    current_correlation_id,
     end_chain,
     log_chain_step,
     normalize_channel,
@@ -720,17 +723,19 @@ async def _chat_impl(
             error=result.get("error"),
         )
     except Exception as e:
-        print(f"❌ Error en chat con {agent_name}: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Error en chat con %s", agent_name)
         log_chain_step(
             "ACTUAR", company_id=chain_company, user=current_user, agent=agent_name,
             action="agent_chat", action_type="chat_request_exception",
             description=f"Excepción en chat {agent_name}", status="failed", priority="high",
-            details={"error": str(e)[:300], "request_type": "chat"},
+            details={"error": type(e).__name__, "request_type": "chat"},
             visible_to_client=True,
         )
-        exc_msg = f"Error interno: {str(e)}"
+        # R10: al cliente solo un mensaje generico + request_id; el detalle queda en log y J7.
+        rid = current_correlation_id()
+        exc_msg = "Ha ocurrido un error interno al procesar tu mensaje." + (
+            f" Referencia: {rid}" if rid else ""
+        )
         _persist_assistant(
             db,
             current_user,
@@ -743,7 +748,8 @@ async def _chat_impl(
             agent=agent_name,
             message=exc_msg,
             success=False,
-            error=str(e),
+            error="internal_error",
+            request_id=rid,
         )
 
 # J4: communicate/coordinate ejecutan agent.process_request directamente. Autorizacion:
@@ -924,21 +930,23 @@ async def coordinate_agents(
 
 
 @router.get("/health")
-async def chat_health():
-    """Health check para el servicio de chat (no fuerza carga de agentes si aún no se ha usado el stack)."""
-    if not _agents_ready:
-        return {
-            "status": "healthy",
-            "agents": {k: "lazy_pending" for k in AGENT_ORDER_KEYS},
-        }
-    agents_status = {
-        name: "initialized" if agent is not None else "error"
-        for name, agent in AGENTS.items()
-    }
-    return {
-        "status": "healthy",
-        "agents": agents_status,
-    }
+async def chat_health(db: Session = Depends(get_db)):
+    """Health check del servicio de chat (R10). Publico a proposito (sonda de plataforma) y por eso
+    sin detalles internos: solo `healthy` (200) o `unhealthy` (503). Comprueba de verdad la BD
+    (`SELECT 1`) y, si el stack de agentes ya se cargo, que todos esten inicializados (no fuerza
+    la carga perezosa: un stack aun no usado es un estado normal, no un fallo)."""
+    problems: List[str] = []
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception:
+        logger.exception("chat/health: la BD no responde")
+        problems.append("db")
+    if _agents_ready and (not AGENTS or any(a is None for a in AGENTS.values())):
+        logger.error("chat/health: el stack de agentes cargo con agentes sin inicializar")
+        problems.append("agents")
+    if problems:
+        return JSONResponse(status_code=503, content={"status": "unhealthy"})
+    return {"status": "healthy"}
 
 
 @router.get("/panel/executions")

@@ -125,7 +125,7 @@ class Justicia(BaseAgent):
                     audit_mode = audit_body.get("execution_mode", "REAL")
             except Exception as exc:
                 logger.warning("[JUSTICIA] system audit failed: %s", exc)
-                audit_body = {"error": str(exc), "execution_mode": "SIMULATED"}
+                audit_body = {"error": "audit_unavailable", "execution_mode": "SIMULATED"}
             finally:
                 db.close()
         else:
@@ -221,11 +221,11 @@ class Justicia(BaseAgent):
             db.close()
             
         except Exception as e:
-            print(f"⚠️ [JUSTICIA] Error aplicando firewall: {e}")
+            logger.exception("[JUSTICIA] error aplicando firewall")
             # Si falla el firewall, marcar como requiere aprobación manual
             result["firewall_applied"] = False
             result["requires_manual_review"] = True
-            result["error"] = f"Error en firewall: {str(e)}"
+            result["error"] = "Error en firewall"
         
         return result
     
@@ -383,7 +383,7 @@ Revisa:
             logger.error(f"Error validando ticket TPV en JUSTICIA: {e}")
             return {
                 "success": False,
-                "error": str(e),
+                "error": "internal_error",
                 "legal_ok": False
             }
 

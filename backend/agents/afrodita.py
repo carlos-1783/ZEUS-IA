@@ -251,11 +251,12 @@ Eres la voz humana de ZEUS-IA. El corazón del sistema. 💙""",
             decision["metadata"] = metadata
             return decision
             
-        except Exception as e:
+        except Exception:
+            logger.exception("[AFRODITA] error procesando la solicitud")
             return {
                 "success": False,
                 "agent": self.name,
-                "error": str(e),
+                "error": "internal_error",
                 "fallback_message": "Lo siento, tuve un problema procesando tu solicitud de RRHH/Logística. Por favor, intenta nuevamente."
             }
     
@@ -376,7 +377,7 @@ Eres la voz humana de ZEUS-IA. El corazón del sistema. 💙""",
             logger.error(f"Error sincronizando empleado TPV en AFRODITA: {e}")
             return {
                 "success": False,
-                "error": str(e)
+                "error": "internal_error"
             }
     
     def _get_employee_permissions(self, employee_id: str) -> Dict[str, Any]:

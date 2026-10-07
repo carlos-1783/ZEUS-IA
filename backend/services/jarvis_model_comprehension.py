@@ -392,16 +392,30 @@ _MOV_OUT_RE = re.compile(r"\b(?:salida|salidas|retira|retirar|resta|restar|descu
 _PRODUCT_BLOCK = {"unidades", "unidad", "stock", "inventario", "entrada", "salida", "movimiento", "ruta", "uds", "ud"}
 
 
-def _run_in_text(cand: Optional[str], text: str, f: str) -> Optional[str]:
-    """El texto del modelo debe ser EXACTAMENTE una secuencia de palabras completas del mensaje (sin acentos
-    ni mayusculas). Devuelve el trozo tal como lo escribio el usuario (si se puede localizar) o None."""
+_OPS_TAIL_RE = re.compile(
+    r"(?:\s+en\s+(?:el\s+)?(?:inventario|almacen|stock))?(?:\s*,?\s+(?:gracias|por\s+favor))?\s*[.!]?\s*"
+)
+
+
+def _run_in_text(
+    cand: Optional[str], text: str, f: str, before: str, after: "re.Pattern[str]",
+    start_min: int = 0,
+) -> Optional[Tuple[str, int, int]]:
+    """El texto del modelo debe ser EXACTAMENTE el sintagma COMPLETO del complemento: palabras completas,
+    precedido por `before` (p. ej. «de») y seguido SOLO por `after` (fin de mensaje, cierre de cortesia, «en el
+    inventario»...). Un prefijo de un nombre mas largo («Harina» en «Harina integral»), o texto de retractacion
+    tras el complemento, no valen. -> (trozo escrito por el usuario, inicio, fin) o None."""
     want = ip.fold(" ".join((cand or "").split()))
     if not want or len(want) > 120:
         return None
-    m = re.search(rf"(?<![\w]){re.escape(want)}(?![\w])", f)
-    if not m:
-        return None
-    return text[m.start():m.end()] if len(f) == len(text) else " ".join(cand.split())
+    for m in re.finditer(rf"(?<![\w]){re.escape(want)}(?![\w])", f):
+        if m.start() < start_min or not re.search(before + r"$", f[:m.start()]):
+            continue
+        if after.fullmatch(f[m.end():]) is None:
+            continue
+        written = text[m.start():m.end()] if len(f) == len(text) else " ".join(cand.split())
+        return written, m.start(), m.end()
+    return None
 
 
 def _qty_in_text(x: float, f: str) -> bool:
@@ -416,10 +430,21 @@ def _validate_ops_write(act: ClassifierAction, text: str, f: str) -> Tuple[Optio
     if act.action_type == "create_ops_route":
         if not re.search(r"\bruta\b", f):
             return None, ip.QUESTION_OPS
-        o, d = _run_in_text(ent.origin, text, f), _run_in_text(ent.destination, text, f)
-        if not o or not d or not ip._words_ok(o, 5, ip._PLACE_WORD_RE) or not ip._words_ok(d, 5, ip._PLACE_WORD_RE):
+        d = _run_in_text(ent.destination, text, f, r"\b(?:a|hasta|hacia)\s+", _OPS_TAIL_RE)
+        if not d:
             return None, ip.QUESTION_OPS
-        return {"origin": o, "destination": d}, None
+        connector = re.compile(r"\s+(?:a|hasta|hacia)\s+")
+        o = None
+        want_o = ip.fold(" ".join((ent.origin or "").split()))
+        if want_o:
+            for m in re.finditer(rf"(?<![\w]){re.escape(want_o)}(?![\w])", f):
+                if (re.search(r"\b(?:de|desde)\s+$", f[:m.start()])
+                        and connector.fullmatch(f[m.end():d[1]]) is not None):
+                    o = (text[m.start():m.end()] if len(f) == len(text) else " ".join(ent.origin.split()))
+                    break
+        if not o or not ip._words_ok(o, 5, ip._PLACE_WORD_RE) or not ip._words_ok(d[0], 5, ip._PLACE_WORD_RE):
+            return None, ip.QUESTION_OPS
+        return {"origin": o, "destination": d[0]}, None
     mv = ent.movement
     has_in, has_out = bool(_MOV_IN_RE.search(f)), bool(_MOV_OUT_RE.search(f))
     if mv not in ("in", "out") or has_in == has_out or (mv == "in") != has_in:
@@ -429,8 +454,15 @@ def _validate_ops_write(act: ClassifierAction, text: str, f: str) -> Tuple[Optio
     q = float(ent.quantities[0])
     if not (0 < q <= 1_000_000) or not _qty_in_text(q, f):
         return None, ip.QUESTION_OPS
-    prod = _run_in_text(ent.product, text, f)
-    if not prod or ip.fold(prod) in _PRODUCT_BLOCK or not ip._words_ok(prod, 6, ip._PRODUCT_WORD_RE):
+    pr = _run_in_text(ent.product, text, f, r"\b(?:de|del)\s+", _OPS_TAIL_RE)
+    if not pr:
+        return None, ip.QUESTION_OPS
+    prod = pr[0]
+    # UNA sola cantidad en el mensaje (el producto puede llevar digitos: se cuentan fuera de su sintagma)
+    outside = f[:pr[1]] + " " + f[pr[2]:]
+    if len(re.findall(r"(?<![\w.,])\d+(?:[.,]\d+)?(?![\w])", outside)) != 1:
+        return None, ip.QUESTION_OPS
+    if ip.fold(prod) in _PRODUCT_BLOCK or not ip._words_ok(prod, 6, ip._PRODUCT_WORD_RE):
         return None, ip.QUESTION_OPS
     return {"product_text": prod, "quantity": q, "movement": mv}, None
 

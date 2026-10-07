@@ -656,3 +656,79 @@ def test_coordinate_cross_tenant_cada_usuario_su_empresa(db, client, coord):
 
 def test_zeus_core_ya_no_tiene_via_propia_de_coordinacion():
     assert not hasattr(ZeusCore, "coordinate_multi_agent_task")
+
+
+# =============================================================== J9e vuelta 1 (revisor)
+def test_modelo_producto_prefijo_de_un_nombre_mas_largo_no_prepara(db, client, writes_on, monkeypatch):
+    u, c = _user(db)
+    corto = _product(db, c, name="Harina", stock=5)
+    largo = _product(db, c, name="Harina integral", stock=5)
+    use(monkeypatch, clf(mov(product="Harina")))
+    out = say(client, u, "no te olvides de anotar la entrada de 5 unidades de Harina integral")
+    assert not prepared(out) and not approvals(db, u)
+    db.expire_all()
+    assert db.query(Product).filter(Product.id == corto.id).one().quantity_on_hand == 5
+    # con el sintagma completo si prepara el producto correcto
+    use(monkeypatch, clf(mov(product="Harina integral")))
+    out = say(client, u, "no te olvides de anotar la entrada de 5 unidades de Harina integral")
+    assert prepared(out) and largo.sku in out["message"]
+
+
+def test_modelo_destino_u_origen_prefijo_de_un_nombre_mas_largo_no_prepara(db, client, writes_on, monkeypatch):
+    u, c = _user(db)
+    use(monkeypatch, clf(route(dest="Valencia")))
+    assert not prepared(say(client, u, "no te olvides de anotar una ruta de Madrid a Valencia del Cid"))
+    use(monkeypatch, clf(route(origin="Madrid", dest="Valencia del Cid")))
+    assert not prepared(say(client, u, "no te olvides de anotar una ruta de Madrid Norte a Valencia del Cid"))
+    use(monkeypatch, clf(route(origin="Madrid", dest="Valencia")))
+    assert prepared(say(client, u, "no te olvides de anotar una ruta de Madrid a Valencia"))
+    assert len(approvals(db, u)) == 1
+
+
+@pytest.mark.parametrize("msg", [
+    "no te olvides de anotar la entrada de 5 unidades de Cafe molido, mejor no",
+    "no te olvides de anotar la entrada de 5 unidades de Cafe molido, cancela",
+    "no te olvides de anotar la entrada de 5 unidades de Cafe molido pero no lo hagas",
+    "no te olvides de anotar la entrada de 5 unidades de Cafe molido, no mejor 8",
+])
+def test_modelo_retractacion_en_cola_o_segunda_cantidad_no_prepara(db, client, writes_on, monkeypatch, msg):
+    u, c = _user(db)
+    p = _product(db, c, name="Cafe molido", stock=5)
+    use(monkeypatch, clf(mov(cert=0.95)))
+    assert not prepared(say(client, u, msg)) and not approvals(db, u)
+    db.refresh(p)
+    assert p.quantity_on_hand == 5
+
+
+def test_modelo_ruta_con_retractacion_en_cola_no_prepara(db, client, writes_on, monkeypatch):
+    u, c = _user(db)
+    use(monkeypatch, clf(route()))
+    assert not prepared(say(client, u, "no te olvides de anotar una ruta de Madrid a Valencia, mejor no"))
+    assert not approvals(db, u)
+
+
+@pytest.mark.parametrize("word", ["Anular", "Detener", "Descarta", "Ignora", "Dejalo", "Cancelalo", "Deshaz", "Aborta",
+                                  "Descartar", "Ignorar", "Deshacer"])
+def test_palabras_de_retractacion_son_palabras_de_parada(word):
+    from services.intent_parser import parse_intent
+
+    t = parse_intent(f"crea una ruta de Madrid a Valencia {word}")
+    assert t.needs_clarification or t.intent not in ("create_ops_route",), word
+    t = parse_intent(f"registra una entrada de 5 unidades de Harina {word.lower()}")
+    assert t.needs_clarification or t.intent != "create_inventory_movement", word
+
+
+def test_error_de_agente_en_plan_no_llega_al_usuario(db, client, monkeypatch):
+    import services.unified_agent_runtime as rt
+
+    leak = "/srv/app/services/x.py line 3: SELECT * FROM users WHERE password='abc' Traceback"
+    monkeypatch.setattr(rt, "run_chat", lambda *a, **k: {"success": False, "error": leak, "message": f"Error: {leak}"})
+    u, c = _user(db)
+    use(monkeypatch, clf(steps=[step("PERSEO", "consulta", "Analiza las ventas"),
+                                step("RAFAEL", "consulta", "Resumen fiscal")]))
+    out = say(client, u, "dime las ventas y el resumen fiscal y registra todo")
+    assert [s["status"] for s in out["steps"]] == ["failed", "failed"]
+    blob = json.dumps(out, ensure_ascii=False)
+    assert "SELECT" not in blob and "/srv/" not in blob and "Traceback" not in blob and "password" not in blob
+    # el detalle queda en el registro J7 del servidor
+    assert any("SELECT" in json.dumps(r.details or {}) for r in rows(db, c.id, step="ACTUAR", action="plan_step"))

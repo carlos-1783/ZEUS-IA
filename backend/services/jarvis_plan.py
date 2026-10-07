@@ -36,6 +36,7 @@ SUMMARY_CHARS = 160
 # Tope documentado del texto completo de un paso `done` (steps[].text y, en consultas, message).
 # Los borradores/entregables no se incrustan en el chat: van solo en steps[].text y J10 los enlazara
 # al workspace del agente. La vista previa de un paso con consecuencias NO se trunca.
+AGENT_FAILURE_TEXT = "El agente no pudo completar este paso. Inténtalo de nuevo."
 STEP_TEXT_MAX_CHARS = 4000
 DEPENDENCY_CONTEXT_CHARS = 400
 KINDS = ("consulta", "borrador", "accion_con_consecuencias")
@@ -320,9 +321,11 @@ async def execute_plan(
             _log_step(user, company_id, step, "success", response_chars=len(step.text))
         else:
             step.status = "failed"
-            step.reason = short_summary(out.get("error") or out.get("message") or "sin respuesta", 200)
-            step.summary = step.reason
-            _log_step(user, company_id, step, "failed", error=step.reason[:120])
+            # El detalle (puede traer rutas, SQL o trazas) solo va al registro J7 del servidor; al usuario,
+            # un texto fijo.
+            detail = short_summary(out.get("error") or out.get("message") or "sin respuesta", 200)
+            step.reason = step.summary = AGENT_FAILURE_TEXT
+            _log_step(user, company_id, step, "failed", error=detail[:120])
 
     return build_response(plan)
 

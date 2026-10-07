@@ -208,6 +208,8 @@ def build_server_context(
         for k, v in (client_context or {}).items()
         if k not in _CLIENT_FORBIDDEN_CONTEXT_KEYS and not str(k).startswith("_")
     }
+    if "channel" in ctx:
+        ctx["channel"] = normalize_channel(ctx.get("channel"))  # solo text|voice
     ctx["thread_id"] = thread_id
     ctx["user_id"] = user.id
     ctx["user_email"] = user.email

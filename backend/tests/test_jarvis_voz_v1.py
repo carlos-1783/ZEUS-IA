@@ -66,3 +66,12 @@ def test_decir_confirmar_por_voz_de_otro_usuario_no_resuelve_la_aprobacion(db, c
     db.expire_all()
     row = db.query(ZeusPendingApproval).filter(ZeusPendingApproval.id == appr).one()
     assert row.status != "pending"
+
+
+def test_build_server_context_normaliza_el_canal(db):
+    from app.api.v1.endpoints.chat import build_server_context
+
+    user, _ = _seed(db)
+    assert build_server_context(db, user, {"channel": "VOICE"}, "t")["channel"] == "voice"
+    assert build_server_context(db, user, {"channel": "<script>"}, "t")["channel"] == "text"
+    assert "channel" not in build_server_context(db, user, {}, "t")

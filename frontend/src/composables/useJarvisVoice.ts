@@ -13,6 +13,10 @@ import { ref, computed, onUnmounted } from 'vue';
  */
 
 export const VOICE_LANG = 'es-ES';
+// Watchdog de sintesis: ~100 ms por caracter (ritmo lento) + margen, minimo 3 s.
+export const WATCHDOG_MS_PER_CHAR = 100;
+export const WATCHDOG_MARGIN_MS = 3000;
+export const WATCHDOG_MIN_MS = 3000;
 
 export interface JarvisVoiceOptions {
   /** Reconocimiento continuo (true) o una frase por pulsacion (false). */
@@ -28,7 +32,7 @@ export function speakableText(text: string): string {
   return String(text || '')
     .replace(/\bhttps?:\/\/\S+/gi, '')
     .replace(/\b(?:www\.)\S+/gi, '')
-    .replace(/(?:^|\s)\/(?:api\/)\S+/g, ' ')
+    .replace(/(?:^|\s)\/[\w.~-]+(?:\/[\w.~%?=&#:@+-]*)+/g, ' ') // rutas relativas /algo/...
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
@@ -79,6 +83,7 @@ export function useJarvisVoice(options: JarvisVoiceOptions = {}) {
 
   let recognition: any = null;
   let utterance: SpeechSynthesisUtterance | null = null;
+  let watchdog: ReturnType<typeof setTimeout> | null = null;
 
   function ensureRecognition(): any {
     if (recognition) return recognition;
@@ -141,11 +146,26 @@ export function useJarvisVoice(options: JarvisVoiceOptions = {}) {
     listening.value = false;
   }
 
+  function clearWatchdog(): void {
+    if (watchdog) {
+      clearTimeout(watchdog);
+      watchdog = null;
+    }
+  }
+
+  /** Corta la voz actual. Invalida la utterance vigente ANTES de cancelar: sus eventos tardios se ignoran. */
   function cancel(): void {
-    const s = synth();
-    if (s && (s.speaking || s.pending)) s.cancel();
-    speaking.value = false;
+    clearWatchdog();
     utterance = null;
+    const s = synth();
+    if (s) {
+      try {
+        if (s.speaking || s.pending) s.cancel();
+      } catch {
+        /* nada que cancelar */
+      }
+    }
+    speaking.value = false;
   }
 
   /** Lee `text` en voz alta (sin URLs). Para el reconocimiento mientras dura. */
@@ -159,20 +179,44 @@ export function useJarvisVoice(options: JarvisVoiceOptions = {}) {
     u.lang = VOICE_LANG;
     u.rate = options.rate ?? 1.0;
     u.pitch = 1.0;
-    const es = s.getVoices().find((v) => v.lang && v.lang.toLowerCase().startsWith('es'));
-    if (es) u.voice = es;
-    u.onstart = () => {
-      speaking.value = true;
-    };
+    try {
+      const es = s.getVoices().find((v) => v.lang && v.lang.toLowerCase().startsWith('es'));
+      if (es) u.voice = es;
+    } catch {
+      /* voz por defecto */
+    }
+    // Solo la utterance vigente puede liberar `speaking`: un onend/onerror tardio de una anterior se ignora.
     const done = () => {
+      if (utterance !== u) return;
+      clearWatchdog();
+      utterance = null;
       speaking.value = false;
-      if (utterance === u) utterance = null;
     };
     u.onend = done;
     u.onerror = done;
     utterance = u;
     speaking.value = true; // activo ya: el reconocimiento no arranca ni acepta nada hasta el final
-    s.speak(u);
+    // Watchdog: si el navegador nunca dispara onend/onerror, se libera solo para esta utterance.
+    const ms = Math.max(
+      WATCHDOG_MIN_MS,
+      (clean.length * WATCHDOG_MS_PER_CHAR) / (options.rate && options.rate > 0 ? options.rate : 1) + WATCHDOG_MARGIN_MS,
+    );
+    watchdog = setTimeout(() => {
+      if (utterance !== u) return;
+      try {
+        if (s.speaking) s.cancel();
+      } catch {
+        /* nada */
+      }
+      done();
+    }, ms);
+    try {
+      s.speak(u);
+    } catch {
+      done();
+      error.value = 'No se pudo reproducir la voz. Puedes leer la respuesta en pantalla.';
+      return false;
+    }
     return true;
   }
 

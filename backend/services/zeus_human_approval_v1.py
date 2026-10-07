@@ -196,8 +196,86 @@ def request_approval(
     return row
 
 
+STUCK_EXECUTING_MINUTES = 15
+
+
+def recover_stuck_approvals(
+    db: Session,
+    *,
+    company_id: Optional[int] = None,
+    older_than_minutes: int = STUCK_EXECUTING_MINUTES,
+) -> int:
+    """J2b: filas en `executing` desde hace mas de `older_than_minutes` (proceso muerto entre el
+    claim y el resultado) -> `failed`, con result_json explicativo. NUNCA re-ejecuta: no se sabe si
+    el efecto llego a producirse. Sin `company_id` recorre todas las empresas (arranque); con
+    `company_id` solo esa empresa. UPDATE condicional por fila (status sigue en executing), con
+    registro en agent_activities (company_id) y evento THALOS. Devuelve cuantas recupero."""
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=older_than_minutes)
+    q = db.query(ZeusPendingApproval).filter(ZeusPendingApproval.status == "executing")
+    if company_id is not None:
+        q = q.filter(ZeusPendingApproval.company_id == company_id)
+    recovered = 0
+    for row in q.all():
+        since = _aware(row.executing_at or row.resolved_at or row.created_at)
+        if since is None or since >= cutoff:
+            continue
+        outcome = {
+            "error": (
+                "Ejecucion interrumpida; revisar manualmente: puede haberse producido el efecto. "
+                "No se ha reintentado automaticamente."
+            ),
+            "interrupted": True,
+            "executing_since": since.isoformat(),
+        }
+        done = (
+            db.query(ZeusPendingApproval)
+            .filter(ZeusPendingApproval.id == row.id, ZeusPendingApproval.status == "executing")
+            .update(
+                {"status": "failed", "result_json": json.dumps(outcome, ensure_ascii=False),
+                 "executed_at": datetime.now(timezone.utc)},
+                synchronize_session=False,
+            )
+        )
+        db.commit()
+        if not done:
+            continue
+        recovered += 1
+        requester = db.query(User).filter(User.id == row.user_id).first()
+        _log(
+            row.agent_name, "approval_failed",
+            f"Aprobacion {row.id} ({row.action_type}) interrumpida en ejecucion; marcada failed sin re-ejecutar",
+            requester, row.company_id,
+            {"approval_id": row.id, "action_type": row.action_type, "error": outcome["error"],
+             "recovered_stuck": True},
+            "failed",
+        )
+        try:
+            from services.thalos_request_guard_v1 import record_security_event
+
+            record_security_event(
+                db,
+                event_type="approval_execution_interrupted",
+                severity="warning",
+                source="zeus_human_approval",
+                details={"approval_id": row.id, "agent": row.agent_name, "action": row.action_type,
+                         "executing_since": outcome["executing_since"], "re_executed": False},
+                user=requester,
+                company_id=row.company_id,
+                action_taken="marked_failed",
+                decision_rule="stuck_executing",
+            )
+        except Exception:
+            logger.exception("No se pudo registrar el evento THALOS de recuperacion %s", row.id)
+    return recovered
+
+
 def list_pending(db: Session, *, user: User, company_id: int) -> List[Dict[str, Any]]:
     assert_company_access(db, user, company_id)
+    try:
+        recover_stuck_approvals(db, company_id=company_id)
+    except Exception:
+        db.rollback()
+        logger.exception("Fallo recuperando aprobaciones atascadas (empresa %s)", company_id)
     rows = (
         db.query(ZeusPendingApproval)
         .filter(
@@ -309,7 +387,7 @@ async def execute_approval(db: Session, *, row: ZeusPendingApproval, user: User)
     claimed = (
         db.query(ZeusPendingApproval)
         .filter(ZeusPendingApproval.id == row.id, ZeusPendingApproval.status == "approved")
-        .update({"status": "executing"}, synchronize_session=False)
+        .update({"status": "executing", "executing_at": datetime.now(timezone.utc)}, synchronize_session=False)
     )
     db.commit()
     if not claimed:

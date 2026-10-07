@@ -300,6 +300,19 @@ async def startup_event():
         ensure_schema_patches()
         create_tables()
         ensure_initial_superuser()
+        try:  # J2b: aprobaciones que quedaron en `executing` por un reinicio (nunca se re-ejecutan)
+            from app.db.base import SessionLocal
+            from services.zeus_human_approval_v1 import recover_stuck_approvals
+
+            _db = SessionLocal()
+            try:
+                n = recover_stuck_approvals(_db)
+                if n:
+                    logger.warning("Recuperadas %s aprobaciones atascadas en executing -> failed", n)
+            finally:
+                _db.close()
+        except Exception:
+            logger.exception("No se pudo recuperar aprobaciones atascadas en el arranque")
     else:
         logger.warning(
             "ZEUS_SKIP_STARTUP_DB_INIT activo: no se ejecutan create_tables ni ensure_initial_superuser."

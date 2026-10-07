@@ -132,6 +132,7 @@ def ensure_schema_patches():
         _migrate_agent_activities_company_id()
         _migrate_zeus_approvals_execution_columns()
         _migrate_zeus_approvals_chat_columns()
+        _migrate_zeus_approvals_executing_at()
         _migrate_role_check_constraints()
         _migrate_rename_misleading_company_id_columns()
         _migrate_company_billing_fields()
@@ -847,6 +848,30 @@ def _migrate_zeus_approvals_chat_columns():
             ))
     except Exception as e:
         print(f"[MIGRATION] [WARN] zeus_pending_approvals chat: {e}")
+
+
+def _migrate_zeus_approvals_executing_at():
+    """executing_at en zeus_pending_approvals (J2b, alembic 0061). Idempotente."""
+    from sqlalchemy import inspect, text
+
+    try:
+        inspector = inspect(engine)
+        table_name = "zeus_pending_approvals"
+        if table_name not in inspector.get_table_names():
+            return
+        is_postgres = "postgres" in settings.DATABASE_URL.lower()
+        cols = {c["name"] for c in inspector.get_columns(table_name)}
+        if "executing_at" in cols:
+            return
+        ddl = "TIMESTAMP WITH TIME ZONE" if is_postgres else "DATETIME"
+        with engine.begin() as conn:
+            if is_postgres:
+                conn.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "executing_at" {ddl}'))
+            else:
+                conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN executing_at {ddl}"))
+        print(f"[MIGRATION] [OK] {table_name}.executing_at agregada")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] zeus_pending_approvals executing_at: {e}")
 
 
 def _migrate_agent_activities_company_id():

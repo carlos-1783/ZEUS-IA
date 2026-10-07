@@ -10,6 +10,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.db.base import Base, SessionLocal, engine
+from app.models.company import Company, UserCompany
 from app.models.erp import InventoryMovementType, Product, ProductCategory, ProductStatus
 from app.models.ops_route import OpsRoute
 from app.models.user import User
@@ -45,8 +46,21 @@ def user(db):
 
 
 @pytest.fixture()
-def product(db):
+def company(db, user):
+    suf = uuid.uuid4().hex[:8]
+    c = Company(company_name=f"OPS {suf}", slug=f"ops-{suf}", company_type="bar_restaurant")
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    db.add(UserCompany(user_id=user.id, company_id=c.id, role="owner"))
+    db.commit()
+    return c
+
+
+@pytest.fixture()
+def product(db, company):
     p = Product(
+        company_id=company.id,
         sku=f"SKU-{uuid.uuid4().hex[:8]}",
         name="Test Product OPS",
         price=10.0,
@@ -62,7 +76,7 @@ def product(db):
     return p
 
 
-def test_create_movement_updates_stock(db, user, product):
+def test_create_movement_updates_stock(db, user, product, company):
     with patch.dict(
         os.environ,
         {"AFRODITA_EXECUTION_ENABLED": "true", "AFRODITA_READ_ONLY_MODE": "false"},
@@ -75,6 +89,7 @@ def test_create_movement_updates_stock(db, user, product):
             movement_type="adjustment",
             quantity=-10.0,
             reference="test-ops",
+            company_id=company.id,
         )
         db.commit()
     assert out["stock_after"] == 90.0
@@ -102,7 +117,7 @@ def test_create_route_persists(db, user):
     assert row.origin == "Madrid"
 
 
-def test_movement_rejects_negative_stock(db, user, product):
+def test_movement_rejects_negative_stock(db, user, product, company):
     with patch.dict(
         os.environ,
         {"AFRODITA_EXECUTION_ENABLED": "true", "AFRODITA_READ_ONLY_MODE": "false"},
@@ -115,6 +130,7 @@ def test_movement_rejects_negative_stock(db, user, product):
                 product_id=product.id,
                 movement_type=InventoryMovementType.SALE.value,
                 quantity=-500.0,
+                company_id=company.id,
             )
         assert exc.value.status_code == 422
 

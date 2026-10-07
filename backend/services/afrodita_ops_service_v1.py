@@ -68,8 +68,17 @@ def _tpv_row(p: TPVProduct) -> Dict[str, Any]:
     }
 
 
-def list_erp_products(db: Session, *, limit: int = 200) -> List[Dict[str, Any]]:
-    rows = db.query(Product).order_by(Product.name.asc()).limit(limit).all()
+def list_erp_products(db: Session, *, company_ids: List[int], limit: int = 200) -> List[Dict[str, Any]]:
+    """Productos ERP de las empresas indicadas. Fail-closed: sin empresas -> lista vacia."""
+    if not company_ids:
+        return []
+    rows = (
+        db.query(Product)
+        .filter(Product.company_id.in_(company_ids))
+        .order_by(Product.name.asc())
+        .limit(limit)
+        .all()
+    )
     return [_erp_row(r) for r in rows]
 
 
@@ -93,16 +102,26 @@ def merge_products_view(db: Session, user: User) -> Dict[str, Any]:
     flags = current_flags()
     global_mode = get_global_status(db)["execution_mode"]
     ui_badge = global_mode if global_mode in ("REAL", "SIMULATED", "ERROR") else "SIMULATED"
-    erp_items: List[Dict[str, Any]] = list_erp_products(db) if flags["AFRODITA_USE_ERP"] else []
+    company_ids = _company_ids(db, user)
+    erp_items: List[Dict[str, Any]] = (
+        list_erp_products(db, company_ids=company_ids) if flags["AFRODITA_USE_ERP"] else []
+    )
     tpv_items: List[Dict[str, Any]] = list_tpv_products(db, user) if flags["AFRODITA_USE_TPV"] else []
 
     merged: List[Dict[str, Any]] = []
     used_tpv: set[int] = set()
 
-    erp_rows = db.query(Product).order_by(Product.name.asc()).limit(500).all() if flags["AFRODITA_USE_ERP"] else []
+    erp_rows: List[Product] = []
+    if flags["AFRODITA_USE_ERP"] and company_ids:
+        erp_rows = (
+            db.query(Product)
+            .filter(Product.company_id.in_(company_ids))
+            .order_by(Product.name.asc())
+            .limit(500)
+            .all()
+        )
     tpv_rows: List[TPVProduct] = []
     if flags["AFRODITA_USE_TPV"]:
-        company_ids = _company_ids(db, user)
         q = db.query(TPVProduct)
         if company_ids:
             q = q.filter(
@@ -178,14 +197,19 @@ def merge_products_view(db: Session, user: User) -> Dict[str, Any]:
     }
 
 
-def list_inventory_movements(db: Session, *, limit: int = 100) -> Dict[str, Any]:
+def list_inventory_movements(db: Session, user: User, *, limit: int = 100) -> Dict[str, Any]:
+    """Movimientos de productos de las empresas del usuario (fail-closed sin empresa)."""
     flags = current_flags()
     if not flags["AFRODITA_USE_ERP"]:
         return {"movements": [], "count": 0, "source": "inventory_movements", "read_only": True}
 
+    company_ids = _company_ids(db, user)
+    if not company_ids:
+        return {"movements": [], "count": 0, "source": "inventory_movements", "read_only": not writes_enabled()}
     rows = (
         db.query(InventoryMovement, Product)
         .join(Product, Product.id == InventoryMovement.product_id)
+        .filter(Product.company_id.in_(company_ids))
         .order_by(InventoryMovement.created_at.desc())
         .limit(min(limit, 500))
         .all()
@@ -253,6 +277,21 @@ def _sync_tpv_stock_for_product(
     return None
 
 
+def resolve_product_company_id(db: Session, user: User, product_id: int) -> int:
+    """Empresa (de las del usuario) a la que pertenece el producto; si no es de ninguna -> 404."""
+    company_ids = _company_ids(db, user)
+    row = None
+    if company_ids:
+        row = (
+            db.query(Product.company_id)
+            .filter(Product.id == product_id, Product.company_id.in_(company_ids))
+            .first()
+        )
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Producto {product_id} no encontrado")
+    return int(row[0])
+
+
 def create_inventory_movement(
     db: Session,
     user: User,
@@ -262,18 +301,22 @@ def create_inventory_movement(
     quantity: float,
     reference: Optional[str] = None,
     notes: Optional[str] = None,
-    company_id: Optional[int] = None,
+    company_id: int,
 ) -> Dict[str, Any]:
-    """`company_id` (J9c, opcional para no cambiar a los llamadores existentes): si se indica, solo
-    se opera sobre productos de esa empresa (otra empresa o producto sin empresa -> 404)."""
+    """`company_id` OBLIGATORIO (J9d): solo se opera sobre productos de esa empresa (otra empresa
+    o producto sin empresa -> 404 sin revelar existencia). Los llamadores deben resolverlo en
+    servidor (ver `resolve_product_company_id`), nunca desde el cliente sin validar."""
     flags = current_flags()
     if not flags.get("AFRODITA_USE_ERP"):
         raise HTTPException(status_code=503, detail="AFRODITA_USE_ERP=false")
 
-    pq = db.query(Product).filter(Product.id == product_id)
-    if company_id is not None:
-        pq = pq.filter(Product.company_id == company_id)
-    product = pq.first()
+    if company_id is None:
+        raise HTTPException(status_code=404, detail=f"Producto {product_id} no encontrado")
+    product = (
+        db.query(Product)
+        .filter(Product.id == product_id, Product.company_id == int(company_id))
+        .first()
+    )
     if not product:
         raise HTTPException(status_code=404, detail=f"Producto {product_id} no encontrado")
     if not product.track_inventory:
@@ -405,9 +448,12 @@ def create_ops_route(
 
 
 def list_ops_routes(db: Session, user: User, *, limit: int = 50) -> Dict[str, Any]:
+    company_ids = _company_ids(db, user)
+    if not company_ids:
+        return {"routes": [], "count": 0, "source": "ops_routes"}
     rows = (
         db.query(OpsRoute)
-        .filter(OpsRoute.user_id == user.id)
+        .filter(OpsRoute.company_id.in_(company_ids))
         .order_by(OpsRoute.id.desc())
         .limit(min(limit, 200))
         .all()

@@ -17,6 +17,7 @@ from services.afrodita_ops_service_v1 import (
     list_inventory_movements,
     list_ops_routes,
     merge_products_view,
+    resolve_product_company_id,
     warehouse_summary,
 )
 from services.afrodita_unified_control import (
@@ -85,7 +86,7 @@ def afrodita_ops_movements(
         allowed=True,
         actor_id=current_user.id,
     )
-    body = list_inventory_movements(db, limit=limit)
+    body = list_inventory_movements(db, current_user, limit=limit)
     return wrap_response(
         {"success": True, **body},
         db=db,
@@ -101,6 +102,7 @@ def afrodita_ops_movement_create(
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     assert_can_write(db)
+    company_id = resolve_product_company_id(db, current_user, body.product_id)
     log_execution_attempt(
         domain="goods_layer",
         action="create_movement",
@@ -115,6 +117,7 @@ def afrodita_ops_movement_create(
         quantity=body.quantity,
         reference=body.reference,
         notes=body.notes,
+        company_id=company_id,
     )
     from services.workspace_playbook_writer_v1 import write_ops_playbook
 

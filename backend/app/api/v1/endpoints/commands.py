@@ -23,21 +23,6 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Mapeo de módulos por empresa
-EMPRESA_MODULOS = {
-    "per-seo": {
-        "crm": True,
-        "per-seo": True,
-        "facturacion": True,
-        "marketing": True
-    },
-    "thalos": {
-        "crm": True,
-        "thalos": True,
-        "inventario": True
-    }
-}
-
 class CommandData(BaseModel):
     command: str = Field(..., description="The command to execute")
 
@@ -118,7 +103,6 @@ async def execute_command(
             # Activate the default company
             state["empresa_actual"] = "PER-SEO"
             state["empresa_activada"] = True
-            state["modulos_activos"] = ["modulo1", "modulo2"]  # Default modules
             state["ultima_activacion"] = datetime.utcnow().isoformat()
             state_manager.update_state(state)
             
@@ -139,7 +123,6 @@ async def execute_command(
             logger.info(f"Activating company: {empresa}")
             state["empresa_actual"] = empresa
             state["empresa_activada"] = True
-            state["modulos_activos"] = [f"modulo_{empresa.lower()}", "comun"]
             state["ultima_activacion"] = datetime.utcnow().isoformat()
             state_manager.update_state(state)
             
@@ -207,7 +190,6 @@ async def activate_company(empresa: str) -> Dict[str, Any]:
     update_data = {
         "empresa_actual": empresa,
         "empresa_activada": True,
-        "modulos_activos": EMPRESA_MODULOS.get(empresa_lower, {})
     }
     
     # Actualizar el estado

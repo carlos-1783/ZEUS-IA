@@ -1,7 +1,55 @@
+# JX2: BD desechable. Debe ejecutarse ANTES de importar nada de `app` (config/db leen DATABASE_URL al importar).
+import atexit
+
 import pytest
-from fastapi.testclient import TestClient
-from app.main import app
-from app.core.config import settings
+
+import infra_bd_desechable as _infra_bd
+
+_BD_TMP_DIR, _BD_TMP_URL = _infra_bd.preparar_url_de_tests()
+_motivo = _infra_bd.validar_url_temporal(_BD_TMP_URL)
+if _motivo:
+    _infra_bd.borrar_directorio(_BD_TMP_DIR)
+    pytest.exit(
+        "JX2: los tests no pueden usar esta BD (" + _motivo + "). Quita DATABASE_URL o apuntala a un "
+        "sqlite dentro del directorio temporal. Sesion abortada para proteger zeus.db/produccion.",
+        returncode=2,
+    )
+atexit.register(_infra_bd.borrar_directorio, _BD_TMP_DIR)
+
+from app.core.config import settings  # noqa: E402
+import app.db.base as _app_db_base  # noqa: E402
+
+# Segunda salvaguarda, sobre lo que de verdad usa la app (settings y engine).
+for _u in (settings.DATABASE_URL, _app_db_base.engine.url.render_as_string(hide_password=False)):
+    _motivo = _infra_bd.validar_url_temporal(_u)
+    if _motivo:
+        _infra_bd.borrar_directorio(_BD_TMP_DIR)
+        pytest.exit("JX2: la app apunta a una BD no temporal (" + _motivo + "). Sesion abortada.", returncode=2)
+
+from fastapi.testclient import TestClient  # noqa: E402
+from app.main import app  # noqa: E402  (importa routers y, con ellos, los modelos)
+
+# create_tables() solo importa una lista fija de modelos; en una BD vacia create_all falla si falta
+# alguno referenciado por FK (p.ej. company_employees). En la app real main ya los ha importado todos
+# antes del lifespan; aqui lo garantizamos importando todo `app.models.*`.
+import importlib  # noqa: E402
+import pkgutil  # noqa: E402
+import app.models as _app_models  # noqa: E402
+
+for _m in pkgutil.iter_modules(_app_models.__path__):
+    importlib.import_module("app.models." + _m.name)
+
+# Mismo esquema que la app al arrancar: create_all de todos los modelos + parches idempotentes.
+_app_db_base.create_tables()
+
+
+def pytest_unconfigure(config):
+    """Cierra conexiones y borra la BD desechable (nunca hace fallar la suite)."""
+    try:
+        _app_db_base.engine.dispose()
+    except Exception:
+        pass
+    _infra_bd.borrar_directorio(_BD_TMP_DIR)
 
 @pytest.fixture(scope="module")
 def test_client():

@@ -222,16 +222,25 @@ def test_create_customer_via_agent_execute_is_pending_not_created(db, client):
 
 
 def test_invalid_email_fails_controlled_no_500(db, client):
+    """J12b: datos invalidos de create_customer se rechazan ANTES de abrir aprobacion."""
     user, company = _seed(db, with_customer=False)
     _as(user)
-    r = client.post(f"{BASE}/agent/execute", json={
-        "agent": "ZEUS", "action": "create_customer", "payload": {"name": "Ana", "email": "no-es-un-email"},
-    })
-    aid = r.json()["approval_id"]
-    res = client.post(f"{BASE}/approvals/{aid}/resolve", json={"approve": True})
-    assert res.status_code == 422, res.text
-    row = _row(db, aid)
-    assert row.status == "failed" and "email" in json.loads(row.result_json)["error"].lower()
+    antes = db.query(ZeusPendingApproval).filter(ZeusPendingApproval.user_id == user.id).count()
+    for payload in (
+        {"name": "Ana", "email": "no-es-un-email"},
+        {"name": "Ana", "email": "ana@dominio.test"},
+        {"name": "", "email": "ana@example.com"},
+        {"name": "Ana", "email": ""},
+    ):
+        r = client.post(f"{BASE}/agent/execute", json={
+            "agent": "ZEUS", "action": "create_customer", "payload": payload,
+        })
+        assert r.status_code == 200, (payload, r.text)
+        body = r.json()
+        assert body["success"] is False and body["executed"] is False, (payload, body)
+        assert not body.get("approval_id") and not body.get("needs_approval"), (payload, body)
+    db.expire_all()
+    assert db.query(ZeusPendingApproval).filter(ZeusPendingApproval.user_id == user.id).count() == antes
     assert _count_customers(db, company.id) == 0
 
 

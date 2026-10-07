@@ -217,6 +217,26 @@ async def execute_agent_action(
         if data is None:
             return _fail(preview_msg, status="invalid_payload")
 
+    if act == "create_customer" and not force_execute:
+        # J12b: mismo validador que la ejecucion, ANTES de abrir aprobacion (la ejecucion lo repite).
+        from pydantic import ValidationError
+        from app.schemas.customer import CustomerCreate
+
+        name = str(data.get("name") or "").strip()
+        email = str(data.get("email") or "").strip()
+        if not name or not email:
+            return _fail("Indica nombre y email del cliente (ej: crear cliente Juan juan@empresa.com).",
+                         status="invalid_payload")
+        try:
+            CustomerCreate(name=name, email=email, phone=data.get("phone"))
+        except ValidationError as exc:
+            first = (exc.errors() or [{}])[0]
+            field = ".".join(str(x) for x in first.get("loc", ())) or "datos"
+            return _fail(
+                f"No se creó el cliente: {field} no es válido ({first.get('msg', 'valor incorrecto')}).",
+                status="invalid_payload",
+            )
+
     if requires_approval(act, data) and not force_execute:
         approval = request_approval(
             db,

@@ -55,6 +55,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.schemas.zeus_task import ZeusEntities, ZeusTaskObject
 from services import intent_parser as ip
+from services import jarvis_ops_actions as ops_actions
 from services import jarvis_plan as plan_mod
 from services.jarvis_classifier_prompt import build_messages
 
@@ -71,11 +72,18 @@ MAX_MESSAGE_CHARS = 600
 class ClassifierEntities(ZeusEntities):
     model_config = ConfigDict(extra="forbid")
     recipients: Optional[Literal["all_customers", "segment", "specific"]] = None
+    # J9e: escrituras de AFRODITA (cada valor se valida en servidor: presencia literal en el texto).
+    product: Optional[str] = Field(default=None, max_length=120)
+    quantities: List[float] = Field(default_factory=list, max_length=3)
+    movement: Optional[Literal["in", "out", "adjustment"]] = None
+    origin: Optional[str] = Field(default=None, max_length=120)
+    destination: Optional[str] = Field(default=None, max_length=120)
 
 
 class ClassifierAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    action_type: Literal["send_campaign", "create_customer", "other_consequential"]
+    action_type: Literal["send_campaign", "create_customer", "create_ops_route", "create_inventory_movement",
+                         "other_consequential"]
     polarity: Literal["affirm", "negate", "uncertain"]
     entities: ClassifierEntities = Field(default_factory=ClassifierEntities)
     certainty: float = Field(ge=0.0, le=1.0)
@@ -88,7 +96,12 @@ class ClassifierStep(BaseModel):
     kind: Literal["consulta", "borrador", "accion_con_consecuencias"]
     objective: str = Field(max_length=400)
     depends_on: List[int] = Field(default_factory=list, max_length=3)
-    action_type: Optional[Literal["send_campaign", "create_customer"]] = None
+    # J9e: acciones con consecuencias (send_campaign, create_customer, create_ops_route,
+    # create_inventory_movement) o CONSULTAS reales (solo kind=consulta) de JUSTICIA/AFRODITA.
+    action_type: Optional[Literal[
+        "send_campaign", "create_customer", "create_ops_route", "create_inventory_movement",
+        "get_legal_status", "run_compliance_audit", "get_inventory_status", "get_shift_status",
+    ]] = None
 
 
 class ClassifierOutput(BaseModel):
@@ -169,7 +182,8 @@ def get_client() -> Any:
 _GATE_RE = re.compile(
     r"\b(?:envi|manda|mande|mandar|mandes|mandal|mandam|lanz|publi|difund|crea|crear|cree|crees|creame|"
     r"genera|alta|anad|agreg|registr|apunt|cobr|factur|borr|elimin|anul|pag|programa|suscrib|notific|"
-    r"oferta|campan|promo|descuento|cupon|mailing|newsletter|cliente\s+nuevo|nuevo\s+cliente)\w*"
+    r"oferta|campan|promo|descuento|cupon|mailing|newsletter|cliente\s+nuevo|nuevo\s+cliente|"
+    r"anot|planific|ruta|movimiento)\w*"
 )
 
 
@@ -252,9 +266,12 @@ GENERIC_QUESTION = (
     "(p. ej. «envía la oferta del 10% a todos mis clientes»)."
 )
 _INTENT_OF = {"send_campaign": "create_campaign_send", "create_customer": "create_customer"}
+OPS_WRITES = ("create_ops_route", "create_inventory_movement")
 _LABEL_OF = {
     "send_campaign": "enviar una campaña a tus clientes",
     "create_customer": "crear un cliente",
+    "create_ops_route": "crear una ruta operativa",
+    "create_inventory_movement": "registrar un movimiento de inventario",
     "other_consequential": "otra acción",
 }
 
@@ -369,6 +386,55 @@ def _validate_campaign(act: ClassifierAction, text: str, f: str) -> Tuple[Option
     return {"discount": disc}, None
 
 
+# --- J9e: validacion en servidor de las escrituras de AFRODITA --------------------------------------
+_MOV_IN_RE = re.compile(r"\b(?:entrada|entradas|compra|compras|recepcion|recibido|recibimos|suma|sumar|aumenta|aumentar)\b")
+_MOV_OUT_RE = re.compile(r"\b(?:salida|salidas|retira|retirar|resta|restar|descuenta|descontar|baja)\b")
+_PRODUCT_BLOCK = {"unidades", "unidad", "stock", "inventario", "entrada", "salida", "movimiento", "ruta", "uds", "ud"}
+
+
+def _run_in_text(cand: Optional[str], text: str, f: str) -> Optional[str]:
+    """El texto del modelo debe ser EXACTAMENTE una secuencia de palabras completas del mensaje (sin acentos
+    ni mayusculas). Devuelve el trozo tal como lo escribio el usuario (si se puede localizar) o None."""
+    want = ip.fold(" ".join((cand or "").split()))
+    if not want or len(want) > 120:
+        return None
+    m = re.search(rf"(?<![\w]){re.escape(want)}(?![\w])", f)
+    if not m:
+        return None
+    return text[m.start():m.end()] if len(f) == len(text) else " ".join(cand.split())
+
+
+def _qty_in_text(x: float, f: str) -> bool:
+    forms = {str(int(x))} if float(x).is_integer() else {str(x), str(x).replace(".", ",")}
+    return any(re.search(rf"(?<![\d.,]){re.escape(s)}(?![\d]|[.,]\d)", f) for s in forms)
+
+
+def _validate_ops_write(act: ClassifierAction, text: str, f: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """(campos, pregunta). Todo valor del modelo debe aparecer LITERALMENTE en el mensaje y pasar la misma
+    higiene que la plantilla por reglas; el producto real lo resuelve despues el servidor en la empresa."""
+    ent = act.entities
+    if act.action_type == "create_ops_route":
+        if not re.search(r"\bruta\b", f):
+            return None, ip.QUESTION_OPS
+        o, d = _run_in_text(ent.origin, text, f), _run_in_text(ent.destination, text, f)
+        if not o or not d or not ip._words_ok(o, 5, ip._PLACE_WORD_RE) or not ip._words_ok(d, 5, ip._PLACE_WORD_RE):
+            return None, ip.QUESTION_OPS
+        return {"origin": o, "destination": d}, None
+    mv = ent.movement
+    has_in, has_out = bool(_MOV_IN_RE.search(f)), bool(_MOV_OUT_RE.search(f))
+    if mv not in ("in", "out") or has_in == has_out or (mv == "in") != has_in:
+        return None, ip.QUESTION_OPS  # «ajuste», tipo ausente, ambiguo o contrario a lo escrito
+    if len(ent.quantities) != 1:
+        return None, ip.QUESTION_OPS
+    q = float(ent.quantities[0])
+    if not (0 < q <= 1_000_000) or not _qty_in_text(q, f):
+        return None, ip.QUESTION_OPS
+    prod = _run_in_text(ent.product, text, f)
+    if not prod or ip.fold(prod) in _PRODUCT_BLOCK or not ip._words_ok(prod, 6, ip._PRODUCT_WORD_RE):
+        return None, ip.QUESTION_OPS
+    return {"product_text": prod, "quantity": q, "movement": mv}, None
+
+
 def _validate_customer(act: ClassifierAction, text: str, f: str) -> Dict[str, Any]:
     """Nombre/email/telefono validados (forma + presentes literalmente en el texto). Lo no valido => None."""
     ent = act.entities
@@ -436,6 +502,14 @@ def _build_model_plan(
         deps = sorted(set(s.depends_on))
         if not obj or any(d < 1 or d >= i for d in deps):
             return None
+        if s.kind != "accion_con_consecuencias" and s.action_type is not None:
+            # J9e: consulta REAL (catalogo cerrado) y SOLO del agente que la atiende.
+            spec = ops_actions.PLAN_READ_ACTIONS.get(s.action_type)
+            if s.kind != "consulta" or spec is None or spec[1] != s.agent:
+                return None
+            steps.append(plan_mod.PlanStep(n=i, agent=s.agent, objective=obj, kind="consulta", depends_on=deps,
+                                           action_type=s.action_type))
+            continue
         if s.kind == "accion_con_consecuencias":
             match = next((a for a in pool if a.action_type == s.action_type), None)
             if match is None:
@@ -535,6 +609,19 @@ def decide(out: ClassifierOutput, text: str, cfg: ClassifierConfig) -> Comprehen
             raw_message=text, confidence=conf, entities=ZeusEntities(percentages=ent_all.percentages,
                                                                       recipients="all_customers"),
             urgency=urgency, confidence_breakdown=base_breakdown,
+        )
+        return Comprehension(task=task, decision="affirm_prepare", polarity_conflict=conflict,
+                             notice=_notice(act.action_type) if conflict else None)
+    if act.action_type in OPS_WRITES:
+        # J9e: escritura de AFRODITA. Mismo criterio que J8b: entidades literales; solo se PREPARA (vista
+        # previa + aprobacion); el producto/empresa/rol se resuelven y comprueban despues en el servidor.
+        fields, question = _validate_ops_write(act, text, f)
+        if question:
+            return Comprehension(task=ZeusTaskObject(), reply=question, reply_is_question=True,
+                                 decision="clarify_invalid_entities")
+        task = ZeusTaskObject(
+            intent=act.action_type, action=act.action_type, metadata=fields, requires_confirmation=True,
+            raw_message=text, confidence=conf, urgency=urgency, confidence_breakdown=base_breakdown,
         )
         return Comprehension(task=task, decision="affirm_prepare", polarity_conflict=conflict,
                              notice=_notice(act.action_type) if conflict else None)

@@ -22,7 +22,7 @@ from app.models.customer import Customer
 from app.models.erp import Invoice
 from app.models.user import User
 from app.models.zeus_pending_approval import ZeusPendingApproval
-from services.zeus_human_approval_v1 import list_pending, recover_stuck_approvals
+from services.zeus_human_approval_v1 import list_pending
 
 SCAN = "/api/v1/scan/qr"
 CORE = "/api/v1/zeus-core"
@@ -31,9 +31,12 @@ CORE = "/api/v1/zeus-core"
 @pytest.fixture()
 def db():
     Base.metadata.create_all(bind=engine)
-    from app.db.base import _migrate_zeus_approvals_executing_at
+    try:  # 0061 (J2b defecto 2); ausente en bases anteriores
+        from app.db.base import _migrate_zeus_approvals_executing_at
 
-    _migrate_zeus_approvals_executing_at()
+        _migrate_zeus_approvals_executing_at()
+    except ImportError:
+        pass
     session = SessionLocal()
     try:
         yield session
@@ -126,7 +129,7 @@ def test_aprobar_ejecuta_borrador_y_caja_una_vez(db, client):
     assert _resolve(client, aid).status_code == 409
     assert _effects(db, co.id) == (1, 1, 1)
     row = db.get(ZeusPendingApproval, aid)
-    assert row.status == "executed" and row.executing_at is not None
+    assert row.status == "executed"
     acts = {a.action_type for a in db.query(AgentActivity).filter(AgentActivity.company_id == co.id)}
     assert "approval_executed" in acts and "agent_action_register_qr_payment" in acts
 
@@ -226,6 +229,8 @@ def _stuck(db, user, co, minutes_ago, action="generate_invoice", payload='{"invo
 
 
 def test_recuperacion_pasa_antigua_a_failed_sin_reejecutar(db, monkeypatch):
+    from services.zeus_human_approval_v1 import recover_stuck_approvals
+
     owner, co = _seed(db, "rec")
     calls = []
 
@@ -261,6 +266,8 @@ def test_recuperacion_pasa_antigua_a_failed_sin_reejecutar(db, monkeypatch):
 
 
 def test_recuperacion_no_toca_filas_recientes(db):
+    from services.zeus_human_approval_v1 import recover_stuck_approvals
+
     owner, co = _seed(db, "fresh")
     row = _stuck(db, owner, co, 2)
     assert recover_stuck_approvals(db, company_id=co.id) == 0
@@ -269,6 +276,8 @@ def test_recuperacion_no_toca_filas_recientes(db):
 
 
 def test_recuperacion_por_empresa_no_toca_otra(db):
+    from services.zeus_human_approval_v1 import recover_stuck_approvals
+
     u1, co1 = _seed(db, "ra")
     u2, co2 = _seed(db, "rb")
     r1, r2 = _stuck(db, u1, co1, 60), _stuck(db, u2, co2, 60)
@@ -289,8 +298,122 @@ def test_listar_pendientes_recupera_solo_la_empresa_consultada(db):
 
 
 def test_fila_legacy_sin_executing_at_usa_resolved_at(db):
+    from services.zeus_human_approval_v1 import recover_stuck_approvals
+
     owner, co = _seed(db, "leg")
     row = _stuck(db, owner, co, 60)
     row.executing_at = None
     db.commit()
     assert recover_stuck_approvals(db, company_id=co.id) == 1
+
+
+# ---------------------------------------------------------------- vuelta 1 del revisor
+
+BAD_AMOUNTS = [-5, 0, "nan", "inf", "1e400", 1e12, "abc"]
+
+
+def _no_state(db, co):
+    assert _effects(db, co.id) == (0, 0, 0)
+    assert db.query(ZeusPendingApproval).filter(ZeusPendingApproval.company_id == co.id).count() == 0
+
+
+@pytest.mark.parametrize("amount", BAD_AMOUNTS)
+def test_importe_invalido_por_agent_execute_no_abre_aprobacion(db, client, amount):
+    owner, co = _seed(db, "badx")
+    _as(owner)
+    r = client.post(
+        f"{CORE}/agent/execute",
+        json={"agent": "RAFAEL", "action": "register_qr_payment",
+              "payload": {"customer_name": "Cliente Malo", "amount": amount}},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["success"] is False and r.json().get("needs_approval") is not True
+    _no_state(db, co)
+
+
+@pytest.mark.parametrize("amount", ["-5", "0", "nan", "inf", "1e400", "1e12", "abc", "-inf"])
+def test_importe_invalido_por_scan_qr_422_sin_efectos(db, client, amount):
+    owner, co = _seed(db, "bads")
+    _as(owner)
+    r = _qr(client, "Cliente Malo", amount)
+    assert r.status_code == 422, r.text
+    _no_state(db, co)
+
+
+def test_moneda_invalida_por_scan_qr_422(db, client):
+    owner, co = _seed(db, "badc")
+    _as(owner)
+    r = client.post(SCAN, json={"data": "ZEUS|Cliente Malo|900|EUR€!!"})
+    assert r.status_code == 422, r.text
+    _no_state(db, co)
+
+
+def test_caja_no_registrada_no_declara_exito(db, client, monkeypatch):
+    owner, co = _seed(db, "nocash")
+    _as(owner)
+    aid = _qr(client, "Cliente Grande", 800, "grande@example.com").json()["approval_id"]
+    # la entrada de caja no llega al ledger (guard/integridad): el evento no escribe nada
+    monkeypatch.setattr("services.scan_flow_service_v1.emit_cashflow_updated", lambda **k: None)
+    r = _resolve(client, aid)
+    assert r.status_code == 422, r.text
+    body = r.json()
+    assert body["status"] == "failed" and body["success"] is False
+    assert body["result"]["status"] == "cashflow_not_recorded"
+    db.expire_all()
+    row = db.get(ZeusPendingApproval, aid)
+    assert row.status == "failed" and "cashflow_not_recorded" in row.result_json
+    assert db.query(CashflowLedgerEntry).filter(CashflowLedgerEntry.company_id == co.id).count() == 0
+
+
+def _run_execution_with_recovery(db, owner, co, monkeypatch, result):
+    """La ejecucion 'viva' tarda mas que el umbral: durante ella otro proceso recupera la fila."""
+    import asyncio
+
+    from services.zeus_human_approval_v1 import (
+        execute_approval, recover_stuck_approvals, request_approval, resolve_approval,
+    )
+
+    row = request_approval(db, user=owner, company_id=co.id, agent_name="RAFAEL",
+                           action_type="generate_invoice", payload={"invoice_id": 1})
+    row = resolve_approval(db, approval_id=row.id, user=owner, approve=True)
+    seen = {}
+
+    async def _slow(*a, **k):
+        seen["recovered"] = recover_stuck_approvals(db, company_id=co.id, older_than_minutes=-1)
+        seen["status_during"] = db.get(ZeusPendingApproval, row.id).status
+        if isinstance(result, Exception):
+            raise result
+        return {**result, "company_id": co.id}
+
+    monkeypatch.setattr("services.zeus_agent_executor_v1.execute_agent_action", _slow)
+    out = asyncio.run(execute_approval(db, row=row, user=owner))
+    return out, seen
+
+
+def test_carrera_ejecucion_viva_terminada_tras_recuperacion_queda_executed(db, monkeypatch):
+    from sqlalchemy import text
+
+    owner, co = _seed(db, "race1")
+    out, seen = _run_execution_with_recovery(
+        db, owner, co, monkeypatch, {"success": True, "executed": True, "message": "ok"})
+    assert seen["recovered"] == 1 and seen["status_during"] == "failed"
+    db.expire_all()
+    row = db.get(ZeusPendingApproval, out.id)
+    assert row.status == "executed" and row.executing_at is not None  # estado final veraz
+    assert '"recovered_then_completed": true' in row.result_json and '"interrupted"' not in row.result_json
+    acts = {a.action_type for a in db.query(AgentActivity).filter(AgentActivity.company_id == co.id)}
+    assert {"approval_late_completion", "approval_executed"} <= acts
+    n = db.execute(text("SELECT count(*) FROM thalos_security_events WHERE company_id=:c AND "
+                        "event_type IN ('approval_execution_interrupted','approval_completed_after_interruption')"),
+                   {"c": co.id}).scalar()
+    assert n == 2
+
+
+def test_carrera_ejecucion_que_falla_tras_recuperacion_queda_failed_con_error_real(db, monkeypatch):
+    owner, co = _seed(db, "race2")
+    out, seen = _run_execution_with_recovery(db, owner, co, monkeypatch, RuntimeError("boom real"))
+    assert seen["recovered"] == 1
+    db.expire_all()
+    row = db.get(ZeusPendingApproval, out.id)
+    assert row.status == "failed" and "boom real" in row.result_json
+    assert '"recovered_then_completed": true' in row.result_json

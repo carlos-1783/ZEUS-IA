@@ -412,6 +412,21 @@ def process_qr_scan(
         )
         return {**out, "routed": "client_action"}
 
+    # J2b: importe/moneda/cliente validados con el MISMO limpiador que la ejecucion, ANTES de
+    # decidir la rama (>=500 o <500) y de cualquier efecto: nan/inf/1e12/negativos -> 422.
+    from services.zeus_agent_executor_v1 import _clean_qr_payment_payload
+
+    clean_qr, qr_error = _clean_qr_payment_payload({
+        "customer_name": str(parsed.get("customer_name") or "Cliente QR").strip(),
+        "email": parsed.get("email"),
+        "amount": parsed.get("amount"),
+        "currency": parsed.get("currency") or "EUR",
+    })
+    if clean_qr is None:
+        raise HTTPException(status_code=422, detail=f"QR no válido: {qr_error}")
+    parsed["amount"] = clean_qr["amount"]
+    parsed["currency"] = clean_qr["currency"]
+
     emit_scan_detected(
         user_id=user.id,
         user_email=getattr(user, "email", None),
@@ -423,21 +438,15 @@ def process_qr_scan(
         db=db,
     )
 
-    customer_name = str(parsed.get("customer_name") or "Cliente QR").strip()
-    amount = float(parsed.get("amount") or 0)
+    customer_name = clean_qr["customer_name"]
+    amount = clean_qr["amount"]
     needs_approval = amount >= 500 and requires_approval("register_payment", {"amount": amount})
 
     if needs_approval and not force_execute:
         # J2b: NINGUN efecto antes de la confirmacion (ni cliente, ni factura, ni caja). La accion
         # propia `register_qr_payment` (lista blanca) crea cliente/borrador/caja al aprobarse.
         # Si el cliente ya existe se informa su id; si no, se creara al ejecutar.
-        if not customer_name:
-            raise HTTPException(status_code=422, detail="Nombre de cliente requerido.")
-        email = parsed.get("email")
-        try:  # mismo validador que la creacion real: falla ya, no tras la aprobacion
-            CustomerCreate(name=customer_name, email=email or "scan@example.com")
-        except Exception:
-            raise HTTPException(status_code=422, detail="Nombre o email del QR no válidos.")
+        email = clean_qr["email"]
         existing = _lookup_customer(db, company_id=cid, name=customer_name, email=email)
         approval = request_approval(
             db,
@@ -445,13 +454,7 @@ def process_qr_scan(
             company_id=cid,
             agent_name="RAFAEL",
             action_type="register_qr_payment",
-            payload={
-                "customer_name": customer_name,
-                "email": email,
-                "amount": amount,
-                "currency": parsed.get("currency", "EUR"),
-                "source": "qr_scan",
-            },
+            payload=clean_qr,
         )
         result = {
             "success": True,
@@ -471,7 +474,7 @@ def process_qr_scan(
         user,
         company_id=cid,
         name=customer_name,
-        email=parsed.get("email"),
+        email=clean_qr["email"],
     )
     invoice_id = apply_qr_payment_effects(
         db, user, company_id=cid, customer=cust, amount=amount, customer_name=customer_name

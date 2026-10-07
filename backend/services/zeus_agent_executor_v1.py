@@ -133,12 +133,20 @@ def _clean_qr_payment_payload(data: Dict[str, Any]):
     """J2b: lista blanca del payload de `register_qr_payment` (nunca company_id/user_id/ids del
     cliente). -> (payload_limpio, vista_previa) o (None, error)."""
     name = str(data.get("customer_name") or "").strip()
+    import math
+    import re
+
     try:
         amount = round(float(data.get("amount")), 2)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None, "amount (numero) es obligatorio."
-    if not name or amount <= 0 or amount > 10_000_000:
-        return None, "customer_name obligatorio e importe entre 0 y 10.000.000."
+    if not name:
+        return None, "customer_name es obligatorio."
+    if not math.isfinite(amount) or amount <= 0 or amount > 10_000_000:
+        return None, "El importe debe ser un numero finito entre 0,01 y 10.000.000."
+    currency = str(data.get("currency") or "EUR").strip().upper()
+    if not re.fullmatch(r"[A-Z]{3}", currency):
+        return None, "La moneda debe ser un codigo de 3 letras (ej. EUR)."
     email = str(data.get("email") or "").strip() or None
     from pydantic import ValidationError
 
@@ -153,7 +161,7 @@ def _clean_qr_payment_payload(data: Dict[str, Any]):
         "customer_name": name[:255],
         "email": email,
         "amount": amount,
-        "currency": str(data.get("currency") or "EUR")[:8],
+        "currency": currency,
         "source": "qr_scan",
     }
     return clean, f"Registrar cobro QR de {amount:.2f} {clean['currency']} de «{clean['customer_name']}» (borrador de factura y entrada de caja)."

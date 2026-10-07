@@ -258,7 +258,7 @@ async def execute_send_campaign(db: Session, user: User, action: ZeusAction) -> 
         )
     )
 
-    cid = action.company_id or crm_svc.primary_company_id(db, user)
+    cid = _active_company_id(db, user, action)
     if cid is not None:
         try:
             crm_svc.log_activity(
@@ -491,7 +491,7 @@ def execute_create_customer(db: Session, user: User, action: ZeusAction) -> Zeus
 def execute_get_cashflow(db: Session, user: User, action: ZeusAction) -> ZeusExecutionResult:
     from services.cashflow_ledger_service import get_balance, get_summary
 
-    cid = action.company_id or crm_svc.primary_company_id(db, user)
+    cid = _active_company_id(db, user, action)
     days = int(action.payload.get("days") or 30)
     bal = get_balance(db, company_id=cid)
     summary = get_summary(db, company_id=cid, days=days)

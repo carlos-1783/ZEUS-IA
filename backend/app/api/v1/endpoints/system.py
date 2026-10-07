@@ -71,5 +71,5 @@ async def get_system_status(
         logger.error(f"Error al obtener el estado del sistema: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al obtener el estado del sistema: {str(e)}"
+            detail="Error interno al obtener el estado del sistema."
         )

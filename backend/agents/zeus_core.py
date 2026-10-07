@@ -233,73 +233,9 @@ class ZeusCore(BaseAgent):
         
         return result
     
-    def coordinate_multi_agent_task(
-        self,
-        task_description: str,
-        required_agents: List[str],
-        context: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """
-        Coordinar una tarea que requiere múltiples agentes
-        
-        Args:
-            task_description: Descripción de la tarea
-            required_agents: Lista de agentes necesarios
-            context: Contexto adicional
-        
-        Returns:
-            Dict con resultados de todos los agentes
-        """
-        print(f"🎯 [ZEUS] Coordinando tarea multi-agente: {task_description}")
-
-        teamflow_run = None
-        if context and context.get("workflow_id") and self.teamflow_engine:
-            try:
-                teamflow_run = self.teamflow_engine.run_workflow(
-                    workflow_id=context["workflow_id"],
-                    payload=context.get("workflow_payload"),
-                    actor=context.get("requested_by"),
-                )
-                self.execution_snapshots.append(
-                    {
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "workflow": context["workflow_id"],
-                        "execution_id": teamflow_run["execution_id"],
-                        "summary": task_description,
-                    }
-                )
-            except ValueError as exc:
-                print(f"⚠️ [ZEUS] Error iniciando TeamFlow: {exc}")
-        
-        results = {}
-        for agent_name in required_agents:
-            agent_upper = agent_name.upper()
-            if agent_upper not in self.agents:
-                results[agent_upper] = {
-                    "success": False,
-                    "error": f"Agente '{agent_name}' no disponible"
-                }
-                continue
-            
-            agent = self.agents[agent_upper]
-            agent_context = {
-                "user_message": task_description,
-                "multi_agent_task": True,
-                "other_agents": [a for a in required_agents if a.upper() != agent_upper],
-                **(context or {})
-            }
-            
-            result = agent.process_request(agent_context)
-            results[agent_upper] = result
-        
-        return {
-            "success": True,
-            "task": task_description,
-            "agents_involved": required_agents,
-            "results": results,
-            "coordinated_by": "ZEUS CORE",
-            "teamflow_execution": teamflow_run
-        }
+    # J9e: `coordinate_multi_agent_task` se ELIMINO. La coordinacion multiagente la ejecuta ahora
+    # `services.jarvis_plan.execute_plan` desde POST /chat/agents/coordinate (modulos J9a por paso,
+    # registro J7 por paso, sin acciones con consecuencias). Aqui no se conserva una segunda via.
 
     def _build_decision_metadata(self, agent_name: str, task_type: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Crear metadata trazable para auditoría y paneles."""

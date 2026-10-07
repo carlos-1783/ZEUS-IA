@@ -735,7 +735,10 @@ def _server_agent_context(db: Session, user: User, client_context: Optional[dict
     return ctx
 
 
-def _log_agent_call(user: User, company_id: int, action: str, description: str, details: dict, ok: bool) -> None:
+def _log_agent_call(
+    user: User, company_id: int, action: str, description: str, details: dict, ok: bool,
+    correlation_id: Optional[str] = None,
+) -> None:
     """communicate/coordinate: un paso ACTUAR con empresa/usuario explicitos y status real.
     Cada llamada lleva su propio correlation_id (no hay cadena conversacional)."""
     import uuid
@@ -743,7 +746,7 @@ def _log_agent_call(user: User, company_id: int, action: str, description: str, 
     log_chain_step(
         "ACTUAR", company_id=company_id, user=user, agent="ZEUS CORE", action=action,
         action_type=action, description=description, status="completed" if ok else "failed",
-        details=details, correlation_id=uuid.uuid4().hex,
+        details=details, correlation_id=correlation_id or uuid.uuid4().hex,
         priority="normal" if ok else "high", visible_to_client=True,
     )
 
@@ -784,41 +787,86 @@ async def communicate_agents(
     return result
 
 
+MAX_COORDINATE_TASK_CHARS = 4000
+_COORDINATE_FAIL_MSG = "El agente no pudo completar la tarea."
+
+
+async def _coordinate_no_confirmation(step) -> Dict[str, Any]:
+    # J9e: coordinate nunca ejecuta ni prepara acciones con consecuencias (solo consultas/analisis).
+    return {"status": "failed", "message": "Acción no permitida en la coordinación."}
+
+
 @router.post("/agents/coordinate")
 async def coordinate_agents(
     request: MultiAgentTaskRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(thalos_request_guard),
 ):
-    """Coordinacion multi-agente. Identidad/empresa/workflow los fija el servidor."""
+    """Coordinacion multi-agente. Identidad/empresa/workflow los fija el servidor.
+
+    J9e: unificada con el ejecutor de planes de JARVIS (`jarvis_plan.execute_plan`, J9b): un paso por
+    agente pedido, en el orden recibido; control de modulos por paso (J9a), contexto de servidor sin datos
+    personales, un registro J7 por paso con el mismo correlation_id y ninguna accion con consecuencias."""
+    from services import jarvis_plan as plan_mod
+
     await asyncio.to_thread(ensure_agent_stack)
-    if zeus is None:
-        raise HTTPException(status_code=500, detail="ZEUS CORE no está inicializado")
 
     base = _authorize_agent_call(db, current_user, request.required_agents)
     company_id = base["company_id"]
+    task = (request.task_description or "").strip()
+    if not task or len(task) > MAX_COORDINATE_TASK_CHARS:
+        raise HTTPException(status_code=422, detail=f"task_description debe tener entre 1 y {MAX_COORDINATE_TASK_CHARS} caracteres.")
+    agents = list(dict.fromkeys(_norm_agent(a) for a in request.required_agents))  # sin duplicados, en orden
+    if len(agents) > plan_mod.MAX_STEPS:
+        raise HTTPException(status_code=422, detail=f"Maximo {plan_mod.MAX_STEPS} agentes por coordinacion.")
     context = _server_agent_context(db, current_user, request.context)
-    agents = [_norm_agent(a) for a in request.required_agents]
-    details = {"required_agents": agents, "task_description": request.task_description[:500]}
-    try:
-        result = await asyncio.to_thread(
-            zeus.coordinate_multi_agent_task,
-            task_description=request.task_description,
-            required_agents=agents,
-            context=context,
-        )
-    except Exception:
-        logger.exception("agents_coordinate fallo %s", agents)
-        _log_agent_call(current_user, company_id, "agents_coordinate",
-                        "Coordinación multiagente fallida", {**details, "error": "exception"}, False)
-        raise HTTPException(status_code=500, detail="Error interno al coordinar agentes.")
-    results = result.get("results", {}) if isinstance(result, dict) else {}
-    ok = bool(results) and all(
-        isinstance(r, dict) and r.get("success") is not False and not r.get("error") for r in results.values()
+    details = {"required_agents": agents, "task_description": task[:500]}
+    plan = plan_mod.Plan(
+        source="coordinate",
+        steps=[plan_mod.PlanStep(n=i, agent=a, objective=task, kind="consulta") for i, a in enumerate(agents, 1)],
     )
-    _log_agent_call(current_user, company_id, "agents_coordinate",
-                    "Coordinación multiagente ejecutada", details, ok)
-    return result
+
+    def step_context(step, steps):  # el servidor fija quienes son los demas agentes (nunca el cliente)
+        return {"multi_agent_task": True, "other_agents": [s.agent for s in steps if s.agent != step.agent]}
+
+    chain, token = begin_chain()
+    try:
+        try:
+            await plan_mod.execute_plan(
+                db, current_user, plan, ctx=context, company_id=company_id,
+                thread_id=f"coordinate-{chain.correlation_id[:12]}",
+                prepare_confirmation=_coordinate_no_confirmation, step_context=step_context,
+            )
+        except Exception:
+            logger.exception("agents_coordinate fallo %s", agents)
+            _log_agent_call(current_user, company_id, "agents_coordinate",
+                            "Coordinación multiagente fallida", {**details, "error": "exception"}, False,
+                            correlation_id=chain.correlation_id)
+            raise HTTPException(status_code=500, detail="Error interno al coordinar agentes.")
+        for s in plan.steps:  # nunca se devuelve al cliente el texto de un error interno del agente
+            if s.status in ("failed", "skipped"):
+                s.reason = s.summary = _COORDINATE_FAIL_MSG
+        out = plan_mod.build_response(plan)
+        results = {
+            s.agent: {
+                "success": s.status == "done", "status": s.status, "step": s.n,
+                "message": s.text if s.status == "done" else "", "content": s.text if s.status == "done" else "",
+                **({} if s.status == "done" else {"error": s.summary}),
+            }
+            for s in plan.steps
+        }
+        ok = all(s.status == "done" for s in plan.steps)
+        _log_agent_call(current_user, company_id, "agents_coordinate",
+                        "Coordinación multiagente ejecutada", details, ok, correlation_id=chain.correlation_id)
+        return {
+            "success": ok, "task": task, "agents_involved": agents, "results": results,
+            "coordinated_by": "ZEUS CORE", "teamflow_execution": None,
+            "plan_source": "coordinate", "steps": out["steps"], "message": out["message"],
+            "executed": False, "needs_confirmation": False,
+        }
+    finally:
+        end_chain(token)
+
 
 @router.get("/health")
 async def chat_health():

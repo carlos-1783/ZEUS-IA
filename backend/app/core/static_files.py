@@ -15,7 +15,10 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
 # Primer segmento de ruta (comparado en minúsculas) que nunca se sirve de forma pública.
-BLOCKED_PUBLIC_PREFIXES = ("fiscal",)
+# "fiscal": ficheros fiscales legados que pudieran quedar bajo STATIC_DIR (ver docstring).
+# "private_files": el propio directorio de settings.PRIVATE_FILES_DIR — defensa en profundidad
+# para que, aunque algún despliegue lo anide bajo STATIC_DIR o spa_root, nunca se sirva público.
+BLOCKED_PUBLIC_PREFIXES = ("fiscal", "private_files")
 
 
 def is_blocked_public_path(path: str) -> bool:

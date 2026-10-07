@@ -22,7 +22,9 @@ logger = logging.getLogger(__name__)
 
 MANDATORY_ACTIONS = {
     "ZEUS": frozenset({"create_customer", "get_customers", "send_campaign", "get_cashflow", "get_metrics"}),
-    "RAFAEL": frozenset({"generate_invoice", "generate_model_303", "get_tax_summary"}),
+    "RAFAEL": frozenset(
+        {"generate_invoice", "register_qr_payment", "generate_model_303", "get_tax_summary"}
+    ),
     "PERSEO": frozenset({"create_campaign", "launch_campaign", "track_leads"}),
     # J9c. Lectura: sin aprobacion. Escritura (AFRODITA): siempre por aprobacion (CRITICAL_ACTIONS).
     "JUSTICIA": frozenset({"run_compliance_audit", "get_legal_status"}),
@@ -35,6 +37,7 @@ MANDATORY_ACTIONS = {
 _STRICT_AGENT_ACTIONS: Dict[str, str] = {
     a: ag for ag in ("JUSTICIA", "AFRODITA") for a in MANDATORY_ACTIONS[ag]
 }
+_STRICT_AGENT_ACTIONS["register_qr_payment"] = "RAFAEL"  # J2b
 _MAX_DELIVERIES = 50
 
 
@@ -126,6 +129,36 @@ def _clean_afrodita_payload(db: Session, act: str, data: Dict[str, Any], cid: Op
     )
 
 
+def _clean_qr_payment_payload(data: Dict[str, Any]):
+    """J2b: lista blanca del payload de `register_qr_payment` (nunca company_id/user_id/ids del
+    cliente). -> (payload_limpio, vista_previa) o (None, error)."""
+    name = str(data.get("customer_name") or "").strip()
+    try:
+        amount = round(float(data.get("amount")), 2)
+    except (TypeError, ValueError):
+        return None, "amount (numero) es obligatorio."
+    if not name or amount <= 0 or amount > 10_000_000:
+        return None, "customer_name obligatorio e importe entre 0 y 10.000.000."
+    email = str(data.get("email") or "").strip() or None
+    from pydantic import ValidationError
+
+    from app.schemas.customer import CustomerCreate
+
+    try:  # mismo validador que la creacion real del cliente (nombre y email)
+        CustomerCreate(name=name, email=email or "scan@example.com")
+    except ValidationError as exc:
+        first = (exc.errors() or [{}])[0]
+        return None, f"cliente no valido ({'.'.join(str(x) for x in first.get('loc', ()))}: {first.get('msg')})."
+    clean = {
+        "customer_name": name[:255],
+        "email": email,
+        "amount": amount,
+        "currency": str(data.get("currency") or "EUR")[:8],
+        "source": "qr_scan",
+    }
+    return clean, f"Registrar cobro QR de {amount:.2f} {clean['currency']} de «{clean['customer_name']}» (borrador de factura y entrada de caja)."
+
+
 def _afrodita_writes_blocked() -> Optional[Dict[str, Any]]:
     from services.afrodita_unified_control import writes_enabled
 
@@ -214,6 +247,11 @@ async def execute_agent_action(
         if wb:
             return wb
         data, preview_msg = _clean_afrodita_payload(db, act, data, cid)
+        if data is None:
+            return _fail(preview_msg, status="invalid_payload")
+
+    if act == "register_qr_payment" and not force_execute:
+        data, preview_msg = _clean_qr_payment_payload(data)
         if data is None:
             return _fail(preview_msg, status="invalid_payload")
 
@@ -319,6 +357,7 @@ def _map_action_to_zeus_type(action: str) -> str:
         "get_inventory_status": "unknown",
         "create_ops_route": "unknown",
         "create_inventory_movement": "unknown",
+        "register_qr_payment": "unknown",
     }
     return mapping.get(action, action)
 
@@ -387,6 +426,9 @@ async def _dispatch(
 
         out = generate_invoice_pdf_flow(db, user=user, invoice_id=int(invoice_id))
         return {"success": True, "executed": True, "message": "Factura PDF generada.", "data": out}
+
+    if action == "register_qr_payment":
+        return _execute_register_qr_payment(db, user, zeus_action, payload)
 
     if action == "generate_model_303":
         year = int(payload.get("year") or 2026)
@@ -500,3 +542,52 @@ async def _dispatch(
     out = r.model_dump()
     out["executed"] = r.executed
     return out
+
+
+def _execute_register_qr_payment(
+    db: Session, user: User, zeus_action: ZeusAction, payload: Dict[str, Any]
+) -> Dict[str, Any]:
+    """J2b: ejecuta el cobro QR aprobado: cliente (buscar/crear en la empresa del servidor),
+    borrador de factura (NO emitida) y entrada de caja, con la misma logica que la rama <500."""
+    from fastapi import HTTPException
+
+    from services.scan_flow_service_v1 import _find_or_create_customer, apply_qr_payment_effects
+
+    cid = zeus_action.company_id
+    if cid is None:
+        return _fail("El usuario no tiene empresa asociada.")
+    clean, err = _clean_qr_payment_payload(dict(payload or {}))
+    if clean is None:
+        return _fail(err, status="invalid_payload")
+    try:
+        cust, created = _find_or_create_customer(
+            db, user, company_id=cid, name=clean["customer_name"], email=clean["email"]
+        )
+        invoice_id = apply_qr_payment_effects(
+            db, user, company_id=cid, customer=cust, amount=clean["amount"],
+            customer_name=clean["customer_name"],
+        )
+        db.commit()
+        from app.models.cashflow_ledger import CashflowLedgerEntry
+
+        ledger = (
+            db.query(CashflowLedgerEntry)
+            .filter(CashflowLedgerEntry.company_id == cid, CashflowLedgerEntry.invoice_id == invoice_id)
+            .count()
+        )
+    except HTTPException as exc:
+        db.rollback()
+        return _fail(str(exc.detail))
+    if not ledger:
+        # Factura creada pero la caja no se registro (guard/integridad): no se declara exito.
+        return _fail(
+            f"Se creo el borrador de factura {invoice_id} pero no se pudo registrar la entrada de caja; "
+            "revisalo manualmente.",
+            status="cashflow_not_recorded", invoice_id=invoice_id,
+        )
+    return {
+        "success": True, "executed": True, "company_id": cid,
+        "message": f"Cobro QR registrado: factura borrador {invoice_id} y entrada de caja de {clean['amount']:.2f} EUR.",
+        "data": {"customer_id": cust.id, "customer_created": created, "invoice_id": invoice_id,
+                 "amount": clean["amount"], "invoice_status": "draft", "cashflow_updated": True},
+    }

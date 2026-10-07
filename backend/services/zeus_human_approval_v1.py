@@ -21,6 +21,8 @@ CRITICAL_ACTIONS: Set[str] = frozenset({
     "create_customer",
     "launch_campaign",
     "generate_invoice",
+    # J2b: cobro por QR >= 500 EUR (borrador de factura + caja), payload de lista blanca.
+    "register_qr_payment",
     "generate_model_303",
     "high_value_actions",
     "contract_generation",

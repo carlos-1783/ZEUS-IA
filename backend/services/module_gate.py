@@ -75,7 +75,7 @@ EXECUTOR_UNMAPPED_ACTIONS = frozenset(
     {
         "create_customer", "get_customers", "list_customers", "send_campaign", "launch_campaign",
         "create_campaign", "get_cashflow", "get_metrics",
-        "generate_invoice", "generate_model_303", "get_tax_summary",
+        "generate_invoice", "register_qr_payment", "generate_model_303", "get_tax_summary",
         "get_inventory_status", "create_inventory_movement", "create_ops_route",
     }
 )

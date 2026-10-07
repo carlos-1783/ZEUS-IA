@@ -142,6 +142,17 @@ def ensure_schema_patches():
         traceback.print_exc()
 
 
+def _import_all_models() -> None:
+    """Importa cada modulo del paquete app.models para que todas las tablas esten en Base.metadata."""
+    import importlib
+    import pkgutil
+
+    import app.models as models_pkg
+
+    for mod in pkgutil.iter_modules(models_pkg.__path__):
+        importlib.import_module(f"{models_pkg.__name__}.{mod.name}")
+
+
 def create_tables():
     """Crear todas las tablas en la base de datos"""
     import time
@@ -203,6 +214,10 @@ def create_tables():
                 TimeControlEvent,
                 TimeControlAlert,
             )
+
+            # J12b: registrar TODOS los modelos del paquete (la lista de arriba no incluia p. ej.
+            # company_employee/zeus_analytics y create_all fallaba con NoReferencedTableError en BD vacia).
+            _import_all_models()
 
             Base.metadata.create_all(bind=engine)
             print("[DATABASE] [OK] Tablas creadas correctamente")

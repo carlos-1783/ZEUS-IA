@@ -41,10 +41,16 @@ DEPENDENCY_CONTEXT_CHARS = 400
 KINDS = ("consulta", "borrador", "accion_con_consecuencias")
 AGENT_CATALOG = ("PERSEO", "RAFAEL", "JUSTICIA", "AFRODITA", "THALOS", "ZEUS CORE")
 # Agente responsable de cada accion con consecuencias (catalogo cerrado; lo fija el servidor).
-CONSEQUENCE_AGENT = {"send_campaign": "PERSEO", "create_customer": "ZEUS CORE"}
+CONSEQUENCE_AGENT = {
+    "send_campaign": "PERSEO", "create_customer": "ZEUS CORE",
+    # J9e: escrituras de AFRODITA (solo se preparan; la aprobacion/ejecucion es la de J3b)
+    "create_ops_route": "AFRODITA", "create_inventory_movement": "AFRODITA",
+}
 CONSEQUENCE_LABEL = {
     "send_campaign": "preparar el envío de la campaña a tus clientes",
     "create_customer": "preparar el alta del cliente",
+    "create_ops_route": "preparar la ruta operativa",
+    "create_inventory_movement": "preparar el movimiento de inventario",
 }
 
 STATUS_LABEL = {
@@ -229,8 +235,14 @@ async def execute_plan(
     company_id: Optional[int],
     thread_id: str,
     prepare_confirmation: PrepareConfirmation,
+    run_read: Optional[PrepareConfirmation] = None,
+    step_context: Optional[Callable[[PlanStep, List[PlanStep]], Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    """Ejecuta el plan paso a paso (ver docstring del modulo). Nunca ejecuta pasos con consecuencias."""
+    """Ejecuta el plan paso a paso (ver docstring del modulo). Nunca ejecuta pasos con consecuencias.
+
+    J9e: `run_read` ejecuta los pasos `consulta` con `action_type` (consultas REALES de JUSTICIA/AFRODITA
+    via ejecutor, sin aprobacion); `step_context` anade claves de contexto del servidor por paso
+    (p. ej. `multi_agent_task` en /chat/agents/coordinate)."""
     from services.unified_agent_runtime import run_chat
     from services.zeus_global_context import build_agent_company_context
 
@@ -276,10 +288,29 @@ async def execute_plan(
                       "needs_confirmation" if step.status == "pending_confirmation" else step.status,
                       action_type=step.action_type, approval_id=step.approval_id, executed=False)
             continue
+        if step.kind == "consulta" and step.action_type:
+            res = await (run_read(step) if run_read else _no_reader(step))
+            step.status = res.get("status", "failed")
+            text = str(res.get("message") or "")
+            if step.status == "done" and text.strip():
+                step.text, step.summary = text, short_summary(text)
+                _log_step(user, company_id, step, "success", action_type=step.action_type, executed_read=True,
+                          response_chars=len(text))
+            elif step.status == "blocked":
+                step.reason = step.summary = text
+                _log_step(user, company_id, step, "blocked_module", action_type=step.action_type)
+            else:
+                step.status = "failed"
+                step.reason = step.summary = short_summary(text or "sin respuesta", 200)
+                _log_step(user, company_id, step, "failed", action_type=step.action_type, error=step.reason[:120])
+            continue
         # consulta / borrador: SU agente, SU prompt de personalidad (run_chat -> process_request)
         message = _agent_message(step, steps)
+        run_ctx = dict(agent_ctx)
+        if step_context is not None:
+            run_ctx.update(step_context(step, steps))
         try:
-            out = await asyncio.to_thread(run_chat, step.agent, thread_id, message, company_id, dict(agent_ctx))
+            out = await asyncio.to_thread(run_chat, step.agent, thread_id, message, company_id, run_ctx)
         except Exception as exc:  # run_chat no lanza, pero un fallo aqui no tumba el resto del plan
             logger.exception("plan: fallo ejecutando el paso %s (%s)", step.n, step.agent)
             out = {"success": False, "message": "", "error": type(exc).__name__}
@@ -294,6 +325,10 @@ async def execute_plan(
             _log_step(user, company_id, step, "failed", error=step.reason[:120])
 
     return build_response(plan)
+
+
+async def _no_reader(step: PlanStep) -> Dict[str, Any]:
+    return {"status": "failed", "message": "Consulta no disponible."}
 
 
 def build_response(plan: Plan) -> Dict[str, Any]:

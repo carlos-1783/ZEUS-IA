@@ -36,6 +36,7 @@ from services.intent_parser import clarification_for_unknown, has_negation, is_c
 from services import jarvis_clarification as clarif
 from services import jarvis_model_comprehension as model_comp
 from services import jarvis_plan as plan_mod
+from services import jarvis_ops_actions as ops_actions
 from services import module_gate
 from services.zeus_global_context import attach_context_to_action_payload, enrich_chat_context
 from services.chain_log import log_chain_step
@@ -56,7 +57,8 @@ AGENT_ZEUS = "ZEUS CORE"
 MIN_CONFIDENCE = 0.7
 PENDING_TTL_SECONDS = CHAT_APPROVAL_TTL_SECONDS
 # Acciones con consecuencias (envían emails / crean datos): exigen vista previa + confirmación.
-CONFIRMABLE_ACTIONS = frozenset({"send_campaign", "create_customer"})
+# J9e: las escrituras de AFRODITA (ruta operativa, movimiento de inventario) tambien.
+CONFIRMABLE_ACTIONS = frozenset({"send_campaign", "create_customer"}) | ops_actions.WRITE_ACTIONS
 
 def _company_key(user: User, context: Optional[Dict[str, Any]]) -> str:
     """Clave de empresa para la memoria de ZEUS.
@@ -337,6 +339,9 @@ async def _dispatch_action(
     if at == "get_metrics":
         return handlers.execute_get_core_metrics(db, user, action)
 
+    if at in ops_actions.READ_ACTIONS:  # J9e: consultas JUSTICIA/AFRODITA via ejecutor (sin aprobacion)
+        return await ops_actions.run_read_action(db, user, action)
+
     return ZeusExecutionResult(
         success=False,
         intent="unknown",
@@ -357,7 +362,21 @@ async def _prepare_confirmable(
     """Vista previa + solicitud en zeus_pending_approvals de una accion con consecuencias (J3b).
     Compartido por el chat directo y por los pasos con consecuencias de un plan (J9b). No ejecuta."""
     action.requires_confirmation = True
-    if action.action_type == "send_campaign":
+    approval_agent = "ZEUS"
+    approval_payload = _clean_payload(action.payload)
+    if action.action_type in ops_actions.WRITE_ACTIONS:
+        # J9e: escritura de AFRODITA. Producto/empresa/payload se validan en servidor; la aprobacion
+        # se pide a nombre de AFRODITA (el ejecutor rechaza una accion de AFRODITA pedida con otro agente).
+        clean, detail = ops_actions.prepare_write(db, user, action)
+        if clean is None:
+            _step("ORQUESTAR", action.action_type, "rejected", requires_confirmation=True, reason="invalid_write")
+            return {"handled": True, "success": False, "executed": False, "message": detail}
+        preview = {
+            "message": f"Voy a preparar esta acción de AFRODITA: {detail} Responde «confirmar» para ejecutarla.",
+            "preview": detail,
+        }
+        approval_agent, approval_payload = "AFRODITA", clean
+    elif action.action_type == "send_campaign":
         preview = handlers.preview_send_campaign(db, user, action)
     else:
         preview = _preview_create_customer(action)
@@ -373,9 +392,9 @@ async def _prepare_confirmable(
             db,
             user=user,
             company_id=company_int,
-            agent_name="ZEUS",
+            agent_name=approval_agent,
             action_type=action.action_type,
-            payload=_clean_payload(action.payload),
+            payload=approval_payload,
             thread_id=thread_id,
             ttl_seconds=PENDING_TTL_SECONDS,
         )
@@ -407,7 +426,7 @@ async def _prepare_confirmable(
         "approval_id": row.id,
         "message": preview["message"],
         "execution": preview,
-        "action": {**action.model_dump(), "payload": _clean_payload(action.payload)},
+        "action": {**action.model_dump(), "payload": approval_payload},
     }
 
 
@@ -443,9 +462,27 @@ async def _run_plan(
             return {"status": "pending_confirmation", "message": out["message"], "approval_id": out["approval_id"]}
         return {"status": "needs_data" if out.get("success") else "failed", "message": out.get("message", "")}
 
+    async def run_read(step: "plan_mod.PlanStep") -> Dict[str, Any]:
+        """J9e: consulta real de JUSTICIA/AFRODITA dentro del plan (modulos + ejecutor; sin aprobacion)."""
+        spec = ops_actions.PLAN_READ_ACTIONS.get(step.action_type or "")
+        if spec is None or spec[1] != step.agent:
+            return {"status": "failed", "message": "Consulta no reconocida."}
+        chat_action = spec[0]
+        blocked = module_gate.check_action(db, user, chat_action)
+        if blocked:
+            _step("ORQUESTAR", chat_action, "blocked_module", module=blocked["module"], action_type=chat_action)
+            return {"status": "blocked", "message": blocked["message"]}
+        action = _with_global_context(
+            ZeusAction(action_type=chat_action, company_id=company_int, user_id=user.id), global_context
+        )
+        result = await execute_action(db, user, action, force_execute=False)
+        if result.executed and result.success:
+            return {"status": "done", "message": result.message}
+        return {"status": "failed", "message": result.message}
+
     return await plan_mod.execute_plan(
         db, user, plan, ctx=ctx, company_id=company_int, thread_id=_raw_thread(ctx),
-        prepare_confirmation=prepare,
+        prepare_confirmation=prepare, run_read=run_read,
     )
 
 

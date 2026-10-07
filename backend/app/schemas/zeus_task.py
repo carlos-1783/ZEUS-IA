@@ -19,6 +19,12 @@ ZeusIntentType = Literal[
     "tpv_sales_summary",
     "tpv_sales_today",
     "shift_status",
+    # J9e
+    "get_legal_status",
+    "run_compliance_audit",
+    "get_inventory_status",
+    "create_ops_route",
+    "create_inventory_movement",
 ]
 
 

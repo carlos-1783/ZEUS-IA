@@ -60,6 +60,12 @@ INTENT_LABELS: Dict[str, str] = {
     "shift_status": "tu turno / fichaje",
     "create_customer": "crear un cliente",
     "create_campaign_send": "enviar una campaña a tus clientes",
+    # J9e
+    "get_legal_status": "el estado legal / documentos legales",
+    "run_compliance_audit": "una auditoría de cumplimiento",
+    "get_inventory_status": "el estado del inventario",
+    "create_ops_route": "crear una ruta operativa",
+    "create_inventory_movement": "registrar un movimiento de inventario",
 }
 
 
@@ -286,7 +292,7 @@ _ANALYTICS_RE = re.compile(
     r"\b(resumen|metricas?)\b.{0,40}?\b(agentes?|sistema|zeus|global)\b"
 )
 _SHIFT_RE = re.compile(
-    r"\b(turno|jornada|fichaje|fichar|fichado|control\s+horario)\b.{0,40}?"
+    r"\b(turnos?|jornada|fichaje|fichar|fichado|control\s+horario)\b.{0,40}?"
     r"\b(activo|activa|estado|abierto|abierta|tengo|estoy)\b"
     r"|\b(estoy|sigo)\s+fichad[oa]\b"
 )
@@ -358,6 +364,7 @@ _REQUEST_FORMULAS = (
 _SUBJUNCTIVE = {
     "envies", "mandes", "lances", "notifiques", "avises", "comuniques", "difundas",
     "crees", "generes", "hagas", "montes", "prepares", "registres", "agregues", "anadas", "apuntes",
+    "anotes", "planifiques",
 }
 _SENTENCE_BREAK_RE = re.compile(r"[.;:!?¿¡\n]")
 
@@ -499,6 +506,109 @@ def _is_clean_order(text: str, customer: bool) -> bool:
         if m and _prefix_ok(m.group("prefix"), m.group("verb")):
             return True
     return False
+
+
+# --- J9e: JUSTICIA / AFRODITA en el chat -------------------------------------------------------
+# CONSULTAS (sin confirmacion): estado legal, auditoria de cumplimiento, inventario, turnos.
+# ESCRITURAS (vista previa + aprobacion J3b): ruta operativa y movimiento de inventario. CRITERIO
+# ESTRICTO como J8: el mensaje ENTERO debe encajar, anclado, en UNA de estas dos plantillas (tras NFKC y
+# espacios colapsados, sin acentos), con el mismo prefijo de cortesia/peticion que las demas acciones:
+#   ruta      : [prefijo] (crea|genera|planifica|prepara|monta|registra|anade|haz) [una|la|nueva] ruta
+#               [operativa|de reparto|de entrega|logistica] (de|desde) ORIGEN (a|hasta|hacia) DESTINO [cierre]
+#   movimiento: [prefijo] (registra|anota|anade|agrega|apunta|crea|genera|haz) [un|una|el] [movimiento de]
+#               (entrada|salida) [de stock] de N [unidades|uds|ud|u] (de|del) PRODUCTO [en el inventario] [cierre]
+# - ORIGEN/DESTINO: 1-5 palabras Capitalizadas o numeros (particulas de/del/la/las/los/el/y interiores en
+#   minuscula), ninguna en la lista de parada. - PRODUCTO: 1-6 palabras (letras/digitos/.-'), ninguna en la
+#   lista de parada; la identidad real la decide el SERVIDOR al preparar (nombre o SKU EXACTOS dentro de LA
+#   EMPRESA del usuario: otro tenant, ausente o ambiguo -> no se prepara).
+# - N: numero positivo (<= 1.000.000). «salida» resta, «entrada» suma. «ajuste», kg/litros, signos, varias
+#   cantidades o cualquier otro texto => no encaja => pregunta, NUNCA vista previa.
+# FALSOS NEGATIVOS CONSERVADORES: cualquier formulacion fuera de plantilla, ciudades con palabras de parada
+# («A Coruña»), productos con «sin»/«no» en el nombre, mensajes con otra frase o negacion.
+QUESTION_OPS = (
+    "No lo he entendido como una orden clara y completa, así que no he preparado nada. Dímelo así: "
+    "«crea una ruta de Madrid a Valencia» o «registra una entrada de 5 unidades de Harina»."
+)
+_OPS_CREATE_V = (
+    r"(?:crea|crear|creame|genera|generar|planifica|planificar|prepara|preparar|monta|montar|registra|registrar|"
+    r"anade|anadir|agrega|agregar|haz|hacer|apunta|apuntar|anota|anotar|da\s+de\s+alta|"
+    r"crees|generes|planifiques|prepares|montes|registres|anadas|agregues|hagas|apuntes|anotes)"
+)
+_MOV_NOUN = r"(?:movimientos?|entradas?|salidas?|ajustes?)"
+_ROUTE_TRIGGER_RE = re.compile(rf"\b{_OPS_CREATE_V}\b.{{0,30}}?\bruta\b")
+_MOV_TRIGGER_RE = re.compile(
+    rf"\b{_OPS_CREATE_V}\b.{{0,30}}?\b{_MOV_NOUN}\b.{{0,60}}?\b(?:stock|inventario|existencias|unidades|uds?|\d)"
+)
+_ROUTE_TEMPLATE = re.compile(
+    rf"^(?P<prefix>.*?)\b(?P<verb>{_OPS_CREATE_V})\s+(?:(?:una|la|nueva)\s+){{1,2}}ruta"
+    r"(?:\s+(?:operativa|de\s+reparto|de\s+entrega|logistica))?\s+(?:de|desde)\s+(?P<o>.+?)"
+    rf"\s+(?:a|hasta|hacia)\s+(?P<d>.+?){_CLOSE}$"
+)
+_MOV_TEMPLATE = re.compile(
+    rf"^(?P<prefix>.*?)\b(?P<verb>{_OPS_CREATE_V})\s+(?:(?:un|una|el)\s+)?(?:movimiento\s+de\s+)?"
+    r"(?P<type>entrada|salida)\s+(?:de\s+)?(?:stock\s+)?(?:de\s+)?(?P<qty>\d{1,7}(?:[.,]\d{1,3})?)"
+    r"\s*(?:unidades|unidad|uds|ud|u)?\s+(?:de|del)\s+(?P<prod>.+?)"
+    rf"(?:\s+en\s+(?:el\s+)?(?:inventario|almacen|stock))?{_CLOSE}$"
+)
+# separadores (. ' -) solo ENTRE letras/digitos: «harina...», «Madrid.» o «--» no son palabras validas
+_PLACE_WORD_RE = re.compile(r"[A-ZÁÉÍÓÚÜÑ]\w*(?:[.'-]\w+)*|\d+[A-Za-z]?")
+_PRODUCT_WORD_RE = re.compile(r"\w+(?:[.'-]\w+)*")
+_PLACE_PARTICLES = {"de", "del", "la", "las", "los", "el", "y"}
+
+
+def _words_ok(original: str, max_words: int, word_re: "re.Pattern[str]") -> bool:
+    words = original.split()
+    if not 1 <= len(words) <= max_words or words[0] in _PLACE_PARTICLES or words[-1] in _PLACE_PARTICLES:
+        return False
+    for i, w in enumerate(words):
+        if i > 0 and w in _PLACE_PARTICLES:
+            continue
+        if not word_re.fullmatch(w) or fold(w) in _STOP_WORDS:
+            return False
+    return True
+
+
+def _num(raw: str) -> Optional[float]:
+    v = _to_float(raw)
+    return v if v is not None and 0 < v <= 1_000_000 else None
+
+
+def parse_ops_write(text: str, kind: str) -> Optional[Dict[str, Any]]:
+    """Plantilla estricta (ver arriba). kind: "route" | "movement". -> campos o None si no encaja."""
+    t = " ".join(unicodedata.normalize("NFKC", text or "").split())
+    f = "".join(fold(ch) for ch in t)
+    if not t or len(f) != len(t):
+        return None
+    m = (_ROUTE_TEMPLATE if kind == "route" else _MOV_TEMPLATE).match(f)
+    if not m or not _prefix_ok(m.group("prefix"), m.group("verb")):
+        return None
+    if kind == "route":
+        o, d = t[m.start("o"):m.end("o")], t[m.start("d"):m.end("d")]
+        ok = _words_ok(o, 5, _PLACE_WORD_RE) and _words_ok(d, 5, _PLACE_WORD_RE)
+        return {"origin": o, "destination": d} if ok else None
+    prod = t[m.start("prod"):m.end("prod")]
+    qty = _num(m.group("qty"))
+    if qty is None or not _words_ok(prod, 6, _PRODUCT_WORD_RE):
+        return None
+    return {"product_text": prod, "quantity": qty, "movement": "in" if m.group("type") == "entrada" else "out"}
+
+
+_LEGAL_STATUS_RE = re.compile(
+    r"\b(?:estado|situacion)\s+(?:legal|juridic[oa]|de\s+cumplimiento|normativ[oa])\b"
+    r"|\bdocumentos?\s+legales\b|\bcumplimiento\s+(?:legal|normativo)\b"
+)
+_AUDIT_RE = re.compile(
+    r"\b(?:audit\w*|revis\w*|chequ\w*|comprueb\w*|ejecut\w*|lanz\w*|haz|hacer|pasa)\b.{0,30}?"
+    r"\b(?:cumplimiento|compliance|rgpd)\b|\bauditoria\s+de\s+cumplimiento\b"
+)
+_INVENTORY_RE = re.compile(r"\b(?:inventario|stock|existencias)\b")
+_INVENTORY_CUE_RE = re.compile(
+    r"\b(?:estado|como\s+(?:esta|va|anda|vamos)|cuanto|cuantos|cuantas|que\s+hay|hay|queda|quedan|bajo|bajos|"
+    r"resumen|dame|muestra\w*|ver|revisa\w*|dime|nivel\w*|tengo|tenemos|consulta\w*)\b"
+)
+_SHIFT_STATUS_RE = re.compile(
+    r"\b(?:estado|situacion)\s+de\s+(?:mi|mis|los|el|la)\s+(?:turnos?|fichajes?|jornada)\b"
+)
 
 
 def _is_negated_before(f: str, verb_start: int) -> bool:
@@ -736,8 +846,37 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
         base = 0.80 if _METRICS_CUE_RE.search(f) else 0.68  # palabra suelta («ingreso») NO basta
         c.append(_Cand("get_metrics", "get_metrics", base, "metrics_weak", metadata={"days": days_p or 30}))
 
+    # --- J9e: AFRODITA ruta / movimiento (escrituras: plantilla estricta o pregunta, nunca por defecto)
+    ops_write = False
+    for kind, trig, intent in (("route", _ROUTE_TRIGGER_RE, "create_ops_route"),
+                               ("movement", _MOV_TRIGGER_RE, "create_inventory_movement")):
+        if trig.search(f):
+            fields_ = parse_ops_write(text, kind)
+            ops_write = True
+            c.append(_Cand(
+                intent, intent, 0.85, intent,
+                suppresses={"list_customers_summary", "get_metrics", "tpv_sales_summary", "tpv_sales_today",
+                            "get_inventory_status", "shift_status", "get_legal_status", "run_compliance_audit"},
+                metadata=fields_ or {}, fields={"requires_confirmation": True},
+                missing=[] if fields_ else ["explicit_intent"], question=None if fields_ else QUESTION_OPS,
+            ))
+
+    # --- J9e: JUSTICIA consultas
+    if _LEGAL_STATUS_RE.search(f):
+        c.append(_Cand("get_legal_status", "get_legal_status", 0.85, "legal_status"))
+    ma = _AUDIT_RE.search(f)
+    if ma:
+        neg = _is_negated_before(f, ma.start()) or _NEGATION_ANY_RE.search(f[:ma.start()]) is not None
+        c.append(_Cand("run_compliance_audit", "run_compliance_audit", 0.85, "compliance_audit",
+                       missing=["explicit_intent"] if neg else [], question=QUESTION_NEGATED if neg else None))
+
+    # --- J9e: AFRODITA consultas (inventario; turnos ya cubiertos por shift_status)
+    if not ops_write and _INVENTORY_RE.search(f):
+        c.append(_Cand("get_inventory_status", "get_inventory_status",
+                       0.82 if _INVENTORY_CUE_RE.search(f) else 0.68, "inventory_status"))
+
     # --- turno
-    if _SHIFT_RE.search(f):
+    if _SHIFT_RE.search(f) or _SHIFT_STATUS_RE.search(f):
         c.append(_Cand("shift_status", "shift_status", 0.85, "shift"))
     return c
 
@@ -786,7 +925,8 @@ def parse_intent(message: str) -> ZeusTaskObject:
 
     best = cands[0]
     rivals = [cd for cd in cands[1:] if best.base - cd.base <= AMBIGUITY_MARGIN and cd.intent != best.intent]
-    required = best.intent in ("create_customer", "create_campaign_send")
+    required = best.intent in ("create_customer", "create_campaign_send", "create_ops_route",
+                               "create_inventory_movement")
     bonus = REQUIRED_PRESENT_BONUS if (required and not best.missing) else 0.0
     penalty = AMBIGUITY_PENALTY if rivals else 0.0
     conf = round(max(0.0, min(CONFIDENCE_CAP, best.base + bonus - penalty)), 2)

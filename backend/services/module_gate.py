@@ -41,11 +41,16 @@ ACTION_MODULE: Dict[str, str] = {
     "analytics_summary": "analytics",
     "tpv_sales_summary": "tpv",
     "shift_status": "control_horario",
+    # J9e: acciones de JUSTICIA expuestas en el chat (mismo criterio que EXECUTOR_ACTION_MODULE).
+    "get_legal_status": "agents",
+    "run_compliance_audit": "agents",
 }
 # Sin mapeo claro (decision de producto pendiente; quedan permitidas): clientes y campanas existen en
 # hosteleria y oficina (send_campaign ya lo cubre el rol, J3b); el ledger de caja es transversal.
 UNMAPPED_ACTIONS = frozenset(
-    {"list_customers", "create_customer", "send_campaign", "get_cashflow", "get_metrics"}
+    {"list_customers", "create_customer", "send_campaign", "get_cashflow", "get_metrics",
+     # J9e: AFRODITA inventario/rutas sin modulo propio en el registro real (ver EXECUTOR_UNMAPPED_ACTIONS)
+     "get_inventory_status", "create_ops_route", "create_inventory_movement"}
 )
 
 # J9c: acciones del EJECUTOR de agentes (`zeus_agent_executor_v1._dispatch`) -> modulo requerido.

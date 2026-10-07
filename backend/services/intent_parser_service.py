@@ -62,7 +62,12 @@ def _map_intent_to_action_type(intent: str, legacy_action: Optional[str]) -> str
         "create_customer": "create_customer",
         "get_cashflow": "get_cashflow",
         "get_metrics": "get_metrics",
-        "create_customer": "create_customer",
+        # J9e
+        "get_legal_status": "get_legal_status",
+        "run_compliance_audit": "run_compliance_audit",
+        "get_inventory_status": "get_inventory_status",
+        "create_ops_route": "create_ops_route",
+        "create_inventory_movement": "create_inventory_movement",
     }
     if intent in mapping:
         return mapping[intent]
@@ -90,6 +95,10 @@ def _modules_for_intent(intent: str) -> List[str]:
         return ["analytics", "activity_log"]
     if intent == "get_metrics":
         return ["analytics", "activity_log"]
+    if intent in ("get_legal_status", "run_compliance_audit"):
+        return ["justicia_agent", "activity_log"]
+    if intent in ("get_inventory_status", "create_ops_route", "create_inventory_movement"):
+        return ["afrodita_agent", "activity_log"]
     if intent == "confirm_pending":
         return ["activity_log"]
     return []

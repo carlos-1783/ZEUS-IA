@@ -385,6 +385,16 @@ def create_payment(
     """
     invoice = get_invoice_orm_or_404(db, invoice_id, current_user)
 
+    # JARVIS J5d-resto (punto 3): reglas de negocio que faltaban por completo
+    # antes de persistir el pago. Ninguna de las dos comprobaciones existia:
+    # se podia registrar un pago sobre una factura VOID, y no habia limite
+    # alguno sobre amount_paid frente a total (sobrepago).
+    if invoice.status == ModelInvoiceStatus.VOID:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot register a payment on a void invoice",
+        )
+
     validate_payment_logical(
         invoice_id=invoice_id,
         amount=float(payment_in.amount),
@@ -398,6 +408,22 @@ def create_payment(
         method=str(payment_in.payment_method.value if hasattr(payment_in.payment_method, "value") else payment_in.payment_method),
         payment_date=payment_in.payment_date or datetime.utcnow().date(),
     )
+
+    # Sobrepago: solo los pagos COMPLETED cuentan hacia amount_paid (ver
+    # calculate_invoice_totals), asi que el limite solo aplica a ese caso.
+    # Se calcula ANTES de anadir el nuevo pago (invoice.payments todavia no
+    # lo incluye) para comparar contra el amount_due real pendiente.
+    new_status = ModelPaymentStatus[payment_in.status.name]
+    if new_status == ModelPaymentStatus.COMPLETED:
+        totals_before = calculate_invoice_totals(invoice, db)
+        if float(payment_in.amount) > totals_before["amount_due"] + 0.01:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Payment amount ({float(payment_in.amount):.2f}) exceeds "
+                    f"the outstanding balance ({totals_before['amount_due']:.2f})"
+                ),
+            )
 
     # Create payment
     payment_data = payment_in.dict()

@@ -32,6 +32,7 @@ for _stream_name in ("stdout", "stderr"):
 
 import logging
 import os
+import re
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, status
@@ -531,6 +532,40 @@ async def serve_service_worker():
     )
 
 
+_WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:([/\\]|$)")
+
+
+def _safe_spa_path(full_path: str) -> Path | None:
+    """Resuelve ``full_path`` dentro de ``spa_root``, o None si intenta escapar.
+
+    H-10 (traversal en el fallback SPA): ``os.path.join(spa_root, full_path)`` confiaba en
+    que ``full_path`` fuera siempre relativo. FastAPI decodifica ``%2e%2e`` a ``..`` y
+    ``%2f``/``\\`` antes de que esta función se ejecute, y un ``full_path`` que empieza por
+    ``/`` (p.ej. ``//etc/passwd``) o por una letra de unidad (``C:/Windows/...``) hace que
+    ``os.path.join``/``Path.__truediv__`` DESCARTEN ``spa_root`` y devuelvan esa ruta absoluta
+    tal cual. Se rechaza explícitamente cualquier ruta absoluta o anclada en unidad ANTES de
+    unir, y además se exige que la ruta ya resuelta (symlinks incluidos) quede dentro de
+    ``spa_root`` resuelto — defensa en profundidad por si algún SO futuro uniera distinto.
+    """
+    if not full_path:
+        return None
+    normalized = full_path.replace("\\", "/")
+    if normalized.startswith("/"):
+        return None
+    if _WINDOWS_DRIVE_RE.match(full_path):
+        return None
+    try:
+        base = Path(spa_root).resolve()
+        candidate = (base / normalized).resolve()
+    except (OSError, ValueError, RuntimeError):
+        return None
+    try:
+        candidate.relative_to(base)
+    except ValueError:
+        return None
+    return candidate
+
+
 @app.get("/{full_path:path}")
 async def serve_frontend(request: Request, full_path: str):
     """SPA fallback; no debe interceptar /static (montaje anterior)."""
@@ -544,8 +579,8 @@ async def serve_frontend(request: Request, full_path: str):
             },
         )
 
-    static_path = os.path.join(spa_root, full_path)
-    if os.path.isfile(static_path) and not is_blocked_public_path(full_path):
+    static_path = _safe_spa_path(full_path)
+    if static_path is not None and static_path.is_file() and not is_blocked_public_path(full_path):
         return FileResponse(static_path)
 
     index_path = os.path.join(spa_root, "index.html")

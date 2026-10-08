@@ -178,7 +178,7 @@ def _verify_stripe_payment_intent(payment_intent_id: str, plan: str):
         )
         raise HTTPException(
             status_code=502,
-            detail=f"No se pudo verificar el pago con Stripe: {str(e)}",
+            detail="No se pudo verificar el pago con Stripe. Inténtalo de nuevo.",
         )
 
     if payment_intent.status != "succeeded":
@@ -382,9 +382,10 @@ async def create_account_after_payment(
         raise
     except Exception as e:
         db.rollback()
+        logger.exception("create_account: fallo creando la cuenta")
         raise HTTPException(
             status_code=500,
-            detail=f"Error al crear cuenta: {str(e)}"
+            detail="No se pudo crear la cuenta. Inténtalo de nuevo."
         )
 
 async def send_welcome_email(
@@ -519,10 +520,13 @@ async def verify_payment_status(payment_intent_id: str):
             "created": payment_intent.created
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.exception("verify_payment_status: fallo verificando pago %s", payment_intent_id)
         raise HTTPException(
             status_code=500,
-            detail=f"Error al verificar pago: {str(e)}"
+            detail="No se pudo verificar el pago. Inténtalo de nuevo."
         )
 
 @router.post("/complete-onboarding")

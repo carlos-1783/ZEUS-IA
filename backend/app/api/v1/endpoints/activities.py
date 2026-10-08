@@ -2,6 +2,8 @@
 📊 Agent Activities Endpoints
 Endpoints para consultar actividades y métricas de agentes
 """
+import logging
+
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List, Dict, Any
@@ -17,6 +19,7 @@ from services.activity_logger import ActivityLogger, ensure_tables_initialized, 
 CLIENT_LOG_ORIGIN = "client_log"
 EXECUTABLE_STATUSES = frozenset({"pending", "in_progress"})
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # ============================================================================
@@ -101,9 +104,10 @@ async def get_agent_activities(
         }
         
     except Exception as e:
+        logger.exception("get_agent_activities: fallo obteniendo actividades de %s", agent_name)
         raise HTTPException(
             status_code=500,
-            detail=f"Error al obtener actividades: {str(e)}"
+            detail="No se pudieron obtener las actividades. Inténtalo de nuevo."
         )
 
 @router.get("/{agent_name}/metrics")
@@ -141,9 +145,10 @@ async def get_agent_metrics(
         }
         
     except Exception as e:
+        logger.exception("get_agent_metrics: fallo obteniendo métricas de %s", agent_name)
         raise HTTPException(
             status_code=500,
-            detail=f"Error al obtener métricas: {str(e)}"
+            detail="No se pudieron obtener las métricas. Inténtalo de nuevo."
         )
 
 @router.post("/log")
@@ -232,9 +237,10 @@ async def log_activity(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("log_activity: fallo registrando actividad de %s", activity.agent_name)
         raise HTTPException(
             status_code=500,
-            detail=f"Error al registrar actividad: {str(e)}"
+            detail="No se pudo registrar la actividad. Inténtalo de nuevo."
         )
 
 @router.get("/all/summary")
@@ -274,8 +280,9 @@ async def get_all_agents_summary(
         }
         
     except Exception as e:
+        logger.exception("get_all_agents_summary: fallo obteniendo resumen de agentes")
         raise HTTPException(
             status_code=500,
-            detail=f"Error al obtener resumen: {str(e)}"
+            detail="No se pudo obtener el resumen de actividades. Inténtalo de nuevo."
         )
 

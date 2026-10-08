@@ -136,7 +136,7 @@ async def create_tokens(db: Session, user: User) -> Dict[str, Any]:
             jornada = begin_work_session_on_login(db, user)
         except Exception as e:
             logger.exception("begin_work_session_on_login: %s", e)
-            jornada = {"error": str(e)}
+            jornada = {"error": "No se pudo iniciar la jornada laboral."}
         
         return {
             "access_token": access_token,
@@ -156,7 +156,7 @@ async def create_tokens(db: Session, user: User) -> Dict[str, Any]:
         logger.error(f"Error creating tokens for user {user.email}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating authentication tokens: {str(e)}"
+            detail="No se pudieron generar los tokens de autenticación. Inténtalo de nuevo."
         )
 
 # ZEUS_LOCAL_CORS_FIX_001: Preflight OPTIONS sin autenticaci?n para que CORS pase en local

@@ -129,9 +129,10 @@ async def approve_document(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("approve_and_send_document: fallo aprobando documento")
         raise HTTPException(
             status_code=500,
-            detail=f"Error al aprobar documento: {str(e)}"
+            detail="No se pudo aprobar el documento. Inténtalo de nuevo."
         )
 
 
@@ -178,9 +179,10 @@ async def get_pending_documents(
             "message": f"{len(documents)} documento(s) pendiente(s) de aprobación" if documents else "No hay documentos pendientes de aprobación"
         }
     except Exception as e:
+        logger.exception("get_pending_documents: fallo obteniendo documentos pendientes")
         raise HTTPException(
             status_code=500,
-            detail=f"Error obteniendo documentos pendientes: {str(e)}"
+            detail="No se pudieron obtener los documentos pendientes. Inténtalo de nuevo."
         )
 
 
@@ -211,9 +213,10 @@ async def get_approval_history(
             "message": f"{len(history)} documento(s) en historial" if history else "No hay historial de aprobaciones disponible"
         }
     except Exception as e:
+        logger.exception("get_approval_history: fallo obteniendo historial")
         raise HTTPException(
             status_code=500,
-            detail=f"Error obteniendo historial: {str(e)}"
+            detail="No se pudo obtener el historial. Inténtalo de nuevo."
         )
 
 
@@ -262,9 +265,10 @@ async def update_advisor_emails(
         
     except Exception as e:
         db.rollback()
+        logger.exception("update_advisor_emails: fallo actualizando emails de asesores")
         raise HTTPException(
             status_code=500,
-            detail=f"Error actualizando emails de asesores: {str(e)}"
+            detail="No se pudieron actualizar los emails de asesores. Inténtalo de nuevo."
         )
 
 
@@ -294,9 +298,10 @@ async def toggle_document_authorization(
         
     except Exception as e:
         db.rollback()
+        logger.exception("toggle_document_authorization: fallo actualizando autorización")
         raise HTTPException(
             status_code=500,
-            detail=f"Error actualizando autorización: {str(e)}"
+            detail="No se pudo actualizar la autorización. Inténtalo de nuevo."
         )
 
 
@@ -414,10 +419,10 @@ async def export_fiscal_document(
     except Exception as e:
         if db:
             db.rollback()
-        logger.error(f"Error exportando documento fiscal: {e}")
+        logger.exception("export_fiscal_document: fallo exportando documento fiscal")
         raise HTTPException(
             status_code=500,
-            detail=f"Error exportando documento: {str(e)}"
+            detail="No se pudo exportar el documento. Inténtalo de nuevo."
         )
 
 
@@ -470,9 +475,9 @@ async def get_fiscal_document_trace(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error obteniendo trazabilidad: {e}")
+        logger.exception("get_fiscal_document_trace: fallo obteniendo trazabilidad")
         raise HTTPException(
             status_code=500,
-            detail=f"Error obteniendo trazabilidad: {str(e)}"
+            detail="No se pudo obtener la trazabilidad del documento. Inténtalo de nuevo."
         )
 

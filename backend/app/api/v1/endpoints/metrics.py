@@ -291,7 +291,7 @@ async def get_dashboard_summary(
         # Devolver valores por defecto si hay error
         return {
             "success": False,
-            "error": str(e),
+            "error": "No se pudo calcular el resumen del dashboard.",
             "user": {
                 "id": current_user.id if current_user else None,
                 "email": current_user.email if current_user else None,

@@ -371,6 +371,7 @@ async def stripe_webhook_handler(
         }
     except Exception as e:
         db.rollback()
+        logger.exception("[WEBHOOK] Error procesando pago %s", payment_intent_id)
         ActivityLogger.log_activity(
             agent_name="ZEUS",
             action_type="payment_webhook_error",
@@ -384,7 +385,7 @@ async def stripe_webhook_handler(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing webhook: {str(e)}"
+            detail="Error processing webhook"
         )
     finally:
         db.close()
@@ -490,7 +491,7 @@ async def twilio_webhook_handler(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[WEBHOOK] Error procesando webhook de Twilio: {e}")
+        logger.exception("[WEBHOOK] Error procesando webhook de Twilio")
         ActivityLogger.log_activity(
             agent_name="ZEUS",
             action_type="whatsapp_webhook_error",
@@ -503,5 +504,5 @@ async def twilio_webhook_handler(request: Request):
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing Twilio webhook: {str(e)}"
+            detail="Error processing Twilio webhook"
         )

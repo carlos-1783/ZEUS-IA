@@ -3,6 +3,8 @@
 Endpoints para el panel de administración (solo superusuarios)
 """
 
+import logging
+
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -21,6 +23,7 @@ from services.admin_account_service import (
     set_user_active,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -115,9 +118,10 @@ async def get_admin_stats(
             "timestamp": datetime.utcnow().isoformat()
         }
     except Exception as e:
+        logger.exception("get_admin_stats: fallo calculando estadísticas de admin")
         raise HTTPException(
             status_code=500,
-            detail=f"Error obteniendo estadísticas: {str(e)}"
+            detail="No se pudieron obtener las estadísticas. Inténtalo de nuevo."
         )
 
 
@@ -168,9 +172,10 @@ async def get_admin_customers(
             "timestamp": datetime.utcnow().isoformat()
         }
     except Exception as e:
+        logger.exception("get_admin_customers: fallo obteniendo lista de clientes")
         raise HTTPException(
             status_code=500,
-            detail=f"Error obteniendo clientes: {str(e)}"
+            detail="No se pudo obtener la lista de clientes. Inténtalo de nuevo."
         )
 
 
@@ -402,9 +407,10 @@ async def get_revenue_chart_data(
             "timestamp": datetime.utcnow().isoformat()
         }
     except Exception as e:
+        logger.exception("get_revenue_chart_data: fallo calculando datos del gráfico")
         raise HTTPException(
             status_code=500,
-            detail=f"Error obteniendo datos del gráfico: {str(e)}"
+            detail="No se pudieron obtener los datos del gráfico. Inténtalo de nuevo."
         )
 
 
@@ -445,8 +451,9 @@ async def bootstrap_internal_company(
         result = run_bootstrap()
         return result
     except Exception as e:
+        logger.exception("bootstrap_internal_company: fallo en el bootstrap de la empresa interna")
         raise HTTPException(
             status_code=500,
-            detail=f"Bootstrap error: {str(e)}",
+            detail="No se pudo completar el bootstrap de la empresa interna. Inténtalo de nuevo.",
         )
 

@@ -849,10 +849,10 @@ async def check_in(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error en check-in: {e}")
+        logger.exception("Error en check-in")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error interno: {str(e)}",
+            detail="Error interno al registrar la entrada.",
         )
 
 
@@ -1020,10 +1020,10 @@ async def check_out(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error en check-out: {e}")
+        logger.exception("Error en check-out")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error interno: {str(e)}",
+            detail="Error interno al registrar la salida.",
         )
 
 
@@ -1093,8 +1093,8 @@ async def break_start(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("break_start: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("break_start")
+        raise HTTPException(status_code=500, detail="No se pudo iniciar la pausa. Inténtalo de nuevo.")
 
 
 @router.post("/break-end")
@@ -1163,8 +1163,8 @@ async def break_end(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("break_end: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("break_end")
+        raise HTTPException(status_code=500, detail="No se pudo finalizar la pausa. Inténtalo de nuevo.")
 
 
 @router.get("/employees")
@@ -1208,10 +1208,10 @@ async def get_employees(
         }
         
     except Exception as e:
-        logger.error(f"Error obteniendo empleados: {e}")
+        logger.exception("Error obteniendo empleados")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail="No se pudo obtener la lista de empleados. Inténtalo de nuevo."
         )
 
 
@@ -1238,10 +1238,10 @@ async def calculate_hours(
         return result
         
     except Exception as e:
-        logger.error(f"Error calculando horas: {e}")
+        logger.exception("Error calculando horas")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail="No se pudieron calcular las horas trabajadas. Inténtalo de nuevo."
         )
 
 
@@ -1287,10 +1287,10 @@ async def set_business_profile(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error estableciendo business profile: {e}")
+        logger.exception("Error estableciendo business profile")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail="No se pudo establecer el perfil de negocio. Inténtalo de nuevo."
         )
 
 
@@ -1322,8 +1322,8 @@ async def get_reports(
         }
         
     except Exception as e:
-        logger.error(f"Error obteniendo reportes: {e}")
+        logger.exception("Error obteniendo reportes")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail="No se pudieron obtener los reportes. Inténtalo de nuevo."
         )

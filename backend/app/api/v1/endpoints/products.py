@@ -178,9 +178,18 @@ def create_product(
     """
     Create a new product
     """
-    # Check if SKU already exists
+    company_id = crm_svc.primary_company_id(db, current_user)
+    require_company_id(company_id, context="productos")
+
+    # Check if SKU already exists DENTRO DE LA MISMA EMPRESA (JARVIS J5d-resto,
+    # punto 1): la restriccion de BD ahora es UniqueConstraint(company_id, sku)
+    # (migracion 0062) precisamente para permitir que dos empresas distintas
+    # usen el mismo SKU. Si aqui se comprobase sin filtrar por company_id se
+    # reabriria el oraculo de enumeracion cruzada entre empresas (saber si un
+    # SKU esta en uso por OTRA empresa) aunque la BD ya no lo imponga.
     existing_product = db.query(Product).filter(
-        Product.sku == product_in.sku
+        Product.sku == product_in.sku,
+        Product.company_id == company_id,
     ).first()
 
     if existing_product:
@@ -188,9 +197,6 @@ def create_product(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="A product with this SKU already exists"
         )
-
-    company_id = crm_svc.primary_company_id(db, current_user)
-    require_company_id(company_id, context="productos")
 
     # Create product
     product_data = product_in.dict(exclude={"variants"})
@@ -284,13 +290,15 @@ def update_product(
     """
     product = get_product_or_404(db, product_id, current_user)
     
-    # Check if SKU is being updated and if it already exists
+    # Check if SKU is being updated and if it already exists DENTRO DE LA
+    # MISMA EMPRESA (ver nota de create_product sobre el oraculo cruzado).
     if product_in.sku and product_in.sku != product.sku:
         existing_product = db.query(Product).filter(
             Product.sku == product_in.sku,
+            Product.company_id == product.company_id,
             Product.id != product_id
         ).first()
-        
+
         if existing_product:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -341,11 +349,14 @@ def create_product_variant(
     # Verify product exists
     product = get_product_or_404(db, product_id, current_user)
     
-    # Check if variant SKU already exists
+    # Check if variant SKU already exists DENTRO DEL MISMO PRODUCTO (ver
+    # migracion 0062: UniqueConstraint(product_id, sku) en ProductVariant;
+    # product ya esta acotado a la empresa del usuario por get_product_or_404).
     existing_variant = db.query(ProductVariant).filter(
-        ProductVariant.sku == variant_in.sku
+        ProductVariant.sku == variant_in.sku,
+        ProductVariant.product_id == product_id,
     ).first()
-    
+
     if existing_variant:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -378,13 +389,15 @@ def update_product_variant(
     # Get variant or 404 (acotado a la empresa del usuario a través del producto)
     variant = get_variant_or_404(db, variant_id, current_user)
 
-    # Check if SKU is being updated and if it already exists
+    # Check if SKU is being updated and if it already exists DENTRO DEL
+    # MISMO PRODUCTO (ver nota de create_product_variant).
     if variant_in.sku and variant_in.sku != variant.sku:
         existing_variant = db.query(ProductVariant).filter(
             ProductVariant.sku == variant_in.sku,
+            ProductVariant.product_id == variant.product_id,
             ProductVariant.id != variant_id
         ).first()
-        
+
         if existing_variant:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

@@ -238,6 +238,14 @@ class PaymentCreate(PaymentBase):
 
 # Update schemas
 class ProductUpdate(BaseModel):
+    # JARVIS J5d-resto (punto 1): faltaba por completo este campo, pese a
+    # que update_product (app/api/v1/endpoints/products.py) ya intentaba
+    # leer `product_in.sku` para comprobar duplicados -- al no existir en
+    # el schema, Pydantic lanzaba AttributeError y CUALQUIER PUT a
+    # /products/{id} que llegase a esa linea devolvia 500 (bug preexistente,
+    # no introducido por este cambio, pero bloqueaba verificar el fix del
+    # punto 1 en el camino de actualizacion).
+    sku: Optional[str] = Field(None, min_length=1, max_length=50)
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = None
     price: Optional[float] = Field(None, gt=0)
@@ -250,6 +258,10 @@ class ProductUpdate(BaseModel):
     status: Optional[ProductStatus] = None
 
 class ProductVariantUpdate(BaseModel):
+    # Mismo bug preexistente que ProductUpdate.sku (ver nota arriba):
+    # update_product_variant ya leia `variant_in.sku` sin que el campo
+    # existiera en el schema.
+    sku: Optional[str] = Field(None, min_length=1, max_length=50)
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     price_override: Optional[float] = Field(None, gt=0)
     cost_override: Optional[float] = Field(None, ge=0)

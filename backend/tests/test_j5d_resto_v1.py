@@ -249,3 +249,32 @@ def test_partial_payment_then_overpayment_on_remainder_rejected(client, h_a):
     })
     assert r3.status_code == 201, r3.text
     assert _db_status(inv) == InvoiceStatus.PAID
+
+
+def test_overpayment_by_one_cent_rejected_exact_remainder_accepted(client, h_a):
+    """Limite exacto (hallazgo del revisor-independiente): la tolerancia del
+    check de sobrepago debe ser solo la de redondeo de coma flotante (1e-6),
+    nunca un margen de negocio. Resto pendiente exacto 21.00: un pago de
+    21.01 (un centimo de sobrepago REAL) debe rechazarse; el pago exacto del
+    resto (21.00) debe aceptarse."""
+    inv = _create_invoice(client, h_a)  # total 121.0
+
+    r1 = client.post(f"{API}/invoices/{inv}/payments", headers=h_a, json={
+        "amount": 100.0, "payment_method": "cash", "status": "completed",
+    })
+    assert r1.status_code == 201, r1.text
+    assert _db_status(inv) == InvoiceStatus.PARTIALLY_PAID
+
+    # Quedan 21.00 pendientes exactos; 21.01 es un centimo de mas -> 400.
+    r_over = client.post(f"{API}/invoices/{inv}/payments", headers=h_a, json={
+        "amount": 21.01, "payment_method": "cash", "status": "completed",
+    })
+    assert r_over.status_code == 400, r_over.text
+    assert _db_status(inv) == InvoiceStatus.PARTIALLY_PAID
+
+    # El resto exacto (21.00) si se acepta.
+    r_exact = client.post(f"{API}/invoices/{inv}/payments", headers=h_a, json={
+        "amount": 21.00, "payment_method": "cash", "status": "completed",
+    })
+    assert r_exact.status_code == 201, r_exact.text
+    assert _db_status(inv) == InvoiceStatus.PAID

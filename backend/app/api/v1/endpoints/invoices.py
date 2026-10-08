@@ -413,10 +413,19 @@ def create_payment(
     # calculate_invoice_totals), asi que el limite solo aplica a ese caso.
     # Se calcula ANTES de anadir el nuevo pago (invoice.payments todavia no
     # lo incluye) para comparar contra el amount_due real pendiente.
+    #
+    # Tolerancia: 1e-6, SOLO para absorber el error de redondeo propio de
+    # `float` (no es un margen de negocio). Revision del revisor-independiente
+    # (vuelta J5d-resto): un 0.01 aqui es un centimo de sobrepago REAL
+    # aceptado (p.ej. resto pendiente 21.00 + pago 21.01 pasaba), no
+    # imprecision de coma flotante -- nadie ha pedido ese margen de negocio,
+    # asi que se reduce a la tolerancia minima necesaria para que
+    # `21.0 + 21.0 == 42.0` tipo de comparaciones no fallen por redondeo
+    # binario, sin dejar pasar ningun centimo real de mas.
     new_status = ModelPaymentStatus[payment_in.status.name]
     if new_status == ModelPaymentStatus.COMPLETED:
         totals_before = calculate_invoice_totals(invoice, db)
-        if float(payment_in.amount) > totals_before["amount_due"] + 0.01:
+        if float(payment_in.amount) > totals_before["amount_due"] + 1e-6:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(

@@ -82,9 +82,36 @@ class AgentAutomationExecutor:
         from services.legacy_handler_guard_v1 import audit_legacy_handler_path
         from services.unified_agent_runtime import run_workspace_task
 
+        agent = (activity.agent_name or "").upper()
+        origin = (activity.details or {}).get("_origin") if isinstance(activity.details, dict) else None
+        if origin == "client_log":
+            # J3c: actividad registrada por un cliente via POST /activities/log. Nunca se
+            # ejecuta (evita saltarse confirmacion humana, THALOS y rol).
+            activity.status = "blocked_client_origin"
+            activity.completed_at = None
+            activity.details = merge_dict(activity.details, {
+                "blocked_reason": "client_origin_not_executable",
+                "executed": False,
+            })
+            session.add(activity)
+            session.commit()
+            ActivityLogger.log_activity(
+                agent_name=agent,
+                action_type="automation_blocked",
+                action_description=(
+                    f"Actividad {activity.id} ({agent}, {activity.action_type}) bloqueada: "
+                    "origen cliente (/activities/log) no ejecutable."
+                ),
+                details={"original_activity_id": activity.id, "automation_status": "blocked_client_origin"},
+                user_email=activity.user_email,
+                company_id=activity.company_id,
+                status="blocked_client_origin",
+                priority=activity.priority,
+            )
+            return
+
         audit_legacy_handler_path(activity)
         result = run_workspace_task(activity)
-        agent = (activity.agent_name or "").upper()
         status = result.get("status", "completed")
 
         activity.status = status

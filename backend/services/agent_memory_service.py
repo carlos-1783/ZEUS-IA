@@ -26,6 +26,17 @@ _memory_schema_lock = Lock()
 _memory_schema_ok = False
 
 
+def scoped_thread_id(thread_id: Optional[str], user_id: Any) -> str:
+    """Hilo de memoria atado al usuario: `<hilo[:100]>:u<user_id>`.
+
+    Fuente unica del formato (la usa tambien el pending de confirmacion de ZEUS CORE).
+    thread_id es String(128) en las tres tablas de memoria: se recorta la parte del cliente
+    para dejar sitio al sufijo. Las filas antiguas (sin sufijo) no coinciden nunca con esta
+    clave: quedan huerfanas y caducan por TTL (buffer) o se ignoran (log/estado).
+    """
+    return f"{(thread_id or 'main')[:100]}:u{user_id}"
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 

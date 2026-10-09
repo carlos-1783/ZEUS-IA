@@ -467,6 +467,7 @@ def test_log_activity_requires_authentication(client: TestClient):
     assert r.status_code in (401, 403)
 
 
+@pytest.mark.usefixtures("no_external_messaging")
 def test_log_activity_ignores_client_supplied_user_email(client: TestClient, db: Session):
     """Hallazgo nuevo de la Vuelta 5: el cliente podía spoofear `user_email`
     con el email de OTRO usuario (p.ej. un superusuario conocido). Ahora debe

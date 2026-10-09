@@ -150,6 +150,16 @@
           <div v-if="agentResponse" class="subtitle agent" :class="{ 'speaking': agentSpeaking }">
             <strong>{{ activeAgent.name }}:</strong> {{ agentResponse }}
           </div>
+          <ul v-if="agentEvidence.length" class="agent-evidence">
+            <li v-for="ev in agentEvidence" :key="`${ev.kind}-${ev.id}`">
+              <a :href="ev.url" class="evidence-link" :title="`${ev.agent} · ${ev.status}`" @click.prevent="openAgentEvidence(ev)">{{ ev.title }}</a>
+            </li>
+          </ul>
+          <div v-if="agentNextStep" class="agent-next-step">{{ agentNextStep }}</div>
+          <div v-if="agentNeedsConfirmation" class="agent-confirm">
+            <button type="button" class="confirm-btn" @click="answerAgentConfirmation('confirmar')">Confirmar</button>
+            <button type="button" class="cancel-btn" @click="answerAgentConfirmation('cancelar')">Cancelar</button>
+          </div>
         </div>
 
         <!-- Controles de voz -->
@@ -281,13 +291,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Agent3DAvatar from '@/components/Agent3DAvatar.vue'
 import DashboardProfesional from '@/components/DashboardProfesional.vue'
 import { usePWA } from '@/composables/usePWA'
-import { getAgentChatUrl, AGENT_CHAT_TIMEOUT_MS } from '@/utils/chatApi'
+import { useJarvisVoice } from '@/composables/useJarvisVoice'
+import { getAgentChatUrl, AGENT_CHAT_TIMEOUT_MS, extractChatExtras, openEvidence } from '@/utils/chatApi'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -350,15 +361,19 @@ let tpvTablesPollTimer = null
 
 // Estado de conversación por voz
 const voiceActive = ref(false)
-const listening = ref(false)
-const agentSpeaking = ref(false)
-const currentTranscript = ref('')
 const agentResponse = ref('')
+const agentEvidence = ref([])
+const agentNextStep = ref('')
+const agentNeedsConfirmation = ref(false)
 
-// Web Speech API
-let recognition = null
-let speechSynthesis = window.speechSynthesis
-let currentUtterance = null
+// J11: capa de voz unica (Web Speech API) compartida con AgentActivityPanel
+const voice = useJarvisVoice({
+  continuous: true,
+  onFinal: (text) => sendVoiceMessage(text),
+})
+const listening = voice.listening
+const agentSpeaking = voice.speaking
+const currentTranscript = voice.transcript
 
 // Agentes del Olimpo - SIEMPRE VISIBLES CON IMÁGENES 3D
 const olymposAgents = ref([
@@ -494,41 +509,10 @@ const handleInstallPWA = async () => {
 // La validación real de permisos se hace en el backend en /api/v1/tpv
 // Los superusuarios siempre tienen acceso completo
 
-// Inicializar Speech Recognition
-const initSpeechRecognition = () => {
-  if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    recognition = new SpeechRecognition()
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.lang = 'es-ES'
-    
-    recognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map(result => result[0].transcript)
-        .join('')
-      
-      currentTranscript.value = transcript
-      
-      // Si es final, enviar al agente
-      if (event.results[event.results.length - 1].isFinal) {
-        sendVoiceMessage(transcript)
-      }
-    }
-    
-    recognition.onerror = (event) => {
-      console.error('Error de reconocimiento:', event.error)
-      listening.value = false
-      showNotification('error', '❌ Error en reconocimiento de voz')
-    }
-    
-    recognition.onend = () => {
-      listening.value = false
-    }
-  } else {
-    showNotification('error', '❌ Tu navegador no soporta reconocimiento de voz')
-  }
-}
+// Errores / falta de soporte de voz: aviso claro; el modo texto sigue disponible
+watch(voice.error, (msg) => {
+  if (msg) showNotification('error', `❌ ${msg}`)
+})
 
 // Posiciones de agentes paseando por el Olimpo
 const getAgentPosition = (agentId) => {
@@ -554,9 +538,8 @@ const summonAgent = (agent) => {
   setTimeout(() => {
     voiceActive.value = true
     
-    // Inicializar speech recognition si no existe
-    if (!recognition) {
-      initSpeechRecognition()
+    if (!voice.supported) {
+      showNotification('error', `❌ ${voice.unsupportedMessage.value}`)
     }
     
     // Mensaje de bienvenida con voz
@@ -591,27 +574,26 @@ const toggleVoiceListening = () => {
 }
 
 const startListening = () => {
-  if (recognition) {
-    currentTranscript.value = ''
-    recognition.start()
-    listening.value = true
+  if (voice.start()) {
     showNotification('info', '🎤 Escuchando...')
+  } else if (!voice.supported) {
+    showNotification('error', `❌ ${voice.unsupportedMessage.value}`)
   }
 }
 
 const stopListening = () => {
-  if (recognition && listening.value) {
-    recognition.stop()
-    listening.value = false
-  }
+  voice.stop()
 }
 
 // Enviar mensaje de voz al backend
-const sendVoiceMessage = async (transcript) => {
+const sendVoiceMessage = async (transcript, channel = 'voice') => {
   if (!transcript.trim() || !activeAgent.value) return
   
   stopListening()
-  
+  agentEvidence.value = []
+  agentNextStep.value = ''
+  agentNeedsConfirmation.value = false
+
   try {
     const token = authStore.getToken?.() ?? authStore.token ?? null
     const headers = { 'Content-Type': 'application/json' }
@@ -626,7 +608,7 @@ const sendVoiceMessage = async (transcript) => {
         headers,
         body: JSON.stringify({
           message: transcript,
-          context: {},
+          context: { channel },
         }),
         signal: controller.signal,
       })
@@ -643,6 +625,10 @@ const sendVoiceMessage = async (transcript) => {
     // Mostrar y hablar la respuesta
     const responseText = data.message || 'Lo siento, no pude procesar tu solicitud.'
     agentResponse.value = responseText
+    const extras = extractChatExtras(data)  // J10: evidencia enlazada, siguiente paso y confirmación
+    agentEvidence.value = extras.evidence
+    agentNextStep.value = extras.nextStep || ''
+    agentNeedsConfirmation.value = extras.needsConfirmation
     speakText(responseText)
     
     if (data.hitl_required) {
@@ -658,50 +644,29 @@ const sendVoiceMessage = async (transcript) => {
   }
 }
 
-// Hablar texto (Text-to-Speech)
+const openAgentEvidence = async (ev) => {
+  try {
+    const token = authStore.getToken?.() ?? authStore.token ?? null
+    await openEvidence(ev, token)
+  } catch (error) {
+    showNotification('error', `❌ ${error?.message || 'No se pudo abrir el recurso'}`)
+  }
+}
+
+// Confirmar/Cancelar la acción pendiente: se responde en el mismo hilo con «confirmar»/«cancelar»
+const answerAgentConfirmation = async (word) => {
+  agentNeedsConfirmation.value = false
+  await sendVoiceMessage(word, 'text') // botón visible = canal texto
+}
+
+// Hablar texto (Text-to-Speech): solo el texto breve de respuesta, nunca la evidencia ni URLs
 const speakText = (text) => {
-  // Detener cualquier voz anterior
-  stopAgentSpeaking()
-  
-  // Crear nueva utterance
-  currentUtterance = new SpeechSynthesisUtterance(text)
-  currentUtterance.lang = 'es-ES'
-  currentUtterance.rate = 1.0
-  currentUtterance.pitch = 1.0
-  
-  // Seleccionar voz española si está disponible
-  const voices = speechSynthesis.getVoices()
-  const spanishVoice = voices.find(voice => voice.lang.startsWith('es'))
-  if (spanishVoice) {
-    currentUtterance.voice = spanishVoice
-  }
-  
-  // Eventos
-  currentUtterance.onstart = () => {
-    agentSpeaking.value = true
-  }
-  
-  currentUtterance.onend = () => {
-    agentSpeaking.value = false
-    currentUtterance = null
-  }
-  
-  currentUtterance.onerror = () => {
-    agentSpeaking.value = false
-    currentUtterance = null
-  }
-  
-  // Hablar
-  speechSynthesis.speak(currentUtterance)
+  voice.speak(text)
 }
 
 // Detener voz del agente
 const stopAgentSpeaking = () => {
-  if (speechSynthesis.speaking) {
-    speechSynthesis.cancel()
-  }
-  agentSpeaking.value = false
-  currentUtterance = null
+  voice.cancel()
 }
 
 // Mostrar notificación
@@ -1874,6 +1839,47 @@ const showNotification = (type, message) => {
   padding: 12px 18px;
   border-radius: 15px;
   word-wrap: break-word;
+}
+
+.agent-evidence {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.evidence-link {
+  color: var(--zeus-accent, #4f46e5);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.agent-next-step {
+  margin-top: 6px;
+  font-size: 0.85rem;
+  color: var(--zeus-text-secondary, #52607a);
+}
+
+.agent-confirm {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.agent-confirm .confirm-btn,
+.agent-confirm .cancel-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--zeus-border-strong, #d7dce5);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  color: var(--zeus-text, #0f172a);
+  cursor: pointer;
+}
+
+.agent-confirm .confirm-btn {
+  background: var(--zeus-accent, #4f46e5);
+  border-color: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-on-accent, #ffffff);
 }
 
 .chat-message.user .message-content {

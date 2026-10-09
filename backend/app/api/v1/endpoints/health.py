@@ -1,6 +1,7 @@
 """
 Health Check endpoints para monitoreo
 """
+import logging
 from datetime import datetime
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,6 +12,7 @@ from app.core.config import settings
 import psutil  # pyright: ignore[reportMissingModuleSource]
 import os
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.get("/health")
@@ -31,8 +33,9 @@ async def detailed_health_check(db: Session = Depends(get_db)) -> Dict[str, Any]
     db_status = "healthy"
     try:
         db.execute(text("SELECT 1"))
-    except Exception as e:
-        db_status = f"unhealthy: {str(e)}"
+    except Exception:
+        logger.exception("detailed_health_check: la BD no responde")
+        db_status = "unhealthy"
     
     # Métricas del sistema
     system_metrics = {
@@ -59,8 +62,9 @@ async def detailed_health_check(db: Session = Depends(get_db)) -> Dict[str, Any]
             "status": "ok" if not gaps else "gaps",
             "gaps": gaps,
         }
-    except Exception as exc:
-        fiscal_schema = {"status": "error", "detail": str(exc)}
+    except Exception:
+        logger.exception("detailed_health_check: fallo comprobando el esquema fiscal")
+        fiscal_schema = {"status": "error"}
 
     return {
         "status": "healthy" if db_status == "healthy" else "unhealthy",
@@ -92,10 +96,13 @@ async def readiness_check(db: Session = Depends(get_db)) -> Dict[str, Any]:
             "timestamp": datetime.utcnow().isoformat()
         }
         
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("readiness_check: servicio no listo")
         raise HTTPException(
             status_code=503,
-            detail=f"Service not ready: {str(e)}"
+            detail="Service not ready"
         )
 
 @router.get("/health/live")

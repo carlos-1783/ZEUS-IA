@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from services.thalos_request_guard_v1 import thalos_request_guard
 from app.core.auth import get_current_active_user
 from app.db.session import get_db
 from app.models.user import User
@@ -47,7 +48,7 @@ class TransactionCreateRequest(BaseModel):
     idempotency_key: Optional[str] = None
 
 
-@router.post("/transactions")
+@router.post("/transactions", dependencies=[Depends(thalos_request_guard)])
 def zeus_transaction_create(
     body: TransactionCreateRequest,
     current_user: User = Depends(get_current_active_user),
@@ -80,7 +81,7 @@ def zeus_transaction_get(
 @router.post("/transactions/{transaction_id}/execute")
 def zeus_transaction_execute(
     transaction_id: str,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(thalos_request_guard),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     return {"success": True, **execute_transaction(db, current_user, transaction_id)}

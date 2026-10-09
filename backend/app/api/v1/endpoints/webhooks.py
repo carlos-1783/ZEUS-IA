@@ -22,6 +22,7 @@ from services.event_bus import emit_payment_registered
 from services.global_company_bootstrap import run_global_autonomous_bootstrap
 from services.stripe_service import stripe_service
 from services.whatsapp_service import whatsapp_service
+from services.webhook_signature_v1 import verify_twilio_request
 
 
 router = APIRouter(tags=["webhooks"])
@@ -210,10 +211,12 @@ async def stripe_webhook_handler(
         event = stripe.Webhook.construct_event(
             payload, stripe_signature, webhook_secret
         )
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid payload: {e}")
-    except stripe.error.SignatureVerificationError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid signature: {e}")
+    except ValueError:
+        logger.exception("[WEBHOOK] Stripe: payload invalido")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError:
+        logger.exception("[WEBHOOK] Stripe: firma invalida")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid signature")
     
     event_type = event.get("type")
     
@@ -370,6 +373,7 @@ async def stripe_webhook_handler(
         }
     except Exception as e:
         db.rollback()
+        logger.exception("[WEBHOOK] Error procesando pago %s", payment_intent_id)
         ActivityLogger.log_activity(
             agent_name="ZEUS",
             action_type="payment_webhook_error",
@@ -383,7 +387,7 @@ async def stripe_webhook_handler(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing webhook: {str(e)}"
+            detail="Error processing webhook"
         )
     finally:
         db.close()
@@ -401,6 +405,8 @@ async def twilio_webhook_handler(request: Request):
     
     try:
         form_data = await request.form()
+        # Autenticidad ANTES de procesar nada (403 firma invalida, 503 token no configurado).
+        verify_twilio_request(request, form_data)
         
         from_number = form_data.get("From", "").replace("whatsapp:", "")
         to_number = form_data.get("To", "").replace("whatsapp:", "")
@@ -487,7 +493,7 @@ async def twilio_webhook_handler(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[WEBHOOK] Error procesando webhook de Twilio: {e}")
+        logger.exception("[WEBHOOK] Error procesando webhook de Twilio")
         ActivityLogger.log_activity(
             agent_name="ZEUS",
             action_type="whatsapp_webhook_error",
@@ -500,5 +506,5 @@ async def twilio_webhook_handler(request: Request):
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing Twilio webhook: {str(e)}"
+            detail="Error processing Twilio webhook"
         )

@@ -8,14 +8,22 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_active_user
+from app.core.auth import get_current_active_superuser, get_current_active_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.marketing_integrations import MarketingIntegrationsIn, MarketingIntegrationsOut
 from services import marketing_integrations_service as mi_svc
 from services.marketing_service import marketing_service
+from services.thalos_request_guard_v1 import thalos_request_guard
 
 router = APIRouter()
+
+# DECISION J5c (seguridad): marketing_service usa credenciales GLOBALES de plataforma
+# (GOOGLE_ADS_*, META_*, GA_*), no hay asociacion de cuenta de ads a empresa. Cualquier
+# empresa autenticada podria gastar con la cuenta de la plataforma, asi que estas rutas
+# son solo de superusuario (operador de plataforma) y pasan por el guard THALOS.
+# Las rutas por empresa son /marketing/integrations*.
+PLATFORM_ADS_DEPS = [Depends(thalos_request_guard), Depends(get_current_active_superuser)]
 
 # ============================================================================
 # MODELS
@@ -49,7 +57,7 @@ class AnalyticsQuery(BaseModel):
 # GOOGLE ADS ENDPOINTS
 # ============================================================================
 
-@router.post("/google-ads/campaign")
+@router.post("/google-ads/campaign", dependencies=PLATFORM_ADS_DEPS)
 async def create_google_ads_campaign(campaign: GoogleAdsCampaign):
     """Crear campaña en Google Ads"""
     result = await marketing_service.create_google_ads_campaign(
@@ -65,7 +73,7 @@ async def create_google_ads_campaign(campaign: GoogleAdsCampaign):
     
     return result
 
-@router.get("/google-ads/performance")
+@router.get("/google-ads/performance", dependencies=PLATFORM_ADS_DEPS)
 async def get_google_ads_performance(
     campaign_id: Optional[str] = None,
     start_date: Optional[datetime] = None,
@@ -83,7 +91,7 @@ async def get_google_ads_performance(
     
     return result
 
-@router.post("/google-ads/optimize")
+@router.post("/google-ads/optimize", dependencies=PLATFORM_ADS_DEPS)
 async def optimize_google_ads_campaign(optimization: CampaignOptimization):
     """Optimizar campaña usando IA de PERSEO"""
     result = await marketing_service.optimize_google_ads_campaign(
@@ -100,7 +108,7 @@ async def optimize_google_ads_campaign(optimization: CampaignOptimization):
 # META ADS ENDPOINTS
 # ============================================================================
 
-@router.post("/meta-ads/campaign")
+@router.post("/meta-ads/campaign", dependencies=PLATFORM_ADS_DEPS)
 async def create_meta_ads_campaign(campaign: MetaAdsCampaign):
     """Crear campaña en Meta Ads (Facebook/Instagram)"""
     result = await marketing_service.create_meta_ads_campaign(
@@ -116,7 +124,7 @@ async def create_meta_ads_campaign(campaign: MetaAdsCampaign):
     
     return result
 
-@router.get("/meta-ads/insights")
+@router.get("/meta-ads/insights", dependencies=PLATFORM_ADS_DEPS)
 async def get_meta_ads_insights(
     campaign_id: Optional[str] = None,
     start_date: Optional[datetime] = None,
@@ -138,7 +146,7 @@ async def get_meta_ads_insights(
 # GOOGLE ANALYTICS ENDPOINTS
 # ============================================================================
 
-@router.post("/analytics/data")
+@router.post("/analytics/data", dependencies=PLATFORM_ADS_DEPS)
 async def get_analytics_data(query: AnalyticsQuery):
     """Obtener datos de Google Analytics"""
     result = await marketing_service.get_analytics_data(
@@ -157,7 +165,7 @@ async def get_analytics_data(query: AnalyticsQuery):
 # MARKETING REPORTS
 # ============================================================================
 
-@router.get("/report")
+@router.get("/report", dependencies=PLATFORM_ADS_DEPS)
 async def generate_marketing_report(period_days: int = 30):
     """
     Generar reporte completo de marketing con análisis de PERSEO
@@ -178,7 +186,7 @@ async def generate_marketing_report(period_days: int = 30):
 # STATUS
 # ============================================================================
 
-@router.get("/status")
+@router.get("/status", dependencies=[Depends(thalos_request_guard)])
 async def marketing_status():
     """Obtener estado del servicio de marketing"""
     return marketing_service.get_status()
@@ -199,7 +207,7 @@ def get_marketing_integrations(
     return MarketingIntegrationsOut(**data)
 
 
-@router.put("/integrations", response_model=MarketingIntegrationsOut)
+@router.put("/integrations", response_model=MarketingIntegrationsOut, dependencies=[Depends(thalos_request_guard)])
 def save_marketing_integrations(
     body: MarketingIntegrationsIn,
     db: Session = Depends(get_db),

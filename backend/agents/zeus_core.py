@@ -101,21 +101,17 @@ class ZeusCore(BaseAgent):
         
         # Si no se especifica tipo, ZEUS decide qué agente usar
         if not task_type:
-            task_type = self._route_to_agent(user_message)
-        
-        # Mapear tipo a agente
-        agent_mapping = {
-            "marketing": "PERSEO",
-            "fiscal": "RAFAEL",
-            "security": "THALOS",
-            "legal": "JUSTICIA"
-        }
-        
-        agent_name = agent_mapping.get(task_type)
+            task_type = self._route_to_agent(
+                user_message, is_superuser=bool(context.get("_is_superuser"))
+            )
+
+        from services.agent_routing import task_type_to_agent
+
+        agent_name = task_type_to_agent(task_type)
         
         if not agent_name or agent_name not in self.agents:
             # Si no hay agente disponible, ZEUS responde directamente
-            return self._handle_directly(user_message)
+            return self._handle_directly(user_message, context)
         
         # Delegar al agente apropiado
         agent = self.agents[agent_name]
@@ -142,60 +138,20 @@ class ZeusCore(BaseAgent):
         
         return result
     
-    def _route_to_agent(self, user_message: str) -> str:
-        """
-        Decidir qué agente debe manejar la solicitud
-        (Heurística simple por ahora, se puede mejorar con embedding search)
-        """
-        message_lower = user_message.lower()
-        
-        # Keywords para cada agente
-        marketing_keywords = [
-            "marketing", "campaña", "anuncio", "seo", "sem", "ventas", 
-            "cliente", "lead", "conversión", "tráfico", "contenido",
-            "redes sociales", "instagram", "facebook", "google ads"
-        ]
-        
-        fiscal_keywords = [
-            "factura", "impuesto", "iva", "irpf", "modelo", "hacienda",
-            "contable", "gasto", "ingreso", "deducible", "declaración",
-            "fiscal", "tributario", "gastos", "ingresos"
-        ]
-        
-        security_keywords = [
-            "seguridad", "ataque", "amenaza", "vulnerabilidad", "hackeo",
-            "ip", "firewall", "log", "incidente", "malware", "ransomware"
-        ]
-        
-        legal_keywords = [
-            "legal", "contrato", "gdpr", "privacidad", "datos personales",
-            "consentimiento", "política", "términos", "condiciones", "ley"
-        ]
-        
-        # Contar matches
-        scores = {
-            "marketing": sum(1 for kw in marketing_keywords if kw in message_lower),
-            "fiscal": sum(1 for kw in fiscal_keywords if kw in message_lower),
-            "security": sum(1 for kw in security_keywords if kw in message_lower),
-            "legal": sum(1 for kw in legal_keywords if kw in message_lower)
-        }
-        
-        # Seleccionar el que tenga más matches
-        selected_type = max(scores, key=scores.get)
-        
-        if scores[selected_type] == 0:
-            # Si no hay matches, default a marketing (PERSEO)
-            selected_type = "marketing"
-        
-        print(f"🧠 [ZEUS] Routing scores: {scores} → {selected_type}")
-        
-        return selected_type
-    
-    def _handle_directly(self, user_message: str) -> Dict[str, Any]:
+    def _route_to_agent(self, user_message: str, is_superuser: bool = False) -> Optional[str]:
+        """J9a: tabla unica `services.agent_routing` (palabras completas). Devuelve el task_type o
+        None si no hay agente claro (ZEUS responde directamente; ya no hay default a PERSEO)."""
+        from services.agent_routing import route_message
+
+        decision = route_message(user_message, is_superuser=is_superuser)
+        print(f"[ZEUS] Routing {decision.scores} -> {decision.agent or 'ZEUS CORE'} ({decision.reason})")
+        return decision.task_type
+
+    def _handle_directly(self, user_message: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """ZEUS maneja la solicitud directamente (cuando no hay agente apropiado)"""
         print("🏛️ [ZEUS] Manejando solicitud directamente")
         
-        result = self.make_decision(user_message)
+        result = self.make_decision(user_message, additional_context=context)
         result["routed_by"] = "ZEUS CORE"
         result["selected_agent"] = "ZEUS CORE (directo)"
         
@@ -277,73 +233,9 @@ class ZeusCore(BaseAgent):
         
         return result
     
-    def coordinate_multi_agent_task(
-        self,
-        task_description: str,
-        required_agents: List[str],
-        context: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """
-        Coordinar una tarea que requiere múltiples agentes
-        
-        Args:
-            task_description: Descripción de la tarea
-            required_agents: Lista de agentes necesarios
-            context: Contexto adicional
-        
-        Returns:
-            Dict con resultados de todos los agentes
-        """
-        print(f"🎯 [ZEUS] Coordinando tarea multi-agente: {task_description}")
-
-        teamflow_run = None
-        if context and context.get("workflow_id") and self.teamflow_engine:
-            try:
-                teamflow_run = self.teamflow_engine.run_workflow(
-                    workflow_id=context["workflow_id"],
-                    payload=context.get("workflow_payload"),
-                    actor=context.get("requested_by"),
-                )
-                self.execution_snapshots.append(
-                    {
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "workflow": context["workflow_id"],
-                        "execution_id": teamflow_run["execution_id"],
-                        "summary": task_description,
-                    }
-                )
-            except ValueError as exc:
-                print(f"⚠️ [ZEUS] Error iniciando TeamFlow: {exc}")
-        
-        results = {}
-        for agent_name in required_agents:
-            agent_upper = agent_name.upper()
-            if agent_upper not in self.agents:
-                results[agent_upper] = {
-                    "success": False,
-                    "error": f"Agente '{agent_name}' no disponible"
-                }
-                continue
-            
-            agent = self.agents[agent_upper]
-            agent_context = {
-                "user_message": task_description,
-                "multi_agent_task": True,
-                "other_agents": [a for a in required_agents if a.upper() != agent_upper],
-                **(context or {})
-            }
-            
-            result = agent.process_request(agent_context)
-            results[agent_upper] = result
-        
-        return {
-            "success": True,
-            "task": task_description,
-            "agents_involved": required_agents,
-            "results": results,
-            "coordinated_by": "ZEUS CORE",
-            "teamflow_execution": teamflow_run
-        }
+    # J9e: `coordinate_multi_agent_task` se ELIMINO. La coordinacion multiagente la ejecuta ahora
+    # `services.jarvis_plan.execute_plan` desde POST /chat/agents/coordinate (modulos J9a por paso,
+    # registro J7 por paso, sin acciones con consecuencias). Aqui no se conserva una segunda via.
 
     def _build_decision_metadata(self, agent_name: str, task_type: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Crear metadata trazable para auditoría y paneles."""

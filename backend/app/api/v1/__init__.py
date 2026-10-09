@@ -17,6 +17,7 @@ from app.api.v1.endpoints import (
     analytics,
     automations,
     chat,
+    jarvis,
     integrations,
     google,
     marketing,
@@ -98,6 +99,9 @@ api_router.include_router(automations.router, prefix="/automations", tags=["auto
 
 # Chat endpoint (para interactuar con agentes)
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
+
+# JARVIS: punto de entrada unico de la conversacion con ZEUS CORE (alias de /chat/ZEUS CORE/chat)
+api_router.include_router(jarvis.router, prefix="/jarvis", tags=["jarvis"])
 
 # Integrations endpoint (WhatsApp, Email, Hacienda, Stripe)
 api_router.include_router(integrations.router, prefix="/integrations", tags=["integrations"])

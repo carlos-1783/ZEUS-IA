@@ -42,15 +42,38 @@ def _company_ids(db: Session, user: User) -> List[int]:
     return [int(r[0]) for r in rows]
 
 
-def _safe_count(db: Session, model, label: str, trace: List[AuditTraceItem]) -> Tuple[int, bool]:
+def _safe_count(
+    db: Session,
+    model,
+    label: str,
+    trace: List[AuditTraceItem],
+    *,
+    company_ids: Optional[List[int]] = None,
+    global_scope: bool = False,
+) -> Tuple[int, bool]:
+    """Cuenta filas de `model`. Aislamiento multi-tenant (J9d): salvo `global_scope=True`
+    (solo superusuario) el conteo se limita a `company_ids` (fail-closed: lista vacia -> 0).
+    `InventoryMovement` no tiene company_id propio: se une con Product."""
     table = getattr(model, "__tablename__", label)
     try:
-        count = int(db.query(func.count(model.id)).scalar() or 0)
-        trace.append(AuditTraceItem(kind="table", ref=table, detail=f"COUNT(*)={count}"))
+        q = db.query(func.count(model.id))
+        if global_scope:
+            scope = "global_superuser"
+        else:
+            scope = "company_scoped"
+            ids = [int(c) for c in (company_ids or [])]
+            if model is InventoryMovement:
+                q = q.join(Product, Product.id == InventoryMovement.product_id).filter(
+                    Product.company_id.in_(ids)
+                )
+            else:
+                q = q.filter(model.company_id.in_(ids))
+        count = int(q.scalar() or 0)
+        trace.append(AuditTraceItem(kind="table", ref=table, detail=f"COUNT(*)={count} ({scope})"))
         trace.append(
             AuditTraceItem(
                 kind="query",
-                ref=f"SELECT COUNT(*) FROM {table}",
+                ref=f"SELECT COUNT(*) FROM {table} [{scope}]",
                 detail="read_only",
             )
         )
@@ -149,6 +172,10 @@ def run_system_audit(db: Session, user: User) -> Dict[str, Any]:
 
     conclusions: List[AuditConclusion] = []
     company_ids = _company_ids(db, user)
+    # Criterio J9d: solo un superusuario (rol de plataforma) ve conteos globales; el resto,
+    # solo los de sus empresas.
+    is_global = bool(getattr(user, "is_superuser", False))
+    scope_kw = {"company_ids": company_ids, "global_scope": is_global}
 
     # --- RRHH ---
     emp_ok = False
@@ -186,7 +213,7 @@ def run_system_audit(db: Session, user: User) -> Dict[str, Any]:
         )
     )
 
-    checkin_count, checkin_ok = _safe_count(db, TimeCostCheckin, "time_cost_checkins", trace)
+    checkin_count, checkin_ok = _safe_count(db, TimeCostCheckin, "time_cost_checkins", trace, **scope_kw)
     conclusions.append(
         _conclusion(
             "rrhh",
@@ -219,7 +246,7 @@ def run_system_audit(db: Session, user: User) -> Dict[str, Any]:
     )
 
     # --- OPS ---
-    prod_count, prod_ok = _safe_count(db, Product, "products", trace)
+    prod_count, prod_ok = _safe_count(db, Product, "products", trace, **scope_kw)
     conclusions.append(
         _conclusion(
             "ops",
@@ -230,7 +257,7 @@ def run_system_audit(db: Session, user: User) -> Dict[str, Any]:
         )
     )
 
-    mov_count, mov_ok = _safe_count(db, InventoryMovement, "inventory_movements", trace)
+    mov_count, mov_ok = _safe_count(db, InventoryMovement, "inventory_movements", trace, **scope_kw)
     conclusions.append(
         _conclusion(
             "ops",

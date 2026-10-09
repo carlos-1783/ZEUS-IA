@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
+from services.chain_log import exclude_chain_steps
 
 from app.models.agent_activity import AgentActivity
 from app.models.customer import Customer
@@ -59,7 +60,7 @@ def build_analytics_summary(
     act_q = db.query(AgentActivity).filter(AgentActivity.created_at >= since)
     if getattr(user, "email", None):
         act_q = act_q.filter(AgentActivity.user_email == user.email)
-    activity_total = act_q.count()
+    activity_total = exclude_chain_steps(act_q).count()  # J7: sin trazas chain_*
 
     sales_by_day: List[Dict[str, Any]] = [
         {"date": d, "total": round(v, 2), "label": d[5:]}

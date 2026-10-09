@@ -39,6 +39,7 @@ from app.core.auth import get_current_active_user
 from app.core.security import get_password_hash
 from app.db.base import Base, SessionLocal, engine
 from app.main import app
+from app.models.company import Company, UserCompany
 from app.models.fiscal import FiscalProfile, TPVSale
 from app.models.user import User
 
@@ -75,6 +76,14 @@ def _mk_user(db: Session, *, tag: str = "u") -> User:
         role="owner",
     )
     db.add(user)
+    db.flush()
+    # J5e: toda ruta mutante pasa por el guard THALOS global, que exige empresa (salvo
+    # superusuario). Un usuario TPV real pertenece a una empresa; antes el test usaba un
+    # usuario sin empresa que no existe en el flujo de TPV (tpv/sale ya la exigia).
+    company = Company(company_name=f"E4 Recargo {suf}", slug=f"e4-recargo-{suf}")
+    db.add(company)
+    db.flush()
+    db.add(UserCompany(user_id=user.id, company_id=company.id, role="owner"))
     db.commit()
     db.refresh(user)
     return user

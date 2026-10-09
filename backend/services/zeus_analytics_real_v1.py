@@ -10,6 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.agent_activity import AgentActivity
+from services.chain_log import exclude_chain_steps
 from app.models.compliance_event import ComplianceEvent
 from app.models.user import User
 from app.models.zeus_analytics import ZeusAlert, ZeusAutomation, ZeusEvent
@@ -132,6 +133,7 @@ def _count_events_24h(db: Session, user: Optional[User]) -> tuple[int, int]:
         aq = db.query(AgentActivity).filter(AgentActivity.created_at >= since)
         if user and getattr(user, "email", None):
             aq = aq.filter(AgentActivity.user_email == user.email)
+        aq = exclude_chain_steps(aq)  # J7: sin trazas chain_*
         total = aq.count()
         success = aq.filter(AgentActivity.status.in_(("completed", "success"))).count()
         return total, success

@@ -7,6 +7,7 @@ import logging
 from app.db.session import get_db
 from app.models.user import User
 from app.core.state_manager import state_manager
+from services.module_gate import active_modules
 from app.core.auth import get_current_active_user as get_current_user
 
 router = APIRouter()
@@ -52,7 +53,7 @@ async def get_system_status(
             "data": {
                 "sistema_activo": state.get("empresa_activada", False),
                 "empresa_actual": state.get("empresa_actual", ""),
-                "modulos_activos": state.get("modulos_activos", []),
+                "modulos_activos": active_modules(db, current_user),
                 "ultima_activacion": state.get("ultima_activacion"),
                 "version": state.get("version", "1.0.0"),
                 "usuario_actual": {
@@ -70,5 +71,5 @@ async def get_system_status(
         logger.error(f"Error al obtener el estado del sistema: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al obtener el estado del sistema: {str(e)}"
+            detail="Error interno al obtener el estado del sistema."
         )

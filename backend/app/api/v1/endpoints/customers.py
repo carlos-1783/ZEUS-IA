@@ -126,7 +126,7 @@ async def create_customer(
         logger.exception("create_customer")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating customer: {str(e)}",
+            detail="No se pudo crear el cliente. Inténtalo de nuevo.",
         )
 
 @router.get(
@@ -263,9 +263,10 @@ def delete_customer(
         )
     except Exception as e:
         db.rollback()
+        logger.exception("delete_customer: customer_id=%s", customer_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error deleting customer: {str(e)}",
+            detail="No se pudo eliminar el cliente. Inténtalo de nuevo.",
         )
 
 # Contact person endpoints
@@ -323,9 +324,10 @@ def create_contact_person(
         
     except SQLAlchemyError as e:
         db.rollback()
+        logger.exception("create_contact_person: customer_id=%s", customer_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating contact: {str(e)}"
+            detail="No se pudo crear el contacto. Inténtalo de nuevo."
         )
 
 @router.put(
@@ -398,9 +400,10 @@ def update_contact_person(
         
     except SQLAlchemyError as e:
         db.rollback()
+        logger.exception("update_contact_person: contact_id=%s", contact_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error updating contact: {str(e)}"
+            detail="No se pudo actualizar el contacto. Inténtalo de nuevo."
         )
 
 @router.delete(
@@ -455,7 +458,8 @@ def delete_contact_person(
         
     except SQLAlchemyError as e:
         db.rollback()
+        logger.exception("delete_contact_person: contact_id=%s", contact_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error deleting contact: {str(e)}"
+            detail="No se pudo eliminar el contacto. Inténtalo de nuevo."
         )

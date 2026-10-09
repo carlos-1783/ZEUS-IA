@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request, Form, Bo
 from fastapi.responses import Response
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 
-from app.core.auth import get_current_active_user, resolve_user_scopes
+from app.core.auth import get_current_active_superuser, get_current_active_user, resolve_user_scopes
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -136,7 +136,7 @@ async def create_tokens(db: Session, user: User) -> Dict[str, Any]:
             jornada = begin_work_session_on_login(db, user)
         except Exception as e:
             logger.exception("begin_work_session_on_login: %s", e)
-            jornada = {"error": str(e)}
+            jornada = {"error": "No se pudo iniciar la jornada laboral."}
         
         return {
             "access_token": access_token,
@@ -156,7 +156,7 @@ async def create_tokens(db: Session, user: User) -> Dict[str, Any]:
         logger.error(f"Error creating tokens for user {user.email}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating authentication tokens: {str(e)}"
+            detail="No se pudieron generar los tokens de autenticación. Inténtalo de nuevo."
         )
 
 # ZEUS_LOCAL_CORS_FIX_001: Preflight OPTIONS sin autenticaci?n para que CORS pase en local
@@ -1310,9 +1310,12 @@ async def test_token(current_user: User = Depends(get_current_active_user)):
 )
 async def debug_verify_token(
     token: str = Body(..., embed=True),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _superuser: User = Depends(get_current_active_superuser),
 ):
     """
+    Solo superusuario (J5c): sin autenticacion devolvia claims sin verificar de cualquier
+    token y existencia/estado/rol de usuarios (enumeracion).
     Debug endpoint to verify a JWT token and return detailed information.
     This helps diagnose issues with token verification.
     

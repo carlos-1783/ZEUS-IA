@@ -9,6 +9,7 @@ from app.db.session import get_db
 from app.core.auth import get_current_active_user
 from app.models.user import User
 from app.models.agent_activity import AgentActivity
+from services.chain_log import business_activities, is_success_status
 
 router = APIRouter()
 
@@ -149,7 +150,8 @@ async def get_agents_status(
     )
     if effective_user_email:
         query = query.filter(AgentActivity.user_email == effective_user_email)
-    rows = query.all()
+    # J7: las trazas internas de la cadena (chain_*) no cuentan como actividad de negocio.
+    rows = business_activities(query.all())
 
     per_agent: Dict[str, List[AgentActivity]] = {name: [] for name in AGENT_REGISTRY}
     for row in rows:
@@ -162,7 +164,7 @@ async def get_agents_status(
     for name, meta in AGENT_REGISTRY.items():
         activities = per_agent[name]
         total = len(activities)
-        completed = sum(1 for a in activities if a.status == "completed")
+        completed = sum(1 for a in activities if is_success_status(a.status))
         decisions_today = sum(1 for a in activities if a.created_at >= today_start)
         last_activity = max((a.created_at for a in activities), default=None)
 

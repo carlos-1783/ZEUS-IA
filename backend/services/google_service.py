@@ -37,6 +37,19 @@ class GoogleService:
         else:
             logger.warning("Google Service: credentials not configured")
     
+    @staticmethod
+    def _not_implemented(operation: str, api: str) -> Dict[str, Any]:
+        """Respuesta honesta: la integracion real con la API de Google aun no
+        existe (las credenciales actuales son variables de entorno globales,
+        no OAuth por empresa). Nunca devuelve success=True ni datos falsos."""
+        logger.warning("Google Service: %s no implementado (%s)", operation, api)
+        return {
+            "success": False,
+            "not_implemented": True,
+            "status_code": 501,
+            "error": f"{operation}: integracion con {api} no implementada",
+        }
+
     def is_configured(self, service: str = None) -> bool:
         """Verificar si el servicio está configurado"""
         if service:
@@ -73,37 +86,12 @@ class GoogleService:
         if not self.is_configured("calendar"):
             return {
                 "success": False,
+                "status_code": 501,
                 "error": "Google Calendar not configured. Set GOOGLE_CALENDAR_CREDENTIALS"
             }
         
-        try:
-            # En modo producción, aquí iría la llamada a Google Calendar API
-            # from google.oauth2 import service_account
-            # from googleapiclient.discovery import build
-            
-            # SIMULACIÓN para desarrollo
-            event_data = {
-                "summary": summary,
-                "start": start_time.isoformat(),
-                "end": end_time.isoformat(),
-                "description": description,
-                "attendees": attendees or [],
-                "location": location
-            }
-            
-            return {
-                "success": True,
-                "event_id": f"event_{datetime.now().timestamp()}",
-                "event_data": event_data,
-                "message": "Calendar event created (SIMULATED - implement Google Calendar API)",
-                "calendar_link": f"https://calendar.google.com/calendar/event?eid=simulated"
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+        return self._not_implemented("create_calendar_event", "Google Calendar API")
+
     
     async def list_calendar_events(
         self,
@@ -115,20 +103,12 @@ class GoogleService:
         if not self.is_configured("calendar"):
             return {
                 "success": False,
+                "status_code": 501,
                 "error": "Google Calendar not configured"
             }
         
-        try:
-            return {
-                "success": True,
-                "events": [],
-                "message": "Implement Google Calendar API to fetch events"
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+        return self._not_implemented("list_calendar_events", "Google Calendar API")
+
     
     # ============================================================================
     # GMAIL
@@ -156,22 +136,12 @@ class GoogleService:
         if not self.is_configured("gmail"):
             return {
                 "success": False,
+                "status_code": 501,
                 "error": "Gmail not configured. Set GOOGLE_GMAIL_CREDENTIALS"
             }
         
-        try:
-            return {
-                "success": True,
-                "message_id": f"msg_{datetime.now().timestamp()}",
-                "to": to_email,
-                "subject": subject,
-                "message": "Gmail sent (SIMULATED - implement Gmail API)"
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+        return self._not_implemented("send_gmail", "Gmail API")
+
     
     async def read_gmail_inbox(
         self,
@@ -182,21 +152,12 @@ class GoogleService:
         if not self.is_configured("gmail"):
             return {
                 "success": False,
+                "status_code": 501,
                 "error": "Gmail not configured"
             }
         
-        try:
-            return {
-                "success": True,
-                "messages": [],
-                "total_count": 0,
-                "message": "Implement Gmail API to fetch messages"
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+        return self._not_implemented("read_gmail_inbox", "Gmail API")
+
     
     # ============================================================================
     # GOOGLE DRIVE
@@ -222,22 +183,12 @@ class GoogleService:
         if not self.is_configured("drive"):
             return {
                 "success": False,
+                "status_code": 501,
                 "error": "Google Drive not configured. Set GOOGLE_DRIVE_CREDENTIALS"
             }
         
-        try:
-            return {
-                "success": True,
-                "file_id": f"file_{datetime.now().timestamp()}",
-                "file_name": file_name or os.path.basename(file_path),
-                "web_view_link": f"https://drive.google.com/file/d/simulated/view",
-                "message": "File uploaded (SIMULATED - implement Drive API)"
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+        return self._not_implemented("upload_to_drive", "Google Drive API")
+
     
     async def list_drive_files(
         self,
@@ -248,20 +199,12 @@ class GoogleService:
         if not self.is_configured("drive"):
             return {
                 "success": False,
+                "status_code": 501,
                 "error": "Google Drive not configured"
             }
         
-        try:
-            return {
-                "success": True,
-                "files": [],
-                "message": "Implement Drive API to list files"
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+        return self._not_implemented("list_drive_files", "Google Drive API")
+
     
     # ============================================================================
     # GOOGLE SHEETS
@@ -285,22 +228,12 @@ class GoogleService:
         if not self.is_configured("sheets"):
             return {
                 "success": False,
+                "status_code": 501,
                 "error": "Google Sheets not configured. Set GOOGLE_SHEETS_CREDENTIALS"
             }
         
-        try:
-            return {
-                "success": True,
-                "spreadsheet_id": f"sheet_{datetime.now().timestamp()}",
-                "spreadsheet_url": f"https://docs.google.com/spreadsheets/d/simulated/edit",
-                "title": title,
-                "message": "Spreadsheet created (SIMULATED - implement Sheets API)"
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+        return self._not_implemented("create_spreadsheet", "Google Sheets API")
+
     
     async def write_to_sheet(
         self,
@@ -324,22 +257,12 @@ class GoogleService:
         if not self.is_configured("sheets"):
             return {
                 "success": False,
+                "status_code": 501,
                 "error": "Google Sheets not configured"
             }
         
-        try:
-            return {
-                "success": True,
-                "spreadsheet_id": spreadsheet_id,
-                "updated_range": range_name,
-                "updated_rows": len(values),
-                "message": "Data written (SIMULATED - implement Sheets API)"
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+        return self._not_implemented("write_to_sheet", "Google Sheets API")
+
     
     async def read_from_sheet(
         self,
@@ -350,20 +273,12 @@ class GoogleService:
         if not self.is_configured("sheets"):
             return {
                 "success": False,
+                "status_code": 501,
                 "error": "Google Sheets not configured"
             }
         
-        try:
-            return {
-                "success": True,
-                "values": [],
-                "message": "Implement Sheets API to read data"
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+        return self._not_implemented("read_from_sheet", "Google Sheets API")
+
     
     def get_status(self) -> Dict[str, Any]:
         """Obtener estado del servicio"""

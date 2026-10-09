@@ -17,6 +17,7 @@ from services import chat_persistence_service as chat_db
 from services.activity_logger import ActivityLogger
 from services.teamflow_audit_service_v1 import run_full_audit
 from services.teamflow_engine import teamflow_engine
+from services.thalos_request_guard_v1 import thalos_request_guard
 from services.teamflow_persistence_v1 import create_item, list_items, update_item_status
 
 router = APIRouter(prefix="/teamflow", tags=["teamflow"])
@@ -30,7 +31,7 @@ class TeamFlowRunRequest(BaseModel):
 class TeamFlowChatExecuteRequest(BaseModel):
     message: str
     thread_id: Optional[str] = "main"
-    force_execute: bool = False
+    # J3: `force_execute` ya no existe; si un cliente lo envia, pydantic lo ignora.
 
 
 class TeamFlowCreateRequest(BaseModel):
@@ -164,7 +165,7 @@ async def get_workflow(workflow_id: str, _: User = Depends(get_current_active_us
 async def run_workflow(
     workflow_id: str,
     request: TeamFlowRunRequest,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(thalos_request_guard),
     db: Session = Depends(get_db),
 ):
     try:
@@ -193,8 +194,9 @@ async def validate_integrations(_: User = Depends(get_current_active_user)):
 async def execute_from_chat(
     request: TeamFlowChatExecuteRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(thalos_request_guard),
 ):
+    from app.api.v1.endpoints.chat import build_server_context
     from services.zeus_orchestrator_service import try_handle_zeus_chat
 
     thread_id = request.thread_id or "main"
@@ -213,8 +215,7 @@ async def execute_from_chat(
         db,
         current_user,
         request.message,
-        {"thread_id": thread_id},
-        force_execute=request.force_execute,
+        build_server_context(db, current_user, {}, thread_id),
     )
     out_msg = (bridge or {}).get("message") or "No se detectó una acción ejecutable en el mensaje."
     chat_db.save_message(
@@ -234,10 +235,12 @@ async def execute_from_chat(
             "thread_id": thread_id,
             "handled": bool((bridge or {}).get("handled")),
             "executed": bool((bridge or {}).get("executed")),
-            "force_execute": bool(request.force_execute),
+            "company_id": company_id,
+            "needs_confirmation": bool((bridge or {}).get("needs_confirmation")),
+            "success": bool((bridge or {}).get("success")),
         },
         user_email=current_user.email,
-        status="completed",
+        status="failed" if ((bridge or {}).get("handled") and not bridge.get("success")) else "completed",
         priority="normal",
         visible_to_client=True,
     )

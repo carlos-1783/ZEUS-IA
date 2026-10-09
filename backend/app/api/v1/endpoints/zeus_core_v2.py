@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 
+from fastapi.responses import JSONResponse
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -18,7 +19,8 @@ from services.zeus_agenda_optimizer_v1 import propose_meeting_slots, schedule_me
 from services.zeus_core_metrics_v1 import get_core_metrics
 from services.zeus_core_workspace_bootstrap_v1 import run_zeus_core_workspace_bootstrap
 from services.zeus_external_intelligence_v1 import research_business
-from services.zeus_human_approval_v1 import list_pending, resolve_approval
+from services.thalos_request_guard_v1 import thalos_request_guard
+from services.zeus_human_approval_v1 import execute_approval, list_pending, resolve_approval
 from services.zeus_scoring_engine_v1 import convert_lead_to_customer, create_lead, score_lead
 
 router = APIRouter()
@@ -26,10 +28,12 @@ logger = logging.getLogger(__name__)
 
 
 class AgentExecuteRequest(BaseModel):
-    agent: str = Field(..., description="ZEUS|RAFAEL|PERSEO")
+    agent: str = Field(..., description="ZEUS|RAFAEL|PERSEO|JUSTICIA|AFRODITA")
     action: str
     payload: Dict[str, Any] = Field(default_factory=dict)
-    force_execute: bool = False
+    # force_execute ya NO existe en el schema: si un cliente lo envia se ignora
+    # (pydantic descarta campos extra). Las acciones criticas solo se ejecutan
+    # tras la aprobacion del mismo usuario (POST /approvals/{id}/resolve).
 
 
 class LeadCreateRequest(BaseModel):
@@ -66,7 +70,7 @@ def core_metrics(
 @router.post("/agent/execute")
 async def agent_execute(
     body: AgentExecuteRequest,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(thalos_request_guard),
     db: Session = Depends(get_db),
 ):
     return await execute_agent_action(
@@ -75,7 +79,6 @@ async def agent_execute(
         agent=body.agent,
         action=body.action,
         payload=body.payload,
-        force_execute=body.force_execute,
     )
 
 
@@ -92,26 +95,33 @@ def approvals_pending(
 
 
 @router.post("/approvals/{approval_id}/resolve")
-def approvals_resolve(
+async def approvals_resolve(
     approval_id: int,
     body: ApprovalResolveRequest,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(thalos_request_guard),
     db: Session = Depends(get_db),
 ):
-    row = resolve_approval(db, approval_id=approval_id, user=current_user, approve=body.approve)
-    if body.approve:
-        import json
+    """approve=true: el solicitante confirma y el SERVIDOR ejecuta la accion
+    almacenada (una sola vez). approve=false: rechaza sin ejecutar."""
+    import json
 
-        payload = json.loads(row.payload_json or "{}")
-        return {
-            "success": True,
-            "status": row.status,
-            "hint": "Ejecuta POST /zeus-core/agent/execute con force_execute=true y el mismo payload.",
-            "agent": row.agent_name,
-            "action": row.action_type,
-            "payload": payload,
-        }
-    return {"success": True, "status": row.status}
+    row = resolve_approval(db, approval_id=approval_id, user=current_user, approve=body.approve)
+    if not body.approve:
+        return {"success": True, "status": row.status}
+    row = await execute_approval(db, row=row, user=current_user)
+    outcome = json.loads(row.result_json or "{}")
+    base = {
+        "approval_id": row.id,
+        "status": row.status,
+        "agent": row.agent_name,
+        "action": row.action_type,
+    }
+    if row.status == "executed":
+        return {"success": True, **base, "result": outcome.get("result")}
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"success": False, **base, "error": outcome.get("error"), "result": outcome.get("result")},
+    )
 
 
 @router.post("/leads")
@@ -166,7 +176,7 @@ def agenda_schedule(
     return {"success": True, **schedule_meeting(db, user=current_user, lead_id=lead_id, start_iso=body.start_iso)}
 
 
-@router.post("/leads/{lead_id}/convert")
+@router.post("/leads/{lead_id}/convert", dependencies=[Depends(thalos_request_guard)])
 def leads_convert(
     lead_id: int,
     current_user: User = Depends(get_current_active_user),
@@ -257,7 +267,7 @@ async def get_zeus_status(
         logger.error(f"Error obteniendo estado ZEUS: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error obteniendo estado: {str(e)}",
+            detail="Error interno obteniendo el estado de ZEUS.",
         )
 
 

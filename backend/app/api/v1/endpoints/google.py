@@ -3,6 +3,7 @@
 Endpoints para Google Calendar, Gmail, Drive, Sheets
 """
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from services.thalos_request_guard_v1 import thalos_request_guard
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any, List
 from datetime import datetime
@@ -33,7 +34,8 @@ class GmailMessage(BaseModel):
     attachments: Optional[List[str]] = None
 
 class DriveUpload(BaseModel):
-    file_path: str
+    # file_path ya NO se acepta del cliente (leia rutas arbitrarias del
+    # servidor). Cuando exista la subida real debe ser multipart (UploadFile).
     folder_id: Optional[str] = None
     file_name: Optional[str] = None
 
@@ -55,7 +57,7 @@ class SpreadsheetRead(BaseModel):
 # GOOGLE CALENDAR ENDPOINTS
 # ============================================================================
 
-@router.post("/calendar/event")
+@router.post("/calendar/event", dependencies=[Depends(thalos_request_guard)])
 async def create_calendar_event(
     event: CalendarEvent,
     current_user: User = Depends(get_current_active_user),
@@ -71,7 +73,7 @@ async def create_calendar_event(
     )
     
     if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
     
     return result
 
@@ -90,7 +92,7 @@ async def list_calendar_events(
     )
     
     if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
     
     return result
 
@@ -98,7 +100,7 @@ async def list_calendar_events(
 # GMAIL ENDPOINTS
 # ============================================================================
 
-@router.post("/gmail/send")
+@router.post("/gmail/send", dependencies=[Depends(thalos_request_guard)])
 async def send_gmail(
     message: GmailMessage,
     current_user: User = Depends(get_current_active_user),
@@ -112,7 +114,7 @@ async def send_gmail(
     )
     
     if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
     
     return result
 
@@ -129,7 +131,7 @@ async def read_gmail_inbox(
     )
     
     if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
     
     return result
 
@@ -137,20 +139,22 @@ async def read_gmail_inbox(
 # GOOGLE DRIVE ENDPOINTS
 # ============================================================================
 
-@router.post("/drive/upload")
+@router.post("/drive/upload", dependencies=[Depends(thalos_request_guard)])
 async def upload_to_drive(
     upload: DriveUpload,
     current_user: User = Depends(get_current_active_user),
 ):
     """Subir archivo a Google Drive"""
+    # No se lee ninguna ruta del cliente; el servicio responde 501 hasta que
+    # exista la integracion real con Drive.
     result = await google_service.upload_to_drive(
-        file_path=upload.file_path,
+        file_path="",
         folder_id=upload.folder_id,
         file_name=upload.file_name
     )
     
     if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
     
     return result
 
@@ -167,7 +171,7 @@ async def list_drive_files(
     )
     
     if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
     
     return result
 
@@ -175,7 +179,7 @@ async def list_drive_files(
 # GOOGLE SHEETS ENDPOINTS
 # ============================================================================
 
-@router.post("/sheets/create")
+@router.post("/sheets/create", dependencies=[Depends(thalos_request_guard)])
 async def create_spreadsheet(
     spreadsheet: SpreadsheetCreate,
     current_user: User = Depends(get_current_active_user),
@@ -187,11 +191,11 @@ async def create_spreadsheet(
     )
     
     if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
     
     return result
 
-@router.post("/sheets/write")
+@router.post("/sheets/write", dependencies=[Depends(thalos_request_guard)])
 async def write_to_sheet(
     data: SpreadsheetWrite,
     current_user: User = Depends(get_current_active_user),
@@ -205,11 +209,11 @@ async def write_to_sheet(
     )
     
     if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
     
     return result
 
-@router.post("/sheets/read")
+@router.post("/sheets/read", dependencies=[Depends(thalos_request_guard)])
 async def read_from_sheet(
     data: SpreadsheetRead,
     current_user: User = Depends(get_current_active_user),
@@ -221,7 +225,7 @@ async def read_from_sheet(
     )
     
     if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
+        raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
     
     return result
 

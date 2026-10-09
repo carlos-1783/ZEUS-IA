@@ -51,6 +51,18 @@ def build_global_context(db: Session, user: User) -> Dict[str, Any]:
     }
 
 
+def build_agent_company_context(db: Session, user: User) -> Dict[str, Any]:
+    """J9a: contexto de servidor para agentes que no son ZEUS CORE: empresa, tipo y modulos activos.
+    Sin datos personales (ni clientes, ni sesiones, ni identificadores de usuario)."""
+    cfg = get_company_config_for_user(db, user)
+    modules = cfg.get("modules") or {}
+    return {
+        "company_name": cfg.get("company_name"),
+        "company_type": cfg.get("company_type"),
+        "active_modules": sorted(k for k, v in modules.items() if v),
+    }
+
+
 def enrich_chat_context(
     db: Session,
     user: User,

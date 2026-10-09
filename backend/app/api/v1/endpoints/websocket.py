@@ -199,20 +199,23 @@ async def websocket_endpoint(
                 return
                 
         except (JWTError, JWTClaimsError, ExpiredSignatureError, JoseJWTError) as e:
-            error_msg = f"Error de validación del token: {str(e)}"
-            logger.error(f"[WebSocket] JWT validation error: {error_msg}")
+            is_audience_error = "audience" in str(e).lower()
+            logger.exception(
+                "[WebSocket] JWT validation error (audience_error=%s)", is_audience_error
+            )
             error_details = {
                 "type": "auth_error",
                 "error": "Token de autenticación inválido",
                 "code": "jwt_validation_error"
             }
-            if "audience" in str(e).lower():
+            if is_audience_error:
                 error_details["details"] = "Audiencia del token no válida. Por favor, obtenga un nuevo token de autenticación."
             else:
-                error_details["details"] = str(e)
-            
+                error_details["details"] = "No se pudo validar el token de autenticación. Por favor, obtenga un nuevo token."
+
+            close_reason = "Error de validación del token de autenticación"
             await websocket.send_text(json.dumps(error_details))
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_msg)
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=close_reason)
             return
         
         # PASO 3: REGISTRAR CONEXIÓN Y COMENZAR A ESCUCHAR

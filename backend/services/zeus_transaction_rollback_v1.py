@@ -30,7 +30,7 @@ def compensate_step(
         if mod == "OPS" and act == "create_movement":
             return _compensate_movement(db, user, output)
         if mod == "OPS" and act == "create_route":
-            return _compensate_route(db, output)
+            return _compensate_route(db, user, output)
         if mod == "WORKSPACE" and act in ("persist_playbook", "persist_summary"):
             return _compensate_playbook(db, output)
     except Exception as exc:
@@ -74,7 +74,15 @@ def _compensate_movement(db: Session, user: User, output: Dict[str, Any]) -> Dic
     mid = mov.get("id")
     if not mid:
         return {"status": "SKIPPED", "reason": "no_movement_id"}
-    row = db.query(InventoryMovement).filter(InventoryMovement.id == int(mid)).first()
+    from services.afrodita_ops_service_v1 import _company_ids
+
+    cids = _company_ids(db, user)
+    row = (
+        db.query(InventoryMovement)
+        .join(Product, Product.id == InventoryMovement.product_id)
+        .filter(InventoryMovement.id == int(mid), Product.company_id.in_(cids or [-1]))
+        .first()
+    )
     if not row:
         return {"status": "DONE", "action": "movement_already_absent"}
     product = db.query(Product).filter(Product.id == row.product_id).first()
@@ -86,14 +94,18 @@ def _compensate_movement(db: Session, user: User, output: Dict[str, Any]) -> Dic
     return {"status": "DONE", "action": "reverse_movement", "movement_id": mid}
 
 
-def _compensate_route(db: Session, output: Dict[str, Any]) -> Dict[str, Any]:
+def _compensate_route(db: Session, user: User, output: Dict[str, Any]) -> Dict[str, Any]:
     from app.models.ops_route import OpsRoute
 
     route = output.get("route") or {}
     rid = route.get("id")
     if not rid:
         return {"status": "SKIPPED", "reason": "no_route_id"}
-    row = db.query(OpsRoute).filter(OpsRoute.id == int(rid)).first()
+    row = (
+        db.query(OpsRoute)
+        .filter(OpsRoute.id == int(rid), OpsRoute.user_id == user.id)
+        .first()
+    )
     if row:
         db.delete(row)
         db.flush()

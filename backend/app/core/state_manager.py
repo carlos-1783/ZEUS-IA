@@ -25,12 +25,6 @@ class StateManager:
         self._state = {
             'empresa_actual': '',
             'empresa_activada': False,
-            'modulos_activos': {
-                'ventas': False,
-                'inventario': False,
-                'facturacion': False,
-                'marketing': False
-            },
             'ultima_activacion': None,
             'version': '1.0.0'
         }
@@ -105,12 +99,6 @@ class StateManager:
         self._state = {
             'empresa_actual': '',
             'empresa_activada': False,
-            'modulos_activos': {
-                'ventas': False,
-                'inventario': False,
-                'facturacion': False,
-                'marketing': False
-            },
             'ultima_activacion': None,
             'version': '1.0.0'
         }

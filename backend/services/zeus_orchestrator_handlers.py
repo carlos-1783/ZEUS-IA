@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+from services.chain_log import business_activities, is_success_status
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+from pydantic import ValidationError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -37,6 +39,28 @@ def _sales_since(action: ZeusAction) -> datetime:
         return now.replace(hour=0, minute=0, second=0, microsecond=0)
     days = int(action.payload.get("days") or 7)
     return datetime.now(timezone.utc) - timedelta(days=days)
+
+
+def _active_company_id(db: Session, user: User, action: ZeusAction) -> Optional[int]:
+    """J12b R9: empresa activa resuelta en servidor. Solo vale `action.company_id` si el usuario
+    pertenece a esa empresa; si no, la primaria del usuario (misma regla que el contexto global).
+    Nunca se sustituye por email ni por user_id. None => el handler responde con error controlado."""
+    cids = crm_svc.company_ids_for_user(db, user)
+    if action.company_id is not None and action.company_id in cids:
+        return action.company_id
+    if action.company_id is not None:
+        logger.warning("company_id %s de la accion no pertenece al usuario %s: se ignora",
+                       action.company_id, user.id)
+    return crm_svc.primary_company_id(db, user)
+
+
+def _no_company_result(intent: str) -> ZeusExecutionResult:
+    return ZeusExecutionResult(
+        success=False,
+        intent=intent,
+        message="Tu usuario no tiene una empresa activa asignada, asi que no puedo consultar estos datos.",
+        executed=False,
+    )
 
 
 def _context_customers(action: ZeusAction) -> Dict[str, Any]:
@@ -234,7 +258,7 @@ async def execute_send_campaign(db: Session, user: User, action: ZeusAction) -> 
         )
     )
 
-    cid = action.company_id or crm_svc.primary_company_id(db, user)
+    cid = _active_company_id(db, user, action)
     if cid is not None:
         try:
             crm_svc.log_activity(
@@ -293,18 +317,20 @@ async def execute_send_campaign(db: Session, user: User, action: ZeusAction) -> 
 
 
 def execute_analytics_summary(db: Session, user: User, action: ZeusAction) -> ZeusExecutionResult:
+    cid = _active_company_id(db, user, action)
+    if cid is None:
+        return _no_company_result("analytics_summary")
     days = int(action.payload.get("days") or 30)
     end_date = datetime.now(timezone.utc)
     start_date = end_date - timedelta(days=days)
     q = db.query(AgentActivity).filter(
         AgentActivity.created_at >= start_date,
         AgentActivity.created_at <= end_date,
+        AgentActivity.company_id == cid,
     )
-    if not getattr(user, "is_superuser", False):
-        q = q.filter(AgentActivity.user_email == user.email)
-    activities = q.all()
+    activities = business_activities(q.all())  # J7: sin trazas chain_*
     total = len(activities)
-    completed = sum(1 for a in activities if a.status == "completed")
+    completed = sum(1 for a in activities if is_success_status(a.status))
     rate = (completed / total * 100) if total else 0.0
     msg = (
         f"Resumen últimos {days} días: {total} actividades registradas, "
@@ -334,16 +360,15 @@ def execute_analytics_summary(db: Session, user: User, action: ZeusAction) -> Ze
 
 
 def execute_tpv_sales_summary(db: Session, user: User, action: ZeusAction) -> ZeusExecutionResult:
+    cid = _active_company_id(db, user, action)
+    if cid is None:
+        return _no_company_result("tpv_sales_summary")
     days = int(action.payload.get("days") or 7)
     since = datetime.now(timezone.utc) - timedelta(days=days)
     q = db.query(
         func.count(TPVSale.id),
         func.coalesce(func.sum(TPVSale.total), 0),
-    ).filter(TPVSale.sale_date >= since)
-    if action.company_id is not None:
-        q = q.filter(TPVSale.company_id == action.company_id)
-    else:
-        q = q.filter(TPVSale.user_id == user.id)
+    ).filter(TPVSale.sale_date >= since, TPVSale.company_id == cid)
     count, total_sum = q.one()
     total_eur = float(total_sum or 0)
     msg = f"TPV últimos {days} días: {count} venta(s), total {total_eur:,.2f} €."
@@ -371,10 +396,14 @@ def execute_tpv_sales_summary(db: Session, user: User, action: ZeusAction) -> Ze
 def execute_shift_status(db: Session, user: User, action: ZeusAction) -> ZeusExecutionResult:
     from app.models.employee_work_session import EmployeeWorkSession
 
+    cid = _active_company_id(db, user, action)
+    if cid is None:
+        return _no_company_result("shift_status")
     ws = (
         db.query(EmployeeWorkSession)
         .filter(
             EmployeeWorkSession.user_id == user.id,
+            EmployeeWorkSession.company_id == cid,
             EmployeeWorkSession.status == "active",
         )
         .order_by(EmployeeWorkSession.id.desc())
@@ -435,11 +464,18 @@ def execute_create_customer(db: Session, user: User, action: ZeusAction) -> Zeus
             message="Indica nombre y email del cliente (ej: crear cliente Juan juan@empresa.com).",
             executed=False,
         )
-    cust = crm_svc.create_customer(
-        db,
-        user,
-        CustomerCreate(name=name, email=email, phone=action.payload.get("phone")),
-    )
+    try:
+        data = CustomerCreate(name=name, email=email, phone=action.payload.get("phone"))
+    except ValidationError as exc:
+        first = (exc.errors() or [{}])[0]
+        field = ".".join(str(x) for x in first.get("loc", ())) or "datos"
+        return ZeusExecutionResult(
+            success=False,
+            intent="create_customer",
+            message=f"No se creó el cliente: {field} no es válido ({first.get('msg', 'valor incorrecto')}).",
+            executed=False,
+        )
+    cust = crm_svc.create_customer(db, user, data)
     return ZeusExecutionResult(
         success=True,
         intent="create_customer",
@@ -455,7 +491,7 @@ def execute_create_customer(db: Session, user: User, action: ZeusAction) -> Zeus
 def execute_get_cashflow(db: Session, user: User, action: ZeusAction) -> ZeusExecutionResult:
     from services.cashflow_ledger_service import get_balance, get_summary
 
-    cid = action.company_id or crm_svc.primary_company_id(db, user)
+    cid = _active_company_id(db, user, action)
     days = int(action.payload.get("days") or 30)
     bal = get_balance(db, company_id=cid)
     summary = get_summary(db, company_id=cid, days=days)

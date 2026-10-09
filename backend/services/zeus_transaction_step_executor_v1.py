@@ -9,7 +9,11 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.user import User
-from services.afrodita_ops_service_v1 import create_inventory_movement, create_ops_route
+from services.afrodita_ops_service_v1 import (
+    create_inventory_movement,
+    create_ops_route,
+    resolve_product_company_id,
+)
 from services.afrodita_workspace_service_v1 import create_company_employee, execute_qr_checkin
 from services.workspace_playbook_service_v1 import create_playbook
 from services.zeus_data_pipeline_v1 import attach_pipeline_metadata
@@ -123,6 +127,7 @@ def _exec_ops(db: Session, user: User, action: str, inp: Dict[str, Any]) -> Dict
             quantity=float(inp["quantity"]),
             reference=inp.get("reference"),
             notes=inp.get("notes"),
+            company_id=resolve_product_company_id(db, user, int(inp["product_id"])),
         )
     if action == "create_route":
         return create_ops_route(

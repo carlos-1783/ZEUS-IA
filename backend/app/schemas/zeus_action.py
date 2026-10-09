@@ -21,6 +21,12 @@ ZeusActionType = Literal[
     "analytics_summary",
     "tpv_sales_summary",
     "shift_status",
+    # J9e: acciones reales de JUSTICIA/AFRODITA expuestas en el chat (mismos nombres que el ejecutor).
+    "get_legal_status",
+    "run_compliance_audit",
+    "get_inventory_status",
+    "create_ops_route",
+    "create_inventory_movement",
 ]
 
 ZeusModuleName = Literal[

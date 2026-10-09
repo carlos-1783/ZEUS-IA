@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.models.user import User
+from app.core.auth import get_current_active_user
 from app.core.security import get_password_hash
 from services.email_service import email_service
 from services.global_company_bootstrap import run_global_autonomous_bootstrap
@@ -177,7 +178,7 @@ def _verify_stripe_payment_intent(payment_intent_id: str, plan: str):
         )
         raise HTTPException(
             status_code=502,
-            detail=f"No se pudo verificar el pago con Stripe: {str(e)}",
+            detail="No se pudo verificar el pago con Stripe. Inténtalo de nuevo.",
         )
 
     if payment_intent.status != "succeeded":
@@ -381,9 +382,10 @@ async def create_account_after_payment(
         raise
     except Exception as e:
         db.rollback()
+        logger.exception("create_account: fallo creando la cuenta")
         raise HTTPException(
             status_code=500,
-            detail=f"Error al crear cuenta: {str(e)}"
+            detail="No se pudo crear la cuenta. Inténtalo de nuevo."
         )
 
 async def send_welcome_email(
@@ -518,72 +520,45 @@ async def verify_payment_status(payment_intent_id: str):
             "created": payment_intent.created
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.exception("verify_payment_status: fallo verificando pago %s", payment_intent_id)
         raise HTTPException(
             status_code=500,
-            detail=f"Error al verificar pago: {str(e)}"
+            detail="No se pudo verificar el pago. Inténtalo de nuevo."
         )
 
 @router.post("/complete-onboarding")
 async def complete_onboarding(
-    email: EmailStr,
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_active_user),
 ):
     """
-    Completar onboarding (cambiar contraseña, configurar preferencias, etc.)
+    Endpoint LEGACY. Antes era anonimo, aceptaba un email por query y respondia
+    user_id/email o 404 (enumeracion de usuarios) sin hacer nada real.
+    Ahora exige sesion, no recibe email y responde 410: el onboarding real se completa en
+    /api/v1/auth/onboarding/questionnaire y /api/v1/auth/onboarding/profile.
     """
-    try:
-        user = db.query(User).filter(User.email == email).first()
-        
-        if not user:
-            raise HTTPException(
-                status_code=404,
-                detail="Usuario no encontrado"
-            )
-        
-        # Aquí podríamos añadir más configuraciones
-        
-        return {
-            "success": True,
-            "message": "Onboarding completado",
-            "user_id": user.id,
-            "email": user.email
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al completar onboarding: {str(e)}"
-        )
+    raise HTTPException(
+        status_code=410,
+        detail="Endpoint obsoleto. Usa /api/v1/auth/onboarding/questionnaire y /api/v1/auth/onboarding/status.",
+    )
 
 @router.get("/status/{email}")
 async def get_onboarding_status(
-    email: EmailStr,
-    db: Session = Depends(get_db)
+    email: str,
+    current_user: User = Depends(get_current_active_user),
 ):
-    """Obtener estado del onboarding de un usuario"""
-    try:
-        user = db.query(User).filter(User.email == email).first()
-        
-        if not user:
-            return {
-                "exists": False,
-                "onboarding_complete": False
-            }
-        
-        return {
-            "exists": True,
-            "user_id": user.id,
-            "email": user.email,
-            "is_active": user.is_active,
-            "onboarding_complete": True  # Podríamos añadir campo en BD
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al verificar estado: {str(e)}"
-        )
+    """Estado de onboarding del PROPIO usuario autenticado (el email debe coincidir con el token).
 
+    Cualquier otro email responde 403 identico exista o no -> sin enumeracion de usuarios.
+    """
+    if str(email).strip().lower() != str(current_user.email or "").strip().lower():
+        raise HTTPException(status_code=403, detail="Solo puedes consultar tu propio estado.")
+    return {
+        "exists": True,
+        "user_id": current_user.id,
+        "email": current_user.email,
+        "is_active": current_user.is_active,
+        "onboarding_endpoint": "/api/v1/auth/onboarding/status",
+    }

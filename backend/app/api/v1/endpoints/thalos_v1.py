@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from services.thalos_request_guard_v1 import thalos_request_guard
 from app.core.auth import get_current_active_user
 from app.core.config import settings
 from app.db.session import get_db
@@ -151,7 +152,7 @@ def thalos_v1_monitor(
 @router.post("/execute")
 def thalos_v1_execute(
     body: ThalosExecuteRequest,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(thalos_request_guard),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     # Mitigación interina (AUDIT_FIX_THALOS_SHIELD.md, sección 7.3/8.3):

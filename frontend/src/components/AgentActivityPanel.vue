@@ -81,6 +81,21 @@
             :class="{ user: message.sender === 'user', agent: message.sender === 'agent' }"
           >
             <div class="message-content">{{ message.content }}</div>
+            <ul v-if="message.evidence && message.evidence.length" class="message-evidence">
+              <li v-for="ev in message.evidence" :key="`${ev.kind}-${ev.id}`">
+                <a
+                  :href="ev.url"
+                  class="evidence-link"
+                  :title="`${ev.agent} · ${ev.status}`"
+                  @click.prevent="openEvidenceLink(ev)"
+                >{{ ev.title }}</a>
+              </li>
+            </ul>
+            <p v-if="message.nextStep" class="message-next-step">{{ message.nextStep }}</p>
+            <div v-if="message.needsConfirmation" class="message-confirm">
+              <button type="button" class="confirm-btn" @click="answerConfirmation(message, 'confirmar')">Confirmar</button>
+              <button type="button" class="cancel-btn" @click="answerConfirmation(message, 'cancelar')">Cancelar</button>
+            </div>
             <div class="message-time">{{ formatTime(message.timestamp) }}</div>
           </div>
         </div>
@@ -122,6 +137,7 @@
         <p class="voice-status">
           {{ voiceStatus }}
         </p>
+        <p v-if="voiceError" class="voice-error" role="alert">{{ voiceError }} Puedes usar el modo 💬 Texto.</p>
 
         <button 
           @click="toggleVoiceChat"
@@ -137,6 +153,11 @@
 
         <div class="voice-response" v-if="agentVoiceResponse">
           <p><strong>{{ agent.name }}:</strong> {{ agentVoiceResponse }}</p>
+          <p v-if="voiceNextStep" class="message-next-step">{{ voiceNextStep }}</p>
+          <div v-if="voiceNeedsConfirmation" class="message-confirm">
+            <button type="button" class="confirm-btn" @click="answerVoiceConfirmation('confirmar')">Confirmar</button>
+            <button type="button" class="cancel-btn" @click="answerVoiceConfirmation('cancelar')">Cancelar</button>
+          </div>
         </div>
       </div>
     </div>
@@ -235,6 +256,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { useJarvisVoice } from '@/composables/useJarvisVoice'
 import PerseoWorkspace from './agent-workspaces/PerseoWorkspace.vue'
 import RafaelWorkspace from './agent-workspaces/RafaelWorkspace.vue'
 import AfroditaWorkspace from './agent-workspaces/AfroditaWorkspace.vue'
@@ -243,7 +265,13 @@ import JusticiaWorkspace from './agent-workspaces/JusticiaWorkspace.vue'
 import ZeusCoreWorkspace from './agent-workspaces/ZeusCoreWorkspace.vue'
 import ImageUploader from '@/components/ImageUploader.jsx'
 import { isForbiddenAiFallback, sanitizeAgentChatForMediaFlow } from '@/utils/mediaUploadPolicy'
-import { getAgentChatUrl, getChatMessagesUrl, AGENT_CHAT_TIMEOUT_MS } from '@/utils/chatApi'
+import {
+  getAgentChatUrl,
+  getChatMessagesUrl,
+  AGENT_CHAT_TIMEOUT_MS,
+  extractChatExtras,
+  openEvidence,
+} from '@/utils/chatApi'
 
 const props = defineProps({
   agent: {
@@ -310,12 +338,19 @@ const clearImageReference = () => {
 }
 
 // Voice chat
-const isListening = ref(false)
-const isSpeaking = ref(false)
-const currentTranscript = ref('')
+// J11: capa de voz unica (Web Speech API) compartida con OlymposDashboard
+const voice = useJarvisVoice({
+  continuous: false,
+  rate: 0.9,
+  onFinal: (text) => sendVoiceToAgent(text),
+})
+const isListening = voice.listening
+const isSpeaking = voice.speaking
+const currentTranscript = voice.transcript
 const agentVoiceResponse = ref('')
-let recognition = null
-let speechSynthesis = window.speechSynthesis
+const voiceNextStep = ref('')
+const voiceNeedsConfirmation = ref(false)
+const voiceError = computed(() => voice.error.value || (voice.supported ? '' : voice.unsupportedMessage.value))
 
 const voiceStatus = computed(() => {
   if (isListening.value) return '🎤 Escuchando...'
@@ -323,44 +358,8 @@ const voiceStatus = computed(() => {
   return `🤖 ${props.agent.name} está listo para escucharte`
 })
 
-// Inicializar reconocimiento de voz
-const initSpeechRecognition = () => {
-  if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    recognition = new SpeechRecognition()
-    recognition.continuous = false
-    recognition.interimResults = true
-    recognition.lang = 'es-ES'
-    
-    recognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map(result => result[0].transcript)
-        .join('')
-      
-      currentTranscript.value = transcript
-      
-      // Si es final, enviar al agente
-      if (event.results[event.results.length - 1].isFinal) {
-        sendVoiceToAgent(transcript)
-      }
-    }
-    
-    recognition.onerror = (event) => {
-      console.error('Error de reconocimiento:', event.error)
-      isListening.value = false
-      if (event.error === 'not-allowed') {
-        alert('❌ Necesitas dar permiso al micrófono')
-      }
-    }
-    
-    recognition.onend = () => {
-      isListening.value = false
-    }
-  }
-}
-
 // Enviar mensaje de voz al agente
-const sendVoiceToAgent = async (transcript) => {
+const sendVoiceToAgent = async (transcript, channel = 'voice') => {
   if (!transcript.trim()) return
 
   const now = Date.now()
@@ -370,12 +369,13 @@ const sendVoiceToAgent = async (transcript) => {
   }
   lastVoiceChatSentAt.value = now
   
-  isListening.value = false
-  isSpeaking.value = true
+  voice.stop()
+  voiceNextStep.value = ''
+  voiceNeedsConfirmation.value = false
   agentVoiceResponse.value = '⏳ Procesando...'
   
   try {
-    const vctx = {}
+    const vctx = { channel }
     if (isPerseoAgent.value && imageReferenceUrl.value) {
       const u = imageReferenceUrl.value
       if (/\.pdf($|\?)/i.test(u) || u.includes('/documents/')) vctx.pdf_url = u
@@ -401,23 +401,16 @@ const sendVoiceToAgent = async (transcript) => {
     
     agentVoiceResponse.value = responseText
     
-    // Text-to-Speech
-    if (speechSynthesis) {
-      const utterance = new SpeechSynthesisUtterance(responseText)
-      utterance.lang = 'es-ES'
-      utterance.rate = 0.9
-      utterance.onend = () => {
-        isSpeaking.value = false
-      }
-      speechSynthesis.speak(utterance)
-    } else {
-      isSpeaking.value = false
-    }
-    
+    const extras = extractChatExtras(data)  // J10: siguiente paso y confirmación visibles también en voz
+    voiceNextStep.value = extras.nextStep || ''
+    voiceNeedsConfirmation.value = extras.needsConfirmation
+
+    // Text-to-Speech: solo el texto breve de respuesta (sin evidencia ni URLs)
+    voice.speak(responseText)
+
   } catch (error) {
     console.error('Error en voz:', error)
     agentVoiceResponse.value = `❌ ${formatChatFetchError(error)}`
-    isSpeaking.value = false
   }
 }
 
@@ -711,7 +704,10 @@ const sendTextMessage = async () => {
     }
     
     await loadChatHistory()
-    
+    // J10: el historial persistido trae solo texto; la evidencia y el siguiente paso de ESTA respuesta
+    // se vuelven a colgar del último mensaje del agente.
+    if (data.success !== false) attachChatExtras(data)
+
   } catch (error) {
     console.error('Error al comunicarse con el agente:', error)
     lastTextChatSentAt.value = 0
@@ -728,28 +724,50 @@ const sendTextMessage = async () => {
   }
 }
 
-const toggleVoiceChat = () => {
-  if (!recognition) {
-    initSpeechRecognition()
+function attachChatExtras(data) {
+  const extras = extractChatExtras(data)
+  if (!extras.evidence.length && !extras.nextStep && !extras.needsConfirmation) return
+  const last = [...messages.value].reverse().find((m) => m.sender === 'agent')
+  if (last) Object.assign(last, extras)
+}
+
+async function openEvidenceLink(ev) {
+  try {
+    const token = authStore.getToken?.() ?? authStore.token ?? null
+    await openEvidence(ev, token)
+  } catch (error) {
+    messages.value.push({
+      id: Date.now(),
+      sender: 'agent',
+      content: `No se pudo abrir «${ev.title}»: ${formatChatFetchError(error)}`,
+      timestamp: new Date(),
+    })
   }
-  
+}
+
+// Confirmar/Cancelar una acción pendiente: se responde en el MISMO hilo con «confirmar»/«cancelar».
+async function answerConfirmation(message, word) {
+  message.needsConfirmation = false
+  lastTextChatSentAt.value = 0
+  textInput.value = word
+  await sendTextMessage()
+}
+
+// Confirmar/Cancelar desde el botón visible: mismo hilo, canal texto (no es voz)
+async function answerVoiceConfirmation(word) {
+  voiceNeedsConfirmation.value = false
+  lastVoiceChatSentAt.value = 0
+  await sendVoiceToAgent(word, 'text')
+}
+
+const toggleVoiceChat = () => {
   if (isListening.value) {
-    // Detener
-    if (recognition) {
-      recognition.stop()
-    }
-    isListening.value = false
-    currentTranscript.value = ''
+    voice.stop()
   } else {
-    // Iniciar
-    if (recognition) {
-      currentTranscript.value = ''
-      agentVoiceResponse.value = ''
-      recognition.start()
-      isListening.value = true
-    } else {
-      alert('❌ Tu navegador no soporta reconocimiento de voz. Usa Chrome, Edge o Safari.')
-    }
+    agentVoiceResponse.value = ''
+    voiceNextStep.value = ''
+    voiceNeedsConfirmation.value = false
+    voice.start()
   }
 }
 
@@ -770,8 +788,18 @@ const getActivityIcon = (actionType) => {
 const getStatusText = (status) => {
   const texts = {
     completed: 'Completado',
+    success: 'Completado',
+    executed: 'Ejecutado',
     failed: 'Fallido',
-    pending: 'Pendiente'
+    pending: 'Pendiente',
+    needs_confirmation: 'Pendiente de confirmar',
+    needs_more_data: 'Faltan datos',
+    not_understood: 'No entendido',
+    rejected: 'Rechazado',
+    audit_failed: 'Auditoría fallida',
+    blocked_no_company: 'Bloqueado: sin empresa',
+    blocked_client_origin: 'Bloqueado',
+    blocked_missing_handler: 'Bloqueado'
   }
   return texts[status] || status
 }
@@ -1012,6 +1040,52 @@ const formatMetricValue = (value) => {
 
 .message.agent .message-content {
   background: var(--zeus-accent-2-soft, #f3ecfd);
+}
+
+.message-evidence {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.evidence-link {
+  color: var(--zeus-accent, #4f46e5);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.message-next-step {
+  margin: 6px 0 0;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--zeus-text-secondary, #52607a);
+}
+
+.message-confirm {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 0 8px;
+}
+
+.confirm-btn,
+.cancel-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--zeus-border-strong, #d7dce5);
+  background: var(--zeus-bg-subtle, #eef1f6);
+  color: var(--zeus-text, #0f172a);
+  cursor: pointer;
+}
+
+.confirm-btn {
+  background: var(--zeus-accent, #4f46e5);
+  border-color: var(--zeus-accent, #4f46e5);
+  color: var(--zeus-on-accent, #ffffff);
 }
 
 .message-time {
@@ -1255,6 +1329,13 @@ const formatMetricValue = (value) => {
   50% { height: 60px; }
 }
 
+.voice-error {
+  color: #ff8a8a;
+  font-size: 0.9rem;
+  margin: 0 0 12px;
+  text-align: center;
+}
+
 .voice-status {
   color: var(--zeus-text-secondary, #52607a);
   font-size: 16px;
@@ -1387,6 +1468,23 @@ const formatMetricValue = (value) => {
 .activity-status.failed {
   background: var(--zeus-danger-soft, #fdecec);
   color: #dc2626;
+}
+
+.activity-status.failed,
+.activity-status.audit_failed {
+  background: var(--zeus-danger-soft, #fdecec);
+  color: var(--zeus-danger, #dc2626);
+}
+
+.activity-status.needs_confirmation,
+.activity-status.needs_more_data,
+.activity-status.not_understood,
+.activity-status.rejected,
+.activity-status.blocked_no_company,
+.activity-status.blocked_client_origin,
+.activity-status.blocked_missing_handler {
+  background: var(--zeus-warning-soft, #fef6e7);
+  color: var(--zeus-warning, #f59e0b);
 }
 
 .activity-metrics {

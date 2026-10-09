@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
+from services.thalos_request_guard_v1 import thalos_request_guard
 from app.core.auth import get_current_active_user
 from app.db.session import SessionLocal
 from app.models.agent_activity import AgentActivity
@@ -49,7 +50,7 @@ def _require_superuser(current_user: User) -> None:
 @router.post("/execute", response_model=ActionsExecuteResponse)
 async def actions_execute(
     body: ActionsExecuteRequest,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(thalos_request_guard),
 ):
     """
     Unified real action execution.

@@ -103,6 +103,27 @@ def _parse_qr_data(data: str) -> Dict[str, Any]:
     return {"kind": "unknown", "raw": raw, "text": raw}
 
 
+def _lookup_customer(
+    db: Session,
+    *,
+    company_id: int,
+    name: str,
+    email: Optional[str] = None,
+    tax_id: Optional[str] = None,
+) -> Optional[Customer]:
+    """Cliente existente de la empresa (tax_id, email o nombre), sin crear nada."""
+    q = db.query(Customer).filter(Customer.company_id == company_id)
+    if tax_id:
+        existing = q.filter(Customer.tax_id == tax_id).first()
+        if existing:
+            return existing
+    if email:
+        existing = q.filter(Customer.email == email).first()
+        if existing:
+            return existing
+    return q.filter(Customer.name == (name or "").strip()).first()
+
+
 def _find_or_create_customer(
     db: Session,
     user: User,
@@ -117,16 +138,7 @@ def _find_or_create_customer(
     if not name:
         raise HTTPException(status_code=422, detail="Nombre de cliente requerido.")
 
-    q = db.query(Customer).filter(Customer.company_id == company_id)
-    if tax_id:
-        existing = q.filter(Customer.tax_id == tax_id).first()
-        if existing:
-            return existing, False
-    if email:
-        existing = q.filter(Customer.email == email).first()
-        if existing:
-            return existing, False
-    existing = q.filter(Customer.name == name).first()
+    existing = _lookup_customer(db, company_id=company_id, name=name, email=email, tax_id=tax_id)
     if existing:
         return existing, False
 
@@ -309,6 +321,53 @@ def _process_client_qr_action(
     return {**result, "scan_event_id": scan.id}
 
 
+def apply_qr_payment_effects(
+    db: Session,
+    user: User,
+    *,
+    company_id: int,
+    customer: Customer,
+    amount: float,
+    customer_name: str,
+) -> Optional[int]:
+    """Efectos reales de un cobro por QR fiscal: borrador de factura + evento de factura +
+    entrada de caja ("in"). Unica implementacion, usada por la rama directa (<500) y por la
+    ejecucion de la aprobacion humana (>=500, accion `register_qr_payment`). Devuelve el
+    invoice_id (None si el importe es 0)."""
+    if amount <= 0:
+        return None
+    inv = _create_invoice_draft(
+        db,
+        user,
+        company_id=company_id,
+        customer_id=customer.id,
+        amount=amount,
+        description=f"Servicio {customer_name}",
+    )
+    emit_invoice_generated(
+        user_id=user.id,
+        user_email=getattr(user, "email", None),
+        company_id=company_id,
+        invoice_id=inv.id,
+        file_path="scan_flow",
+        file_size=0,
+        db=db,
+    )
+    emit_cashflow_updated(
+        user_id=user.id,
+        user_email=getattr(user, "email", None),
+        company_id=company_id,
+        amount=amount,
+        direction="in",
+        source="QR_SCAN",
+        customer_id=customer.id,
+        invoice_id=inv.id,
+        payment_method="qr",
+        db=db,
+    )
+    return inv.id
+
+
 def process_qr_scan(
     db: Session,
     user: User,
@@ -353,6 +412,21 @@ def process_qr_scan(
         )
         return {**out, "routed": "client_action"}
 
+    # J2b: importe/moneda/cliente validados con el MISMO limpiador que la ejecucion, ANTES de
+    # decidir la rama (>=500 o <500) y de cualquier efecto: nan/inf/1e12/negativos -> 422.
+    from services.zeus_agent_executor_v1 import _clean_qr_payment_payload
+
+    clean_qr, qr_error = _clean_qr_payment_payload({
+        "customer_name": str(parsed.get("customer_name") or "Cliente QR").strip(),
+        "email": parsed.get("email"),
+        "amount": parsed.get("amount"),
+        "currency": parsed.get("currency") or "EUR",
+    })
+    if clean_qr is None:
+        raise HTTPException(status_code=422, detail=f"QR no válido: {qr_error}")
+    parsed["amount"] = clean_qr["amount"]
+    parsed["currency"] = clean_qr["currency"]
+
     emit_scan_detected(
         user_id=user.id,
         user_email=getattr(user, "email", None),
@@ -364,80 +438,48 @@ def process_qr_scan(
         db=db,
     )
 
-    customer_name = str(parsed.get("customer_name") or "Cliente QR").strip()
-    amount = float(parsed.get("amount") or 0)
-    cust, created = _find_or_create_customer(
-        db,
-        user,
-        company_id=cid,
-        name=customer_name,
-        email=parsed.get("email"),
-    )
-
-    approval_payload = {
-        "customer_id": cust.id,
-        "amount": amount,
-        "currency": parsed.get("currency", "EUR"),
-        "source": "qr_scan",
-    }
+    customer_name = clean_qr["customer_name"]
+    amount = clean_qr["amount"]
     needs_approval = amount >= 500 and requires_approval("register_payment", {"amount": amount})
 
     if needs_approval and not force_execute:
+        # J2b: NINGUN efecto antes de la confirmacion (ni cliente, ni factura, ni caja). La accion
+        # propia `register_qr_payment` (lista blanca) crea cliente/borrador/caja al aprobarse.
+        # Si el cliente ya existe se informa su id; si no, se creara al ejecutar.
+        email = clean_qr["email"]
+        existing = _lookup_customer(db, company_id=cid, name=customer_name, email=email)
         approval = request_approval(
             db,
             user=user,
             company_id=cid,
             agent_name="RAFAEL",
-            action_type="generate_invoice",
-            payload=approval_payload,
+            action_type="register_qr_payment",
+            payload=clean_qr,
         )
         result = {
             "success": True,
             "executed": False,
             "needs_approval": True,
             "approval_id": approval.id,
-            "customer_id": cust.id,
-            "customer_created": created,
+            "customer_id": existing.id if existing else None,
+            "customer_created": False,
             "message": f"Factura QR ({amount:.2f} €) pendiente de aprobación humana.",
         }
         scan = _persist_scan(db, company_id=cid, user=user, scan_type="qr", agent_name="RAFAEL", raw_payload=data, parsed=parsed, result=result)
         db.commit()
         return {**result, "scan_event_id": scan.id}
 
-    invoice_id = None
-    cashflow_id = None
-    if amount > 0:
-        inv = _create_invoice_draft(
-            db,
-            user,
-            company_id=cid,
-            customer_id=cust.id,
-            amount=amount,
-            description=f"Servicio {customer_name}",
-        )
-        invoice_id = inv.id
-        emit_invoice_generated(
-            user_id=user.id,
-            user_email=getattr(user, "email", None),
-            company_id=cid,
-            invoice_id=inv.id,
-            file_path="scan_flow",
-            file_size=0,
-            db=db,
-        )
-        emit_cashflow_updated(
-            user_id=user.id,
-            user_email=getattr(user, "email", None),
-            company_id=cid,
-            amount=amount,
-            direction="in",
-            source="QR_SCAN",
-            customer_id=cust.id,
-            invoice_id=inv.id,
-            payment_method="qr",
-            db=db,
-        )
-        cashflow_id = "ledger"
+    cust, created = _find_or_create_customer(
+        db,
+        user,
+        company_id=cid,
+        name=customer_name,
+        email=clean_qr["email"],
+    )
+    invoice_id = apply_qr_payment_effects(
+        db, user, company_id=cid, customer=cust, amount=amount, customer_name=customer_name
+    )
+    cashflow_id = "ledger" if invoice_id else None
 
     result = {
         "success": True,

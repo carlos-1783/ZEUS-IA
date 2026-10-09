@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from services.thalos_request_guard_v1 import thalos_request_guard
 from pydantic import AnyHttpUrl, BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -802,7 +803,7 @@ async def workspace_thalos_threat(
     )
 
 
-@router.post("/thalos/credential-revoker")
+@router.post("/thalos/credential-revoker", dependencies=[Depends(thalos_request_guard)])
 async def workspace_thalos_credentials(
     request: ThalosCredentialRequest,
     current_user: User = Depends(get_current_active_user),

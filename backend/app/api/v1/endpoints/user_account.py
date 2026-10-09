@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends
+from services.thalos_request_guard_v1 import thalos_request_guard
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -76,7 +77,7 @@ async def export_user_data(
     )
 
 
-@router.post("/api-keys")
+@router.post("/api-keys", dependencies=[Depends(thalos_request_guard)])
 async def generate_api_key(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from services.thalos_request_guard_v1 import thalos_request_guard
 from app.core.auth import get_current_active_user
 from app.core.config import settings
 from app.db.session import get_db
@@ -196,7 +197,7 @@ def perseo_v2_image_generate(
 @router.post("/ads/create")
 def perseo_v2_ads_create(
     body: AdsCreateBody,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(thalos_request_guard),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     return {"success": True, **create_ad_campaign(
@@ -205,7 +206,7 @@ def perseo_v2_ads_create(
     )}
 
 
-@router.post("/publish")
+@router.post("/publish", dependencies=[Depends(thalos_request_guard)])
 def perseo_v2_publish(
     body: PublishBody,
     current_user: User = Depends(get_current_active_user),
@@ -308,7 +309,7 @@ def perseo_pipeline_status(
     return {"success": True, **pipeline_status(db)}
 
 
-@router.post("/pipeline/run")
+@router.post("/pipeline/run", dependencies=[Depends(thalos_request_guard)])
 def perseo_pipeline_run(
     body: PipelineRunBody,
     current_user: User = Depends(get_current_active_user),

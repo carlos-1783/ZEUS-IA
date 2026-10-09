@@ -148,6 +148,11 @@ app.include_router(api_router, prefix="/api/v1")
 # Alias spec zeus_time_cost_engine_v1: POST /api/checkin
 app.include_router(checkin_v1.router, prefix="/api/checkin", tags=["checkin"])
 
+# THALOS J5e: cobertura estructural de TODA ruta mutante /api/* (guard de ruta existente o global).
+from services.thalos_request_guard_v1 import install_global_thalos_guard  # noqa: E402
+
+install_global_thalos_guard(app)
+
 
 @app.get("/api/v1", include_in_schema=False)
 async def api_v1_prefix_probe():
@@ -202,6 +207,21 @@ def _execute_zeus_launch_started():
             logger.warning("No superuser found. Skipping zeus_launch_started action.")
             return
         
+        # J7: run_workspace_task exige empresa real. El superusuario no tiene garantizada una
+        # UserCompany (el bootstrap interno es opcional): se usa su empresa primaria o, si no, la
+        # empresa interna de plataforma. Sin ninguna, no se lanza (nunca una empresa inventada).
+        from services.internal_company_bootstrap import INTERNAL_COMPANY_SLUG
+        from app.models.company import Company
+        import services.crm_office_service as crm_svc
+
+        launch_company_id = crm_svc.primary_company_id(session, superuser)
+        if launch_company_id is None:
+            internal = session.query(Company).filter(Company.slug == INTERNAL_COMPANY_SLUG).first()
+            launch_company_id = internal.id if internal else None
+        if launch_company_id is None:
+            logger.warning("zeus_launch_started omitido: el superusuario no tiene empresa ni existe la empresa interna.")
+            return
+
         # Crear actividad
         activity = ActivityLogger.log_activity(
             agent_name="ZEUS",
@@ -213,6 +233,7 @@ def _execute_zeus_launch_started():
                 "superuser_email": superuser.email,
             },
             user_email=superuser.email,
+            company_id=launch_company_id,
             status="pending",
             priority="high",
             visible_to_client=False,
@@ -280,6 +301,19 @@ async def startup_event():
         ensure_schema_patches()
         create_tables()
         ensure_initial_superuser()
+        try:  # J2b: aprobaciones que quedaron en `executing` por un reinicio (nunca se re-ejecutan)
+            from app.db.base import SessionLocal
+            from services.zeus_human_approval_v1 import recover_stuck_approvals
+
+            _db = SessionLocal()
+            try:
+                n = recover_stuck_approvals(_db)
+                if n:
+                    logger.warning("Recuperadas %s aprobaciones atascadas en executing -> failed", n)
+            finally:
+                _db.close()
+        except Exception:
+            logger.exception("No se pudo recuperar aprobaciones atascadas en el arranque")
     else:
         logger.warning(
             "ZEUS_SKIP_STARTUP_DB_INIT activo: no se ejecutan create_tables ni ensure_initial_superuser."

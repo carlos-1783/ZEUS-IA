@@ -130,6 +130,9 @@ def ensure_schema_patches():
         _migrate_zeus_domain_events()
         _migrate_zeus_analytics_tables()
         _migrate_agent_activities_company_id()
+        _migrate_zeus_approvals_execution_columns()
+        _migrate_zeus_approvals_chat_columns()
+        _migrate_zeus_approvals_executing_at()
         _migrate_role_check_constraints()
         _migrate_rename_misleading_company_id_columns()
         _migrate_company_billing_fields()
@@ -138,6 +141,17 @@ def ensure_schema_patches():
         logger.warning("ensure_schema_patches: %s", e)
         import traceback
         traceback.print_exc()
+
+
+def _import_all_models() -> None:
+    """Importa cada modulo del paquete app.models para que todas las tablas esten en Base.metadata."""
+    import importlib
+    import pkgutil
+
+    import app.models as models_pkg
+
+    for mod in pkgutil.iter_modules(models_pkg.__path__):
+        importlib.import_module(f"{models_pkg.__name__}.{mod.name}")
 
 
 def create_tables():
@@ -201,6 +215,10 @@ def create_tables():
                 TimeControlEvent,
                 TimeControlAlert,
             )
+
+            # J12b: registrar TODOS los modelos del paquete (la lista de arriba no incluia p. ej.
+            # company_employee/zeus_analytics y create_all fallaba con NoReferencedTableError en BD vacia).
+            _import_all_models()
 
             Base.metadata.create_all(bind=engine)
             print("[DATABASE] [OK] Tablas creadas correctamente")
@@ -768,6 +786,92 @@ def _migrate_company_employees_tpv_pin_hash():
         print(f"[MIGRATION] [WARN] No se pudo verificar company_employees.tpv_pin_hash: {e}")
         import traceback
         traceback.print_exc()
+
+
+def _migrate_zeus_approvals_execution_columns():
+    """result_json / executed_at en zeus_pending_approvals (J2, alembic 0059).
+    Igual que otros parches: en despliegues con `stamp head` este parche
+    idempotente es el que realmente anade las columnas."""
+    from sqlalchemy import inspect, text
+
+    try:
+        inspector = inspect(engine)
+        table_name = "zeus_pending_approvals"
+        if table_name not in inspector.get_table_names():
+            return
+        is_postgres = "postgres" in settings.DATABASE_URL.lower()
+        cols = {c["name"] for c in inspector.get_columns(table_name)}
+        wanted = {
+            "result_json": "TEXT",
+            "executed_at": "TIMESTAMP WITH TIME ZONE" if is_postgres else "DATETIME",
+        }
+        for col, ddl in wanted.items():
+            if col in cols:
+                continue
+            with engine.begin() as conn:
+                if is_postgres:
+                    conn.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "{col}" {ddl}'))
+                else:
+                    conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col} {ddl}"))
+            print(f"[MIGRATION] [OK] {table_name}.{col} agregada")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] zeus_pending_approvals ejecucion: {e}")
+
+
+def _migrate_zeus_approvals_chat_columns():
+    """thread_id / expires_at en zeus_pending_approvals (J3b, alembic 0060). Idempotente."""
+    from sqlalchemy import inspect, text
+
+    try:
+        inspector = inspect(engine)
+        table_name = "zeus_pending_approvals"
+        if table_name not in inspector.get_table_names():
+            return
+        is_postgres = "postgres" in settings.DATABASE_URL.lower()
+        cols = {c["name"] for c in inspector.get_columns(table_name)}
+        wanted = {
+            "thread_id": "VARCHAR(128)",
+            "expires_at": "TIMESTAMP WITH TIME ZONE" if is_postgres else "DATETIME",
+        }
+        for col, ddl in wanted.items():
+            if col in cols:
+                continue
+            with engine.begin() as conn:
+                if is_postgres:
+                    conn.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "{col}" {ddl}'))
+                else:
+                    conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col} {ddl}"))
+            print(f"[MIGRATION] [OK] {table_name}.{col} agregada")
+        with engine.begin() as conn:
+            conn.execute(text(
+                f"CREATE INDEX IF NOT EXISTS ix_zeus_pending_approvals_thread_id ON {table_name} (thread_id)"
+            ))
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] zeus_pending_approvals chat: {e}")
+
+
+def _migrate_zeus_approvals_executing_at():
+    """executing_at en zeus_pending_approvals (J2b, alembic 0061). Idempotente."""
+    from sqlalchemy import inspect, text
+
+    try:
+        inspector = inspect(engine)
+        table_name = "zeus_pending_approvals"
+        if table_name not in inspector.get_table_names():
+            return
+        is_postgres = "postgres" in settings.DATABASE_URL.lower()
+        cols = {c["name"] for c in inspector.get_columns(table_name)}
+        if "executing_at" in cols:
+            return
+        ddl = "TIMESTAMP WITH TIME ZONE" if is_postgres else "DATETIME"
+        with engine.begin() as conn:
+            if is_postgres:
+                conn.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "executing_at" {ddl}'))
+            else:
+                conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN executing_at {ddl}"))
+        print(f"[MIGRATION] [OK] {table_name}.executing_at agregada")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] zeus_pending_approvals executing_at: {e}")
 
 
 def _migrate_agent_activities_company_id():

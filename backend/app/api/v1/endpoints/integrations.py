@@ -14,6 +14,8 @@ from services.whatsapp_service import whatsapp_service
 from services.email_service import email_service
 from services.hacienda_service import hacienda_service
 from services.stripe_service import stripe_service
+from services.webhook_signature_v1 import verify_email_inbound_secret, verify_twilio_request
+from services.thalos_request_guard_v1 import thalos_request_guard
 from app.core.auth import require_scopes
 from app.core.auth import get_current_active_superuser
 from app.models.user import User
@@ -82,7 +84,7 @@ class PublicCheckoutPaymentIntent(BaseModel):
 # WHATSAPP ENDPOINTS
 # ============================================================================
 
-@router.post("/whatsapp/send")
+@router.post("/whatsapp/send", dependencies=[Depends(thalos_request_guard)])
 async def send_whatsapp(
     message: WhatsAppMessage,
     _: User = Depends(require_scopes(["marketing:write"])),
@@ -106,6 +108,7 @@ async def whatsapp_webhook(request: Request):
     Configurar en Twilio: https://console.twilio.com/us1/develop/sms/settings/whatsapp-sandbox
     """
     form_data = await request.form()
+    verify_twilio_request(request, form_data)  # 403 firma invalida / 503 sin token
     
     from_number = form_data.get("From", "")
     message_body = form_data.get("Body", "")
@@ -133,7 +136,7 @@ async def whatsapp_status(
 # EMAIL ENDPOINTS
 # ============================================================================
 
-@router.post("/email/send")
+@router.post("/email/send", dependencies=[Depends(thalos_request_guard)])
 async def send_email(
     message: EmailMessage,
     _: User = Depends(require_scopes(["marketing:write"])),
@@ -156,7 +159,10 @@ async def email_webhook(request: Request):
     """
     Webhook para recibir emails (SendGrid Inbound Parse)
     Configurar en SendGrid: https://app.sendgrid.com/settings/parse
+    La URL de destino debe incluir ?secret=<EMAIL_INBOUND_WEBHOOK_SECRET> (SendGrid Inbound
+    Parse no firma; no permite cabeceras personalizadas). Tambien se acepta la cabecera X-Inbound-Secret.
     """
+    verify_email_inbound_secret(request)  # 403 secreto invalido / 503 sin secreto
     form_data = await request.form()
     
     from_email = form_data.get("from", "")
@@ -187,7 +193,7 @@ async def email_status(
 # HACIENDA ENDPOINTS
 # ============================================================================
 
-@router.post("/hacienda/factura")
+@router.post("/hacienda/factura", dependencies=[Depends(thalos_request_guard)])
 async def enviar_factura(
     factura: FacturaEmitida,
     _: User = Depends(require_scopes(["tax:write"])),
@@ -200,7 +206,7 @@ async def enviar_factura(
     
     return result
 
-@router.post("/hacienda/modelo-303")
+@router.post("/hacienda/modelo-303", dependencies=[Depends(thalos_request_guard)])
 async def presentar_modelo_303(
     modelo: Modelo303,
     _: User = Depends(require_scopes(["tax:write"])),
@@ -228,7 +234,7 @@ async def hacienda_status(
 # STRIPE ENDPOINTS
 # ============================================================================
 
-@router.post("/stripe/payment-intent")
+@router.post("/stripe/payment-intent", dependencies=[Depends(thalos_request_guard)])
 async def create_payment(
     payment: PaymentIntent,
     _: User = Depends(require_scopes(["tax:write"])),

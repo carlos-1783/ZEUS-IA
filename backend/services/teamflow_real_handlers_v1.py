@@ -19,15 +19,29 @@ HANDLER_NAME = "TEAMFLOW_REAL_HANDLER"
 
 
 def _user_from_activity(session, activity: AgentActivity) -> Optional[User]:
+    """Usuario de la actividad resuelto por el SERVIDOR (J3c, patron J3b).
+
+    `details.user_id` lo puede escribir el cliente: si la actividad trae email, un user_id
+    que no coincida con el usuario del email se ignora (nunca se actua con el tenant de otro
+    usuario). Solo se acepta `details.user_id` si no hay email (origen interno)."""
     details = activity.details if isinstance(activity.details, dict) else {}
+    email = (activity.user_email or "").strip()
     uid = details.get("user_id")
+    if email:
+        user = session.query(User).filter(User.email == email).first()
+        if user is not None and uid not in (None, "") and str(uid) != str(user.id):
+            logger.warning(
+                "activity %s: details.user_id=%s ignorado (el usuario de la actividad es %s)",
+                getattr(activity, "id", None), uid, user.id,
+            )
+        return user
     if uid:
-        user = session.query(User).filter(User.id == int(uid)).first()
+        try:
+            user = session.query(User).filter(User.id == int(uid)).first()
+        except (TypeError, ValueError):
+            user = None
         if user:
             return user
-    email = (activity.user_email or "").strip()
-    if email:
-        return session.query(User).filter(User.email == email).first()
     return session.query(User).filter(User.is_superuser.is_(True)).first()
 
 

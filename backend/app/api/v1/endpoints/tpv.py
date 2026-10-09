@@ -3,6 +3,7 @@
 """
 
 from fastapi import APIRouter, HTTPException, Depends, File, UploadFile, Query
+from services.thalos_request_guard_v1 import thalos_request_guard
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from decimal import Decimal
@@ -1175,8 +1176,8 @@ async def clear_cart(
     }
 
 
-@router.post("/sale")
-@router.post("/sell")
+@router.post("/sale", dependencies=[Depends(thalos_request_guard)])
+@router.post("/sell", dependencies=[Depends(thalos_request_guard)])
 async def process_sale(
     request: ProcessSaleRequest,
     current_user: User = Depends(get_current_active_user),
@@ -1316,7 +1317,7 @@ async def process_sale(
     return result
 
 
-@router.post("/invoice")
+@router.post("/invoice", dependencies=[Depends(thalos_request_guard)])
 async def generate_invoice(
     request: GenerateInvoiceRequest,
     current_user: User = Depends(get_current_active_user),
@@ -1342,7 +1343,7 @@ async def generate_invoice(
     return result
 
 
-@router.post("/close-register")
+@router.post("/close-register", dependencies=[Depends(thalos_request_guard)])
 async def close_register(
     request: CloseRegisterRequest,
     current_user: User = Depends(get_current_active_user),

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Enum, Text, JSON, Numeric
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Enum, Text, JSON, Numeric, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -25,8 +25,22 @@ class Product(Base):
     """Product model for ERP system"""
     __tablename__ = "products"
 
+    # NOTA (JARVIS J5d-resto, punto 1): el SKU era UNIQUE a nivel global
+    # (toda la tabla, sin importar la empresa), lo que permitia un oraculo
+    # entre empresas: cualquier usuario podia saber si un SKU estaba en uso
+    # por OTRA empresa con solo intentar crear un producto con ese codigo y
+    # observar si fallaba por duplicado (sin tener ninguna relacion con esa
+    # empresa). Se sustituye por una restriccion unica compuesta
+    # (company_id, sku) -- ver migracion 0062 -- para que dos empresas
+    # distintas puedan compartir el mismo codigo de SKU (como ocurre con
+    # catalogos independientes en la vida real) y la comprobacion de
+    # duplicados en el endpoint se acote al scope de la propia empresa.
+    __table_args__ = (
+        UniqueConstraint("company_id", "sku", name="uq_products_company_id_sku"),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
-    sku = Column(String(50), unique=True, index=True, nullable=False)
+    sku = Column(String(50), index=True, nullable=False)
     name = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
 
@@ -72,12 +86,20 @@ class Product(Base):
 class ProductVariant(Base):
     """Product variants (size, color, etc.)"""
     __tablename__ = "product_variants"
-    
+
+    # Mismo fix que en Product (ver nota arriba): el SKU de variante era
+    # UNIQUE global. ProductVariant no tiene company_id propio (hereda el
+    # scope de su Product via product_id), asi que la unicidad se acota a
+    # (product_id, sku) -- ver migracion 0062.
+    __table_args__ = (
+        UniqueConstraint("product_id", "sku", name="uq_product_variants_product_id_sku"),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
-    
+
     # Variant details
-    sku = Column(String(50), unique=True, index=True, nullable=False)
+    sku = Column(String(50), index=True, nullable=False)
     name = Column(String(100), nullable=False)  # e.g., "Large", "Red"
     
     # Pricing overrides

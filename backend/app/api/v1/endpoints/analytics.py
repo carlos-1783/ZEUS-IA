@@ -27,7 +27,7 @@ def _analytics_safe_fallback(*, days: int = 30, error: str = "") -> Dict[str, An
         "success": False,
         "status": "safe_fallback",
         "period_days": days,
-        "error": error or None,
+        "error": "No se pudo calcular el resumen de analítica." if error else None,
         "financial": {
             "total_revenue": 0,
             "sales_count": 0,
@@ -60,7 +60,7 @@ async def analytics_executive(
             "automations": 0,
             "efficiency": 0,
             "system": "unknown",
-            "error": str(exc),
+            "error": "No se pudieron calcular los KPIs ejecutivos.",
         }
 
 

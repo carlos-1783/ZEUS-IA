@@ -2,6 +2,8 @@
 📊 Agent Activities Endpoints
 Endpoints para consultar actividades y métricas de agentes
 """
+import logging
+
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List, Dict, Any
@@ -14,6 +16,10 @@ from app.core.auth import get_current_active_user
 from app.models.user import User
 from services.activity_logger import ActivityLogger, ensure_tables_initialized, tables_ready
 
+CLIENT_LOG_ORIGIN = "client_log"
+EXECUTABLE_STATUSES = frozenset({"pending", "in_progress"})
+
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # ============================================================================
@@ -98,9 +104,10 @@ async def get_agent_activities(
         }
         
     except Exception as e:
+        logger.exception("get_agent_activities: fallo obteniendo actividades de %s", agent_name)
         raise HTTPException(
             status_code=500,
-            detail=f"Error al obtener actividades: {str(e)}"
+            detail="No se pudieron obtener las actividades. Inténtalo de nuevo."
         )
 
 @router.get("/{agent_name}/metrics")
@@ -138,9 +145,10 @@ async def get_agent_metrics(
         }
         
     except Exception as e:
+        logger.exception("get_agent_metrics: fallo obteniendo métricas de %s", agent_name)
         raise HTTPException(
             status_code=500,
-            detail=f"Error al obtener métricas: {str(e)}"
+            detail="No se pudieron obtener las métricas. Inténtalo de nuevo."
         )
 
 @router.post("/log")
@@ -189,14 +197,28 @@ async def log_activity(
         effective_user_email = (
             activity.user_email if (is_superuser and activity.user_email) else current_user.email
         )
+        # J3c: este endpoint es un LOG, no una cola de ejecucion para clientes. La marca de
+        # origen la fija SIEMPRE el servidor (sobrescribe cualquier `_origin` del cliente) y
+        # el executor rechaza `client_log`. Ademas, un no superusuario no puede dejar la
+        # actividad en un estado ejecutable (pending/in_progress): se registra como "logged".
+        # Un superusuario conserva la capacidad de encolar (uso administrativo documentado).
+        safe_details = dict(activity.details) if isinstance(activity.details, dict) else {}
+        safe_status = activity.status
+        if is_superuser:
+            safe_details["_origin"] = "superuser_log"
+        else:
+            safe_details["_origin"] = CLIENT_LOG_ORIGIN
+            if (safe_status or "").strip().lower() in EXECUTABLE_STATUSES:
+                safe_details["_requested_status"] = safe_status
+                safe_status = "logged"
         result = ActivityLogger.log_activity(
             agent_name=activity.agent_name.upper(),
             action_type=activity.action_type,
             action_description=activity.action_description,
-            details=activity.details,
+            details=safe_details,
             metrics=activity.metrics,
             user_email=effective_user_email,
-            status=activity.status,
+            status=safe_status,
             priority=activity.priority
         )
         
@@ -215,9 +237,10 @@ async def log_activity(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("log_activity: fallo registrando actividad de %s", activity.agent_name)
         raise HTTPException(
             status_code=500,
-            detail=f"Error al registrar actividad: {str(e)}"
+            detail="No se pudo registrar la actividad. Inténtalo de nuevo."
         )
 
 @router.get("/all/summary")
@@ -257,8 +280,9 @@ async def get_all_agents_summary(
         }
         
     except Exception as e:
+        logger.exception("get_all_agents_summary: fallo obteniendo resumen de agentes")
         raise HTTPException(
             status_code=500,
-            detail=f"Error al obtener resumen: {str(e)}"
+            detail="No se pudo obtener el resumen de actividades. Inténtalo de nuevo."
         )
 

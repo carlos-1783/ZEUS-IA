@@ -11,6 +11,7 @@ from app.db.tenant_context import get_db_scoped
 from app.core.auth import get_current_active_user
 from app.models.user import User
 import services.crm_office_service as crm_svc
+from services.chain_log import business_activities, is_success_status
 
 router = APIRouter()
 
@@ -58,10 +59,11 @@ async def get_dashboard_metrics(
             AgentActivity.created_at <= end_date,
             tenant_filter,
         ).all()
+        activities = business_activities(activities)  # J7: sin trazas chain_*
 
         # Calcular métricas
         total_interactions = len(activities)
-        completed = len([a for a in activities if a.status == 'completed'])
+        completed = len([a for a in activities if is_success_status(a.status)])
         failed = len([a for a in activities if a.status == 'failed'])
 
         success_rate = (completed / total_interactions * 100) if total_interactions > 0 else 0
@@ -86,7 +88,7 @@ async def get_dashboard_metrics(
             AgentActivity.created_at < start_date,
             tenant_filter,
         )
-        prev_activities = prev_activities_query.count()
+        prev_activities = len(business_activities(prev_activities_query.all()))  # J7: sin chain_*
 
         interactions_change = ((total_interactions - prev_activities) / prev_activities * 100) if prev_activities > 0 else 0
 
@@ -134,9 +136,9 @@ async def get_performance_metrics(
         q = q.filter(AgentActivity.agent_name == agent.upper())
     if not getattr(current_user, "is_superuser", False):
         q = q.filter(AgentActivity.user_email == current_user.email)
-    activities = q.all()
+    activities = business_activities(q.all())  # J7: sin trazas chain_*
     total = len(activities)
-    completed = sum(1 for a in activities if a.status == "completed")
+    completed = sum(1 for a in activities if is_success_status(a.status))
     failed = sum(1 for a in activities if a.status == "failed")
     response_times = []
     for a in activities:
@@ -189,11 +191,11 @@ async def get_dashboard_summary(
             AgentActivity.user_email == current_user.email
         )
         
-        activities = activities_query.all()
+        activities = business_activities(activities_query.all())  # J7: sin trazas chain_*
         
         # Calcular métricas
         total_interactions = len(activities)
-        completed = len([a for a in activities if a.status == 'completed'])
+        completed = len([a for a in activities if is_success_status(a.status)])
         failed = len([a for a in activities if a.status == 'failed'])
         
         success_rate = (completed / total_interactions * 100) if total_interactions > 0 else 0
@@ -221,7 +223,7 @@ async def get_dashboard_summary(
             AgentActivity.user_email == current_user.email
         )
         
-        prev_activities = prev_activities_query.count()
+        prev_activities = len(business_activities(prev_activities_query.all()))  # J7: sin chain_*
         
         interactions_change = ((total_interactions - prev_activities) / prev_activities * 100) if prev_activities > 0 else 0
         
@@ -289,7 +291,7 @@ async def get_dashboard_summary(
         # Devolver valores por defecto si hay error
         return {
             "success": False,
-            "error": str(e),
+            "error": "No se pudo calcular el resumen del dashboard.",
             "user": {
                 "id": current_user.id if current_user else None,
                 "email": current_user.email if current_user else None,

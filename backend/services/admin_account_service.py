@@ -345,7 +345,9 @@ def delete_user_account(
     except SQLAlchemyError as exc:
         db.rollback()
         logger.exception("delete_user_account DB error user_id=%s", uid)
-        raise ValueError(f"Error al eliminar la cuenta: {exc}") from exc
+        raise ValueError(
+            "Error al eliminar la cuenta. Inténtalo de nuevo o contacta soporte."
+        ) from exc
 
     try:
         from services.activity_logger import ActivityLogger

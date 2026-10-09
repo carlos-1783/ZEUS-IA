@@ -14,6 +14,7 @@ Sin red, sin LLM, sin credenciales reales: todo con monkeypatch sobre la capa qu
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from types import SimpleNamespace
@@ -424,3 +425,108 @@ def test_webhooks_twilio_oculta_excepcion_tras_firma_valida(client, monkeypatch)
     assert SECRET not in r.text
     assert r.json()["detail"] == "Error processing Twilio webhook"
     boom.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# J13b: fugas residuales encontradas por el revisor durante J13 (fuera de su
+# alcance declarado en ese momento) -- mismo patron: mensaje generico al
+# cliente, detalle real solo al log.
+# ---------------------------------------------------------------------------
+
+def test_admin_delete_customer_oculta_excepcion_sqlalchemy_y_loguea(client, db, monkeypatch, caplog):
+    """admin_account_service.delete_user_account envolvia un SQLAlchemyError crudo en el
+    ValueError que admin.py reenvia tal cual en el HTTPException (400)."""
+    from sqlalchemy.exc import SQLAlchemyError
+
+    su = _user(db, superuser=True)
+    target = _user(db)
+    app.dependency_overrides[get_current_active_superuser] = lambda: su
+    # POST mutante: pasa tambien por el guard THALOS global que depende de
+    # get_current_active_user (independiente de get_current_active_superuser).
+    app.dependency_overrides[get_current_active_user] = lambda: su
+    app.dependency_overrides[session_get_db] = lambda: db
+
+    def boom(*a, **k):
+        raise SQLAlchemyError(SECRET)
+
+    monkeypatch.setattr(db, "commit", boom)
+
+    with caplog.at_level(logging.ERROR, logger="services.admin_account_service"):
+        r = client.post(
+            f"{P}/admin/customers/{target.id}/delete",
+            json={"confirm_email": target.email, "reason": "test_account"},
+        )
+    assert r.status_code == 400
+    assert SECRET not in r.text
+    assert r.json()["detail"] == "Error al eliminar la cuenta. Inténtalo de nuevo o contacta soporte."
+    assert any(SECRET in (rec.exc_text or "") or SECRET in rec.getMessage() for rec in caplog.records)
+
+
+def test_websocket_jwt_error_oculta_excepcion_y_loguea(client, monkeypatch, caplog):
+    """websocket.py enviaba str(e) crudo del error JWT (no de audiencia) directo al
+    cliente por send_text, y tambien en el `reason` del close frame."""
+    import app.api.v1.endpoints.websocket as ws_endpoint
+    from jose.exceptions import ExpiredSignatureError
+
+    def boom(*a, **k):
+        raise ExpiredSignatureError(SECRET)
+
+    monkeypatch.setattr(ws_endpoint, "get_current_websocket_user", boom)
+
+    with caplog.at_level(logging.ERROR, logger="app.api.v1.endpoints.websocket"):
+        with client.websocket_connect(f"{P}/ws/j13b-test-client?token=fake.jwt.token") as ws:
+            raw = ws.receive_text()
+
+    assert SECRET not in raw
+    body = json.loads(raw)
+    assert body["code"] == "jwt_validation_error"
+    assert SECRET not in body["details"]
+    assert any(SECRET in rec.getMessage() or SECRET in (rec.exc_text or "") for rec in caplog.records)
+
+
+def test_webhooks_stripe_invalid_payload_oculta_excepcion_y_loguea(client, monkeypatch, caplog):
+    """webhooks.py Stripe: ValueError al parsear el payload se devolvia como
+    `Invalid payload: {e}`, filtrando el detalle crudo de la libreria stripe."""
+    import stripe
+
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_j13b_fake")
+
+    def boom(*a, **k):
+        raise ValueError(SECRET)
+
+    monkeypatch.setattr(stripe.Webhook, "construct_event", staticmethod(boom))
+
+    with caplog.at_level(logging.ERROR, logger="app.api.v1.endpoints.webhooks"):
+        r = client.post(
+            f"{P}/webhooks/stripe",
+            data=b"{}",
+            headers={"Stripe-Signature": "t=1,v1=fake"},
+        )
+    assert r.status_code == 400
+    assert SECRET not in r.text
+    assert r.json()["detail"] == "Invalid payload"
+    assert any(SECRET in (rec.exc_text or "") or SECRET in rec.getMessage() for rec in caplog.records)
+
+
+def test_webhooks_stripe_invalid_signature_oculta_excepcion_y_loguea(client, monkeypatch, caplog):
+    """Idem para SignatureVerificationError: `Invalid signature: {e}` filtraba el
+    mensaje crudo de stripe (puede incluir fragmentos del payload/firma)."""
+    import stripe
+
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_j13b_fake")
+
+    def boom(*a, **k):
+        raise stripe.error.SignatureVerificationError(SECRET, "sig_header_value")
+
+    monkeypatch.setattr(stripe.Webhook, "construct_event", staticmethod(boom))
+
+    with caplog.at_level(logging.ERROR, logger="app.api.v1.endpoints.webhooks"):
+        r = client.post(
+            f"{P}/webhooks/stripe",
+            data=b"{}",
+            headers={"Stripe-Signature": "t=1,v1=fake"},
+        )
+    assert r.status_code == 400
+    assert SECRET not in r.text
+    assert r.json()["detail"] == "Invalid signature"
+    assert any(SECRET in (rec.exc_text or "") or SECRET in rec.getMessage() for rec in caplog.records)

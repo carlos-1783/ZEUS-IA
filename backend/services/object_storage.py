@@ -28,7 +28,10 @@ from app.models.stored_file import StoredFile
 logger = logging.getLogger(__name__)
 
 CATEGORIES = frozenset(
-    {"images", "videos", "documents", "media", "products", "crm_import", "workspace", "inbox"}
+    {
+        "images", "videos", "documents", "media", "products", "crm_import", "workspace", "inbox",
+        "outputs",
+    }
 )
 # Tipos que el navegador puede mostrar en linea; el resto se entrega como descarga.
 _INLINE_PREFIXES = ("image/", "video/")
@@ -193,6 +196,7 @@ def store_file(
     content_type: str,
     data: bytes,
     legacy_path: Optional[str] = None,
+    agent_name: Optional[str] = None,
 ) -> StoredFile:
     """Sube a R2 y registra la fila. Si el registro en BD falla, borra el objeto subido."""
     if not isinstance(company_id, int):
@@ -230,6 +234,7 @@ def store_file(
         size_bytes=len(data),
         sha256=digest,
         legacy_path=legacy_path,
+        agent_name=(agent_name or "").upper()[:32] or None,
     )
     try:
         db.add(row)
@@ -330,3 +335,26 @@ def delete_file(db: Session, row: StoredFile) -> None:
 def file_url(row: StoredFile) -> str:
     """URL estable que se guarda en BD: el acceso real siempre pasa por la API."""
     return f"/api/v1/files/{row.id}"
+
+
+# ------------------------------------------------------------------ objetos de plataforma
+
+
+def store_platform_object(key_suffix: str, data: bytes, content_type: str) -> str:
+    """Objeto de PLATAFORMA (p. ej. copia de seguridad de toda la BD), fuera de cualquier
+    prefijo de empresa: `plataforma/{key_suffix}`. No se registra en stored_files ni es
+    accesible por /api/v1/files (no pertenece a ninguna empresa)."""
+    client = _client()
+    key = "plataforma/" + "/".join(safe_filename(p) for p in key_suffix.split("/") if p)
+    try:
+        client.put_object(
+            Bucket=settings.R2_BUCKET,
+            Key=key,
+            Body=data,
+            ContentType=content_type,
+            Metadata={"scope": "platform"},
+        )
+    except Exception as exc:
+        raise StorageError("No se pudo guardar el objeto de plataforma.") from exc
+    logger.info("R2 objeto de plataforma guardado key=%s bytes=%s", key, len(data))
+    return key

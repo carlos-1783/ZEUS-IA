@@ -22,6 +22,8 @@ class StoredFile(Base):
     )
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     category = Column(String(32), nullable=False, index=True)
+    # Agente que genero el fichero (entregables de automatizacion); NULL en subidas de usuario.
+    agent_name = Column(String(32), nullable=True, index=True)
     object_key = Column(String(512), nullable=False, unique=True)
     original_filename = Column(String(255), nullable=False)
     content_type = Column(String(128), nullable=False)

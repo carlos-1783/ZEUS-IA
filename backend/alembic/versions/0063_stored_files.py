@@ -49,6 +49,7 @@ def upgrade() -> None:
             nullable=True,
         ),
         sa.Column("category", sa.String(length=32), nullable=False),
+        sa.Column("agent_name", sa.String(length=32), nullable=True),
         sa.Column("object_key", sa.String(length=512), nullable=False),
         sa.Column("original_filename", sa.String(length=255), nullable=False),
         sa.Column("content_type", sa.String(length=128), nullable=False),
@@ -68,11 +69,13 @@ def upgrade() -> None:
     op.create_index("ix_stored_files_company_id", _TABLE, ["company_id"])
     op.create_index("ix_stored_files_user_id", _TABLE, ["user_id"])
     op.create_index("ix_stored_files_category", _TABLE, ["category"])
+    op.create_index("ix_stored_files_agent_name", _TABLE, ["agent_name"])
 
 
 def downgrade() -> None:
     if _TABLE not in inspect(op.get_bind()).get_table_names():
         return
+    op.drop_index("ix_stored_files_agent_name", table_name=_TABLE)
     op.drop_index("ix_stored_files_category", table_name=_TABLE)
     op.drop_index("ix_stored_files_user_id", table_name=_TABLE)
     op.drop_index("ix_stored_files_company_id", table_name=_TABLE)

@@ -128,15 +128,13 @@ def handle_perseo_task(activity: AgentActivity) -> Dict[str, Any]:
         visible_to_client=True,
     )
 
-    video_result = generate_marketing_video(deliverable, agent, prefix, artifact_id=artifact_id)
-    video_path = (
-        video_result.get("relative_path")
-        if video_result.get("success")
-        else None
-    ) or video_result.get("path")
+    video_result = generate_marketing_video(
+        deliverable, agent, prefix, artifact_id=artifact_id, company_id=activity.company_id
+    )
+    video_path = video_result.get("download_path") if video_result.get("success") else None
     deliverable["video_asset"] = video_result
 
-    json_path = utils.write_json(agent, prefix, deliverable, artifact_id=artifact_id)
+    json_path = utils.write_json(agent, prefix, deliverable, artifact_id=artifact_id, company_id=activity.company_id)
     markdown_content = utils.summarize_markdown(
         "Plan de Lanzamiento ZEUS IA",
         {
@@ -168,7 +166,7 @@ def handle_perseo_task(activity: AgentActivity) -> Dict[str, Any]:
             ],
         },
     )
-    markdown_path = utils.write_markdown(agent, prefix, markdown_content, artifact_id=artifact_id)
+    markdown_path = utils.write_markdown(agent, prefix, markdown_content, artifact_id=artifact_id, company_id=activity.company_id)
 
     # Registrar resultado final en actividad visible al cliente
     _AL.log_activity(

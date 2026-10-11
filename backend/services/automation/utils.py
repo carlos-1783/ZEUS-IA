@@ -7,13 +7,15 @@ de los entregables automáticos.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 
-OUTPUT_BASE_DIR = Path(os.getenv("AGENT_OUTPUT_DIR", "storage/outputs")).resolve()
+logger = logging.getLogger(__name__)
+
 LOG_BASE_DIR = Path(os.getenv("AGENT_AUTOMATION_LOG_DIR", "backend/logs/automation")).resolve()
 
 
@@ -31,36 +33,95 @@ def build_artifact_id(prefix: str) -> str:
     return f"{prefix}_{timestamp()}"
 
 
+def output_url(agent: str, filename: str) -> str:
+    """URL estable del entregable (la API filtra por empresa al servirlo)."""
+    return f"/api/v1/automation/outputs/{agent.lower()}/{filename}"
+
+
+def store_output(
+    agent: str,
+    filename: str,
+    data: bytes,
+    content_type: str,
+    *,
+    company_id: Optional[int],
+    user_id: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
+    """Guarda un entregable de agente en R2 (empresa/{id}/outputs/...).
+
+    Fase 2 / Step 1: antes se escribia en storage/outputs (disco efimero) y la API lo
+    listaba a TODAS las empresas. Sin empresa no se guarda fichero (el resultado sigue en
+    la BD, en los detalles de la actividad) y se devuelve None: nunca a disco local.
+    Sin R2 configurado tampoco: aviso en log y None (el entregable queda en BD)."""
+    from app.db.base import SessionLocal
+    from services import object_storage
+
+    if not isinstance(company_id, int):
+        logger.warning("entregable %s/%s sin empresa: no se guarda fichero", agent, filename)
+        return None
+    if not object_storage.is_configured():
+        logger.warning(
+            "entregable %s/%s no guardado como fichero: R2 sin configurar (%s)",
+            agent, filename, ", ".join(object_storage.missing_config()),
+        )
+        return None
+    db = SessionLocal()
+    try:
+        row = object_storage.store_file(
+            db,
+            company_id=company_id,
+            user_id=user_id,
+            category="outputs",
+            filename=filename,
+            content_type=content_type,
+            data=data,
+            agent_name=agent,
+        )
+        return {
+            "file_id": row.id,
+            "filename": row.original_filename,
+            "url": object_storage.file_url(row),
+            "download_path": output_url(agent, row.original_filename),
+            "size_bytes": row.size_bytes,
+        }
+    finally:
+        db.close()
+
+
 def write_json(
     agent: str,
     prefix: str,
     payload: Dict[str, Any],
-    base_dir: Path = OUTPUT_BASE_DIR,
     artifact_id: Optional[str] = None,
-) -> str:
-    """Persistir un archivo JSON y devolver su ruta absoluta."""
-    agent_dir = ensure_dir(base_dir / agent.lower())
+    *,
+    company_id: Optional[int] = None,
+    user_id: Optional[int] = None,
+) -> Optional[str]:
+    """Persistir un JSON de entregable en R2; devuelve su URL de descarga (o None sin empresa)."""
     base_name = artifact_id or build_artifact_id(prefix)
-    file_path = agent_dir / f"{base_name}.json"
-    with file_path.open("w", encoding="utf-8") as handle:
-        json.dump(payload, handle, ensure_ascii=False, indent=2)
-    return str(file_path.resolve())
+    data = json.dumps(payload, ensure_ascii=False, indent=2, default=str).encode("utf-8")
+    stored = store_output(
+        agent, f"{base_name}.json", data, "application/json", company_id=company_id, user_id=user_id
+    )
+    return stored["download_path"] if stored else None
 
 
 def write_markdown(
     agent: str,
     prefix: str,
     content: str,
-    base_dir: Path = OUTPUT_BASE_DIR,
     artifact_id: Optional[str] = None,
-) -> str:
-    """Persistir un archivo Markdown y devolver su ruta absoluta."""
-    agent_dir = ensure_dir(base_dir / agent.lower())
+    *,
+    company_id: Optional[int] = None,
+    user_id: Optional[int] = None,
+) -> Optional[str]:
+    """Persistir un Markdown de entregable en R2; devuelve su URL de descarga (o None)."""
     base_name = artifact_id or build_artifact_id(prefix)
-    file_path = agent_dir / f"{base_name}.md"
-    with file_path.open("w", encoding="utf-8") as handle:
-        handle.write(content)
-    return str(file_path.resolve())
+    stored = store_output(
+        agent, f"{base_name}.md", content.encode("utf-8"), "text/markdown",
+        company_id=company_id, user_id=user_id,
+    )
+    return stored["download_path"] if stored else None
 
 
 def write_log(agent: str, prefix: str, payload: Dict[str, Any]) -> str:

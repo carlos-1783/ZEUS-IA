@@ -243,8 +243,9 @@ def execute_action(
         result = {"status": "completed", "action": action, "executed": True, "result": cf}
     elif action == "trigger_backup":
         bk = thalos_backup_service.create_backup()
-        _log_action(db, action=action, status="completed", details=bk, company_id=company_id)
-        result = {"status": "completed", "action": action, "executed": True, "result": bk}
+        ok = bool(bk.get("backup_created"))
+        _log_action(db, action=action, status="completed" if ok else "failed", details=bk, company_id=company_id)
+        result = {"status": "completed" if ok else "failed", "action": action, "executed": ok, "result": bk}
     elif action == "block_user":
         email = user_email or payload.get("email") or payload.get("user_email")
         if not email:

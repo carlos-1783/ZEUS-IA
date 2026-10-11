@@ -125,7 +125,7 @@ def handle_afrodita_task(activity: AgentActivity) -> Dict[str, Any]:
         "summary": "Playbook de soporte y onboarding generado para las primeras cuatro semanas.",
     }
 
-    json_path = utils.write_json(agent, prefix, deliverable)
+    json_path = utils.write_json(agent, prefix, deliverable, company_id=activity.company_id)
     markdown = utils.summarize_markdown(
         "Playbook de Soporte ZEUS IA",
         {
@@ -141,7 +141,7 @@ def handle_afrodita_task(activity: AgentActivity) -> Dict[str, Any]:
             ],
         },
     )
-    markdown_path = utils.write_markdown(agent, prefix, markdown)
+    markdown_path = utils.write_markdown(agent, prefix, markdown, company_id=activity.company_id)
     db_result = _persist_to_workspace_db(
         activity,
         title="Playbook de Soporte ZEUS IA",

@@ -1,75 +1,86 @@
 """
-📦 Automation Outputs Endpoints
-Permite listar y descargar los entregables generados automáticamente.
+Entregables generados por los agentes (JSON, Markdown, video).
+
+Fase 2 / Step 1: antes se listaban y descargaban desde storage/outputs (disco efimero)
+SIN filtro de empresa: cualquier usuario autenticado veia y bajaba los entregables de
+todas las empresas. Ahora viven en R2 (`stored_files`, categoria "outputs") y solo se
+listan y sirven los de las empresas del usuario.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional, List, Dict
+import re
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Response
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
+from sqlalchemy.orm import Session
 
-from services.automation.utils import OUTPUT_BASE_DIR
 from app.core.auth import get_current_active_user
+from app.db.session import get_db
+from app.models.stored_file import StoredFile
 from app.models.user import User
+from services import object_storage
+from services.upload_intake import storage_http_error
 
 router = APIRouter()
 
+_AGENT_RE = re.compile(r"^[a-z_ ]{1,32}$")
+_MAX_LIST = 200
+_INLINE_TEXT = frozenset({"application/json", "text/markdown"})
 
-def _collect_outputs(agent: Optional[str] = None) -> List[Dict[str, str]]:
-    base = OUTPUT_BASE_DIR
-    if not base.exists():
-        return []
 
-    outputs: List[Dict[str, str]] = []
-    agents = [agent.lower()] if agent else [p.name for p in base.iterdir() if p.is_dir()]
+def _company_ids(db: Session, user: User):
+    import services.crm_office_service as crm_svc
 
-    for agent_name in agents:
-        agent_dir = base / agent_name
-        if not agent_dir.exists():
-            continue
-        for file in agent_dir.iterdir():
-            if file.is_file():
-                stat = file.stat()
-                outputs.append(
-                    {
-                        "agent": agent_name.upper(),
-                        "filename": file.name,
-                        "path": f"{agent_name}/{file.name}",
-                        "size_bytes": stat.st_size,
-                        "created_at": stat.st_mtime,
-                    }
-                )
+    return crm_svc.company_ids_for_user(db, user)
 
-    outputs.sort(key=lambda item: item["created_at"], reverse=True)
-    return outputs
+
+def _outputs_query(db: Session, user: User):
+    ids = _company_ids(db, user)
+    if not ids:
+        return None
+    return db.query(StoredFile).filter(
+        StoredFile.category == "outputs",
+        StoredFile.company_id.in_(ids),
+        StoredFile.deleted_at.is_(None),
+    )
 
 
 @router.options("/outputs", include_in_schema=False)
 async def outputs_preflight() -> Response:
-    """
-    Responder manualmente a preflight requests para evitar que FastAPI ejecute
-    dependencias de autenticación durante OPTIONS.
-    """
+    """Preflight sin dependencias de autenticacion."""
     return Response(status_code=204)
 
 
 @router.get("/outputs")
-async def list_outputs(
+def list_outputs(
     agent: Optional[str] = None,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    """
-    Listar los entregables generados por los agentes.
-    """
-    files = _collect_outputs(agent)
-    return {
-        "success": True,
-        "total": len(files),
-        "outputs": files,
-    }
+    """Entregables de las empresas del usuario (mas recientes primero)."""
+    q = _outputs_query(db, current_user)
+    if q is None:
+        return {"success": True, "total": 0, "outputs": []}
+    if agent:
+        if not _AGENT_RE.match(agent.lower()):
+            raise HTTPException(status_code=422, detail="Agente no valido")
+        q = q.filter(StoredFile.agent_name == agent.upper())
+    rows = q.order_by(StoredFile.created_at.desc()).limit(_MAX_LIST).all()
+    outputs = [
+        {
+            "agent": (r.agent_name or "").upper(),
+            "filename": r.original_filename,
+            "path": f"{(r.agent_name or '').lower()}/{r.original_filename}",
+            "file_id": r.id,
+            "size_bytes": r.size_bytes,
+            "content_type": r.content_type,
+            "created_at": r.created_at.timestamp() if r.created_at else None,
+        }
+        for r in rows
+    ]
+    return {"success": True, "total": len(outputs), "outputs": outputs}
 
 
 @router.options("/outputs/{agent}/{filename}", include_in_schema=False)
@@ -78,37 +89,41 @@ async def download_preflight(agent: str, filename: str) -> Response:
 
 
 @router.get("/outputs/{agent}/{filename}")
-async def download_output(
+def download_output(
     agent: str,
     filename: str,
-    token: Optional[str] = None,  # Token como query param para descargas directas
+    request: Request,
     current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    """
-    Descargar un entregable concreto.
-    Permite token como query parameter para compatibilidad con descargas directas.
-    """
-    file_path = OUTPUT_BASE_DIR / agent.lower() / filename
-    if not file_path.exists() or not file_path.is_file():
+    """Descarga (302 a URL firmada corta) de un entregable de una empresa del usuario."""
+    q = _outputs_query(db, current_user)
+    if q is None or not _AGENT_RE.match(agent.lower()):
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
-    
-    # Determinar content type basado en extensión
-    content_type = "application/octet-stream"
-    if filename.endswith('.json'):
-        content_type = "application/json"
-    elif filename.endswith(('.md', '.markdown')):
-        content_type = "text/markdown"
-    elif filename.endswith(('.mp4', '.mov', '.avi')):
-        content_type = "video/mp4"
-    elif filename.endswith('.gif'):
-        content_type = "image/gif"
-    
-    return FileResponse(
-        file_path,
-        media_type=content_type,
-        filename=filename,
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
-        }
+    row = (
+        q.filter(StoredFile.agent_name == agent.upper(), StoredFile.original_filename == filename)
+        .order_by(StoredFile.created_at.desc())
+        .first()
     )
-
+    if row is None:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    if row.content_type in _INLINE_TEXT:
+        # JSON/Markdown pequenos: se sirven desde la API (el frontend los lee con fetch; una
+        # redireccion a otro dominio exigiria CORS en el bucket).
+        try:
+            data = object_storage.read_bytes(row)
+        except (object_storage.StorageNotConfigured, object_storage.StorageError) as exc:
+            raise storage_http_error(exc) from exc
+        return Response(
+            content=data,
+            media_type=row.content_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{object_storage.safe_filename(row.original_filename)}"',
+                "Cache-Control": "no-store",
+            },
+        )
+    try:
+        url = object_storage.signed_url(row)
+    except (object_storage.StorageNotConfigured, object_storage.StorageError) as exc:
+        raise storage_http_error(exc) from exc
+    return RedirectResponse(url, status_code=302, headers={"Cache-Control": "no-store"})

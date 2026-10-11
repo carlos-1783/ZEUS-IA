@@ -74,7 +74,7 @@ def handle_thalos_security_scan(activity: AgentActivity) -> Dict[str, Any]:
     }
 
     prefix = f"{activity.id}_{activity.action_type}"
-    json_path = utils.write_json("THALOS", prefix, payload)
+    json_path = utils.write_json("THALOS", prefix, payload, company_id=activity.company_id)
     utils.write_log("THALOS", prefix, payload)
 
     notes = f"Auditoría ejecutada automáticamente. Informe: {json_path}"
@@ -110,7 +110,7 @@ def handle_thalos_alerts(activity: AgentActivity) -> Dict[str, Any]:
     }
 
     prefix = f"{activity.id}_{activity.action_type}"
-    json_path = utils.write_json("THALOS", prefix, payload)
+    json_path = utils.write_json("THALOS", prefix, payload, company_id=activity.company_id)
     utils.write_log("THALOS", prefix, payload)
 
     return {
@@ -125,37 +125,19 @@ def handle_thalos_backup(activity: AgentActivity) -> Dict[str, Any]:
     if not _require_superuser(activity):
         return _blocked_superuser_required(activity.action_type or "backup_created")
 
-    source = Path("zeus.db")
-    backup_dir = Path(os.getenv("AGENT_BACKUP_DIR", "storage/backups"))
-    utils.ensure_dir(backup_dir)
+    # Fase 2 / Step 1: copia REAL (pg_dump) a almacenamiento externo; antes se copiaba
+    # zeus.db del repo a disco efimero y se daba por buena.
+    from services import thalos_backup_service
 
-    backup_created = False
-    backup_path: Optional[str] = None
-
-    if source.exists():
-        target = backup_dir / f"zeus_backup_{utils.timestamp()}.db"
-        shutil.copy2(source, target)
-        backup_created = True
-        backup_path = str(target.resolve())
-
-    payload = {
-        "executed_at": datetime.utcnow().isoformat(),
-        "source_exists": source.exists(),
-        "backup_created": backup_created,
-        "backup_path": backup_path,
-        "notes": "Entorno Railway usa almacenamiento efímero; replicar backup en almacenamiento persistente.",
-    }
+    payload = thalos_backup_service.create_backup(activity_id=activity.id)
+    backup_created = bool(payload.get("backup_created"))
 
     prefix = f"{activity.id}_{activity.action_type}"
-    json_path = utils.write_json("THALOS", prefix, payload)
+    json_path = utils.write_json("THALOS", prefix, payload, company_id=activity.company_id)
     utils.write_log("THALOS", prefix, payload)
 
     status = "completed" if backup_created else "failed"
-    notes = (
-        f"Backup generado automáticamente en {backup_path}."
-        if backup_created
-        else "No se encontró base de datos local para copiar; revisar configuración."
-    )
+    notes = payload.get("notes") or ("Copia creada." if backup_created else "Copia no creada.")
 
     return {
         "status": status,

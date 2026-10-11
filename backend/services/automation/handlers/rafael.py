@@ -66,7 +66,7 @@ def handle_rafael_task(activity: AgentActivity) -> Dict[str, Any]:
         "summary": "Documentación fiscal y financiera preparada para activar facturación automática.",
     }
 
-    json_path = utils.write_json(agent, prefix, deliverable)
+    json_path = utils.write_json(agent, prefix, deliverable, company_id=activity.company_id)
     markdown = utils.summarize_markdown(
         "Paquete Fiscal ZEUS IA",
         {
@@ -83,7 +83,7 @@ def handle_rafael_task(activity: AgentActivity) -> Dict[str, Any]:
             ],
         },
     )
-    markdown_path = utils.write_markdown(agent, prefix, markdown)
+    markdown_path = utils.write_markdown(agent, prefix, markdown, company_id=activity.company_id)
 
     return {
         "status": "completed",

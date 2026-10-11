@@ -33,7 +33,7 @@ def handle_zeus_task(activity: AgentActivity) -> Dict[str, Any]:
     prefix = f"{activity.id}_{activity.action_type}"
 
     deliverable = _coordination_report(activity)
-    json_path = utils.write_json(agent, prefix, deliverable)
+    json_path = utils.write_json(agent, prefix, deliverable, company_id=activity.company_id)
     markdown = utils.summarize_markdown(
         "Informe ZEUS CORE",
         {
@@ -47,7 +47,7 @@ def handle_zeus_task(activity: AgentActivity) -> Dict[str, Any]:
             ],
         },
     )
-    markdown_path = utils.write_markdown(agent, prefix, markdown)
+    markdown_path = utils.write_markdown(agent, prefix, markdown, company_id=activity.company_id)
 
     return {
         "status": "completed",

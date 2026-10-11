@@ -48,10 +48,6 @@ def execute_step(
         out = _exec_perseo(db, user, act, step_input, transaction_id)
         return {**out, "transaction_id": transaction_id}
 
-    if mod == "STORAGE":
-        out = _exec_storage(db, user, act, step_input, transaction_id)
-        return {**out, "transaction_id": transaction_id}
-
     if mod == "RRHH":
         out = _exec_rrhh(db, user, act, step_input)
     elif mod == "OPS":
@@ -275,28 +271,3 @@ def _exec_perseo(
         return run_pipeline(db, user, transaction_id=transaction_id, **inp)
     raise HTTPException(status_code=422, detail=f"Unknown PERSEO action: {action}")
 
-
-def _exec_storage(
-    db: Session,
-    user: User,
-    action: str,
-    inp: Dict[str, Any],
-    transaction_id: str,
-) -> Dict[str, Any]:
-    if action == "store_object":
-        from pathlib import Path
-
-        from services.perseo_storage_v2 import upload_file
-
-        local_path = Path(inp["local_path"])
-        return {
-            **upload_file(
-                local_path,
-                user_id=user.id,
-                category=inp.get("category", "media"),
-                filename=inp.get("filename"),
-                content_type=inp.get("content_type"),
-            ),
-            "transaction_id": transaction_id,
-        }
-    raise HTTPException(status_code=422, detail=f"Unknown STORAGE action: {action}")

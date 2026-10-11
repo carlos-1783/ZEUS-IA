@@ -60,8 +60,11 @@ def validate_transaction(
             "run_pipeline",
         ):
             errors.append(f"Unknown PERSEO action: {action}")
-        if module == "STORAGE" and action not in ("store_object",):
-            errors.append(f"Unknown STORAGE action: {action}")
+        if module == "STORAGE":
+            # Fase 2 / Step 1: `store_object` subia cualquier ruta LOCAL del servidor indicada
+            # por el cliente (lectura arbitraria de ficheros). Eliminado: los ficheros entran
+            # por /api/v1/upload y se referencian como /api/v1/files/{id}.
+            errors.append("El modulo STORAGE no admite pasos de transaccion: sube el fichero por /api/v1/upload.")
 
     return {
         "passed": len(errors) == 0,

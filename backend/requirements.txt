@@ -8,6 +8,7 @@ python-dotenv==1.0.1
 sqlalchemy==2.0.30
 alembic==1.13.1
 psycopg2-binary==2.9.9  # For PostgreSQL support
+boto3==1.43.108  # Fase 2: almacenamiento de objetos Cloudflare R2 (API S3)
 asyncpg==0.29.0  # For Neon Database async support
 
 # Authentication & Security

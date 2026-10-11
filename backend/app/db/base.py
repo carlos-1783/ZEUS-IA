@@ -197,6 +197,7 @@ def create_tables():
             from app.models.zeus_closure_audit import ZeusClosureAudit
             from app.models.thalos_workspace_item import ThalosWorkspaceItem
             from app.models.workspace_file import WorkspaceFile
+            from app.models.stored_file import StoredFile
             from app.models.workspace_playbook import WorkspacePlaybook
             from app.models.ops_route import OpsRoute
             from app.models.zeus_transaction import ZeusTransaction

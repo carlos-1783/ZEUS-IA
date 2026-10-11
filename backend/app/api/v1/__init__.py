@@ -32,6 +32,7 @@ from app.api.v1.endpoints import (
     workspaces,
     workspace as workspace_deliverables,
     upload as upload_media,
+    files as stored_files,
     document_approval,
     tpv,
     admin,
@@ -123,6 +124,8 @@ api_router.include_router(workspace_deliverables.router, prefix="/workspace", ta
 
 # Subida unificada (imagen / vídeo / PDF)
 api_router.include_router(upload_media.router, prefix="/upload", tags=["upload"])
+# Fase 2: acceso a ficheros en R2 (empresa + URL firmada)
+api_router.include_router(stored_files.router, prefix="/files", tags=["files"])
 
 # TPV Universal Enterprise
 api_router.include_router(tpv.router, prefix="/tpv", tags=["tpv"])

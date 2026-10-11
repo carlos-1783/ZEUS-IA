@@ -201,6 +201,16 @@ class Settings(BaseSettings):
     # URL publica del backend (https://api.midominio.com) para reconstruir la URL firmada por Twilio.
     PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
 
+    # Fase 2 — almacenamiento de objetos comun (Cloudflare R2, API S3). Sin estas variables
+    # la app arranca igual; las subidas responden 503 explicito (nunca caen a disco local).
+    R2_ACCOUNT_ID: str = os.getenv("R2_ACCOUNT_ID", "").strip()
+    R2_ACCESS_KEY_ID: str = os.getenv("R2_ACCESS_KEY_ID", "").strip()
+    R2_SECRET_ACCESS_KEY: str = os.getenv("R2_SECRET_ACCESS_KEY", "").strip()
+    R2_BUCKET: str = os.getenv("R2_BUCKET", "").strip()
+    # Opcional: por defecto https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com
+    R2_ENDPOINT_URL: str = os.getenv("R2_ENDPOINT_URL", "").strip().rstrip("/")
+    R2_SIGNED_URL_TTL_SEC: int = int(os.getenv("R2_SIGNED_URL_TTL_SEC", "300") or "300")
+
     # PERSEO V2 — cloud storage, transactional engines, queue workers
     PERSEO_V2_ENABLED: bool = os.getenv("PERSEO_V2_ENABLED", "false").lower() in ("true", "1", "yes")
     PERSEO_STORAGE_BACKEND: str = os.getenv("PERSEO_STORAGE_BACKEND", "local").strip().lower()

@@ -1009,61 +1009,25 @@ async def update_product(
 @router.post("/products/upload-image")
 async def upload_product_image(
     image: UploadFile = File(...),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    """Subir imagen de producto"""
-    is_superuser = getattr(current_user, 'is_superuser', False)
-    
-    # Permisos: Todos los usuarios autenticados pueden subir imágenes
-    
-    # Validar tipo de archivo
-    allowed_types = ["image/png", "image/jpeg", "image/webp"]
-    if image.content_type not in allowed_types:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Formato no soportado. Usa: {', '.join(allowed_types)}"
-        )
-    
-    # Validar tamaño (max 2MB)
-    MAX_SIZE = 2 * 1024 * 1024  # 2MB
-    contents = await image.read()
-    if len(contents) > MAX_SIZE:
-        raise HTTPException(
-            status_code=400,
-            detail="La imagen supera el límite de 2MB"
-        )
-    
-    # Crear directorio de productos si no existe
-    upload_dir = Path(settings.STATIC_DIR) / "uploads" / "products"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Generar nombre único
-    extension = {
-        "image/png": ".png",
-        "image/jpeg": ".jpg",
-        "image/webp": ".webp"
-    }[image.content_type]
-    
-    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
-    token = secrets.token_urlsafe(6)
-    filename = f"product_{timestamp}_{token}{extension}"
-    destination = upload_dir / filename
-    
-    # Guardar archivo
-    destination.write_bytes(contents)
-    
-    # Construir URL pública
-    public_url = f"{settings.STATIC_URL.rstrip('/')}/uploads/products/{filename}"
-    
-    logger.info(f"📸 Imagen de producto subida: {filename}")
-    
-    return {
-        "success": True,
-        "url": public_url,
-        "filename": filename,
-        "content_type": image.content_type,
-        "size_bytes": len(contents)
-    }
+    """Subir imagen de producto. Fase 2 / Step 1: a R2 bajo la empresa del usuario
+    (antes: STATIC_DIR, servido sin autenticacion por /static)."""
+    from services.upload_intake import store_upload
+
+    result = await store_upload(
+        db,
+        current_user,
+        image,
+        category="products",
+        allowed_types=frozenset({"image/png", "image/jpeg", "image/webp"}),
+        max_bytes=2 * 1024 * 1024,
+    )
+    logger.info(
+        "Imagen de producto subida file_id=%s company_id=%s", result["file_id"], result["company_id"]
+    )
+    return result
 
 
 @router.delete("/products/{product_id}")

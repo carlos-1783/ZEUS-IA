@@ -886,40 +886,31 @@ async def workspace_afrodita_contract(
 # ---------------------------------------------------------------------------
 
 UPLOAD_WHITELIST = {
-    "imagenes": {"image/jpeg", "image/png", "image/webp"},
-    "videos": {"video/mp4", "video/webm", "video/quicktime"},
-    "documentos": {"application/pdf", "text/plain"},
+    "imagenes": frozenset({"image/jpeg", "image/png", "image/webp"}),
+    "videos": frozenset({"video/mp4", "video/webm", "video/quicktime"}),
+    "documentos": frozenset({"application/pdf", "text/plain"}),
 }
+UPLOAD_MAX_BYTES = 100 * 1024 * 1024
 
 
 @router.post("/uploads/{category}")
 async def workspace_upload(
     category: str,
     file: UploadFile = File(...),
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
+    """Fase 2 / Step 1: a R2 bajo la empresa del usuario (antes: STATIC_DIR publico)."""
+    from services.upload_intake import store_upload
+
     cat = category.lower()
     if cat not in UPLOAD_WHITELIST:
         raise HTTPException(status_code=400, detail="Categoría no soportada")
-    if file.content_type not in UPLOAD_WHITELIST[cat]:
-        raise HTTPException(
-            status_code=415,
-            detail=f"Formato no permitido para {cat}.",
-        )
-
-    upload_root = Path(settings.STATIC_DIR) / "uploads" / cat
-    upload_root.mkdir(parents=True, exist_ok=True)
-    filename = f"{datetime.utcnow().strftime('%Y%m%dT%H%M%S')}_{file.filename}"
-    destination = upload_root / filename
-
-    contents = await file.read()
-    destination.write_bytes(contents)
-
-    return {
-        "success": True,
-        "filename": filename,
-        "content_type": file.content_type,
-        "size_bytes": len(contents),
-        "url": f"{settings.STATIC_URL.rstrip('/')}/uploads/{cat}/{filename}",
-    }
-
+    return await store_upload(
+        db,
+        current_user,
+        file,
+        category="workspace",
+        allowed_types=UPLOAD_WHITELIST[cat],
+        max_bytes=UPLOAD_MAX_BYTES,
+    )

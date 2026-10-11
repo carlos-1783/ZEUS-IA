@@ -40,12 +40,6 @@ FIELD_ALIASES: Dict[str, List[str]] = {
 }
 
 
-def _upload_root() -> Path:
-    root = Path(settings.STATIC_DIR) / "tmp_uploads"
-    root.mkdir(parents=True, exist_ok=True)
-    return root
-
-
 def _norm_header(value: Any) -> str:
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return ""
@@ -79,14 +73,6 @@ def _validate_email(value: Optional[str]) -> Optional[str]:
         return None
 
 
-def _meta_path(file_id: str) -> Path:
-    return _upload_root() / f"{file_id}.meta.json"
-
-
-def _data_path(file_id: str, ext: str) -> Path:
-    return _upload_root() / f"{file_id}{ext}"
-
-
 def _allowed_ext(filename: str) -> str:
     lower = (filename or "").lower()
     if lower.endswith(".csv"):
@@ -99,48 +85,84 @@ def _allowed_ext(filename: str) -> str:
     )
 
 
-def save_upload(content: bytes, filename: str, user_id: int) -> str:
+_EXT_CONTENT_TYPE = {
+    ".csv": "text/csv",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+
+
+def _storage_error(exc: Exception) -> HTTPException:
+    from services.upload_intake import storage_http_error
+
+    return storage_http_error(exc)
+
+
+def save_upload(db: Session, content: bytes, filename: str, user: User) -> str:
+    """Fase 2 / Step 1: el fichero de importacion va a R2 (empresa/{id}/crm_import/...),
+    nunca a STATIC_DIR/tmp_uploads (que se servia sin autenticacion por /static)."""
+    from services import object_storage
+    from services.upload_intake import resolve_company_for_upload
+
     if len(content) > MAX_FILE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"El archivo supera el límite de {MAX_FILE_BYTES // (1024 * 1024)} MB.",
         )
     ext = _allowed_ext(filename)
-    file_id = uuid.uuid4().hex
-    data_path = _data_path(file_id, ext)
-    data_path.write_bytes(content)
-    meta = {
-        "file_id": file_id,
-        "filename": filename,
-        "ext": ext,
-        "user_id": user_id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    _meta_path(file_id).write_text(json.dumps(meta), encoding="utf-8")
-    return file_id
+    content_type = _EXT_CONTENT_TYPE[ext]
+    company_id = resolve_company_for_upload(db, user)
+    try:
+        object_storage.verify_content(content, content_type)
+        row = object_storage.store_file(
+            db,
+            company_id=company_id,
+            user_id=user.id,
+            category="crm_import",
+            filename=filename,
+            content_type=content_type,
+            data=content,
+        )
+    except (
+        object_storage.StorageNotConfigured,
+        object_storage.StorageError,
+        object_storage.ContentMismatch,
+    ) as exc:
+        raise _storage_error(exc) from exc
+    return row.id
 
 
-def _load_meta(file_id: str, user_id: int) -> Dict[str, Any]:
-    meta_file = _meta_path(file_id)
-    if not meta_file.is_file():
+def _load_stored(db: Session, file_id: str, user: User):
+    """Fichero de importacion del propio usuario y de una de sus empresas."""
+    import services.crm_office_service as crm_svc
+    from services import object_storage
+
+    row = object_storage.get_for_companies(db, file_id, crm_svc.company_ids_for_user(db, user))
+    if row is None or row.category != "crm_import":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sesión de importación no encontrada o expirada.")
-    meta = json.loads(meta_file.read_text(encoding="utf-8"))
-    if meta.get("user_id") != user_id:
+    if row.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes acceso a este archivo de importación.")
-    return meta
+    return row
 
 
-def _read_dataframe(file_id: str, user_id: int) -> Tuple[pd.DataFrame, str]:
-    meta = _load_meta(file_id, user_id)
-    path = _data_path(file_id, meta["ext"])
-    if not path.is_file():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo temporal no encontrado.")
+def _read_dataframe(db: Session, file_id: str, user: User) -> Tuple[pd.DataFrame, str]:
+    import io
+
+    from services import object_storage
+
+    row = _load_stored(db, file_id, user)
+    try:
+        raw = object_storage.read_bytes(row)
+    except (object_storage.StorageNotConfigured, object_storage.StorageError) as exc:
+        raise _storage_error(exc) from exc
+    meta = {"ext": _allowed_ext(row.original_filename), "filename": row.original_filename}
+    path = io.BytesIO(raw)
     filename = meta.get("filename") or "import"
     try:
         if meta["ext"] == ".csv":
             df = None
             for encoding in ("utf-8-sig", "utf-8", "latin-1", "cp1252"):
                 try:
+                    path.seek(0)
                     df = pd.read_csv(path, encoding=encoding, dtype=str, nrows=MAX_ROWS + 1)
                     break
                 except UnicodeDecodeError:
@@ -173,15 +195,17 @@ def _read_dataframe(file_id: str, user_id: int) -> Tuple[pd.DataFrame, str]:
     return df, filename
 
 
-def delete_upload(file_id: str) -> None:
+def delete_upload(db: Session, file_id: str, user: User) -> None:
+    """Borra el fichero temporal de importacion (R2 + marca en stored_files)."""
+    from services import object_storage
+
     try:
-        meta_file = _meta_path(file_id)
-        if meta_file.is_file():
-            meta = json.loads(meta_file.read_text(encoding="utf-8"))
-            _data_path(file_id, meta.get("ext", ".csv")).unlink(missing_ok=True)
-            meta_file.unlink(missing_ok=True)
-    except OSError as exc:
-        logger.warning("cleanup upload %s: %s", file_id, exc)
+        row = _load_stored(db, file_id, user)
+        object_storage.delete_file(db, row)
+    except HTTPException:
+        return
+    except (object_storage.StorageNotConfigured, object_storage.StorageError) as exc:
+        logger.warning("cleanup import file_id=%s: %s", file_id, type(exc).__name__)
 
 
 def detect_column_mapping(columns: List[str]) -> CrmImportColumnMapping:
@@ -250,8 +274,8 @@ def _map_row(row: pd.Series, mapping: CrmImportColumnMapping) -> Dict[str, Optio
     }
 
 
-def build_preview(file_id: str, user_id: int) -> Tuple[str, List[str], CrmImportColumnMapping, List[Dict[str, Any]], int, str]:
-    df, filename = _read_dataframe(file_id, user_id)
+def build_preview(db: Session, file_id: str, user: User) -> Tuple[str, List[str], CrmImportColumnMapping, List[Dict[str, Any]], int, str]:
+    df, filename = _read_dataframe(db, file_id, user)
     columns = list(df.columns)
     if not columns:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No se detectaron columnas.")
@@ -270,8 +294,8 @@ def build_preview(file_id: str, user_id: int) -> Tuple[str, List[str], CrmImport
     return file_id, columns, suggested, preview, len(df), filename
 
 
-def store_preview_from_upload(content: bytes, filename: str, user: User) -> str:
-    file_id = save_upload(content, filename, user.id)
+def store_preview_from_upload(db: Session, content: bytes, filename: str, user: User) -> str:
+    file_id = save_upload(db, content, filename, user)
     return file_id
 
 

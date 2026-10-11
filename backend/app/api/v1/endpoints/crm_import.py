@@ -31,11 +31,12 @@ def _read_upload(file: UploadFile) -> tuple[bytes, str]:
 async def crm_import_clients_preview(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    """Sube archivo, lo guarda en tmp_uploads/ y devuelve file_id, columnas y vista previa."""
+    """Sube archivo a R2 (empresa/{id}/crm_import/) y devuelve file_id, columnas y vista previa."""
     content, filename = _read_upload(file)
-    file_id = import_svc.store_preview_from_upload(content, filename, current_user)
-    fid, columns, suggested, preview, total, name = import_svc.build_preview(file_id, current_user.id)
+    file_id = import_svc.store_preview_from_upload(db, content, filename, current_user)
+    fid, columns, suggested, preview, total, name = import_svc.build_preview(db, file_id, current_user)
     return CrmImportPreviewOut(
         file_id=fid,
         columns=columns,

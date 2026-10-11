@@ -31,13 +31,14 @@ def _utcnow() -> datetime:
 
 
 def parse_file_rows(
+    db: Session,
     file_id: str,
-    user_id: int,
+    user: User,
     *,
     trim: bool = True,
 ) -> Tuple[List[Dict[str, Any]], str]:
     """Step parse_csv / parse_file — normalized row dicts from stored upload."""
-    df, filename = crm_import_svc._read_dataframe(file_id, user_id)
+    df, filename = crm_import_svc._read_dataframe(db, file_id, user)
     rows: List[Dict[str, Any]] = []
     for _, series in df.iterrows():
         row = {str(k): (str(v).strip() if trim and v is not None else v) for k, v in series.items()}
@@ -372,11 +373,11 @@ def run_client_excel_import_pipeline_v2(
             detail="Se requiere una empresa asociada para importar clientes.",
         )
 
-    raw_rows, filename = parse_file_rows(file_id, user.id)
+    raw_rows, filename = parse_file_rows(db, file_id, user)
     clients, validation_errors = validate_clients(raw_rows, mapping, on_error="skip_row")
 
     if not clients:
-        crm_import_svc.delete_upload(file_id)
+        crm_import_svc.delete_upload(db, file_id, user)
         return {
             "success": True,
             "pipeline": PIPELINE_NAME,
@@ -460,7 +461,7 @@ def run_client_excel_import_pipeline_v2(
             detail=f"Error en pipeline de importación: {exc}",
         ) from exc
     finally:
-        crm_import_svc.delete_upload(file_id)
+        crm_import_svc.delete_upload(db, file_id, user)
 
     skipped = len(raw_rows) - len(clients)
     total_saved = inserted + updated

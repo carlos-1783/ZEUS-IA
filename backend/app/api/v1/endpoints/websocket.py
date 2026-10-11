@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Any
 import json
 import logging
 import asyncio
+import re
 import uuid
 from datetime import datetime
 from sqlalchemy.orm import Session
@@ -18,47 +19,66 @@ from app.schemas.user import UserInDB
 
 logger = logging.getLogger(__name__)
 
+# Caracteres de control prohibidos (NUL y C0 salvo \t \n \r), como en el guard HTTP de THALOS.
+_WS_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
 class ConnectionManager:
+    """Conexiones WebSocket por USUARIO.
+
+    Fase 2 / Step 1 (A1): la clave interna es "{user_id}:{client_id}". Antes era el
+    `client_id` enviado por el cliente: otro usuario que conociera ese id sustituia el
+    socket de la victima y recibia sus eventos, y una conexion sin autenticar con el mismo
+    id lo borraba al cerrar. Ahora cada usuario tiene su propio espacio de ids y solo se
+    retira el socket que se registro. No hay `broadcast`: todo envio va a un usuario."""
+
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
         self.user_connections: Dict[int, List[str]] = {}
 
-    async def connect(self, websocket: WebSocket, client_id: str, user_id: int):
+    @staticmethod
+    def connection_key(user_id: int, client_id: str) -> str:
+        return f"{int(user_id)}:{client_id}"
+
+    def register(self, websocket: WebSocket, client_id: str, user_id: int) -> str:
+        key = self.connection_key(user_id, client_id)
+        self.active_connections[key] = websocket  # misma clave = reconexion del MISMO usuario
+        keys = self.user_connections.setdefault(int(user_id), [])
+        if key not in keys:
+            keys.append(key)
+        logger.info("WS registrada user_id=%s conexiones=%s", user_id, len(keys))
+        return key
+
+    async def connect(self, websocket: WebSocket, client_id: str, user_id: int) -> str:
         await websocket.accept()
-        self.active_connections[client_id] = websocket
-        
-        if user_id not in self.user_connections:
-            self.user_connections[user_id] = []
-        
-        if client_id not in self.user_connections[user_id]:
-            self.user_connections[user_id].append(client_id)
-        
-        logger.info(f"Client {client_id} connected. User {user_id} now has {len(self.user_connections[user_id])} connections.")
+        return self.register(websocket, client_id, user_id)
+
+    def unregister(self, key: str, user_id: int, websocket: Optional[WebSocket] = None) -> None:
+        """Retira la conexion solo si sigue siendo `websocket` (si ya la sustituyo una
+        reconexion del mismo usuario, no se toca)."""
+        current = self.active_connections.get(key)
+        if current is not None and (websocket is None or current is websocket):
+            del self.active_connections[key]
+            keys = self.user_connections.get(int(user_id), [])
+            if key in keys:
+                keys.remove(key)
+            if not keys:
+                self.user_connections.pop(int(user_id), None)
 
     def disconnect(self, client_id: str, user_id: int):
-        if client_id in self.active_connections:
-            del self.active_connections[client_id]
-        
-        if user_id in self.user_connections and client_id in self.user_connections[user_id]:
-            self.user_connections[user_id].remove(client_id)
-            if not self.user_connections[user_id]:
-                del self.user_connections[user_id]
-        
-        logger.info(f"Client {client_id} disconnected. User {user_id} has {len(self.user_connections.get(user_id, []))} remaining connections.")
+        self.unregister(self.connection_key(user_id, client_id), user_id)
 
-    async def send_personal_message(self, message: str, client_id: str):
-        if client_id in self.active_connections:
-            await self.active_connections[client_id].send_text(message)
+    async def send_personal_message(self, message: str, key: str):
+        ws = self.active_connections.get(key)
+        if ws is not None:
+            await ws.send_text(message)
 
     async def send_user_json(self, user_id: int, payload: dict):
         message = json.dumps(payload, default=str)
-        for client_id in self.user_connections.get(user_id, []):
-            if client_id in self.active_connections:
-                await self.active_connections[client_id].send_text(message)
+        for key in list(self.user_connections.get(user_id, [])):
+            ws = self.active_connections.get(key)
+            if ws is not None:
+                await ws.send_text(message)
 
-    async def broadcast(self, message: str):
-        for connection in self.active_connections.values():
-            await connection.send_text(message)
 
 manager = ConnectionManager()
 
@@ -129,108 +149,102 @@ def get_current_websocket_user(
         logger.error(f"Unexpected error in WebSocket auth: {str(e)}", exc_info=True)
         return None
 
+_CLIENT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+WS_MAX_MESSAGE_CHARS = 64 * 1024
+
+
+def _ws_thalos_event(
+    db: Session,
+    websocket: WebSocket,
+    *,
+    decision: str,
+    reason: str,
+    user: Optional[User] = None,
+    severity: Optional[str] = None,
+) -> None:
+    """Evento THALOS de la conexion WebSocket (conexion aceptada/rechazada, mensaje
+    rechazado). Las conexiones son poco frecuentes: se registran todas."""
+    try:
+        import services.crm_office_service as crm_svc
+        from services.thalos_request_guard_v1 import record_security_event
+
+        company_id = None
+        if user is not None:
+            try:
+                company_id = crm_svc.primary_company_id(db, user)
+            except Exception:
+                company_id = None
+        record_security_event(
+            db,
+            event_type="websocket_guard",
+            severity=severity or ("info" if decision == "allow" else "warning"),
+            source="thalos_websocket_guard",
+            details={"path": "/api/v1/ws/{client_id}", "decision": decision, "reason": reason},
+            user=user,
+            company_id=company_id,
+            ip_address=websocket.client.host if websocket.client else None,
+            action_taken=decision,
+            decision_rule=reason,
+        )
+    except Exception:
+        logger.exception("THALOS: no se pudo registrar el evento WebSocket")
+
+
+async def _reject(websocket: WebSocket, db: Session, code: str, error_msg: str, user=None) -> None:
+    _ws_thalos_event(db, websocket, decision="deny", reason=code, user=user)
+    await websocket.send_text(json.dumps({"type": "auth_error", "error": error_msg, "code": code}))
+    await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_msg)
+
+
 async def websocket_endpoint(
-    websocket: WebSocket, 
+    websocket: WebSocket,
     client_id: str,
     db: Session = Depends(get_db)
 ):
     """
-    WebSocket endpoint for real-time communication - FLOW CORRECTO
-    
-    FLUJO: ACEPTAR → AUTENTICAR → ESCUCHAR
-    
-    Args:
-        websocket: The WebSocket connection
-        client_id: Unique client identifier
-        db: Database session
+    WebSocket de eventos en tiempo real: ACEPTAR -> AUTENTICAR -> THALOS -> ESCUCHAR.
+
+    Fase 2 / Step 1 (C2/A1): la conexion pasa por THALOS (usuario activo, client_id
+    valido, evento allow/deny persistido) y cada mensaje se valida (tamano y caracteres
+    de control). Las conexiones se registran por usuario: un client_id ajeno no da acceso
+    a los eventos de otro usuario.
     """
-    # Initialize user as None for cleanup in finally block
     user = None
+    conn_key: Optional[str] = None
     connection_accepted = False
-    
+
     try:
-        # PASO 1: ACEPTAR CONEXIÓN PRIMERO (WebSocket handshake)
-        logger.info(f"[WebSocket] Aceptando conexión para client_id={client_id}")
         await websocket.accept()
         connection_accepted = True
-        logger.info(f"[WebSocket] Conexión aceptada para client_id={client_id}")
-        
-        # PASO 2: AUTENTICAR - Obtener y validar token
+
+        if not _CLIENT_ID_RE.match(client_id or ""):
+            await _reject(websocket, db, "invalid_client_id", "Identificador de cliente no valido")
+            return
+
         token = (
             websocket.query_params.get("token") or
             websocket.headers.get("authorization", "").replace("Bearer ", "")
         )
-        
         if not token:
-            error_msg = "No se proporcionó token de autenticación"
-            logger.warning(f"[WebSocket] Connection rejected: {error_msg}")
-            await websocket.send_text(json.dumps({
-                "type": "auth_error",
-                "error": error_msg,
-                "code": "missing_token"
-            }))
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_msg)
+            await _reject(websocket, db, "missing_token", "No se proporcionó token de autenticación")
             return
-        
-        # Authenticate user with detailed error handling
+
         try:
             user = get_current_websocket_user(websocket, token, db)
-            
-            if not user:
-                error_msg = "Token de autenticación inválido o expirado"
-                logger.warning(f"[WebSocket] Authentication failed: {error_msg}")
-                await websocket.send_text(json.dumps({
-                    "type": "auth_error",
-                    "error": error_msg,
-                    "code": "invalid_token"
-                }))
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_msg)
-                return
-                
-            if not user.is_active:
-                error_msg = "La cuenta del usuario no está activa"
-                logger.warning(f"[WebSocket] Inactive user: {error_msg}")
-                await websocket.send_text(json.dumps({
-                    "type": "auth_error",
-                    "error": error_msg,
-                    "code": "inactive_user"
-                }))
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_msg)
-                return
-                
-        except (JWTError, JWTClaimsError, ExpiredSignatureError, JoseJWTError) as e:
-            is_audience_error = "audience" in str(e).lower()
-            logger.exception(
-                "[WebSocket] JWT validation error (audience_error=%s)", is_audience_error
-            )
-            error_details = {
-                "type": "auth_error",
-                "error": "Token de autenticación inválido",
-                "code": "jwt_validation_error"
-            }
-            if is_audience_error:
-                error_details["details"] = "Audiencia del token no válida. Por favor, obtenga un nuevo token de autenticación."
-            else:
-                error_details["details"] = "No se pudo validar el token de autenticación. Por favor, obtenga un nuevo token."
-
-            close_reason = "Error de validación del token de autenticación"
-            await websocket.send_text(json.dumps(error_details))
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=close_reason)
+        except (JWTError, JWTClaimsError, ExpiredSignatureError, JoseJWTError):
+            logger.exception("[WebSocket] JWT validation error")
+            user = None
+        if not user:
+            await _reject(websocket, db, "invalid_token", "Token de autenticación inválido o expirado")
             return
-        
-        # PASO 3: REGISTRAR CONEXIÓN Y COMENZAR A ESCUCHAR
-        logger.info(f"[WebSocket] Usuario autenticado: {user.email}, registrando conexión...")
-        
-        # Registrar en el manager (ya no hace accept porque ya lo hicimos)
-        manager.active_connections[client_id] = websocket
-        if user.id not in manager.user_connections:
-            manager.user_connections[user.id] = []
-        if client_id not in manager.user_connections[user.id]:
-            manager.user_connections[user.id].append(client_id)
-        
-        logger.info(f"[WebSocket] Conexión registrada: client={client_id}, user_id={user.id}")
-        
-        # Send initial connection confirmation
+        if not user.is_active:
+            await _reject(websocket, db, "inactive_user", "La cuenta del usuario no está activa", user=user)
+            user = None
+            return
+
+        _ws_thalos_event(db, websocket, decision="allow", reason="websocket_connected", user=user)
+        conn_key = manager.register(websocket, client_id, user.id)
+
         await manager.send_personal_message(
             json.dumps({
                 "type": "connection_established",
@@ -239,28 +253,25 @@ async def websocket_endpoint(
                 "timestamp": datetime.utcnow().isoformat(),
                 "status": "success"
             }),
-            client_id
+            conn_key
         )
-        
-        # Track last activity for timeout
+
         last_activity = datetime.utcnow()
-        
-        # Main message loop - ESCUCHAR mensajes del cliente
+
         while True:
             try:
-                # Set a timeout for receiving messages (30 seconds)
-                data = await asyncio.wait_for(
-                    websocket.receive_text(),
-                    timeout=30.0
-                )
-                
-                # Update last activity time
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
                 last_activity = datetime.utcnow()
-                
+
+                if len(data) > WS_MAX_MESSAGE_CHARS or _WS_CONTROL_RE.search(data):
+                    reason = "message_too_large" if len(data) > WS_MAX_MESSAGE_CHARS else "control_characters"
+                    _ws_thalos_event(db, websocket, decision="deny", reason=reason, user=user)
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Mensaje rechazado")
+                    break
+
                 try:
                     message = json.loads(data)
                 except json.JSONDecodeError:
-                    logger.warning(f"Received invalid JSON from {client_id}")
                     await manager.send_personal_message(
                         json.dumps({
                             "type": "error",
@@ -268,30 +279,19 @@ async def websocket_endpoint(
                             "code": "invalid_json",
                             "timestamp": datetime.utcnow().isoformat()
                         }),
-                        client_id
+                        conn_key
                     )
                     continue
-                
-                # Log message (sensitive data should be redacted in production)
-                log_msg = f"Received message from client={client_id}, user_id={user.id}"
-                if message.get('type') not in ['heartbeat', 'ping']:  # Skip logging heartbeats/pings
-                    logger.debug(f"{log_msg}: {message}")
-                
-                # Handle different message types
+                if not isinstance(message, dict):
+                    message = {"type": None, "value": message}
+
                 message_type = message.get("type")
-                
                 if message_type == "heartbeat":
-                    # Acknowledge heartbeat
                     await manager.send_personal_message(
-                        json.dumps({
-                            "type": "heartbeat_ack",
-                            "timestamp": datetime.utcnow().isoformat()
-                        }),
-                        client_id
+                        json.dumps({"type": "heartbeat_ack", "timestamp": datetime.utcnow().isoformat()}),
+                        conn_key
                     )
-                
                 elif message_type == "auth":
-                    # Already authenticated, just acknowledge
                     await manager.send_personal_message(
                         json.dumps({
                             "type": "auth_ack",
@@ -299,66 +299,43 @@ async def websocket_endpoint(
                             "user_id": user.id,
                             "timestamp": datetime.utcnow().isoformat()
                         }),
-                        client_id
+                        conn_key
                     )
-                
                 elif message_type == "ping":
-                    # Respond to ping with pong
                     await manager.send_personal_message(
-                        json.dumps({
-                            "type": "pong",
-                            "timestamp": datetime.utcnow().isoformat()
-                        }),
-                        client_id
+                        json.dumps({"type": "pong", "timestamp": datetime.utcnow().isoformat()}),
+                        conn_key
                     )
-                
                 else:
-                    # Echo back the message with additional metadata
                     response = {
                         "type": "message_ack",
                         "message_id": message.get("message_id", str(uuid.uuid4())),
                         "received_at": datetime.utcnow().isoformat(),
                         "status": "received"
                     }
-                    
-                    # Include the original message if it's not too large
-                    if len(data) < 1000:  # 1KB limit
+                    if len(data) < 1000:
                         response["received"] = message
-                    
-                    await manager.send_personal_message(
-                        json.dumps(response),
-                        client_id
-                    )
-            
+                    await manager.send_personal_message(json.dumps(response), conn_key)
+
             except asyncio.TimeoutError:
-                # Check if we should close the connection due to inactivity
-                if (datetime.utcnow() - last_activity).total_seconds() > 300:  # 5 minutes
-                    logger.info(f"Closing idle WebSocket connection: {client_id}")
-                    await websocket.close(
-                        code=status.WS_1000_NORMAL_CLOSURE,
-                        reason="Connection idle for too long"
-                    )
+                if (datetime.utcnow() - last_activity).total_seconds() > 300:
+                    logger.info("Cerrando WebSocket inactivo user_id=%s", user.id)
+                    await websocket.close(code=status.WS_1000_NORMAL_CLOSURE, reason="Connection idle for too long")
                     break
-                
-                # Send a ping to check if the client is still there
                 try:
                     await manager.send_personal_message(
-                        json.dumps({
-                            "type": "ping",
-                            "timestamp": datetime.utcnow().isoformat()
-                        }),
-                        client_id
+                        json.dumps({"type": "ping", "timestamp": datetime.utcnow().isoformat()}),
+                        conn_key
                     )
                 except Exception as ping_error:
-                    logger.warning(f"Failed to send ping to {client_id}: {str(ping_error)}")
+                    logger.warning("Ping WebSocket fallido user_id=%s: %s", user.id, type(ping_error).__name__)
                     raise WebSocketDisconnect()
-            
+
             except WebSocketDisconnect:
-                logger.info(f"Client {client_id} disconnected")
                 break
-                
+
             except Exception as msg_error:
-                logger.error(f"Error processing message from {client_id}: {str(msg_error)}")
+                logger.error("Error procesando mensaje WebSocket user_id=%s: %s", user.id, type(msg_error).__name__)
                 await manager.send_personal_message(
                     json.dumps({
                         "type": "error",
@@ -366,26 +343,21 @@ async def websocket_endpoint(
                         "code": "processing_error",
                         "timestamp": datetime.utcnow().isoformat()
                     }),
-                    client_id
+                    conn_key
                 )
-    
+
     except WebSocketDisconnect:
-        logger.info(f"[WebSocket] Client {client_id} disconnected gracefully")
-        
+        logger.info("[WebSocket] desconexion user_id=%s", getattr(user, "id", None))
+
     except Exception as conn_error:
-        logger.error(f"[WebSocket] Connection error for {client_id}: {str(conn_error)}")
+        logger.error("[WebSocket] error de conexion: %s", type(conn_error).__name__)
         if connection_accepted:
             try:
-                await websocket.close(
-                    code=status.WS_1011_INTERNAL_ERROR,
-                    reason="Internal server error"
-                )
-            except Exception as close_error:
-                logger.error(f"[WebSocket] Error closing connection: {str(close_error)}")
-        
+                await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason="Internal server error")
+            except Exception:
+                pass
+
     finally:
-        # Clean up the connection
-        if user:
-            manager.disconnect(client_id, user.id)
-        else:
-            manager.disconnect(client_id, 0)  # 0 indicates no user was authenticated
+        # Solo se retira la conexion que ESTE handler registro (nunca la de otro usuario).
+        if conn_key and user is not None:
+            manager.unregister(conn_key, user.id, websocket)

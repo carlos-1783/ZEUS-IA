@@ -13,16 +13,14 @@ from __future__ import annotations
 
 import io
 import logging
-import re
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import unquote, urlparse
 
 from PIL import Image, ImageDraw, ImageFont  # type: ignore
 
-from services.automation.utils import OUTPUT_BASE_DIR, ensure_dir, timestamp
+from services.automation.utils import store_output, timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -134,13 +132,21 @@ def generate_marketing_video(
     agent: str,
     prefix: str,
     artifact_id: Optional[str] = None,
+    *,
+    company_id: Optional[int] = None,
+    user_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
-    Genera el recurso de vídeo asociado a un entregable.
-    Intenta MP4 primero, si falla genera GIF como fallback.
+    Genera el recurso de video asociado a un entregable (MP4; GIF si no hay ffmpeg).
+
+    Fase 2 / Step 1: se codifica en un directorio temporal y el resultado se guarda en R2
+    como entregable de la empresa (antes: storage/outputs en disco efimero). Sin empresa o
+    sin R2 no hay donde guardarlo y se devuelve success=False con el motivo.
     """
+    import tempfile
+
     enc = _video_encode_params(deliverable)
-    logical = _build_frames(deliverable, enc.width, enc.height)
+    logical = _build_frames(deliverable, enc.width, enc.height, user_id=user_id)
     if not logical:
         logger.warning("No se generaron frames para el vídeo de PERSEO")
         return {"success": False, "reason": "no_frames"}
@@ -152,66 +158,60 @@ def generate_marketing_video(
         crossfade_seconds=enc.crossfade_sec,
     )
 
-    agent_dir = ensure_dir(OUTPUT_BASE_DIR / agent.lower())
     base_name = artifact_id or f"{prefix}_{timestamp()}"
-    mp4_path = agent_dir / f"{base_name}.mp4"
+    with tempfile.TemporaryDirectory(prefix="perseo_video_") as tmp:
+        work = Path(tmp)
+        mp4_path = work / f"{base_name}.mp4"
+        logger.info(f"Intentando generar MP4 para {base_name}...")
+        if _write_mp4(frames, mp4_path, fps=enc.fps, crf=enc.crf):
+            return _store_video_asset(
+                agent, mp4_path, "mp4", "generated", len(frames), company_id=company_id, user_id=user_id
+            )
 
-    # Intentar generar MP4 primero
-    logger.info(f"Intentando generar MP4 para {base_name}...")
-    if _write_mp4(frames, mp4_path, fps=enc.fps, crf=enc.crf):
-        file_size = mp4_path.stat().st_size if mp4_path.exists() else 0
-        logger.info(f"✅ MP4 generado exitosamente: {mp4_path.name} ({file_size} bytes)")
-        return _build_video_asset_payload(
-            file_path=mp4_path,
-            fmt="mp4",
-            status="generated",
-            frame_count=len(frames),
-        )
-
-    # Si falla MP4, generar GIF como fallback
-    logger.warning("MP4 falló, generando GIF como fallback...")
-    gif_path = agent_dir / f"{base_name}_fallback.gif"
-    gif_ms = max(20, int(round(1000.0 / max(1, enc.fps))))
-    if _write_gif(frames, gif_path, frame_duration_ms=gif_ms):
-        file_size = gif_path.stat().st_size if gif_path.exists() else 0
-        logger.info(f"✅ GIF fallback generado: {gif_path.name} ({file_size} bytes)")
-        payload = _build_video_asset_payload(
-            file_path=gif_path,
-            fmt="gif",
-            status="fallback_gif",
-            frame_count=len(frames),
-        )
-        payload["note"] = "MP4 no disponible (FFmpeg requerido). Se generó GIF como alternativa."
-        return payload
+        logger.warning("MP4 falló, generando GIF como fallback...")
+        gif_path = work / f"{base_name}_fallback.gif"
+        gif_ms = max(20, int(round(1000.0 / max(1, enc.fps))))
+        if _write_gif(frames, gif_path, frame_duration_ms=gif_ms):
+            payload = _store_video_asset(
+                agent, gif_path, "gif", "fallback_gif", len(frames), company_id=company_id, user_id=user_id
+            )
+            if payload.get("success"):
+                payload["note"] = "MP4 no disponible (FFmpeg requerido). Se generó GIF como alternativa."
+            return payload
 
     logger.error("No se pudo generar ni MP4 ni GIF para el entregable PERSEO")
     return {"success": False, "reason": "generation_failed"}
 
 
-def _build_video_asset_payload(
+def _store_video_asset(
+    agent: str,
     file_path: Path,
     fmt: str,
     status: str,
     frame_count: int,
+    *,
+    company_id: Optional[int],
+    user_id: Optional[int],
 ) -> Dict[str, Any]:
-    file_size = file_path.stat().st_size if file_path.exists() else 0
-    try:
-        relative_path = file_path.relative_to(OUTPUT_BASE_DIR).as_posix()
-    except ValueError:
-        relative_path = file_path.name
-
-    download_path = f"/automation/outputs/{relative_path}".replace("//", "/")
-
+    data = file_path.read_bytes()
+    ctype = "video/mp4" if fmt == "mp4" else "image/gif"
+    stored = store_output(agent, file_path.name, data, ctype, company_id=company_id, user_id=user_id)
+    if not stored:
+        return {
+            "success": False,
+            "reason": "storage_unavailable",
+            "error": "Vídeo generado pero sin almacenamiento externo (R2) o sin empresa donde guardarlo.",
+        }
     return {
         "success": True,
-        "path": str(file_path.resolve()),
-        "relative_path": relative_path,
-        "filename": file_path.name,
-        "download_path": download_path,
+        "file_id": stored["file_id"],
+        "url": stored["url"],
+        "filename": stored["filename"],
+        "download_path": stored["download_path"],
         "format": fmt,
         "status": status,
         "frame_count": frame_count,
-        "file_size": file_size,
+        "file_size": len(data),
     }
 
 
@@ -225,64 +225,31 @@ def _ensure_rgb_max(im: Image.Image) -> Image.Image:
     return im
 
 
-def _resolve_local_reference_path(raw: str) -> Optional[Path]:
-    from app.core.config import settings
+def _load_reference_image(raw: str, user_id: Optional[int]) -> Optional[Image.Image]:
+    """Imagen de referencia desde R2, solo si es un fichero de una empresa del usuario.
 
-    s = raw.strip()
-    if not s:
+    Fase 2 / Step 1: antes se leia cualquier ruta de STATIC_DIR o se descargaba cualquier
+    URL http(s) desde el servidor (SSRF). Si no se puede resolver, el video se genera sin
+    diapositiva de referencia (se registra el motivo)."""
+    from fastapi import HTTPException
+
+    from app.db.base import SessionLocal
+    from services import object_storage
+    from services.perseo_media_io import find_input
+
+    if not (raw or "").strip() or not user_id:
         return None
-    path_part = s
-    if s.startswith("http://") or s.startswith("https://"):
-        path_part = unquote(urlparse(s).path or "")
-    elif "?" in s:
-        path_part = s.split("?", 1)[0]
-
-    if path_part.startswith("/static/"):
-        rel = path_part[len("/static/") :].lstrip("/")
-        p = (Path(settings.STATIC_DIR) / rel).resolve()
-        try:
-            p.relative_to(Path(settings.STATIC_DIR).resolve())
-        except ValueError:
-            return None
-        return p if p.is_file() else None
-
-    m = re.match(
-        r"^/api/v1/upload/file/(images|videos|documents|media)/([^/?#]+)$",
-        path_part,
-    )
-    if m:
-        cat, fn = m.group(1), unquote(m.group(2))
-        base = (Path(settings.STATIC_DIR) / "uploads" / cat).resolve()
-        p = (base / fn).resolve()
-        try:
-            p.relative_to(base)
-        except ValueError:
-            return None
-        return p if p.is_file() else None
-    return None
-
-
-def _load_reference_image(raw: str) -> Optional[Image.Image]:
-    lp = _resolve_local_reference_path(raw)
-    if lp is not None:
-        try:
-            return _ensure_rgb_max(Image.open(lp))
-        except Exception as exc:
-            logger.warning("No se pudo abrir imagen de referencia en disco: %s", exc)
-    s = raw.strip()
-    if s.startswith("http://") or s.startswith("https://"):
-        try:
-            import requests  # pyright: ignore[reportMissingModuleSource]
-
-            r = requests.get(
-                s,
-                timeout=25,
-                headers={"User-Agent": "ZEUS-IA-PerseoVideo/1.0"},
-            )
-            r.raise_for_status()
-            return _ensure_rgb_max(Image.open(io.BytesIO(r.content)))
-        except Exception as exc:
-            logger.warning("No se pudo descargar imagen de referencia: %s", exc)
+    db = SessionLocal()
+    try:
+        row = find_input(db, raw, user_id)
+        data = object_storage.read_bytes(row)
+        return _ensure_rgb_max(Image.open(io.BytesIO(data)))
+    except HTTPException as exc:
+        logger.warning("Imagen de referencia no resoluble (%s): %s", exc.status_code, exc.detail)
+    except Exception as exc:
+        logger.warning("No se pudo cargar la imagen de referencia: %s", type(exc).__name__)
+    finally:
+        db.close()
     return None
 
 
@@ -328,12 +295,14 @@ def _render_reference_slide(
     return image
 
 
-def _build_frames(deliverable: Dict[str, Any], width: int, height: int) -> List[Image.Image]:
+def _build_frames(
+    deliverable: Dict[str, Any], width: int, height: int, *, user_id: Optional[int] = None
+) -> List[Image.Image]:
     frames: List[Image.Image] = []
 
     ref_raw = deliverable.get("reference_image_url") or deliverable.get("reference_image")
     if isinstance(ref_raw, str) and ref_raw.strip():
-        ref_pil = _load_reference_image(ref_raw)
+        ref_pil = _load_reference_image(ref_raw, user_id)
         if ref_pil:
             cap = str(deliverable.get("reference_caption") or "").strip()
             frames.append(_render_reference_slide(ref_pil, cap, width, height))

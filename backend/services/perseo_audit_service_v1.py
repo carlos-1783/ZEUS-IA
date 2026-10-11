@@ -100,7 +100,7 @@ def build_feature_status_map(db: Session | None = None) -> Dict[str, Dict[str, A
     video_gen_status: FeatureStatus = "REAL" if video_gen_configured() and s3_configured() else (
         "BROKEN" if video_gen_configured() and not s3_configured() else ("SIMULATED" if not video_gen_configured() else "REAL")
     )
-    pipeline_status_val: FeatureStatus = "REAL" if (ffmpeg_ok and (not v2 or s3_configured())) else "BROKEN"
+    pipeline_status_val: FeatureStatus = "REAL" if (ffmpeg_ok and s3_configured()) else "BROKEN"  # salidas siempre a R2
     v3_status: FeatureStatus = "REAL" if (ffmpeg_ok and execution["writes_enabled"]) else (
         "BROKEN" if not ffmpeg_ok else "SIMULATED"
     )
@@ -254,9 +254,7 @@ def build_audit_report(db: Session | None = None) -> Dict[str, Any]:
                 "create_campaign",
                 "publish_post",
                 "run_pipeline",
-                "store_object",
             ],
-            "storage_module": "STORAGE",
             "require_transaction_id": False,
             "respect_execution_mode": True,
         },

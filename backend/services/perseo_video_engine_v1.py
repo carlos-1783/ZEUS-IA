@@ -14,7 +14,6 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
 
 from fastapi import HTTPException, status
 
@@ -58,48 +57,11 @@ def _video_duration(ffmpeg: str, path: Path) -> float:
     return 0.0
 
 
-def _resolve_input_path(input_url: str, user_id: int) -> Path:
-    raw = (input_url or "").strip()
-    if not raw:
-        raise HTTPException(status_code=422, detail="input_url required")
-
-    if raw.startswith("/static/"):
-        rel = raw[len("/static/") :]
-        path = Path(settings.STATIC_DIR) / rel
-    elif raw.startswith("http://") or raw.startswith("https://"):
-        parsed = urlparse(raw)
-        if parsed.path.startswith("/static/"):
-            rel = parsed.path[len("/static/") :]
-            path = Path(settings.STATIC_DIR) / rel
-        else:
-            raise HTTPException(
-                status_code=422,
-                detail="Remote URLs must be served from /static/ on this host",
-            )
-    else:
-        path = Path(raw)
-        if not path.is_absolute():
-            path = Path(settings.STATIC_DIR) / raw.lstrip("/")
-
-    if not path.exists() or not path.is_file():
-        raise HTTPException(status_code=404, detail=f"Input video not found: {raw}")
-    if not str(path).startswith(str(Path(settings.STATIC_DIR).resolve())):
-        raise HTTPException(status_code=403, detail="Input path outside static storage")
-    return path
-
-
-def _output_paths(user_id: int, job_id: str) -> tuple[Path, Path, str, str]:
+def _output_paths(work_dir: Path, user_id: int, job_id: str) -> tuple[Path, Path]:
+    """Salidas de ffmpeg en el directorio temporal del trabajo (luego se suben a R2)."""
     stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
     base = f"u{user_id}_{stamp}_{job_id[:8]}_perseo_edit"
-    video_dir = Path(settings.STATIC_DIR) / "uploads" / "videos"
-    thumb_dir = Path(settings.STATIC_DIR) / "uploads" / "images"
-    video_dir.mkdir(parents=True, exist_ok=True)
-    thumb_dir.mkdir(parents=True, exist_ok=True)
-    video_path = video_dir / f"{base}.mp4"
-    thumb_path = thumb_dir / f"{base}_thumb.jpg"
-    video_url = f"/static/uploads/videos/{video_path.name}"
-    thumb_url = f"/static/uploads/images/{thumb_path.name}"
-    return video_path, thumb_path, video_url, thumb_url
+    return work_dir / f"{base}.mp4", work_dir / f"{base}_thumb.jpg"
 
 
 def _build_ffmpeg_filter(operations: List[Dict[str, Any]]) -> tuple[List[str], Optional[str]]:
@@ -186,7 +148,13 @@ def _run_ffmpeg_edit(
     return duration
 
 
-def _process_job(job_id: str, user_id: int, input_path: Path, operations: List[Dict[str, Any]]) -> None:
+def _process_job(job_id: str, user_id: int, input_url: str, operations: List[Dict[str, Any]]) -> None:
+    import tempfile
+
+    from app.db.base import SessionLocal
+    from services.perseo_media_io import download_input
+    from services.perseo_storage_v2 import upload_file
+
     with _job_lock:
         job = _jobs.get(job_id)
         if not job:
@@ -195,33 +163,48 @@ def _process_job(job_id: str, user_id: int, input_path: Path, operations: List[D
         job["progress"] = 10
         job["updated_at"] = _now_iso()
 
-    video_path, thumb_path, video_url, thumb_url = _output_paths(user_id, job_id)
     try:
-        with _job_lock:
-            _jobs[job_id]["progress"] = 30
-        duration = _run_ffmpeg_edit(input_path, video_path, thumb_path, operations)
+        with tempfile.TemporaryDirectory(prefix="perseo_edit_") as tmp:
+            work = Path(tmp)
+            db = SessionLocal()
+            try:
+                input_path = download_input(db, input_url, user_id, work)
+            finally:
+                db.close()
+            video_path, thumb_path = _output_paths(work, user_id, job_id)
+            with _job_lock:
+                _jobs[job_id]["progress"] = 30
+            duration = _run_ffmpeg_edit(input_path, video_path, thumb_path, operations)
+            with _job_lock:
+                _jobs[job_id]["progress"] = 80
+            video = upload_file(video_path, user_id=user_id, category="videos", content_type="video/mp4")
+            thumb = (
+                upload_file(thumb_path, user_id=user_id, category="thumbnails", content_type="image/jpeg")
+                if thumb_path.exists()
+                else None
+            )
         with _job_lock:
             _jobs[job_id].update(
                 {
                     "status": "completed",
                     "progress": 100,
-                    "video_url": video_url,
-                    "thumbnail_url": thumb_url if thumb_path.exists() else None,
+                    "video_url": video["url"],
+                    "video_file_id": video["file_id"],
+                    "thumbnail_url": thumb["url"] if thumb else None,
                     "duration": duration,
-                    "output_path": str(video_path),
                     "updated_at": _now_iso(),
-                    "execution_ms": int((time.monotonic()) * 1000),
                 }
             )
-        logger.info("[PERSEO_VIDEO] job=%s completed duration=%s", job_id, duration)
+        logger.info("[PERSEO_VIDEO] job=%s completed duration=%s file_id=%s", job_id, duration, video["file_id"])
     except Exception as exc:
         logger.exception("[PERSEO_VIDEO] job=%s failed", job_id)
+        detail = getattr(exc, "detail", None)
         with _job_lock:
             _jobs[job_id].update(
                 {
                     "status": "failed",
                     "progress": 0,
-                    "error": str(exc)[:500],
+                    "error": (str(detail) if detail else type(exc).__name__)[:500],
                     "updated_at": _now_iso(),
                 }
             )
@@ -245,7 +228,11 @@ def create_video_edit_job(
         )
 
     _ffmpeg_exe()
-    input_path = _resolve_input_path(input_url, user.id)
+    from services.perseo_media_io import find_input
+    from services.perseo_storage_v2 import require_cloud_storage
+
+    require_cloud_storage()
+    find_input(db, input_url, user.id)  # 404/422 inmediato si no es un fichero de su empresa
     ops = operations or [{"type": "scale", "width": 1280, "height": 720}]
 
     job_id = str(uuid.uuid4())
@@ -267,7 +254,7 @@ def create_video_edit_job(
 
     thread = threading.Thread(
         target=_process_job,
-        args=(job_id, user.id, input_path, ops),
+        args=(job_id, user.id, input_url, ops),
         daemon=True,
         name=f"perseo-video-{job_id[:8]}",
     )

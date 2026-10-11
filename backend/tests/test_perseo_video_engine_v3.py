@@ -66,6 +66,7 @@ def test_audit_includes_video_engine_v3():
     assert features["video_engine_v3"]["endpoint"] == "POST /api/v1/perseo/video/generate"
 
 
+@patch("services.perseo_video_engine_v3.require_cloud_storage")
 @patch("services.perseo_video_engine_v3._run_ffmpeg_pipeline")
 @patch("services.perseo_video_engine_v3._persist_video")
 @patch("services.perseo_video_engine_v3._crm_integrate")
@@ -83,6 +84,7 @@ def test_generate_perseo_video_v3_orchestration(
     mock_crm,
     mock_store,
     mock_ffmpeg,
+    _require_storage,
 ):
     from services.perseo_video_engine_v3 import generate_perseo_video_v3
 
@@ -103,7 +105,8 @@ def test_generate_perseo_video_v3_orchestration(
         "mode": "conversion_only",
     }
     mock_img.return_value = Path("/tmp/test.jpg")
-    mock_store.return_value = {"video_url": "/static/uploads/videos/tenant_7/x.mp4", "storage": "local"}
+    fid = "a" * 32
+    mock_store.return_value = {"video_url": f"/api/v1/files/{fid}", "storage": "r2", "file_id": fid}
     mock_crm.return_value = {
         "crm_saved": True,
         "store_video_asset": True,
@@ -118,11 +121,12 @@ def test_generate_perseo_video_v3_orchestration(
         db,
         user,
         tenant_id="7",
-        image_url="https://example.com/p.jpg",
+        image_url="/api/v1/files/" + "b" * 32,
         product_info="servicio premium",
     )
     assert out["success"] is True
     assert out["version"] == "3.0.0"
-    assert out["video_url"].endswith(".mp4")
+    assert out["video_url"] == f"/api/v1/files/{fid}"
+    assert out["storage"] == "r2" and out["video_file_id"] == fid
     assert out["script"]["cta"]
     mock_ffmpeg.assert_called_once()

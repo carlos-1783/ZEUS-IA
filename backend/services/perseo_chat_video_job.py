@@ -110,6 +110,7 @@ def _generate_with_timeout(
     doc_id: int,
     user_id: int,
     artifact_id: str,
+    company_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Ejecuta generate_marketing_video en un hilo con join(timeout) para no bloquear pending indefinidamente."""
     from services.video_service import generate_marketing_video
@@ -126,7 +127,8 @@ def _generate_with_timeout(
     def _work() -> None:
         try:
             out["result"] = generate_marketing_video(
-                deliverable, "PERSEO", f"chatdoc{doc_id}", artifact_id=artifact_id
+                deliverable, "PERSEO", f"chatdoc{doc_id}", artifact_id=artifact_id,
+                company_id=company_id, user_id=user_id,
             )
         except BaseException as e:
             err.append(e)
@@ -155,8 +157,8 @@ def _generate_with_timeout(
 
 def run_perseo_chat_video_generation(doc_id: int, user_id: int) -> None:
     """
-    Genera MP4 o GIF desde el copy del documento y lo copia a static/uploads/videos
-    con prefijo u{user_id}_ (compatible con /api/v1/upload/file/...).
+    Genera MP4 o GIF desde el copy del documento y lo guarda en R2 bajo la empresa del
+    documento; la URL guardada es /api/v1/files/{id}.
     """
     db = SessionLocal()
     try:
@@ -188,7 +190,9 @@ def run_perseo_chat_video_generation(doc_id: int, user_id: int) -> None:
         deliverable = build_deliverable_from_chat_content(content, title)
 
         artifact_id = f"chat_{doc_id}_{user_id}"
-        video_result = _generate_with_timeout(deliverable, doc_id, user_id, artifact_id)
+        video_result = _generate_with_timeout(
+            deliverable, doc_id, user_id, artifact_id, company_id=doc.company_id
+        )
 
         if not video_result.get("success"):
             content["generated_video_status"] = "failed"
@@ -202,34 +206,16 @@ def run_perseo_chat_video_generation(doc_id: int, user_id: int) -> None:
             logger.warning("perseo_chat_video: fallo doc=%s %s", doc_id, content["generated_video_error"])
             return
 
-        src = Path(video_result["path"])
-        if not src.is_file():
-            content["generated_video_status"] = "failed"
-            content["generated_video_error"] = "Archivo generado no encontrado en disco"
-            payload["content"] = content
-            doc.document_payload = payload
-            db.add(doc)
-            db.commit()
-            return
-
+        # Fase 2 / Step 1: el video ya esta en R2 (empresa del documento); antes se copiaba a
+        # STATIC_DIR/uploads/videos y se servia sin autenticacion.
         ext = str(video_result.get("format") or "mp4").lower()
-        if ext not in ("mp4", "gif"):
-            ext = "mp4"
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-        fname = f"u{user_id}_{stamp}_doc{doc_id}_perseo.{ext}"
-        dest_dir = Path(settings.STATIC_DIR) / "uploads" / "videos"
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        dest = dest_dir / fname
-        shutil.copy2(src, dest)
-
-        path_url = f"{settings.STATIC_URL.rstrip('/')}/uploads/videos/{fname}"
-        if not path_url.startswith("/"):
-            path_url = "/" + path_url.lstrip("/")
+        path_url = video_result["url"]
 
         content["generated_video_url"] = path_url
         content["generated_video_status"] = "ready"
         content["generated_video_format"] = ext
         content["generated_video_asset"] = {
+            "file_id": video_result.get("file_id"),
             "file_size": video_result.get("file_size"),
             "frame_count": video_result.get("frame_count"),
             "status": video_result.get("status"),

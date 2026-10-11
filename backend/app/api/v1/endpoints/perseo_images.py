@@ -6,9 +6,11 @@ Permite subir imágenes de referencia locales para las campañas de PERSEO.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user
 from app.core.config import settings
+from app.db.session import get_db
 from app.models.user import User
 from services.perseo_images import save_image
 
@@ -21,10 +23,11 @@ router = APIRouter(prefix="/perseo", tags=["perseo-images"])
 )
 async def upload_perseo_image(
     image: UploadFile = File(...),
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """
-    Guardar una imagen temporal y devolver una URL pública.
+    Guardar la imagen de referencia en R2 (empresa del usuario) y devolver su URL de acceso.
     """
     if not settings.PERSEO_IMAGES_ENABLED:
         raise HTTPException(
@@ -32,24 +35,6 @@ async def upload_perseo_image(
             detail="Las cargas de imágenes están deshabilitadas.",
         )
 
-    try:
-        asset = await save_image(image)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except Exception as exc:  # pylint: disable=broad-except
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="No se pudo guardar la imagen subida.",
-        ) from exc
-
-    return {
-        "success": True,
-        "url": asset["url"],
-        "relative_path": asset["relative_path"],
-        "filename": asset["filename"],
-        "content_type": asset["content_type"],
-        "size_bytes": asset["size_bytes"],
-        "storage": asset["storage"],
-        "expires_at": asset["expires_at"],
-    }
+    asset = await save_image(db, current_user, image)  # 4xx/503 explicitos desde upload_intake
+    return {"success": True, **asset}
 

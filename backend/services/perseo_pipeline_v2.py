@@ -46,7 +46,7 @@ def pipeline_status(db: Session | None = None) -> Dict[str, Any]:
         "connected": True,
         "ai_enabled": openai_configured(),
         "video_generation": video_gen_configured(),
-        "storage": "s3" if s3_configured() else "local",
+        "storage": "r2" if s3_configured() else "not_configured",
         "execution_mode": execution["execution_mode"],
         "writes_enabled": execution["writes_enabled"],
     }
@@ -156,7 +156,7 @@ def run_pipeline(
 
     # 5 storage_upload (engines upload to S3 when configured)
     stages["storage_upload"] = {
-        "backend": "s3" if s3_configured() else "local",
+        "backend": "r2" if s3_configured() else "not_configured",
         "video_url": video_output.get("video_url"),
         "image_url": video_output.get("image_url"),
     }

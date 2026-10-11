@@ -220,16 +220,11 @@ def _build_production_filter_complex(script: Dict[str, str], brand_color: str) -
     )
 
 
-def _download_image_to_workdir(image_url: str, user_id: int, work_dir: Path) -> Path:
-    """Preprocessing: fetch image → /tmp/input.jpg (or work_dir/input.jpg)."""
-    src = _resolve_image_path(image_url, user_id)
+def _download_image_to_workdir(db: Session, image_url: str, user_id: int, work_dir: Path) -> Path:
+    """Preprocesado: imagen de la empresa del usuario desde R2 -> work_dir/input.jpg."""
+    src = _resolve_image_path(db, image_url, user_id, work_dir / "in")
     dest = work_dir / "input.jpg"
     shutil.copy2(src, dest)
-    if src.parent == _temp_root() and src != dest and src.exists():
-        try:
-            src.unlink()
-        except OSError:
-            pass
     return dest
 
 
@@ -311,20 +306,12 @@ def _generate_gif_preview(video_path: Path, work_dir: Path) -> Optional[Path]:
 
 
 def _persist_gif(gif_path: Path, *, tenant_id: int) -> str:
-    from services.perseo_storage_v2 import s3_configured, storage_backend, upload_tenant_video
+    """GIF de vista previa a R2 bajo la empresa (sin respaldo en /static)."""
+    from services.perseo_storage_v2 import upload_tenant_video
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-    if storage_backend() == "s3" and s3_configured():
-        stored = upload_tenant_video(
-            gif_path, tenant_id=tenant_id, user_id=0, filename=f"{ts}_preview.gif"
-        )
-        return stored["url"]
-    dest_dir = Path(settings.STATIC_DIR) / "uploads" / "images" / str(tenant_id)
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    fname = f"preview_{ts}.gif"
-    final = dest_dir / fname
-    shutil.copy2(gif_path, final)
-    return f"/static/uploads/images/{tenant_id}/{fname}"
+    stored = upload_tenant_video(gif_path, tenant_id=tenant_id, user_id=0, filename=f"{ts}_preview.gif")
+    return stored["url"]
 
 
 def _resolve_tenant_id(db: Session, user: User, tenant_id: Optional[str]) -> Tuple[Any, int]:
@@ -382,7 +369,7 @@ def generate_perseo_video_pro_v4(
     output_mp4 = work / "output.mp4"
 
     try:
-        _download_image_to_workdir(image_url, user.id, work)
+        _download_image_to_workdir(db, image_url, user.id, work)
         fc = _build_production_filter_complex(script, brand_color)
         _run_ffmpeg_production(input_jpg, output_mp4, fc)
         validation = _validate_output_video(output_mp4, script)

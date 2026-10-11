@@ -16,9 +16,7 @@ import tempfile
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urlparse
 
-import requests
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -26,7 +24,7 @@ from app.core.config import settings
 from app.models.company import Company, UserCompany
 from app.models.user import User
 from services.crm_office_service import company_ids_for_user, log_activity
-from services.perseo_storage_v2 import s3_configured, storage_backend, upload_file
+from services.perseo_storage_v2 import require_cloud_storage, upload_file
 from services.perseo_video_engine_v1 import _ffmpeg_exe
 from services.zeus_execution_controller_v1 import get_execution_status
 
@@ -164,35 +162,17 @@ def _branding_for_tenant(
     }
 
 
-def _resolve_image_path(image_url: str, user_id: int) -> Path:
-    raw = (image_url or "").strip()
-    if not raw:
+def _resolve_image_path(db: Session, image_url: str, user_id: int, work: Path) -> Path:
+    """Imagen de entrada desde R2, solo si es de una empresa del usuario.
+
+    Fase 2 / Step 1: antes se descargaba cualquier URL http(s) desde el servidor (SSRF:
+    alcanzaba servicios internos) o se leia cualquier ruta de STATIC_DIR sin comprobar
+    a quien pertenecia. Ahora la imagen tiene que haberse subido a ZEUS."""
+    from services.perseo_media_io import download_input
+
+    if not (image_url or "").strip():
         raise HTTPException(status_code=422, detail="image_url required")
-
-    if raw.startswith("http://") or raw.startswith("https://"):
-        try:
-            resp = requests.get(raw, timeout=30)
-            resp.raise_for_status()
-        except Exception as exc:
-            raise HTTPException(status_code=422, detail=f"No se pudo descargar imagen: {exc}") from exc
-        suffix = Path(urlparse(raw).path).suffix or ".jpg"
-        if suffix.lower() not in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
-            suffix = ".jpg"
-        dest = _temp_root() / f"perseo_v3_{user_id}_{uuid.uuid4().hex[:8]}{suffix}"
-        dest.write_bytes(resp.content)
-        return dest
-
-    if raw.startswith("/static/"):
-        rel = raw[len("/static/") :]
-        path = Path(settings.STATIC_DIR) / rel
-    elif raw.startswith("/"):
-        path = Path(settings.STATIC_DIR) / raw.lstrip("/")
-    else:
-        path = Path(settings.STATIC_DIR) / raw.lstrip("/")
-
-    if not path.exists() or not path.is_file():
-        raise HTTPException(status_code=404, detail=f"Imagen no encontrada: {raw}")
-    return path
+    return download_input(db, image_url, user_id, work)
 
 
 def _generate_conversion_copy(
@@ -343,25 +323,17 @@ def _persist_video(
     company_id: int,
     prefix: str = "perseo_v3",
 ) -> Dict[str, Any]:
-    if storage_backend() == "s3" and s3_configured():
-        stored = upload_file(
-            video_path,
-            user_id=user_id,
-            category=f"tenant_{company_id}/videos",
-            content_type="video/mp4",
-        )
-        return {"video_url": stored["url"], "storage": "cloud", **stored}
-
-    dest_dir = Path(settings.STATIC_DIR) / "uploads" / "videos" / f"tenant_{company_id}"
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    fname = f"{prefix}_{uuid.uuid4().hex[:10]}.mp4"
-    final = dest_dir / fname
-    shutil.copy2(video_path, final)
-    return {
-        "video_url": f"/static/uploads/videos/tenant_{company_id}/{fname}",
-        "storage": "local",
-        "path": str(final),
-    }
+    """Video final a R2 bajo la empresa del tenant (sin respaldo en /static)."""
+    require_cloud_storage()
+    stored = upload_file(
+        video_path,
+        user_id=user_id,
+        company_id=company_id,
+        category="videos",
+        filename=f"{prefix}_{uuid.uuid4().hex[:10]}.mp4",
+        content_type="video/mp4",
+    )
+    return {"video_url": stored["url"], **stored}
 
 
 def _crm_integrate(
@@ -481,12 +453,13 @@ def generate_perseo_video_v3(
     script = copy_result["script"]
     _validate_script(script)
 
-    image_path = _resolve_image_path(image_url, user.id)
+    require_cloud_storage()
     work = _temp_root() / f"perseo_v3_job_{uuid.uuid4().hex[:10]}"
     work.mkdir(parents=True, exist_ok=True)
     out_mp4 = work / "output.mp4"
 
     try:
+        image_path = _resolve_image_path(db, image_url, user.id, work / "in")
         vf = _build_drawtext_filter(work, script, brand)
         _run_ffmpeg_pipeline(image_path, vf, out_mp4)
         stored = _persist_video(out_mp4, user_id=user.id, company_id=company_id)
@@ -506,14 +479,9 @@ def generate_perseo_video_v3(
         logger.exception("[PERSEO_V3] generation failed tenant=%s", tenant_id)
         raise HTTPException(
             status_code=500,
-            detail={"error": "ffmpeg_failure", "message": str(exc)[:400]},
+            detail={"error": "ffmpeg_failure", "message": "Fallo generando el video."},
         ) from exc
     finally:
-        if image_path.parent == _temp_root() and image_path.exists():
-            try:
-                image_path.unlink()
-            except OSError:
-                pass
         if work.exists():
             shutil.rmtree(work, ignore_errors=True)
 
@@ -534,7 +502,8 @@ def generate_perseo_video_v3(
         "codec": "h264",
         "duration_sec": DURATION_SEC,
         "resolution": f"{RESOLUTION[0]}x{RESOLUTION[1]}",
-        "storage": stored.get("storage", "local"),
+        "storage": stored.get("storage"),
+        "video_file_id": stored.get("file_id"),
         "copy_engine": copy_result,
         "crm": crm,
     }

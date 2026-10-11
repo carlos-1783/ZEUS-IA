@@ -35,7 +35,7 @@ import os
 import re
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -418,7 +418,17 @@ async def health_check():
     return {"status": "healthy", "service": "zeus-ia"}
 
 
-@app.get("/debug")
+def _debug_dependencies():
+    from app.core.auth import get_current_active_superuser
+    from services.thalos_request_guard_v1 import thalos_read_guard
+
+    return [Depends(thalos_read_guard), Depends(get_current_active_superuser)]
+
+
+# Fase 2 / Step 1 (M1): diagnostico de configuracion SOLO para superusuarios y por THALOS
+# (antes publico). Se eliminan /ws-test y /railway-ws-diagnostic: devolvian datos fijos
+# ("ready") y versiones inventadas sin comprobar nada.
+@app.get("/debug", dependencies=_debug_dependencies(), include_in_schema=False)
 async def debug_info():
     afrodita_diag: dict = {}
     try:
@@ -453,20 +463,6 @@ async def debug_info():
     }
 
 
-@app.get("/ws-test")
-async def websocket_test():
-    return {
-        "message": "WebSocket endpoint available",
-        "endpoint": "/api/v1/ws/{client_id}",
-        "protocol": "wss://" if os.getenv("RAILWAY_ENVIRONMENT") else "ws://",
-        "status": "ready",
-        "railway_environment": os.getenv("RAILWAY_ENVIRONMENT", "NOT_SET"),
-        "port": os.getenv("PORT", "8000"),
-        "host": "0.0.0.0",
-        "websocket_support": "ENABLED",
-    }
-
-
 _BUNDLED_CLEAR_PWA = Path(__file__).resolve().parent / "static_pages" / "clear_pwa_cache.html"
 
 
@@ -482,25 +478,6 @@ async def serve_clear_pwa_cache_bundled():
         "<!DOCTYPE html><html><body><p>Limpiar caché: usa herramientas del navegador (borrar datos del sitio).</p></body></html>",
         status_code=200,
     )
-
-
-@app.get("/railway-ws-diagnostic")
-async def railway_ws_diagnostic():
-    import platform
-
-    return {
-        "platform": platform.system(),
-        "python_version": platform.python_version(),
-        "railway_environment": os.getenv("RAILWAY_ENVIRONMENT", "NOT_SET"),
-        "port": os.getenv("PORT", "8000"),
-        "host": "0.0.0.0",
-        "websocket_endpoint": "/api/v1/ws/{client_id}",
-        "cors_origins": settings.BACKEND_CORS_ORIGINS,
-        "fastapi_version": "0.104.1",
-        "uvicorn_version": "0.24.0",
-        "websocket_support": "ENABLED",
-        "middleware_configured": True,
-    }
 
 
 def _frontend_missing_html(full_path: str) -> str:

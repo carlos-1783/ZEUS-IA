@@ -187,3 +187,19 @@ def test_ws_message_with_control_chars_closes_and_records(db):
             ws.receive_text()
     ev = _last_event(db, "thalos_websocket_guard")
     assert ev.action_taken == "deny" and ev.decision_rule == "control_characters" and ev.user_id == u.id
+
+
+def test_debug_requires_superuser_and_fake_diagnostics_removed(db):
+    client = TestClient(app)
+    assert client.get("/debug").status_code == 401
+    normal = _seed(db, "dbgN")
+    assert client.get("/debug", headers={"Authorization": f"Bearer {_token(normal)}"}).status_code in (400, 403)
+    admin = _seed(db, "dbgS")
+    admin.is_superuser = True
+    db.add(admin)
+    db.commit()
+    ok = client.get("/debug", headers={"Authorization": f"Bearer {_token(admin)}"})
+    assert ok.status_code == 200 and ok.json()["status"] == "debug"
+    for gone in ("/ws-test", "/railway-ws-diagnostic"):
+        r = client.get(gone, headers={"Accept": "application/json"})
+        assert "websocket_support" not in r.text

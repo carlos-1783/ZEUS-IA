@@ -121,12 +121,16 @@ def test_install_covers_new_route_and_is_idempotent():
 
     tmp.include_router(r, prefix="/api/v1")
     before = [x for x in tmp.routes if isinstance(x, APIRoute) and x.path == "/api/v1/nueva"][0]
-    assert not g.route_is_thalos_covered(before)
-    assert g.install_global_thalos_guard(tmp) == 1
-    assert g.route_is_thalos_covered(before)
-    assert g.install_global_thalos_guard(tmp) == 0  # idempotente
     get_route = [x for x in tmp.routes if isinstance(x, APIRoute) and x.path == "/api/v1/lectura"][0]
-    assert not g.route_is_thalos_covered(get_route)  # GET no se toca
+    assert not g.route_is_thalos_covered(before)
+    assert not g.route_is_thalos_covered(get_route)
+    # Fase 2 / Step 1 (C2): tambien las lecturas pasan por THALOS (guard de lectura).
+    assert g.install_global_thalos_guard(tmp) == 2
+    assert g.route_is_thalos_covered(before)
+    assert g.route_is_thalos_covered(get_route)
+    assert g._dependant_has_guard(get_route.dependant, g._READ_GUARD_CALLS)
+    assert not g._dependant_has_guard(before.dependant, g._READ_GUARD_CALLS)  # la POST lleva el de escritura
+    assert g.install_global_thalos_guard(tmp) == 0  # idempotente
 
 
 def test_unguarded_route_now_logs_event_with_tenant(client, db):

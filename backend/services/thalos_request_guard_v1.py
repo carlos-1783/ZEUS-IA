@@ -337,9 +337,88 @@ async def thalos_anonymous_event_only_guard(request: Request, db: Session = Depe
     await _run_anonymous_guard(request, db, validate_body=False)
 
 
+# ------------------------------------------------------------------ lecturas
+
+MAX_QUERY_CHARS = 4096
+MAX_PATH_PARAM_CHARS = 512
+
+
+def validate_read_request(request: Request) -> Optional[tuple]:
+    """None si la lectura es valida; (http_status, motivo) si se rechaza.
+
+    Fase 2 / Step 1 (C2): las lecturas no tienen cuerpo; se valida lo que el cliente
+    controla en una GET: la query string (tamano y caracteres de control, ya
+    decodificados) y los parametros de ruta."""
+    raw_query = request.scope.get("query_string", b"") or b""
+    if len(raw_query) > MAX_QUERY_CHARS:
+        return 414, "query_too_long"
+    try:
+        for k, v in request.query_params.multi_items():
+            if _CONTROL_RE.search(k) or _CONTROL_RE.search(v):
+                return 400, "control_characters"
+    except Exception:
+        return 400, "query_invalid"
+    for v in (request.path_params or {}).values():
+        if isinstance(v, str):
+            if len(v) > MAX_PATH_PARAM_CHARS:
+                return 414, "path_param_too_long"
+            if _CONTROL_RE.search(v):
+                return 400, "control_characters"
+    return None
+
+
+_DENY_DETAIL.update(
+    {
+        "query_too_long": "La consulta es demasiado larga.",
+        "query_invalid": "Consulta no valida.",
+        "path_param_too_long": "Parametro de ruta demasiado largo.",
+    }
+)
+
+
+async def thalos_read_guard(request: Request, db: Session = Depends(get_db)) -> None:
+    """Guard THALOS para lecturas (GET/HEAD) y preflight OPTIONS explicitos.
+
+    No vuelve a autenticar: la autenticacion y el filtro de empresa siguen en la propia
+    ruta (no se cambia quien puede leer que). Valida la entrada y, si la rechaza, registra
+    un evento THALOS con el usuario del token si lo hay. Las lecturas PERMITIDAS no se
+    persisten como evento (cada refresco del panel escribiria una fila): quedan en el log
+    de aplicacion a nivel DEBUG."""
+    verdict = validate_read_request(request)
+    route = request.scope.get("route")
+    route_path = getattr(route, "path", None) or request.url.path
+    if not verdict:
+        logger.debug("THALOS read allow %s %s", request.method, route_path)
+        return
+    code, reason = verdict
+    user = await _best_effort_user(request, db)
+    company_id: Optional[int] = None
+    if user is not None:
+        try:
+            import services.crm_office_service as crm_svc
+
+            company_id = crm_svc.primary_company_id(db, user)
+        except Exception:
+            company_id = None
+    record_security_event(
+        db,
+        event_type="request_guard",
+        severity="warning",
+        source="thalos_read_guard",
+        details={"route": route_path, "method": request.method, "decision": "deny", "reason": reason},
+        user=user,
+        company_id=company_id,
+        ip_address=_client_ip(request),
+        action_taken="deny",
+        decision_rule=reason,
+    )
+    raise HTTPException(status_code=code, detail=_DENY_DETAIL.get(reason, "Peticion rechazada por THALOS."))
+
+
 # ------------------------------------------------------------- cobertura global
 
 MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 # Rutas publicas / con otra autenticacion. Guard ANONIMO con validacion de cuerpo + evento.
 ANON_BODY_ROUTES = frozenset(
@@ -384,17 +463,24 @@ _GUARD_CALLS = (
     thalos_anonymous_guard,
     thalos_anonymous_event_only_guard,
 )
+# El guard de lectura no cuenta como cobertura de una ruta mutante (no valida cuerpo).
+_READ_GUARD_CALLS = (thalos_read_guard,)
 
 
-def _dependant_has_guard(dependant: Any) -> bool:
+def _dependant_has_guard(dependant: Any, calls: tuple = _GUARD_CALLS) -> bool:
     for sub in getattr(dependant, "dependencies", []) or []:
-        if sub.call in _GUARD_CALLS or _dependant_has_guard(sub):
+        if sub.call in calls or _dependant_has_guard(sub, calls):
             return True
     return False
 
 
 def route_is_thalos_covered(route: Any) -> bool:
-    return _dependant_has_guard(route.dependant)
+    """Ruta cubierta por THALOS segun su tipo: mutante -> guard de escritura; lectura ->
+    guard de escritura o de lectura."""
+    methods = set(getattr(route, "methods", None) or ())
+    if methods & MUTATING_METHODS:
+        return _dependant_has_guard(route.dependant)
+    return _dependant_has_guard(route.dependant, _GUARD_CALLS + _READ_GUARD_CALLS)
 
 
 def _global_dependency_for(path: str):
@@ -408,10 +494,10 @@ def _global_dependency_for(path: str):
 
 
 def install_global_thalos_guard(app: Any, *, prefixes: tuple = ("/api/",)) -> int:
-    """Inyecta, de forma estructural, el guard THALOS en toda ruta mutante bajo `prefixes` que
-    aun no lo tenga (la dependencia de ruta ya existente cuenta como cobertura: no hay doble
-    evento). Reutiliza las mismas dependencias (compatible con dependency_overrides).
-    Idempotente. Devuelve cuantas rutas se han cubierto."""
+    """Inyecta, de forma estructural, el guard THALOS en TODA ruta bajo `prefixes` que aun no
+    lo tenga: guard de escritura (cuerpo, usuario, empresa) en las mutantes y guard de lectura
+    (query y parametros de ruta) en GET/HEAD. La dependencia de ruta ya existente cuenta como
+    cobertura (sin doble evento). Idempotente. Devuelve cuantas rutas se han cubierto."""
     from fastapi import params
     from fastapi.dependencies.utils import get_parameterless_sub_dependant
     from fastapi.routing import APIRoute
@@ -420,9 +506,16 @@ def install_global_thalos_guard(app: Any, *, prefixes: tuple = ("/api/",)) -> in
     for route in app.routes:
         if not isinstance(route, APIRoute) or not route.path_format.startswith(prefixes):
             continue
-        if not (set(route.methods or ()) & MUTATING_METHODS) or route_is_thalos_covered(route):
+        methods = set(route.methods or ())
+        if route_is_thalos_covered(route):
             continue
-        dep = params.Depends(_global_dependency_for(route.path_format))
+        if methods & MUTATING_METHODS:
+            guard = _global_dependency_for(route.path_format)
+        elif methods & READ_METHODS:
+            guard = thalos_read_guard
+        else:
+            continue
+        dep = params.Depends(guard)
         route.dependencies.insert(0, dep)
         route.dependant.dependencies.insert(
             0, get_parameterless_sub_dependant(depends=dep, path=route.path_format)

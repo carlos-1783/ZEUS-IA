@@ -148,10 +148,6 @@ app.include_router(api_router, prefix="/api/v1")
 # Alias spec zeus_time_cost_engine_v1: POST /api/checkin
 app.include_router(checkin_v1.router, prefix="/api/checkin", tags=["checkin"])
 
-# THALOS J5e: cobertura estructural de TODA ruta mutante /api/* (guard de ruta existente o global).
-from services.thalos_request_guard_v1 import install_global_thalos_guard  # noqa: E402
-
-install_global_thalos_guard(app)
 
 
 @app.get("/api/v1", include_in_schema=False)
@@ -632,6 +628,14 @@ async def serve_frontend(request: Request, full_path: str):
             "hint": "Deploy with root Dockerfile; Railway root dir must be repo root, not backend/ only.",
         },
     )
+
+
+# THALOS J5e + Fase 2 (C2): cobertura estructural de TODA ruta /api/* -- guard de escritura en
+# las mutantes y de lectura en GET/HEAD/OPTIONS. Se instala AL FINAL, despues de declarar todas
+# las rutas, para que ninguna definida mas abajo quede fuera.
+from services.thalos_request_guard_v1 import install_global_thalos_guard  # noqa: E402
+
+install_global_thalos_guard(app)
 
 
 if __name__ == "__main__":

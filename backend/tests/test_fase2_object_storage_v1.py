@@ -408,3 +408,73 @@ def test_perseo_storage_adapter_without_r2_is_503(no_r2, tmp_path):
     with pytest.raises(HTTPException) as exc:
         perseo_storage_v2.upload_file(f, user_id=1, category="videos")
     assert exc.value.status_code == 503
+
+
+def test_legacy_migration_script_dry_run_apply_and_idempotent(tmp_path, monkeypatch):
+    import importlib.util
+
+    from sqlalchemy import create_engine, text as sql
+
+    from app.models.erp import TPVProduct
+
+    spec = importlib.util.spec_from_file_location(
+        "migrate_static_uploads_to_r2", Path(__file__).resolve().parents[1] / "scripts" / "migrate_static_uploads_to_r2.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    dbfile = tmp_path / "legacy.db"
+    eng = create_engine(f"sqlite:///{dbfile}")
+    Base.metadata.create_all(
+        bind=eng,
+        tables=[User.__table__, Company.__table__, UserCompany.__table__, StoredFile.__table__, TPVProduct.__table__],
+    )
+    from sqlalchemy.orm import Session as OrmSession
+
+    with OrmSession(eng) as s:
+        s.add_all([Company(id=11, company_name="A", slug="a"), Company(id=22, company_name="B", slug="b")])
+        s.add(User(id=5, email="u5@x.test", hashed_password="h", is_active=True))
+        s.flush()
+        s.add(UserCompany(id=1, user_id=5, company_id=11, role="owner"))
+        s.add(TPVProduct(id=1, user_id=5, company_id=22, product_id="P1", name="Cafe", category="bebidas",
+                         price=1, price_with_iva=1.21, image="/static/uploads/products/product_x.png"))
+        s.commit()
+    static = tmp_path / "static" / "uploads"
+    for rel, data in {
+        "images/u5_20260101T000000_foto.png": PNG,
+        "products/product_x.png": PNG,
+        "videos/22/clip.mp4": b"\x00\x00\x00\x18ftypisom",
+        "documents/huerfano.pdf": PDF,
+    }.items():
+        p = static / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(data)
+
+    fake = FakeR2()
+    monkeypatch.setattr(mod, "_r2_client", lambda: fake)
+    monkeypatch.setenv("R2_BUCKET", "zeus-test")
+    base_args = ["prog", "--static-dir", str(tmp_path / "static"), "--database-url", f"sqlite:///{dbfile}"]
+
+    monkeypatch.setattr("sys.argv", base_args + ["--report", str(tmp_path / "dry.json")])
+    assert mod.main() == 0
+    dry = json.loads((tmp_path / "dry.json").read_text(encoding="utf-8"))
+    assert len(dry["migrado"]) == 3 and fake.objects == {}
+    assert [e["legacy_path"] for e in dry["sin_resolver"]] == ["uploads/documents/huerfano.pdf"]
+
+    monkeypatch.setattr("sys.argv", base_args + ["--apply", "--report", str(tmp_path / "apply.json")])
+    assert mod.main() == 0
+    with eng.connect() as c:
+        rows = {r[0]: r[1] for r in c.execute(sql("SELECT legacy_path, company_id FROM stored_files"))}
+    assert rows == {
+        "uploads/images/u5_20260101T000000_foto.png": 11,
+        "uploads/products/product_x.png": 22,
+        "uploads/videos/22/clip.mp4": 22,
+    }
+    assert all(k.startswith(("empresa/11/", "empresa/22/")) for k in fake.objects)
+    assert len(fake.objects) == 3
+
+    monkeypatch.setattr("sys.argv", base_args + ["--apply", "--report", str(tmp_path / "again.json")])
+    assert mod.main() == 0
+    again = json.loads((tmp_path / "again.json").read_text(encoding="utf-8"))
+    assert len(again["ya_migrado"]) == 3 and again["migrado"] == []
+    assert len(fake.objects) == 3

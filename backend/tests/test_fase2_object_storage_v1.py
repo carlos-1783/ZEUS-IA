@@ -274,3 +274,137 @@ def test_crm_import_confirm_reads_from_r2_and_cleans_up(db, r2, as_user):
     assert [x.name for x in created] == ["Ana Ruiz"]
     assert key not in r2.objects, "el fichero temporal debe borrarse de R2 tras importar"
     assert db.get(StoredFile, fid).deleted_at is not None
+
+
+# ---------------------------------------------------------------- /static, entregables, PERSEO
+
+
+def test_static_uploads_no_longer_public(tmp_path):
+    from app.core.static_files import is_blocked_public_path
+
+    for path in (
+        "uploads/images/u1_20260101T000000_a.png",
+        "UPLOADS/videos/x.mp4",
+        "tmp_uploads/abc.csv",
+        "./uploads/../uploads/documents/f.pdf",
+        "fiscal/x.pdf",
+    ):
+        assert is_blocked_public_path(path), path
+    assert not is_blocked_public_path("assets/app.js")
+
+    root = Path(settings.STATIC_DIR) / "uploads" / "images"
+    root.mkdir(parents=True, exist_ok=True)
+    probe = root / f"probe_{uuid.uuid4().hex[:6]}.png"
+    probe.write_bytes(PNG)
+    try:
+        r = TestClient(app).get(f"/static/uploads/images/{probe.name}")
+        assert r.status_code == 404
+    finally:
+        probe.unlink(missing_ok=True)
+
+
+def test_automation_outputs_are_company_scoped(db, r2, as_user):
+    from services.automation import utils
+
+    owner, company = _seed(db, "outA")
+    other, _ = _seed(db, "outB")
+    path = utils.write_json("PERSEO", "42_campaign", {"secreto": "empresa A"}, company_id=company.id)
+    assert path.startswith("/api/v1/automation/outputs/perseo/42_campaign_") and path.endswith(".json")
+    filename = path.rsplit("/", 1)[1]
+
+    mine = as_user(owner).get("/api/v1/automation/outputs?agent=PERSEO").json()
+    assert [o["filename"] for o in mine["outputs"]] == [filename]
+    assert as_user(other).get("/api/v1/automation/outputs").json()["outputs"] == []
+
+    got = as_user(owner).get(f"/api/v1/automation/outputs/perseo/{filename}")
+    assert got.status_code == 200 and got.json() == {"secreto": "empresa A"}
+    assert as_user(other).get(f"/api/v1/automation/outputs/perseo/{filename}").status_code == 404
+
+
+def test_automation_output_without_company_or_r2_is_not_written(db, no_r2):
+    from services.automation import utils
+
+    _, company = _seed(db, "outNo")
+    assert utils.write_json("ZEUS", "1_x", {"a": 1}, company_id=company.id) is None
+    assert utils.write_markdown("ZEUS", "1_x", "# a", company_id=None) is None
+
+
+def test_transaction_storage_step_cannot_read_server_files(db):
+    from services.zeus_transaction_validation_v1 import validate_transaction
+
+    user, _ = _seed(db, "txst")
+    result = validate_transaction(
+        db, user, steps=[{"module": "STORAGE", "action": "store_object", "input": {"local_path": "/proc/self/environ"}}]
+    )
+    assert result["passed"] is False
+    assert any("STORAGE" in e for e in result["errors"])
+
+
+def test_backup_without_r2_fails_honestly(no_r2):
+    from services import thalos_backup_service
+
+    res = thalos_backup_service.create_backup(activity_id=7)
+    assert res["backup_created"] is False
+    assert "R2" in res["notes"]
+
+
+def test_backup_goes_to_platform_prefix_not_company(r2, monkeypatch, tmp_path):
+    from services import thalos_backup_service
+
+    dbfile = tmp_path / "copia.db"
+    dbfile.write_bytes(b"SQLite format 3\x00" + b"\x00" * 100)
+    monkeypatch.setattr(settings, "DATABASE_URL", f"sqlite:///{dbfile}", raising=False)
+    res = thalos_backup_service.create_backup(activity_id=8)
+    assert res["backup_created"] is True, res
+    assert res["storage_key"].startswith("plataforma/backups/zeus_backup_")
+    assert r2.objects[res["storage_key"]]["body"] == dbfile.read_bytes()
+    assert not any(k.startswith("empresa/") and "backup" in k for k in r2.objects)
+
+
+def test_perseo_inputs_only_from_own_company(db, r2):
+    from fastapi import HTTPException
+
+    from services.perseo_media_io import find_input
+
+    owner, company = _seed(db, "pin")
+    other, _ = _seed(db, "pin2")
+    row = object_storage.store_file(
+        db, company_id=company.id, user_id=owner.id, category="videos",
+        filename="clip.mp4", content_type="video/mp4", data=b"\x00\x00\x00\x18ftypisom" + b"\x00" * 32,
+    )
+    assert find_input(db, f"/api/v1/files/{row.id}", owner.id).id == row.id
+    assert find_input(db, f"https://zeus.example/api/v1/files/{row.id}?token=x", owner.id).id == row.id
+    with pytest.raises(HTTPException) as e1:
+        find_input(db, f"/api/v1/files/{row.id}", other.id)
+    assert e1.value.status_code == 404
+    for bad in ("http://100.64.0.4:8080/secret", "/etc/passwd", "file:///etc/passwd"):
+        with pytest.raises(HTTPException) as e2:
+            find_input(db, bad, owner.id)
+        assert e2.value.status_code == 422, bad
+
+
+def test_perseo_storage_adapter_uploads_under_company(db, r2, tmp_path):
+    from services import perseo_storage_v2
+
+    user, company = _seed(db, "pst")
+    f = tmp_path / "out.mp4"
+    f.write_bytes(b"\x00\x00\x00\x18ftypisom" + b"\x00" * 64)
+    out = perseo_storage_v2.upload_file(f, user_id=user.id, category="videos", content_type="video/mp4")
+    assert out["storage"] == "r2" and out["url"] == f"/api/v1/files/{out['file_id']}"
+    assert out["key"].startswith(f"empresa/{company.id}/videos/")
+    gif = tmp_path / "p.gif"
+    gif.write_bytes(b"GIF89a" + b"\x00" * 16)
+    g = perseo_storage_v2.upload_tenant_video(gif, tenant_id=company.id, user_id=0, filename="x_preview.gif")
+    assert g["key"].startswith(f"empresa/{company.id}/images/")
+
+
+def test_perseo_storage_adapter_without_r2_is_503(no_r2, tmp_path):
+    from fastapi import HTTPException
+
+    from services import perseo_storage_v2
+
+    f = tmp_path / "a.mp4"
+    f.write_bytes(b"x")
+    with pytest.raises(HTTPException) as exc:
+        perseo_storage_v2.upload_file(f, user_id=1, category="videos")
+    assert exc.value.status_code == 503

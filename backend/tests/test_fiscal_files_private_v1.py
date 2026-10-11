@@ -359,13 +359,14 @@ def test_e_static_fiscal_is_404_even_if_file_exists_on_disk(tmp_path, monkeypatc
     static = tmp_path / "served_static"
     (static / "fiscal" / "7" / "invoices").mkdir(parents=True)
     (static / "fiscal" / "7" / "invoices" / "invoice_1.pdf").write_bytes(b"%PDF-1.4 legado")
-    (static / "uploads").mkdir()
-    (static / "uploads" / "publico.txt").write_bytes(b"ok-publico")
+    # Fase 2: uploads/ ya NO es publico (ficheros en R2); el control usa otro prefijo.
+    (static / "public").mkdir()
+    (static / "public" / "publico.txt").write_bytes(b"ok-publico")
     monkeypatch.setattr(mount, "directory", str(static))
     monkeypatch.setattr(mount, "all_directories", [str(static)])
 
     # Control: lo publico sigue sirviendose, asi el 404 de fiscal es por el bloqueo y no por el montaje.
-    assert client.get("/static/uploads/publico.txt").content == b"ok-publico"
+    assert client.get("/static/public/publico.txt").content == b"ok-publico"
 
     for path in (
         "/static/fiscal/7/invoices/invoice_1.pdf",

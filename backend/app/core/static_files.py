@@ -18,7 +18,10 @@ from starlette.types import Scope
 # "fiscal": ficheros fiscales legados que pudieran quedar bajo STATIC_DIR (ver docstring).
 # "private_files": el propio directorio de settings.PRIVATE_FILES_DIR — defensa en profundidad
 # para que, aunque algún despliegue lo anide bajo STATIC_DIR o spa_root, nunca se sirva público.
-BLOCKED_PUBLIC_PREFIXES = ("fiscal", "private_files")
+# "uploads"/"tmp_uploads" (Fase 2 / Step 1): ficheros de usuario y entregables. Viven en R2
+# y solo se sirven por /api/v1/files/{id} (empresa + URL firmada); cualquier copia antigua
+# que quede en disco deja de ser accesible sin autenticacion.
+BLOCKED_PUBLIC_PREFIXES = ("fiscal", "private_files", "uploads", "tmp_uploads")
 
 
 def is_blocked_public_path(path: str) -> bool:

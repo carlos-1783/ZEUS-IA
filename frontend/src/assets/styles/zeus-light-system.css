@@ -226,15 +226,15 @@
    solo con peso tipográfico (.zeus-btn-secondary--selected), nunca con
    color de fondo — así no se crea una tercera variante de botón. ---- */
 .zeus-btn-secondary {
-  background: #ffffff;
+  background: var(--zeus-surface);
   color: var(--zeus-text);
-  border: 1px solid #D1D5DB;
+  border: 1px solid var(--zeus-border-strong);
   box-shadow: none;
   transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .zeus-btn-secondary:hover:not(:disabled) {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
 }
 
 .zeus-btn-secondary--selected {

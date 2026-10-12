@@ -42,7 +42,20 @@ def _user_from_activity(session, activity: AgentActivity) -> Optional[User]:
             user = None
         if user:
             return user
-    return session.query(User).filter(User.is_superuser.is_(True)).first()
+    # Fase 2: antes se recurria al primer superusuario (se actuaba con su tenant).
+    logger.warning("activity %s: sin usuario resoluble; no se ejecuta", getattr(activity, "id", None))
+    return None
+
+
+def _company_for(session, user: User, activity: AgentActivity) -> Optional[int]:
+    """Empresa del documento: la de la actividad si el usuario pertenece a ella; si no, la
+    primaria del usuario. None => no se crea nada (sin documentos huerfanos de tenant)."""
+    import services.crm_office_service as crm_svc
+
+    cids = crm_svc.company_ids_for_user(session, user)
+    if activity.company_id is not None and activity.company_id in cids:
+        return activity.company_id
+    return crm_svc.primary_company_id(session, user)
 
 
 def _payload(activity: AgentActivity) -> Dict[str, Any]:
@@ -113,22 +126,24 @@ def handle_invoice_sent(activity: AgentActivity) -> Dict[str, Any]:
         user = _user_from_activity(session, activity)
         if not user:
             return _fail("Usuario no encontrado para invoice_sent")
+        company_id = _company_for(session, user, activity)
+        if company_id is None:
+            return _fail("invoice_sent: el usuario no tiene empresa; no se crea la factura")
         data = _payload(activity)
         title = data.get("invoice_number") or f"INV-{activity.id}"
+        # Antes se pasaban title=/content=, que no son columnas de DocumentApproval: la
+        # creacion lanzaba TypeError SIEMPRE y la factura nunca se persistia.
         doc = DocumentApproval(
             user_id=user.id,
+            company_id=company_id,
             agent_name="RAFAEL",
             document_type="fiscal_document",
-            title=str(title)[:255],
-            content=json.dumps(
-                {
-                    "invoice_template": data,
-                    "workflow_id": data.get("workflow_id"),
-                    "execution_id": data.get("execution_id"),
-                },
-                ensure_ascii=False,
-                default=str,
-            ),
+            document_payload={
+                "title": str(title)[:255],
+                "invoice_template": data,
+                "workflow_id": data.get("workflow_id"),
+                "execution_id": data.get("execution_id"),
+            },
             status="pending_review",
             fiscal_document_type="factura",
         )
@@ -143,7 +158,7 @@ def handle_invoice_sent(activity: AgentActivity) -> Dict[str, Any]:
             source_module="RAFAEL",
             payload={
                 "document_approval_id": doc.id,
-                "title": doc.title,
+                "title": str(title)[:255],
                 "owner_agent": "RAFAEL",
             },
         )
@@ -261,6 +276,9 @@ def handle_ads_campaign_builder(activity: AgentActivity) -> Dict[str, Any]:
         user = _user_from_activity(session, activity)
         if not user:
             return _fail("Usuario no encontrado")
+        company_id = _company_for(session, user, activity)
+        if company_id is None:
+            return _fail("ads_campaign_builder: el usuario no tiene empresa; no se crea el borrador")
         data = _payload(activity)
         channels = data.get("channels")
         platform = data.get("platform") or (channels[0] if isinstance(channels, list) and channels else "meta")
@@ -276,6 +294,7 @@ def handle_ads_campaign_builder(activity: AgentActivity) -> Dict[str, Any]:
         # legal_fiscal_firewall.py.
         doc = DocumentApproval(
             user_id=user.id,
+            company_id=company_id,
             agent_name="PERSEO",
             document_type="marketing_campaign",
             document_payload={

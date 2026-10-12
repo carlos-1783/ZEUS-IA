@@ -91,12 +91,16 @@ class ZeusCore(BaseAgent):
         task_type = context.get("task_type")
         message_lower = user_message.lower()
         
-        # Detectar activación de planes especiales
-        if (
+        # Plan PRE-LANZAMIENTO: plantilla interna para lanzar la propia plataforma ZEUS IA (con
+        # estado compartido en el proceso). Fase 2: antes se entregaba a CUALQUIER cliente que
+        # escribiera "pre-lanzamiento", como si fuera un plan de su empresa. Solo superusuario
+        # (o el arranque interno, que pasa phase=prelaunch con origin=auto-init).
+        wants_prelaunch = (
             "pre-lanzamiento" in message_lower
             or "pre lanzamiento" in message_lower
             or context.get("phase") == "prelaunch"
-        ):
+        )
+        if wants_prelaunch and (context.get("_is_superuser") is True or context.get("origin") == "auto-init"):
             return self._start_prelaunch_phase(context)
         
         # Si no se especifica tipo, ZEUS decide qué agente usar

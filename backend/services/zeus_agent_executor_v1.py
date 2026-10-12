@@ -30,7 +30,8 @@ MANDATORY_ACTIONS = {
     "PERSEO": frozenset({"create_campaign", "launch_campaign", "track_leads",
                          "get_sales_performance"}),  # Fase 2 / Step 1
     # J9c. Lectura: sin aprobacion. Escritura (AFRODITA): siempre por aprobacion (CRITICAL_ACTIONS).
-    "JUSTICIA": frozenset({"run_compliance_audit", "get_legal_status"}),
+    "JUSTICIA": frozenset({"run_compliance_audit", "get_legal_status",
+                           "review_contracts"}),  # Fase 2 / Step 1
     "AFRODITA": frozenset(
         {"get_shift_status", "get_inventory_status", "create_ops_route", "create_inventory_movement",
          # Fase 2 / Step 1: fichajes de la empresa (sin biometria), agenda del dia y pedidos (sin modelo)
@@ -557,6 +558,19 @@ async def _dispatch(
         return {
             "success": True, "executed": True, "company_id": zeus_action.company_id,
             "message": "Auditoria de cumplimiento ejecutada.", "data": audit,
+        }
+
+    if action == "review_contracts":
+        from services.justicia_contracts_v1 import contracts_status
+
+        cid = zeus_action.company_id
+        if cid is None:
+            return _fail("El usuario no tiene empresa asociada.")
+        body = contracts_status(db, cid)
+        return {
+            "success": True, "executed": True, "company_id": cid,
+            "message": f"Contratos: {body['total']}, pendientes de revisión: {body['pending_review']}.",
+            "data": body,
         }
 
     # THALOS (lectura; solo eventos de la empresa del usuario)

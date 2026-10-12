@@ -38,6 +38,7 @@ READ_ACTIONS: Dict[str, Tuple[str, str]] = {
     "get_attendance_status": ("get_attendance_status", "AFRODITA"),
     "get_today_agenda": ("get_today_agenda", "AFRODITA"),
     "get_weekly_orders": ("get_weekly_orders", "AFRODITA"),
+    "review_contracts": ("review_contracts", "JUSTICIA"),
 }
 # Claves del payload del chat que cada consulta puede pasar al ejecutor (lista blanca; el resto
 # del payload del chat, contexto incluido, nunca llega al ejecutor).
@@ -59,6 +60,7 @@ PLAN_READ_ACTIONS: Dict[str, Tuple[str, str]] = {
     "get_sales_performance": ("get_sales_performance", "PERSEO"),
     "get_attendance_status": ("get_attendance_status", "AFRODITA"),
     "get_today_agenda": ("get_today_agenda", "AFRODITA"),
+    "review_contracts": ("review_contracts", "JUSTICIA"),
 }
 
 
@@ -128,6 +130,13 @@ def _format_read(chat_action: str, result: Dict[str, Any]) -> str:
         head = (f"Agenda de hoy: {data['reservations']} reserva(s) ({data['guests']} comensales) y "
                 f"{data['meetings']} reunión(es).")
         return f"{head} " + "; ".join(parts) + "."
+    if chat_action == "review_contracts" and "pending_review" in data:
+        if not data["total"]:
+            return "No hay contratos guardados de tu empresa en JUSTICIA."
+        states = ", ".join(f"{n} {st}" for st, n in sorted(data["by_status"].items()))
+        pend = (f" {data['pending_review']} borrador(es) sin firmar pendientes de revisión."
+                if data["pending_review"] else " No hay borradores pendientes de revisión.")
+        return f"Contratos de tu empresa: {data['total']} ({states}); firmados: {data['signed']}.{pend}"
     if chat_action == "track_leads" and "open_leads" in data:
         if not data["open_leads"]:
             return "No tienes leads abiertos en el CRM de tu empresa."

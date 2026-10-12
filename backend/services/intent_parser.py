@@ -72,6 +72,7 @@ INTENT_LABELS: Dict[str, str] = {
     "get_attendance_status": "los fichajes de hoy",
     "get_today_agenda": "tu agenda de hoy",
     "get_weekly_orders": "los pedidos",
+    "review_contracts": "el estado de tus contratos",
     "create_ops_route": "crear una ruta operativa",
     "create_inventory_movement": "registrar un movimiento de inventario",
 }
@@ -631,6 +632,12 @@ _OTHER_DAY_RE = re.compile(
     r"\b(?:manana|ayer|semana|mes|lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b"
 )
 _ORDERS_RE = re.compile(r"\bpedidos\b|\bpedido\s+(?:de|del|para)\b")
+# JUSTICIA (Fase 2 / Step 1): estado de los contratos (plural: «revisa el contrato X» es otra peticion).
+_CONTRACTS_RE = re.compile(
+    r"\b(?:revis\w*|estado\s+de|situacion\s+de|cuantos|ver|dame|muestra\w*|lista\w*|que\s+pasa\s+con)\s+"
+    r"(?:los\s+|mis\s+|nuestros\s+)?contratos\b"
+    r"|\bcontratos\s+(?:pendientes?|sin\s+firmar|por\s+firmar)\b"
+)
 _LEADS_STATUS_RE = re.compile(
     r"\bleads?\s+(?:abiertos?|pendientes?|activos?)\b"
     r"|\b(?:estado|resumen|seguimiento)\s+de\s+(?:los\s+|mis\s+)?leads?\b"
@@ -959,6 +966,11 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
     # --- turno
     if _SHIFT_RE.search(f) or _SHIFT_STATUS_RE.search(f):
         c.append(_Cand("shift_status", "shift_status", 0.85, "shift"))
+
+    # --- Fase 2 / Step 1: JUSTICIA estado de los contratos de la empresa
+    if _CONTRACTS_RE.search(f):
+        c.append(_Cand("review_contracts", "review_contracts", 0.87, "contracts",
+                       suppresses={"get_legal_status"}))
 
     # --- Fase 2 / Step 1: AFRODITA fichajes de la empresa, agenda de hoy, pedidos
     if _ATTENDANCE_RE.search(f) and not _PERSONAL_RE.search(f):

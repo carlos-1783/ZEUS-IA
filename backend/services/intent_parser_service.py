@@ -74,6 +74,7 @@ def _map_intent_to_action_type(intent: str, legacy_action: Optional[str]) -> str
         "get_attendance_status": "get_attendance_status",
         "get_today_agenda": "get_today_agenda",
         "get_weekly_orders": "get_weekly_orders",
+        "review_contracts": "review_contracts",
         "create_ops_route": "create_ops_route",
         "create_inventory_movement": "create_inventory_movement",
     }
@@ -103,7 +104,7 @@ def _modules_for_intent(intent: str) -> List[str]:
         return ["analytics", "activity_log"]
     if intent == "get_metrics":
         return ["analytics", "activity_log"]
-    if intent in ("get_legal_status", "run_compliance_audit"):
+    if intent in ("get_legal_status", "run_compliance_audit", "review_contracts"):
         return ["justicia_agent", "activity_log"]
     if intent in ("get_inventory_status", "create_ops_route", "create_inventory_movement"):
         return ["afrodita_agent", "activity_log"]

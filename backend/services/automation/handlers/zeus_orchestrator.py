@@ -43,14 +43,19 @@ def _user_from_activity(session, activity: AgentActivity) -> User | None:
             user = None
         if user:
             return user
-    return session.query(User).filter(User.is_superuser.is_(True)).first()
+    # Fase 2: antes se recurria al primer superusuario (se actuaba con su tenant). Sin
+    # usuario resoluble no se ejecuta nada.
+    logger.warning("activity %s: sin usuario resoluble; no se ejecuta", getattr(activity, "id", None))
+    return None
 
 
 def _action_from_activity(activity: AgentActivity, user: User) -> ZeusAction:
     details = activity.details if isinstance(activity.details, dict) else {}
     return ZeusAction(
         action_type=details.get("zeus_action_type") or "unknown",
-        company_id=details.get("company_id"),
+        # La empresa de la actividad la fija el servidor; details lo puede escribir el cliente.
+        # (zeus_orchestrator_handlers vuelve a validar que el usuario pertenece a ella.)
+        company_id=activity.company_id if activity.company_id is not None else details.get("company_id"),
         user_id=user.id,
         payload=details.get("payload") or details,
         modules=list(details.get("modules") or []),

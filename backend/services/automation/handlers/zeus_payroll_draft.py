@@ -18,6 +18,15 @@ from services.payroll_assistant_service import (
 from services.activity_logger import ActivityLogger
 
 
+def _payroll_failed(payload: Dict[str, Any], code: str, note: str) -> Dict[str, Any]:
+    return {
+        "status": "failed",
+        "details_update": {**payload, "executed": False, "error": code},
+        "notes": f"Borrador de nomina no generado: {note}",
+        "executed_handler": "PAYROLL_DRAFT_HANDLER",
+    }
+
+
 def handle_payroll_draft_generate(activity: AgentActivity) -> Dict[str, Any]:
     """
     Handler para payroll_draft_generate: calcula nómina, genera PDF BORRADOR, envía al gestor laboral.
@@ -28,7 +37,6 @@ def handle_payroll_draft_generate(activity: AgentActivity) -> Dict[str, Any]:
 
     session = SessionLocal()
     try:
-        company_id = payload.get("company_id")
         employee_id = payload.get("employee_id")
         gross_salary = float(payload.get("gross_salary", 0) or 0)
         month = str(payload.get("month", datetime.utcnow().strftime("%B")))
@@ -42,23 +50,26 @@ def handle_payroll_draft_generate(activity: AgentActivity) -> Dict[str, Any]:
                 "executed_handler": "PAYROLL_DRAFT_HANDLER",
             }
 
-        # Resolver company_id y employee si faltan
-        if not company_id or not employee_id:
-            user = session.query(User).filter(User.email == user_email).first()
-            if not user:
-                superuser = session.query(User).filter(User.is_superuser == True).first()
-                user = superuser
-            if user:
-                company_id = company_id or user.id
-                employee_id = employee_id or user.id
+        # Fase 2: el empleador es SIEMPRE el usuario de la actividad (servidor). Antes se
+        # tomaba payload["company_id"] (cliente) o, sin usuario, el primer superusuario, y el
+        # empleado por defecto era el propio usuario. Ahora el empleado es obligatorio y debe
+        # pertenecer a una empresa del empleador.
+        import services.crm_office_service as crm_svc
 
-        if not company_id or not employee_id:
-            return {
-                "status": "failed",
-                "details_update": {**payload, "error": "company_id and employee_id required"},
-                "notes": "Faltan company_id y employee_id.",
-                "executed_handler": "PAYROLL_DRAFT_HANDLER",
-            }
+        user = session.query(User).filter(User.email == user_email).first() if user_email else None
+        if user is None:
+            return _payroll_failed(payload, "user_not_resolved", "La actividad no tiene un usuario valido.")
+        try:
+            employee_id = int(employee_id)
+        except (TypeError, ValueError):
+            return _payroll_failed(payload, "employee_id_required", "Falta el empleado (employee_id).")
+        employer_companies = set(crm_svc.company_ids_for_user(session, user))
+        employee_user = session.query(User).filter(User.id == employee_id).first()
+        if not employee_user or not (employer_companies & set(crm_svc.company_ids_for_user(session, employee_user))):
+            return _payroll_failed(
+                payload, "employee_not_in_company", "El empleado no pertenece a ninguna empresa del usuario."
+            )
+        company_id = user.id  # payroll_drafts.owner_user_id (nombre historico)
 
         company = session.query(User).filter(User.id == company_id).first()
         employee = session.query(User).filter(User.id == employee_id).first()
@@ -80,7 +91,8 @@ def handle_payroll_draft_generate(activity: AgentActivity) -> Dict[str, Any]:
         advisor_email = None
         if company:
             advisor_email = getattr(company, "email_gestor_laboral", None) or company.email_gestor_fiscal
-        advisor_email = advisor_email or payload.get("email_gestor_laboral")
+        # Nunca un destinatario del payload: el borrador (datos personales) solo va al gestor
+        # guardado en la ficha del usuario.
 
         email_sent = False
         email_error = None

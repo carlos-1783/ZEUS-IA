@@ -182,7 +182,8 @@ def handle_thalos_v1_monitor(activity: AgentActivity) -> Dict[str, Any]:
         p = _payload(activity)
         cycle = run_monitoring_cycle(
             db,
-            company_id=p.get("company_id"),
+            # Empresa fijada por el servidor (la actividad), no por el payload del cliente.
+            company_id=activity.company_id if activity.company_id is not None else p.get("company_id"),
             auto_execute=bool(p.get("auto_execute")),
             force_scan=True,
         )

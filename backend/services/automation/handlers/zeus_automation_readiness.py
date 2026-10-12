@@ -31,16 +31,18 @@ def handle_automation_readiness_evaluate(activity: AgentActivity) -> Dict[str, A
 
     session = SessionLocal()
     try:
-        # Resolver company_id (user_id)
-        company_id = payload.get("company_id")
-        if company_id is None and user_email:
-            user = session.query(User).filter(User.email == user_email).first()
-            if user:
-                company_id = user.id
-        if company_id is None:
-            # Fallback: superusuario como company por defecto
-            superuser = session.query(User).filter(User.is_superuser == True).first()
-            company_id = superuser.id if superuser else 1
+        # La evaluacion es POR USUARIO (automation_readiness.user_id). Fase 2: antes se tomaba
+        # payload["company_id"] (escrito por el cliente) como user_id, y si no habia usuario se
+        # caia al superusuario o al id 1. Ahora solo el usuario de la actividad (servidor).
+        user = session.query(User).filter(User.email == user_email).first() if user_email else None
+        if user is None:
+            return {
+                "status": "failed",
+                "details_update": {"executed": False, "error": "user_not_resolved"},
+                "notes": "Evaluacion no realizada: la actividad no tiene un usuario valido.",
+                "executed_handler": "AUTOMATION_READINESS_HANDLER",
+            }
+        company_id = user.id  # nombre historico: es el user_id del registro
 
         # Datos de evaluación
         eval_data = {
@@ -62,8 +64,8 @@ def handle_automation_readiness_evaluate(activity: AgentActivity) -> Dict[str, A
         # Si status READY_FOR_FULL_AUTOMATION → notificar por WhatsApp al superusuario
         if record.status == STATUS_READY_FOR_FULL_AUTOMATION:
             superuser_phone = (
+                # Nunca un telefono del payload: el aviso solo va al admin configurado.
                 os.getenv("SUPERUSER_PHONE")
-                or payload.get("superuser_phone")
                 or os.getenv("ZEUS_ADMIN_PHONE")
             )
             if superuser_phone and whatsapp_service.is_configured():

@@ -337,7 +337,7 @@ async def execute_agent_action(
     ok = bool(result.get("success")) and bool(result.get("executed"))
     _log_execution(
         agent_u, act, user, cid, approval_id,
-        "completed" if ok else "failed",
+        "completed" if ok else ("preview" if result.get("status") == "preview" else "failed"),
         {"message": result.get("message"), "executed": result.get("executed")},
     )
     return result
@@ -417,9 +417,21 @@ async def _dispatch(
         r = orch.execute_list_customers(db, user, zeus_action)
         return r.model_dump()
 
-    if action in ("send_campaign", "launch_campaign", "create_campaign"):
+    if action in ("send_campaign", "launch_campaign"):
         r = await execute_action(db, user, zeus_action, force_execute=force_execute)
         return r.model_dump()
+
+    if action == "create_campaign":
+        # Solo VISTA PREVIA: no envia nada (antes caia en la rama de envio y, sin aprobacion,
+        # podia mandar la campana real; y la rama de vista previa la marcaba executed=True).
+        preview = orch.preview_send_campaign(db, user, zeus_action)
+        msg = str(preview.get("message") or "").replace(" Responde «confirmar» para ejecutar.", "")
+        return {
+            "success": True, "executed": False, "status": "preview", "company_id": zeus_action.company_id,
+            "message": f"Vista previa (no se ha enviado nada): {msg} Para enviarla, pide el envío de la "
+                       "campaña: requiere aprobación.",
+            "data": preview,
+        }
 
     if action == "get_cashflow":
         cid = crm_svc.primary_company_id(db, user)
@@ -484,10 +496,6 @@ async def _dispatch(
     if action == "track_leads":
         data = track_leads_summary(db, user)
         return {"success": True, "executed": True, "message": f"Leads abiertos: {data['open_leads']}", "data": data}
-
-    if action == "create_campaign":
-        preview = orch.preview_send_campaign(db, user, zeus_action)
-        return {"success": True, "executed": True, "message": preview.get("message"), "data": preview}
 
     # JUSTICIA (lectura; servicios reales de justice_audit_service, ambito del usuario de la sesion)
     if action in ("run_compliance_audit", "get_legal_status"):

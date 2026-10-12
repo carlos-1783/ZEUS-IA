@@ -70,6 +70,7 @@ def _map_intent_to_action_type(intent: str, legacy_action: Optional[str]) -> str
         "track_leads": "track_leads",
         "get_daily_close": "get_daily_close",
         "get_pending_invoices": "get_pending_invoices",
+        "get_sales_performance": "get_sales_performance",
         "create_ops_route": "create_ops_route",
         "create_inventory_movement": "create_inventory_movement",
     }
@@ -111,6 +112,8 @@ def _modules_for_intent(intent: str) -> List[str]:
         return ["tpv", "activity_log"]
     if intent == "get_pending_invoices":
         return ["rafael_agent", "activity_log"]
+    if intent == "get_sales_performance":
+        return ["perseo_agent", "activity_log"]
     if intent == "confirm_pending":
         return ["activity_log"]
     return []

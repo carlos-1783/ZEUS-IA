@@ -27,7 +27,8 @@ MANDATORY_ACTIONS = {
          # Fase 2 / Step 1: lecturas reales para chat/voz (cierre de ventas del dia, cobros pendientes)
          "get_daily_close", "get_pending_invoices"}
     ),
-    "PERSEO": frozenset({"create_campaign", "launch_campaign", "track_leads"}),
+    "PERSEO": frozenset({"create_campaign", "launch_campaign", "track_leads",
+                         "get_sales_performance"}),  # Fase 2 / Step 1
     # J9c. Lectura: sin aprobacion. Escritura (AFRODITA): siempre por aprobacion (CRITICAL_ACTIONS).
     "JUSTICIA": frozenset({"run_compliance_audit", "get_legal_status"}),
     "AFRODITA": frozenset(
@@ -44,6 +45,7 @@ _STRICT_AGENT_ACTIONS: Dict[str, str] = {
 _STRICT_AGENT_ACTIONS["register_qr_payment"] = "RAFAEL"  # J2b
 for _a in ("get_daily_close", "get_pending_invoices"):  # Fase 2 / Step 1
     _STRICT_AGENT_ACTIONS[_a] = "RAFAEL"
+_STRICT_AGENT_ACTIONS["get_sales_performance"] = "PERSEO"
 _MAX_DELIVERIES = 50
 
 
@@ -424,6 +426,21 @@ async def _dispatch(
     if action in ("send_campaign", "launch_campaign"):
         r = await execute_action(db, user, zeus_action, force_execute=force_execute)
         return r.model_dump()
+
+    if action == "get_sales_performance":
+        from services.perseo_sales_performance_v1 import sales_performance
+
+        cid = zeus_action.company_id
+        if cid is None:
+            return _fail("El usuario no tiene empresa asociada.")
+        try:
+            body = sales_performance(db, cid, days=int(payload.get("days") or 30))
+        except (TypeError, ValueError):
+            return _fail("Periodo no válido: indica entre 1 y 365 días.", status="invalid_payload")
+        return {
+            "success": True, "executed": True, "company_id": cid,
+            "message": f"Ventas {body['window_days']} días: {body['current']['total']:.2f} €.", "data": body,
+        }
 
     if action == "create_campaign":
         # Solo VISTA PREVIA: no envia nada (antes caia en la rama de envio y, sin aprobacion,

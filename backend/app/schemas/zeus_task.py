@@ -27,6 +27,7 @@ ZeusIntentType = Literal[
     "track_leads",  # Fase 2 / Step 3: PERSEO
     "get_daily_close",  # Fase 2 / Step 1: RAFAEL
     "get_pending_invoices",  # Fase 2 / Step 1: RAFAEL
+    "get_sales_performance",  # Fase 2 / Step 1: PERSEO
     "create_ops_route",
     "create_inventory_movement",
 ]

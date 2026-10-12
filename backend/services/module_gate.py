@@ -84,6 +84,7 @@ EXECUTOR_UNMAPPED_ACTIONS = frozenset(
         "create_campaign", "get_cashflow", "get_metrics",
         "generate_invoice", "register_qr_payment", "generate_model_303", "get_tax_summary",
         "get_pending_invoices",  # Fase 2 / Step 1: facturacion de ambas verticales (como las de arriba)
+        "get_sales_performance",  # Fase 2 / Step 1: TPV + facturas, ambas verticales (transversal)
         "get_inventory_status", "create_inventory_movement", "create_ops_route",
     }
 )

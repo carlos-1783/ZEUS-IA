@@ -68,6 +68,7 @@ INTENT_LABELS: Dict[str, str] = {
     "track_leads": "el estado de tus leads",
     "get_daily_close": "el cierre de ventas del día",
     "get_pending_invoices": "tus facturas pendientes de cobro",
+    "get_sales_performance": "cómo van tus ventas",
     "create_ops_route": "crear una ruta operativa",
     "create_inventory_movement": "registrar un movimiento de inventario",
 }
@@ -605,6 +606,10 @@ _PENDING_INVOICES_RE = re.compile(
     r"|\b(?:que|cuantas)\s+facturas?\b.{0,30}?\b(?:pendientes?|cobrar|vencidas?|impagadas?)\b"
     r"|\bpendientes?\s+de\s+cobro\b"
 )
+_SALES_PERF_RE = re.compile(
+    r"\bcomo\s+(?:van|vamos|andan|marchan|estan|llevamos)\s+(?:de\s+)?(?:las\s+|mis\s+|nuestras\s+)?ventas\b"
+    r"|\b(?:evolucion|tendencia|rendimiento)\s+de\s+(?:las\s+|mis\s+)?ventas\b"
+)
 _LEADS_STATUS_RE = re.compile(
     r"\bleads?\s+(?:abiertos?|pendientes?|activos?)\b"
     r"|\b(?:estado|resumen|seguimiento)\s+de\s+(?:los\s+|mis\s+)?leads?\b"
@@ -900,6 +905,13 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
     if _PENDING_INVOICES_RE.search(f):
         c.append(_Cand("get_pending_invoices", "get_pending_invoices", 0.86, "pending_invoices",
                        suppresses={"tpv_sales_summary", "get_cashflow"}))
+
+    # --- Fase 2 / Step 1: PERSEO «¿cómo van las ventas?» (30 dias por defecto, frente a los anteriores).
+    # Con «hoy», «ayer» o un periodo cerrado (semana/mes pasado, fecha) siguen las consultas TPV/cierre.
+    if _SALES_PERF_RE.search(f) and period.get("label") in (None, "last_days", "week", "month", "year"):
+        c.append(_Cand("get_sales_performance", "get_sales_performance", 0.88, "sales_performance",
+                       suppresses={"tpv_sales_summary", "tpv_sales_today", "get_metrics"},
+                       metadata={"days": days_p or 30}))
 
     # --- Fase 2 / Step 3: PERSEO seguimiento de leads (CrmLead de la empresa)
     if _LEADS_STATUS_RE.search(f):

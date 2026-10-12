@@ -34,11 +34,13 @@ READ_ACTIONS: Dict[str, Tuple[str, str]] = {
     "track_leads": ("track_leads", "PERSEO"),
     "get_daily_close": ("get_daily_close", "RAFAEL"),
     "get_pending_invoices": ("get_pending_invoices", "RAFAEL"),
+    "get_sales_performance": ("get_sales_performance", "PERSEO"),
 }
 # Claves del payload del chat que cada consulta puede pasar al ejecutor (lista blanca; el resto
 # del payload del chat, contexto incluido, nunca llega al ejecutor).
 READ_PAYLOAD_KEYS: Dict[str, Tuple[str, ...]] = {
     "get_daily_close": ("day",),
+    "get_sales_performance": ("days",),
 }
 WRITE_ACTIONS = frozenset({"create_ops_route", "create_inventory_movement"})
 # Consultas que un paso de plan puede ejecutar (nombre del ejecutor -> (accion del chat, agente)).
@@ -51,6 +53,7 @@ PLAN_READ_ACTIONS: Dict[str, Tuple[str, str]] = {
     "track_leads": ("track_leads", "PERSEO"),
     "get_daily_close": ("get_daily_close", "RAFAEL"),
     "get_pending_invoices": ("get_pending_invoices", "RAFAEL"),
+    "get_sales_performance": ("get_sales_performance", "PERSEO"),
 }
 
 
@@ -80,6 +83,23 @@ def _format_read(chat_action: str, result: Dict[str, Any]) -> str:
                 if data["overdue_count"] else "")
         return (f"Facturas pendientes de cobro: {data['pending_count']} por {_eur(data['pending_amount'])}"
                 f"{over}.{drafts}")
+    if chat_action == "get_sales_performance" and "current" in data:
+        cur, prev, d = data["current"], data["previous"], data["window_days"]
+        if not cur["tpv_count"] and not cur["invoice_count"]:
+            return f"No hay ventas registradas en tu empresa en los últimos {d} días (ni TPV ni facturas)."
+        parts = []
+        if cur["tpv_count"]:
+            parts.append(f"{cur['tpv_count']} tickets TPV por {_eur(cur['tpv_total'])}")
+        if cur["invoice_count"]:
+            parts.append(f"{cur['invoice_count']} facturas por {_eur(cur['invoice_total'])}")
+        if data["change_pct"] is None:
+            trend = f" No hay ventas en los {d} días anteriores para comparar."
+        else:
+            trend = (f" Frente a los {d} días anteriores ({_eur(prev['total'])}): "
+                     f"{'+' if data['change_pct'] >= 0 else ''}{data['change_pct']:g}%.")
+        top = data.get("top_products") or []
+        tops = (" Lo más vendido: " + ", ".join(f"{p['name']} ({_eur(p['revenue'])})" for p in top) + ".") if top else ""
+        return f"Ventas de los últimos {d} días: {_eur(cur['total'])} ({' y '.join(parts)}).{trend}{tops}"
     if chat_action == "track_leads" and "open_leads" in data:
         if not data["open_leads"]:
             return "No tienes leads abiertos en el CRM de tu empresa."

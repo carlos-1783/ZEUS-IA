@@ -54,12 +54,14 @@ async def analytics_executive(
         logger.warning("analytics_executive failsafe: %s", exc, exc_info=True)
         return {
             "success": False,
-            "agents": 6,
-            "tasks24h": 0,
-            "alerts": 0,
-            "automations": 0,
-            "efficiency": 0,
+            # Sin datos: nunca un numero fijo que parezca real (antes agents=6, efficiency=0).
+            "agents": None,
+            "tasks24h": None,
+            "alerts": None,
+            "automations": None,
+            "efficiency": None,
             "system": "unknown",
+            "real_data": False,
             "error": "No se pudieron calcular los KPIs ejecutivos.",
         }
 
@@ -95,7 +97,8 @@ async def analytics_automations(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    items = list_automation_rows(db)
+    items = list_automation_rows(db, current_user)
+    logger.info("analytics_automations user_id=%s total=%s", current_user.id, len(items))
     return {"success": True, "automations": items, "total": len(items)}
 
 

@@ -1,7 +1,7 @@
 <template>
   <KpiPageShell
     title="Automatizaciones"
-    :subtitle="`Activas: ${total}`"
+    :subtitle="`Ejecutadas en tu cuenta (últimos 30 días): ${total}`"
     :loading="loading"
     :error="error"
   >
@@ -10,9 +10,10 @@
         <strong>{{ a.name }}</strong>
         <span class="pill" :class="a.status">{{ a.status }}</span>
         <span class="last">{{ a.last_run ? formatDate(a.last_run) : 'Sin ejecución' }}</span>
+        <span v-if="a.total_runs != null" class="last">{{ a.total_runs }} ejecuciones</span>
       </li>
     </ul>
-    <p v-else class="empty">No hay automatizaciones registradas.</p>
+    <p v-else class="empty">Ninguna automatización se ha ejecutado en tu cuenta en los últimos 30 días.</p>
     <router-link class="audit-link" to="/automations/audit">Ver auditoría completa →</router-link>
   </KpiPageShell>
 </template>

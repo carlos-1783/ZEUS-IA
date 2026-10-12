@@ -6,7 +6,7 @@
       type="button"
       class="kpi-item kpi-card"
       :class="{
-        'kpi-item--alert': item.key === 'alerts' && item.value !== '0' && item.value !== 0,
+        'kpi-item--alert': item.key === 'alerts' && Number(item.value) > 0,
         'kpi-item--clickable': !!item.route,
       }"
       :title="item.route ? `Ver ${item.label}` : item.label"

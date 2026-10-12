@@ -657,25 +657,30 @@ const dashboardMetrics = ref({
   successTrend: '0%'
 })
 
-const executiveAnalytics = ref({
-  agents: 6,
-  tasks24h: 0,
-  alerts: 0,
-  automations: 0,
-  efficiency: 0,
+// null = "sin datos" (aún no cargado o el backend no pudo calcularlo): nunca un número fijo.
+const EMPTY_EXECUTIVE = Object.freeze({
+  agents: null,
+  agentsTotal: null,
+  tasks24h: null,
+  alerts: null,
+  automations: null,
+  efficiency: null,
   system: 'unknown',
 })
+
+const executiveAnalytics = ref({ ...EMPTY_EXECUTIVE })
 
 const applyExecutiveAnalytics = (data) => {
   if (!data) return
   const ex = data.executive || null
   if (!ex) return
   executiveAnalytics.value = {
-    agents: ex.agents ?? 6,
-    tasks24h: ex.tasks24h ?? 0,
-    alerts: ex.alerts ?? 0,
-    automations: ex.automations ?? 0,
-    efficiency: ex.efficiency ?? 0,
+    agents: ex.agents ?? null,
+    agentsTotal: ex.agents_total ?? null,
+    tasks24h: ex.tasks24h ?? null,
+    alerts: ex.alerts ?? null,
+    automations: ex.automations ?? null,
+    efficiency: ex.efficiency ?? null,
     system: ex.system ?? 'unknown',
   }
 }
@@ -961,14 +966,7 @@ const resetDashboardSessionState = () => {
     savingsTrend: '0%',
     successTrend: '0%',
   }
-  executiveAnalytics.value = {
-    agents: 6,
-    tasks24h: 0,
-    alerts: 0,
-    automations: 0,
-    efficiency: 0,
-    system: 'unknown',
-  }
+  executiveAnalytics.value = { ...EMPTY_EXECUTIVE }
   financialMetrics.value = {
     totalRevenue: 0,
     salesCount: 0,
@@ -1211,49 +1209,53 @@ const tasksRunning24h = computed(() =>
   agentsData.value.reduce((sum, a) => sum + (Number(a.activities_24h) || 0), 0)
 )
 
+const KPI_NO_DATA = 'Sin datos'
+const kpiValue = (v, suffix = '') => (v == null ? KPI_NO_DATA : `${v}${suffix}`)
+
 const executiveKpis = computed(() => {
   const ex = executiveAnalytics.value
   const systemOk = ex.system === 'healthy' && backendHealthLabel.value === 'OK'
   return [
     {
+      // Agentes con actividad real de la cuenta en 24h / agentes del producto.
       key: 'agents_active',
-      label: 'Agentes',
-      value: ex.agents || agentsData.value.length,
+      label: 'Agentes 24h',
+      value: ex.agents == null ? KPI_NO_DATA : `${ex.agents}/${ex.agentsTotal ?? agentsData.value.length}`,
       icon: '👤',
       route: '/agents',
     },
     {
       key: 'tasks_running',
       label: 'Tareas 24h',
-      value: ex.tasks24h ?? tasksRunning24h.value,
+      value: kpiValue(ex.tasks24h),
       icon: '⚡',
       route: '/analytics/tasks',
     },
     {
       key: 'efficiency',
       label: 'Eficiencia',
-      value: `${ex.efficiency ?? 0}%`,
+      value: kpiValue(ex.efficiency, '%'),
       icon: '🕐',
       route: '/analytics/efficiency',
     },
     {
       key: 'alerts',
       label: 'Alertas',
-      value: ex.alerts ?? 0,
+      value: kpiValue(ex.alerts),
       icon: '🛡️',
       route: '/alerts',
     },
     {
       key: 'automations',
       label: 'Automatiz.',
-      value: ex.automations ?? 0,
+      value: kpiValue(ex.automations),
       icon: '⚙️',
       route: '/automations',
     },
     {
       key: 'system_health',
       label: 'Sistema',
-      value: systemOk ? 'OK' : '!',
+      value: ex.system === 'unknown' ? KPI_NO_DATA : (systemOk ? 'OK' : '!'),
       icon: '🗄️',
       route: '/system-health',
     },

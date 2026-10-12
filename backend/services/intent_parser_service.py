@@ -67,6 +67,7 @@ def _map_intent_to_action_type(intent: str, legacy_action: Optional[str]) -> str
         "run_compliance_audit": "run_compliance_audit",
         "get_inventory_status": "get_inventory_status",
         "get_security_status": "get_security_status",
+        "track_leads": "track_leads",
         "create_ops_route": "create_ops_route",
         "create_inventory_movement": "create_inventory_movement",
     }
@@ -102,6 +103,8 @@ def _modules_for_intent(intent: str) -> List[str]:
         return ["afrodita_agent", "activity_log"]
     if intent == "get_security_status":
         return ["thalos_agent", "activity_log"]
+    if intent == "track_leads":
+        return ["crm", "activity_log"]
     if intent == "confirm_pending":
         return ["activity_log"]
     return []

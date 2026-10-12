@@ -101,7 +101,7 @@ class ClassifierStep(BaseModel):
     action_type: Optional[Literal[
         "send_campaign", "create_customer", "create_ops_route", "create_inventory_movement",
         "get_legal_status", "run_compliance_audit", "get_inventory_status", "get_shift_status",
-        "get_security_status",
+        "get_security_status", "track_leads",
     ]] = None
 
 

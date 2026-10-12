@@ -65,6 +65,7 @@ INTENT_LABELS: Dict[str, str] = {
     "run_compliance_audit": "una auditoría de cumplimiento",
     "get_inventory_status": "el estado del inventario",
     "get_security_status": "el estado de seguridad de tu empresa",
+    "track_leads": "el estado de tus leads",
     "create_ops_route": "crear una ruta operativa",
     "create_inventory_movement": "registrar un movimiento de inventario",
 }
@@ -595,6 +596,11 @@ def parse_ops_write(text: str, kind: str) -> Optional[Dict[str, Any]]:
     return {"product_text": prod, "quantity": qty, "movement": "in" if m.group("type") == "entrada" else "out"}
 
 
+_LEADS_STATUS_RE = re.compile(
+    r"\bleads?\s+(?:abiertos?|pendientes?|activos?)\b"
+    r"|\b(?:estado|resumen|seguimiento)\s+de\s+(?:los\s+|mis\s+)?leads?\b"
+    r"|\bcuantos\s+leads?\b"
+)
 _SECURITY_STATUS_RE = re.compile(
     r"\b(?:estado|situacion|resumen|informe)\s+de\s+(?:la\s+)?seguridad\b"
     r"|\beventos?\s+de\s+seguridad\b|\bintentos?\s+(?:de\s+acceso\s+)?bloqueados?\b"
@@ -866,6 +872,10 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
                 metadata=fields_ or {}, fields={"requires_confirmation": True},
                 missing=[] if fields_ else ["explicit_intent"], question=None if fields_ else QUESTION_OPS,
             ))
+
+    # --- Fase 2 / Step 3: PERSEO seguimiento de leads (CrmLead de la empresa)
+    if _LEADS_STATUS_RE.search(f):
+        c.append(_Cand("track_leads", "track_leads", 0.85, "leads_status"))
 
     # --- Fase 2 / Step 3: THALOS consulta de seguridad de la empresa
     if _SECURITY_STATUS_RE.search(f):

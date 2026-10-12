@@ -31,6 +31,7 @@ READ_ACTIONS: Dict[str, Tuple[str, str]] = {
     "run_compliance_audit": ("run_compliance_audit", "JUSTICIA"),
     "get_inventory_status": ("get_inventory_status", "AFRODITA"),
     "get_security_status": ("get_security_status", "THALOS"),
+    "track_leads": ("track_leads", "PERSEO"),
 }
 WRITE_ACTIONS = frozenset({"create_ops_route", "create_inventory_movement"})
 # Consultas que un paso de plan puede ejecutar (nombre del ejecutor -> (accion del chat, agente)).
@@ -40,6 +41,7 @@ PLAN_READ_ACTIONS: Dict[str, Tuple[str, str]] = {
     "get_inventory_status": ("get_inventory_status", "AFRODITA"),
     "get_shift_status": ("shift_status", "AFRODITA"),
     "get_security_status": ("get_security_status", "THALOS"),
+    "track_leads": ("track_leads", "PERSEO"),
 }
 
 
@@ -50,6 +52,11 @@ def _format_read(chat_action: str, result: Dict[str, Any]) -> str:
         extra = f" Pendientes de revisión: {len(pend)} grupos." if isinstance(pend, (list, dict)) and pend else ""
         return (f"Estado legal de tu cuenta: {data['legal_documents']} documentos legales y "
                 f"{data.get('compliance_events', 0)} eventos de cumplimiento registrados.{extra}")
+    if chat_action == "track_leads" and "open_leads" in data:
+        if not data["open_leads"]:
+            return "No tienes leads abiertos en el CRM de tu empresa."
+        return (f"Leads abiertos en tu CRM: {data['open_leads']} "
+                f"({data.get('high_priority', 0)} de prioridad alta, {data.get('with_meeting', 0)} con reunión).")
     if chat_action == "get_security_status" and "events_total" in data:
         if not data["events_total"]:
             return f"THALOS no tiene eventos de seguridad de tu empresa en los últimos {data['window_days']} días."

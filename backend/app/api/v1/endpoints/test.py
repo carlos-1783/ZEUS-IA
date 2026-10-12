@@ -13,23 +13,6 @@ from services.zeus_integrations_e2e_v1 import run_integrations_e2e
 
 router = APIRouter()
 
-class TestResponse(BaseModel):
-    success: bool
-    message: str
-    data: Optional[dict] = None
-
-@router.get("/test-minimal", response_model=TestResponse)
-async def test_minimal_endpoint():
-    """
-    Minimal test endpoint with no dependencies
-    """
-    return {
-        "success": True,
-        "message": "Minimal test endpoint working",
-        "data": {"test": "value"}
-    }
-
-
 @router.get("/phase-b-env")
 async def phase_b_env_status(
     current_user: User = Depends(get_current_active_user),

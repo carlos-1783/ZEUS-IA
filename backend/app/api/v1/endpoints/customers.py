@@ -27,26 +27,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-@router.get(
-    "/test",
-    response_model=Dict[str, str],
-    status_code=status.HTTP_200_OK,
-    summary="Endpoint de prueba",
-    description="Endpoint mínimo para probar el enrutamiento sin dependencias.",
-    response_description="Mensaje de prueba",
-    responses={
-        200: {"description": "Prueba exitosa"},
-    },
-)
-async def test_endpoint() -> Dict[str, str]:
-    """
-    Endpoint de prueba simple que no depende de la base de datos.
-    """
-    return {
-        "status": "success", 
-        "message": "¡Endpoint de prueba funcionando correctamente!"
-    }
-
 def get_customer_or_404(
     db: Session,
     customer_id: int,

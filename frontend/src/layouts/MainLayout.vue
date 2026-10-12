@@ -92,6 +92,7 @@
             {{ pageTitle }}
           </h1>
           <div class="flex items-center space-x-4">
+            <ThemeToggle />
             <label class="text-sm text-gray-600">
               {{ t('layout.languageLabel') }}
             </label>
@@ -133,6 +134,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useI18n } from 'vue-i18n';
+import ThemeToggle from '@/components/ThemeToggle.vue';
 
 const route = useRoute();
 const router = useRouter();

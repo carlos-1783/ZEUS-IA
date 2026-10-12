@@ -14,6 +14,7 @@
           <span class="version-dot" :class="backendHealthLabel === 'OK' ? 'online' : 'degraded'" aria-hidden="true"></span>
           {{ t('dashboardPro.systemVersion', { version: appVersion }) }}
         </span>
+        <ThemeToggle />
         <button
           type="button"
           class="topbar-icon-btn"
@@ -468,6 +469,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import AgentActivityPanel from './AgentActivityPanel.vue'
+import ThemeToggle from './ThemeToggle.vue'
 import KPIBar from './KPIBar.vue'
 import PWAControls from './PWAControls.vue'
 import { isModuleVisible } from '@/utils/companyModules'

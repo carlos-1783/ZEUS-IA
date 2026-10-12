@@ -11,8 +11,8 @@
           :disabled="settingsStore.isPatching"
           @change="onThemeChange"
         >
-          <option value="dark">{{ $t('userSettings.themeDark') }}</option>
           <option value="light">{{ $t('userSettings.themeLight') }}</option>
+          <option value="dark">{{ $t('userSettings.themeDark') }}</option>
           <option value="auto">{{ $t('userSettings.themeAuto') }}</option>
         </select>
       </div>

@@ -190,9 +190,14 @@ def _ws_thalos_event(
         logger.exception("THALOS: no se pudo registrar el evento WebSocket")
 
 
-async def _reject(websocket: WebSocket, db: Session, code: str, error_msg: str, user=None) -> None:
+async def _reject(
+    websocket: WebSocket, db: Session, code: str, error_msg: str, user=None, details: str | None = None
+) -> None:
     _ws_thalos_event(db, websocket, decision="deny", reason=code, user=user)
-    await websocket.send_text(json.dumps({"type": "auth_error", "error": error_msg, "code": code}))
+    payload = {"type": "auth_error", "error": error_msg, "code": code}
+    if details:
+        payload["details"] = details
+    await websocket.send_text(json.dumps(payload))
     await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_msg)
 
 
@@ -232,8 +237,13 @@ async def websocket_endpoint(
         try:
             user = get_current_websocket_user(websocket, token, db)
         except (JWTError, JWTClaimsError, ExpiredSignatureError, JoseJWTError):
+            # El detalle de la libreria va solo al log: nunca al cliente (J13).
             logger.exception("[WebSocket] JWT validation error")
-            user = None
+            await _reject(
+                websocket, db, "jwt_validation_error", "Token de autenticación inválido",
+                details="No se pudo validar el token de autenticación. Por favor, obtenga un nuevo token.",
+            )
+            return
         if not user:
             await _reject(websocket, db, "invalid_token", "Token de autenticación inválido o expirado")
             return

@@ -80,17 +80,24 @@ def detect_threat_events(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def revoke_credentials(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Marcar credenciales — requiere THALOS_EXECUTION_ENABLED."""
-    from datetime import datetime, timezone
+CREDENTIAL_REVOKER_NOT_IMPLEMENTED = (
+    "No hay almacen de credenciales revocables integrado (claves API de terceros, tokens de "
+    "integraciones): THALOS no puede revocarlas. No se ha revocado nada; revocalas en el "
+    "proveedor y rota la variable de entorno."
+)
 
+
+def revoke_credentials(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Fase 2 / Step 2: antes devolvia cada credential_id como "revocada" (con fecha) y
+    real_execution=True sin revocar nada. Ahora informa de que no esta implementado."""
     credentials: List[str] = payload.get("credential_ids", [])
     result = {
-        "revoked": [
-            {"credential_id": cred, "revoked_at": datetime.now(timezone.utc).isoformat()} for cred in credentials
-        ],
-        "count": len(credentials),
-        "real_execution": bool(credentials),
+        "revoked": [],
+        "requested": list(credentials),
+        "count": 0,
+        "real_execution": False,
+        "error": "credential_revoker_not_implemented",
+        "message": CREDENTIAL_REVOKER_NOT_IMPLEMENTED,
     }
-    log_tool_execution("THALOS", "credential_revoker", "Credenciales revocadas", {"result": result})
+    log_tool_execution("THALOS", "credential_revoker", "Revocacion NO ejecutada (sin implementar)", {"result": result})
     return result

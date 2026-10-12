@@ -816,6 +816,12 @@ async def workspace_thalos_credentials(
         actor_id=current_user.id,
     )
     result = revoke_credentials(request.model_dump())
+    if not result.get("real_execution"):
+        # Sin revocacion real no se persiste entregable ni se emite thalos_credentials_revoked.
+        raise HTTPException(
+            status_code=501,
+            detail={"error": result["error"], "message": result["message"], "revoked": []},
+        )
     text = _text_generic("Revocación de credenciales", result)
     response = _persist_agent_tool_response(
         db,

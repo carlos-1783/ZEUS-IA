@@ -404,11 +404,14 @@ def calculate_zeus_metrics(activities: List[AgentActivity]) -> Dict[str, Any]:
     """Métricas específicas de ZEUS (Orquestador)"""
     tasks_delegated = len([a for a in activities if a.action_type == "task_delegated"])
     coordinations = len([a for a in activities if a.action_type == "coordination"])
-    
+    # Antes: "efficiency": 94 fijo. Ahora % real de actividades completadas (None sin datos).
+    total = len(activities)
+    completed = len([a for a in activities if a.status in ("completed", "executed_internal")])
+
     return {
         "tasks_delegated": tasks_delegated,
         "coordinations": coordinations,
-        "efficiency": 94  # Placeholder - calcular real
+        "efficiency": round(100 * completed / total) if total else None,
     }
 
 

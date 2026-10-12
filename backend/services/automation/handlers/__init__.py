@@ -9,10 +9,8 @@ from typing import Callable, Dict, List, Optional, Any
 
 from app.models.agent_activity import AgentActivity
 
-from .perseo import handle_perseo_task
-from .rafael import handle_rafael_task
 from .justicia import handle_justicia_task
-from .afrodita import handle_afrodita_task
+from .no_real_logic import handle_no_real_logic
 from .zeus import handle_zeus_task
 from .zeus_launch import handle_zeus_launch_started
 from .zeus_automation_readiness import handle_automation_readiness_evaluate
@@ -91,13 +89,13 @@ HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
         "payroll_draft_generate": handle_payroll_draft_generate,
     },
     "PERSEO": {
-        "task_assigned": handle_perseo_task,
+        "task_assigned": handle_no_real_logic,
         "campaign_created": handle_campaign_created,
         "image_analyzer": handle_image_analyzer,
         "ads_campaign_builder": handle_ads_campaign_builder,
     },
     "RAFAEL": {
-        "task_assigned": handle_rafael_task,
+        "task_assigned": handle_no_real_logic,
         "invoice_sent": handle_invoice_sent,
     },
     "JUSTICIA": {
@@ -108,7 +106,7 @@ HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
         "document_signed": handle_document_signed,
     },
     "AFRODITA": {
-        "task_assigned": handle_afrodita_task,
+        "task_assigned": handle_no_real_logic,
         "contract_creator_rrhh": handle_contract_creator_rrhh,
     },
     "THALOS": {

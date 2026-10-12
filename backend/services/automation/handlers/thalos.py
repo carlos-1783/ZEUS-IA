@@ -89,36 +89,16 @@ def handle_thalos_security_scan(activity: AgentActivity) -> Dict[str, Any]:
 
 
 def handle_thalos_alerts(activity: AgentActivity) -> Dict[str, Any]:
+    """THALOS task_assigned: ciclo REAL de monitorizacion (thalos_v1).
+
+    Antes devolvia "Monitor de alertas activo y validado" con acciones que no ejecutaba
+    ("Simulacion de evento critico"...). Ahora delega en handle_thalos_v1_monitor.
+    """
     if not _require_superuser(activity):
         return _blocked_superuser_required(activity.action_type or "task_assigned")
+    from .thalos_v1 import handle_thalos_v1_monitor
 
-    configuration = {
-        "log_level": os.getenv("LOG_LEVEL", "INFO"),
-        "sentry_enabled": bool(os.getenv("SENTRY_DSN")),
-        "stripe_mode": os.getenv("STRIPE_MODE", "auto"),
-    }
-    actions = [
-        "Verificación de sinks de logs",
-        "Simulación de evento crítico",
-        "Chequeo de modo Stripe vs credencial",
-    ]
-    payload = {
-        "executed_at": datetime.utcnow().isoformat(),
-        "configuration": configuration,
-        "actions_performed": actions,
-        "result": "Monitor de alertas activo y validado.",
-    }
-
-    prefix = f"{activity.id}_{activity.action_type}"
-    json_path = utils.write_json("THALOS", prefix, payload, company_id=activity.company_id)
-    utils.write_log("THALOS", prefix, payload)
-
-    return {
-        "status": "completed",
-        "details_update": {"automation": {"deliverables": {"json": json_path}}},
-        "metrics_update": {"alerts_verified": len(actions)},
-        "notes": f"Alertas configuradas automáticamente. Informe en {json_path}",
-    }
+    return handle_thalos_v1_monitor(activity)
 
 
 def handle_thalos_backup(activity: AgentActivity) -> Dict[str, Any]:

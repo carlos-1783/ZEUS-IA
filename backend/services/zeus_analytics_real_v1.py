@@ -141,17 +141,26 @@ def _count_events_24h(db: Session, user: Optional[User]) -> tuple[int, int]:
         return 0, 0
 
 
+def _is_platform_superuser(user: Optional[User]) -> bool:
+    return bool(user is not None and getattr(user, "is_superuser", False))
+
+
 def _count_alerts(db: Session, user: Optional[User]) -> int:
+    # Sin usuario no hay tenant: fail-closed (antes se contaban alertas de todas las cuentas).
+    if user is None or getattr(user, "id", None) is None:
+        return 0
     try:
-        q = db.query(ZeusAlert).filter(ZeusAlert.resolved.is_(False))
-        if user and getattr(user, "id", None) is not None:
-            q = q.filter(ZeusAlert.user_id == user.id)
+        q = db.query(ZeusAlert).filter(ZeusAlert.resolved.is_(False), ZeusAlert.user_id == user.id)
         count = q.count()
         if count > 0:
             return count
     except Exception as exc:
         logger.warning("[ANALYTICS] zeus_alerts count: %s", exc)
 
+    # compliance_events no tiene user_id ni company_id: son eventos de toda la plataforma.
+    # Solo el superusuario puede verlos; a un cliente se le filtraban alertas de otras empresas.
+    if not _is_platform_superuser(user):
+        return 0
     try:
         since = _utcnow() - timedelta(days=7)
         cq = db.query(ComplianceEvent).filter(
@@ -250,10 +259,10 @@ def list_unresolved_alerts(
     *,
     limit: int = 50,
 ) -> List[Dict[str, Any]]:
+    if user is None or getattr(user, "id", None) is None:
+        return []
     try:
-        q = db.query(ZeusAlert).filter(ZeusAlert.resolved.is_(False))
-        if user and getattr(user, "id", None) is not None:
-            q = q.filter(ZeusAlert.user_id == user.id)
+        q = db.query(ZeusAlert).filter(ZeusAlert.resolved.is_(False), ZeusAlert.user_id == user.id)
         rows = q.order_by(ZeusAlert.created_at.desc()).limit(limit).all()
         if rows:
             return [
@@ -268,6 +277,9 @@ def list_unresolved_alerts(
     except Exception as exc:
         logger.warning("[ANALYTICS] list_unresolved_alerts: %s", exc)
 
+    # Fallback a compliance_events (global, sin tenant) solo para el superusuario.
+    if not _is_platform_superuser(user):
+        return []
     try:
         since = _utcnow() - timedelta(days=7)
         cq = db.query(ComplianceEvent).filter(

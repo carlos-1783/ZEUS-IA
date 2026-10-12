@@ -6,6 +6,7 @@ Toda nómina es BORRADOR y requiere validación por asesor laboral.
 from __future__ import annotations
 
 import os
+import io
 import base64
 import logging
 from pathlib import Path
@@ -25,7 +26,6 @@ LEGAL_DISCLAIMER = (
     "antes de su emisión oficial o presentación ante organismos públicos."
 )
 
-PAYROLL_OUTPUT_DIR = Path(os.getenv("PAYROLL_OUTPUT_DIR", "storage/outputs/payroll_drafts"))
 STATUS_BORRADOR = "BORRADOR_GENERADO"
 
 
@@ -65,38 +65,42 @@ def calculate_payroll(gross_salary: float) -> Dict[str, float]:
     }
 
 
-def _generate_pdf(
+def _render_document(
     payroll_data: Dict[str, Any],
     company_name: str,
     employee_name: str,
     month: str,
     year: int,
-    output_path: Path,
-) -> str:
-    """Genera PDF con encabezado BORRADOR y disclaimer legal."""
+) -> Tuple[bytes, str, str]:
+    """Genera el borrador EN MEMORIA (nunca a disco: Railway no persiste ficheros).
+
+    Devuelve (bytes, extension, mime). Sin reportlab, TXT con el mismo contenido."""
     try:
         from reportlab.pdfgen import canvas
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.units import cm
     except ImportError:
-        logger.warning("reportlab no instalado. Generando archivo TXT en su lugar.")
-        # Fallback: TXT con el mismo contenido
-        txt_path = output_path.with_suffix(".txt")
-        with open(txt_path, "w", encoding="utf-8") as f:
-            f.write("=== BORRADOR - NÓMINA (NO OFICIAL) ===\n\n")
-            f.write(f"Empresa: {company_name}\n")
-            f.write(f"Empleado: {employee_name}\n")
-            f.write(f"Período: {month}/{year}\n\n")
-            f.write(f"Salario bruto: {payroll_data.get('gross_salary', 0):.2f} €\n")
-            f.write(f"IRPF estimado: {payroll_data.get('irpf_estimated', 0):.2f} €\n")
-            f.write(f"Seguridad Social estimada: {payroll_data.get('social_security_estimated', 0):.2f} €\n")
-            f.write(f"Salario neto estimado: {payroll_data.get('net_salary_estimated', 0):.2f} €\n\n")
-            f.write(f"--- DISCLAIMER LEGAL ---\n{LEGAL_DISCLAIMER}\n")
-        return str(txt_path)
+        logger.warning("reportlab no instalado. Generando borrador TXT en su lugar.")
+        lines = [
+            "=== BORRADOR - NÓMINA (NO OFICIAL) ===",
+            "",
+            f"Empresa: {company_name}",
+            f"Empleado: {employee_name}",
+            f"Período: {month}/{year}",
+            "",
+            f"Salario bruto: {payroll_data.get('gross_salary', 0):.2f} €",
+            f"IRPF estimado: {payroll_data.get('irpf_estimated', 0):.2f} €",
+            f"Seguridad Social estimada: {payroll_data.get('social_security_estimated', 0):.2f} €",
+            f"Salario neto estimado: {payroll_data.get('net_salary_estimated', 0):.2f} €",
+            "",
+            "--- DISCLAIMER LEGAL ---",
+            LEGAL_DISCLAIMER,
+            "",
+        ]
+        return "\n".join(lines).encode("utf-8"), "txt", "text/plain"
 
-    PAYROLL_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    pdf_path = output_path.with_suffix(".pdf")
-    c = canvas.Canvas(str(pdf_path), pagesize=A4)
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
     width, height = A4
 
     # Encabezado BORRADOR
@@ -138,7 +142,7 @@ def _generate_pdf(
     c.setFillColorRGB(0, 0, 0)
     c.showPage()
     c.save()
-    return str(pdf_path)
+    return buf.getvalue(), "pdf", "application/pdf"
 
 
 def _wrap_text(text: str, max_chars: int) -> list:
@@ -158,6 +162,43 @@ def _wrap_text(text: str, max_chars: int) -> list:
     return lines
 
 
+def _names_for(db: Session, owner_user_id: int, employee_id: int) -> Tuple[str, str]:
+    owner = db.query(User).filter(User.id == owner_user_id).first()
+    emp = db.query(User).filter(User.id == employee_id).first()
+    company_name = (
+        (owner.company_name or owner.full_name or owner.email) if owner else f"Empresa {owner_user_id}"
+    )
+    employee_name = (emp.full_name or emp.email) if emp else f"Empleado {employee_id}"
+    return company_name, employee_name
+
+
+def _owner_company_id(db: Session, owner_user_id: int) -> Optional[int]:
+    """Empresa real (companies.id) del owner, para el prefijo empresa/{id}/ en R2."""
+    from app.models.company import UserCompany
+
+    link = (
+        db.query(UserCompany)
+        .filter(UserCompany.user_id == owner_user_id)
+        .order_by(UserCompany.id.asc())
+        .first()
+    )
+    return int(link.company_id) if link else None
+
+
+def _record_payroll_data(record: PayrollDraft) -> Dict[str, float]:
+    return {
+        "gross_salary": float(record.gross_salary or 0),
+        "irpf_estimated": float(record.irpf_estimated or 0),
+        "social_security_estimated": float(record.social_security_estimated or 0),
+        "net_salary_estimated": float(record.net_salary_estimated or 0),
+    }
+
+
+def _draft_filename(record: PayrollDraft, ext: str) -> str:
+    month = str(record.month or "").replace(" ", "_")
+    return f"nomina_borrador_{record.year}_{month}_{record.id}.{ext}"
+
+
 def generate_and_persist(
     db: Session,
     company_id: int,
@@ -167,24 +208,22 @@ def generate_and_persist(
     year: int,
     company_name: str = "",
     employee_name: str = "",
-) -> Tuple[PayrollDraft, str]:
+) -> Tuple[PayrollDraft, Optional[str]]:
     """
-    Calcula nómina, genera PDF con BORRADOR y disclaimer, persiste en BD.
-    Retorna (PayrollDraft, pdf_path).
-    NO presenta a Seguridad Social. NO ejecuta pagos.
+    Calcula nómina, persiste el borrador en BD y guarda el documento en R2
+    (empresa/{companies.id}/documents/...). Nunca escribe en disco local.
+    Retorna (PayrollDraft, referencia "r2:<file_id>" o None si R2 no está configurado;
+    en ese caso la descarga lo regenera desde la fila de BD).
+    NO presenta a Seguridad Social. NO ejecuta pagos. NO envía nada al empleado.
     """
     payroll = calculate_payroll(gross_salary)
-    net = payroll["net_salary_estimated"]
-    irpf = payroll["irpf_estimated"]
-    ss = payroll["social_security_estimated"]
-
     record = PayrollDraft(
         owner_user_id=company_id,
         employee_id=employee_id,
         gross_salary=gross_salary,
-        irpf_estimated=irpf,
-        social_security_estimated=ss,
-        net_salary_estimated=net,
+        irpf_estimated=payroll["irpf_estimated"],
+        social_security_estimated=payroll["social_security_estimated"],
+        net_salary_estimated=payroll["net_salary_estimated"],
         month=month,
         year=year,
         status=STATUS_BORRADOR,
@@ -193,50 +232,108 @@ def generate_and_persist(
     db.commit()
     db.refresh(record)
 
-    PAYROLL_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    filename = f"payroll_{company_id}_{employee_id}_{year}_{month.replace(' ', '_')}_{record.id}"
-    output_path = PAYROLL_OUTPUT_DIR / filename
-
-    pdf_path = _generate_pdf(
+    data, ext, mime = _render_document(
         payroll_data=payroll,
         company_name=company_name or f"Empresa {company_id}",
         employee_name=employee_name or f"Empleado {employee_id}",
         month=month,
         year=year,
-        output_path=output_path,
     )
-    record.pdf_path = pdf_path
-    db.add(record)
-    db.commit()
-    db.refresh(record)
+    pdf_ref: Optional[str] = None
+    from services import object_storage
 
-    logger.info(f"[PAYROLL] Borrador generado id={record.id} company={company_id} employee={employee_id}")
-    return record, pdf_path
+    storage_cid = _owner_company_id(db, company_id)
+    if storage_cid is None:
+        logger.warning("[PAYROLL] borrador id=%s sin empresa real: documento no se guarda en R2", record.id)
+    elif not object_storage.is_configured():
+        logger.warning(
+            "[PAYROLL] borrador id=%s: R2 sin configurar (%s); el documento se regenerará desde BD al descargar",
+            record.id, ", ".join(object_storage.missing_config()),
+        )
+    else:
+        try:
+            row = object_storage.store_file(
+                db,
+                company_id=storage_cid,
+                user_id=company_id,
+                category="documents",
+                filename=_draft_filename(record, ext),
+                content_type=mime,
+                data=data,
+                agent_name="ZEUS",
+            )
+            pdf_ref = f"r2:{row.id}"
+        except (object_storage.StorageNotConfigured, object_storage.StorageError, ValueError) as exc:
+            logger.error("[PAYROLL] borrador id=%s: no se pudo guardar en R2: %s", record.id, exc)
+    if pdf_ref:
+        record.pdf_path = pdf_ref
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+
+    logger.info(
+        "[PAYROLL] Borrador generado id=%s owner_user=%s employee=%s documento=%s",
+        record.id, company_id, employee_id, pdf_ref or "regenerable_desde_bd",
+    )
+    return record, pdf_ref
+
+
+def draft_document(db: Session, record: PayrollDraft) -> Tuple[bytes, str, str]:
+    """Documento del borrador: (bytes, filename, mime).
+
+    1) En R2 (pdf_path = "r2:<file_id>"): se lee de ahí, solo dentro de la empresa del owner.
+    2) Legado: ruta local si aún existe en este contenedor.
+    3) Si no, se regenera desde la fila de BD (mismos importes, mismo formato)."""
+    ref = str(record.pdf_path or "")
+    if ref.startswith("r2:"):
+        from services import object_storage
+
+        cid = _owner_company_id(db, record.owner_user_id)
+        row = object_storage.get_for_companies(db, ref[3:], [cid] if cid else [])
+        if row is not None:
+            try:
+                return object_storage.read_bytes(row), row.original_filename, row.content_type
+            except (object_storage.StorageNotConfigured, object_storage.StorageError) as exc:
+                logger.error("[PAYROLL] borrador id=%s: lectura R2 falló (%s); se regenera desde BD", record.id, exc)
+        else:
+            logger.error("[PAYROLL] borrador id=%s: fichero R2 %s no encontrado en su empresa", record.id, ref)
+    elif ref and os.path.isfile(ref):
+        with open(ref, "rb") as f:
+            data = f.read()
+        mime = "application/pdf" if ref.lower().endswith(".pdf") else "text/plain"
+        return data, os.path.basename(ref), mime
+
+    company_name, employee_name = _names_for(db, record.owner_user_id, record.employee_id)
+    data, ext, mime = _render_document(
+        _record_payroll_data(record), company_name, employee_name, str(record.month or ""), int(record.year or 0)
+    )
+    return data, _draft_filename(record, ext), mime
 
 
 def send_to_labor_advisor(
     to_email: str,
     subject: str,
     body: str,
-    pdf_path: str,
+    attachment: Tuple[bytes, str, str],
 ) -> Dict[str, Any]:
-    """Envía email con PDF adjunto al gestor laboral."""
+    """Envía email con el borrador adjunto (bytes, filename, mime) al gestor laboral.
+    Nunca al empleado ni a organismos (Seguridad Social / AEAT)."""
     from services.email_service import email_service
     from services.activity_logger import ActivityLogger
 
     if not email_service.is_configured():
         return {"success": False, "error": "Email service not configured"}
 
-    if not os.path.isfile(pdf_path):
-        return {"success": False, "error": f"PDF no encontrado: {pdf_path}"}
+    data, att_name, mime_type = attachment
+    if not data:
+        return {"success": False, "error": "Borrador sin contenido"}
 
     try:
         from sendgrid.helpers.mail import Mail, Email, To, Content, Attachment, FileContent, FileName, FileType
     except ImportError:
         return {"success": False, "error": "SendGrid Attachment not available"}
 
-    with open(pdf_path, "rb") as f:
-        pdf_data = base64.b64encode(f.read()).decode()
+    pdf_data = base64.b64encode(data).decode()
 
     message = Mail(
         from_email=Email(email_service.from_email, email_service.from_name),
@@ -244,13 +341,11 @@ def send_to_labor_advisor(
         subject=subject,
         html_content=Content("text/html", body),
     )
-    mime_type = "application/pdf" if pdf_path.lower().endswith(".pdf") else "text/plain"
-    attachment = Attachment(
+    message.add_attachment(Attachment(
         FileContent(pdf_data),
-        FileName(os.path.basename(pdf_path)),
+        FileName(att_name),
         FileType(mime_type),
-    )
-    message.add_attachment(attachment)
+    ))
 
     try:
         response = email_service.client.send(message)
@@ -259,7 +354,7 @@ def send_to_labor_advisor(
             agent_name="ZEUS",
             action_type="email_sent",
             action_description=f"Nómina borrador enviada a gestor laboral: {to_email}",
-            details={"to": to_email, "subject": subject, "attachment": os.path.basename(pdf_path)},
+            details={"to": to_email, "subject": subject, "attachment": att_name},
             status="completed",
             priority="high",
         )

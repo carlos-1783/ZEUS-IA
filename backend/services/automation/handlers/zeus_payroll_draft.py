@@ -14,6 +14,7 @@ from app.db.session import SessionLocal
 from services.payroll_assistant_service import (
     generate_and_persist,
     send_to_labor_advisor,
+    draft_document,
 )
 from services.activity_logger import ActivityLogger
 
@@ -111,7 +112,7 @@ def handle_payroll_draft_generate(activity: AgentActivity) -> Dict[str, Any]:
                 to_email=advisor_email,
                 subject=subject,
                 body=body,
-                pdf_path=pdf_path,
+                attachment=draft_document(session, record),
             )
             email_sent = email_result.get("success", False)
             if not email_sent:

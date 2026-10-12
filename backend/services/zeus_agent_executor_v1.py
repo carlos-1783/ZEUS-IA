@@ -5,7 +5,7 @@ Executor unificado v2 — agentes ejecutan servicios reales (execution_over_text
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Tuple, Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
@@ -53,6 +53,19 @@ def track_leads_summary(db: Session, user: User) -> Dict[str, Any]:
         "high_priority": sum(1 for l in leads if (l.customer_priority or "") == "high"),
         "with_meeting": sum(1 for l in leads if l.meeting_at is not None),
     }
+
+
+def _fiscal_period(payload: Dict[str, Any]) -> Tuple[int, int]:
+    """Periodo pedido o, si no se indica, el trimestre EN CURSO (antes: 2026-T1 fijo, que
+    devolvia datos de otro periodo sin avisar)."""
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    year = int(payload.get("year") or now.year)
+    quarter = int(payload.get("quarter") or (now.month - 1) // 3 + 1)
+    if not 1 <= quarter <= 4:
+        raise ValueError("quarter debe estar entre 1 y 4")
+    return year, quarter
 
 
 def _fail(message: str, **extra: Any) -> Dict[str, Any]:
@@ -445,8 +458,10 @@ async def _dispatch(
         return _execute_register_qr_payment(db, user, zeus_action, payload)
 
     if action == "generate_model_303":
-        year = int(payload.get("year") or 2026)
-        quarter = int(payload.get("quarter") or 1)
+        try:
+            year, quarter = _fiscal_period(payload)
+        except (TypeError, ValueError):
+            return _fail("Periodo fiscal no válido: indica año y trimestre (1-4).", status="invalid_payload")
         from services.rafael_fiscal_engine_v2 import generate_model_303_flow
 
         out = generate_model_303_flow(
@@ -458,8 +473,10 @@ async def _dispatch(
         from services.rafael_fiscal_engine_v2 import fetch_period_financials
 
         cid = crm_svc.primary_company_id(db, user)
-        year = int(payload.get("year") or 2026)
-        quarter = int(payload.get("quarter") or 1)
+        try:
+            year, quarter = _fiscal_period(payload)
+        except (TypeError, ValueError):
+            return _fail("Periodo fiscal no válido: indica año y trimestre (1-4).", status="invalid_payload")
         fin = fetch_period_financials(db, company_id=cid, year=year, quarter=quarter)
         return {"success": True, "executed": True, "message": "Resumen fiscal del periodo.", "data": fin}
 

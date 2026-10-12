@@ -7,7 +7,8 @@
   >
     <p v-if="data?.read_only" class="audit-badge">🔒 Modo auditoría — solo lectura</p>
 
-    <div class="phase-b-actions">
+    <!-- Pruebas con payload sintético: solo superusuario (el backend devuelve 403 al resto). -->
+    <div v-if="isSuperuser" class="phase-b-actions">
       <button
         type="button"
         class="phase-b-btn"
@@ -77,6 +78,10 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import KpiPageShell from '@/components/kpi/KpiPageShell.vue'
+import { useAuthStore } from '@/stores/auth'
+
+const authStore = useAuthStore()
+const isSuperuser = computed(() => !!authStore.isAdmin)
 
 const loading = ref(true)
 const error = ref('')

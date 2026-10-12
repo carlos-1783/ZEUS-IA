@@ -40,12 +40,14 @@ async def phase_b_env_status(
 
 @router.post("/contract-flow")
 async def test_contract_flow(
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_superuser),
     db: Session = Depends(get_db),
 ):
     """
     Safe Phase B test: emit contract_rrhh_created on real event bus.
     Synthetic payload only — does not require employee in company_employees.
+    Solo superusuario: el payload es sintetico y entra en el bus de eventos real, asi que
+    en la cuenta de un cliente ensuciaba sus KPIs, alertas y logs de automatizacion.
     """
     result = run_test_contract_flow(db, current_user)
     return result
@@ -61,12 +63,13 @@ async def phase_c_env_status(
 
 @router.post("/payment-risk")
 async def test_payment_risk_flow(
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_superuser),
     db: Session = Depends(get_db),
 ):
     """
     Safe Phase C test: emit payment_due → CRM risk scoring → RAFAEL agents.
-    Synthetic demo payload only.
+    Synthetic demo payload only ("Demo Client Phase C"). Solo superusuario, por el mismo
+    motivo: no se inyectan datos de demostracion en la cuenta de un cliente.
     """
     result = run_test_payment_risk_flow(db, current_user)
     return result

@@ -12,7 +12,7 @@ from datetime import datetime
 # Importar servicios
 from services.whatsapp_service import whatsapp_service
 from services.email_service import email_service
-from services.hacienda_service import hacienda_service
+from services.hacienda_service import HaciendaError, hacienda_service
 from services.stripe_service import stripe_service
 from services.webhook_signature_v1 import verify_email_inbound_secret, verify_twilio_request
 from services.thalos_request_guard_v1 import thalos_request_guard
@@ -199,12 +199,10 @@ async def enviar_factura(
     _: User = Depends(require_scopes(["tax:write"])),
 ):
     """Enviar factura al SII de Hacienda"""
-    result = await hacienda_service.enviar_factura_emitida(factura.dict())
-    
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
-    
-    return result
+    try:
+        return await hacienda_service.enviar_factura_emitida(factura.dict())
+    except HaciendaError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 @router.post("/hacienda/modelo-303", dependencies=[Depends(thalos_request_guard)])
 async def presentar_modelo_303(
@@ -212,16 +210,14 @@ async def presentar_modelo_303(
     _: User = Depends(require_scopes(["tax:write"])),
 ):
     """Presentar Modelo 303 (IVA trimestral)"""
-    result = await hacienda_service.presentar_modelo_303(
-        trimestre=modelo.trimestre,
-        ejercicio=modelo.ejercicio,
-        datos=modelo.dict()
-    )
-    
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
-    
-    return result
+    try:
+        return await hacienda_service.presentar_modelo_303(
+            trimestre=modelo.trimestre,
+            ejercicio=modelo.ejercicio,
+            datos=modelo.dict()
+        )
+    except HaciendaError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 @router.get("/hacienda/status")
 async def hacienda_status(

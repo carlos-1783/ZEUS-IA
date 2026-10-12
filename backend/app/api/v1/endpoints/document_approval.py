@@ -347,6 +347,7 @@ async def export_fiscal_document(
         
         # Generar export según formato
         export_data = None
+        export_encoding = "utf-8"
         content_type = None
         filename = None
         
@@ -376,12 +377,25 @@ async def export_fiscal_document(
             content_type = "application/xml"
             filename = f"fiscal_document_{document_id}.xml"
         elif format == "pdf":
-            # Para PDF, retornar JSON por ahora (generación PDF requiere librería adicional)
-            # En producción, usar reportlab o similar
-            export_data = json.dumps(document_content, ensure_ascii=False, indent=2)
-            content_type = "application/json"
-            filename = f"fiscal_document_{document_id}.json"
-            # TODO: Implementar generación PDF real
+            # Fase 2: antes devolvia JSON etiquetado como exportacion PDF. Ahora PDF real
+            # (reportlab), en base64 dentro de export_data.
+            import base64
+
+            from services.fiscal_pdf_generator import generate_document_pdf_bytes
+
+            pdf = generate_document_pdf_bytes(
+                f"Documento fiscal #{document_id}",
+                {
+                    "Tipo": doc_approval.fiscal_document_type or doc_approval.document_type,
+                    "Estado": doc_approval.status,
+                    "Fecha": doc_approval.created_at.isoformat() if doc_approval.created_at else "",
+                },
+                document_content if isinstance(document_content, dict) else {"contenido": document_content},
+            )
+            export_data = base64.b64encode(pdf).decode("ascii")
+            export_encoding = "base64"
+            content_type = "application/pdf"
+            filename = f"fiscal_document_{document_id}.pdf"
         
         # Actualizar estado a 'exported'
         doc_approval.status = DocumentStatus.EXPORTED.value
@@ -410,6 +424,7 @@ async def export_fiscal_document(
             "filename": filename,
             "content_type": content_type,
             "export_data": export_data,
+            "export_encoding": export_encoding,
             "exported_at": doc_approval.exported_at.isoformat() if doc_approval.exported_at else None,
             "message": f"Documento exportado correctamente en formato {format}"
         }

@@ -105,3 +105,57 @@ def generate_invoice_pdf_v1(
     c.save()
     logger.info("Invoice PDF generated: %s", pdf_path)
     return str(pdf_path.resolve())
+
+
+def _flatten(value: Any, prefix: str = "") -> List[str]:
+    if isinstance(value, dict):
+        out: List[str] = []
+        for k, v in value.items():
+            out.extend(_flatten(v, f"{prefix}{k}."))
+        return out or [f"{prefix.rstrip('.')}: -"]
+    if isinstance(value, list):
+        out = []
+        for i, v in enumerate(value):
+            out.extend(_flatten(v, f"{prefix}{i}."))
+        return out or [f"{prefix.rstrip('.')}: -"]
+    return [f"{prefix.rstrip('.')}: {value}"]
+
+
+def generate_document_pdf_bytes(title: str, meta: Dict[str, Any], payload: Dict[str, Any]) -> bytes:
+    """PDF real (en memoria) con los metadatos y el contenido del documento, campo a campo."""
+    import io
+
+    try:
+        from reportlab.lib.pagesizes import A4  # pyright: ignore[reportMissingModuleSource]
+        from reportlab.lib.units import cm  # pyright: ignore[reportMissingModuleSource]
+        from reportlab.pdfgen import canvas  # pyright: ignore[reportMissingModuleSource]
+    except ImportError as exc:
+        raise RuntimeError("reportlab no disponible para generar el PDF") from exc
+
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    width, height = A4
+    y = height - 2 * cm
+
+    def line(text: str, font: str = "Helvetica", size: int = 9) -> None:
+        nonlocal y
+        for chunk in _wrap(text, 110):
+            if y < 2 * cm:
+                c.showPage()
+                y = height - 2 * cm
+            c.setFont(font, size)
+            c.drawString(2 * cm, y, chunk)
+            y -= size + 4
+
+    line(title, "Helvetica-Bold", 14)
+    y -= 6
+    for k, v in meta.items():
+        line(f"{k}: {v}")
+    y -= 6
+    line("Contenido", "Helvetica-Bold", 11)
+    for row in _flatten(payload or {}):
+        line(row)
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+

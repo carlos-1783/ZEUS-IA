@@ -290,41 +290,6 @@ def emit_events_per_client(
     return counts
 
 
-def maybe_force_high_risk_demo(
-    db: Session,
-    user: User,
-    created_clients: List[Customer],
-    *,
-    trace_id: str,
-) -> bool:
-    """Step force_high_risk_demo — extra payment_due when any importe > 1000."""
-    has_high = False
-    for customer in created_clients:
-        meta = customer.metadata_ if isinstance(customer.metadata_, dict) else {}
-        try:
-            amount = float(meta.get("importe") or meta.get("pending_amount") or 0)
-        except (TypeError, ValueError):
-            amount = 0.0
-        if amount > 1000:
-            has_high = True
-            break
-
-    if not has_high:
-        return False
-
-    anchor = created_clients[0]
-    _emit_payment_due(
-        db,
-        user,
-        client_id=anchor.id,
-        nombre=anchor.name,
-        importe=1500.0,
-        source="demo_boost",
-        trace_id=trace_id,
-    )
-    return True
-
-
 def audit_import_completed(
     db: Session,
     user: User,
@@ -390,7 +355,6 @@ def run_client_excel_import_pipeline_v2(
             "skipped_invalid": len(raw_rows) - len(clients),
             "errors": validation_errors,
             "events_emitted": {"client_created": 0, "payment_due": 0},
-            "demo_boost_emitted": False,
             "message": "No se importó ningún cliente (filas inválidas o sin teléfono).",
         }
 
@@ -405,7 +369,6 @@ def run_client_excel_import_pipeline_v2(
         )
 
         event_counts = emit_events_per_client(db, user, created_clients, trace_id=trace_id)
-        demo_boost = maybe_force_high_risk_demo(db, user, created_clients, trace_id=trace_id)
 
         crm_svc.log_activity(
             db,
@@ -436,7 +399,6 @@ def run_client_excel_import_pipeline_v2(
                 "imported": inserted,
                 "updated": updated,
                 "events_emitted": event_counts,
-                "demo_boost_emitted": demo_boost,
                 "filename": filename,
             },
         )
@@ -479,7 +441,6 @@ def run_client_excel_import_pipeline_v2(
         "skipped_invalid": skipped,
         "errors": validation_errors,
         "events_emitted": event_counts,
-        "demo_boost_emitted": demo_boost,
         "message": (
             f"Pipeline V2: {inserted} cliente(s) nuevos, {updated} actualizado(s). "
             f"Eventos: {event_counts['client_created']} client_created, "

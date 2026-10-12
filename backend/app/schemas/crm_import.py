@@ -46,5 +46,4 @@ class CrmImportResultOut(BaseModel):
     skipped_invalid: int = 0
     errors: List[str] = Field(default_factory=list)
     events_emitted: Optional[Dict[str, int]] = None
-    demo_boost_emitted: bool = False
     message: str = ""

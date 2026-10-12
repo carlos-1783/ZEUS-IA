@@ -9,7 +9,6 @@ from app.schemas.crm_import import CrmImportColumnMapping
 from services.client_excel_import_pipeline_v2 import (
     PIPELINE_NAME,
     validate_clients,
-    maybe_force_high_risk_demo,
 )
 
 
@@ -33,25 +32,14 @@ def test_validate_clients_skips_invalid_phone():
     assert errors
 
 
-def test_maybe_force_high_risk_demo_emits_when_importe_high():
-    db = MagicMock()
-    user = MagicMock()
-    user.id = 1
-    customer = MagicMock()
-    customer.id = 42
-    customer.name = "Big Client"
-    customer.metadata_ = {"importe": 1200}
+def test_no_demo_boost_with_invented_amount():
+    """Fase 2 / Step 2: se emitia un payment_due de 1500 EUR inventado (source=demo_boost)
+    sobre el primer cliente si alguno superaba 1000 EUR."""
+    import services.client_excel_import_pipeline_v2 as pipeline
 
-    with patch(
-        "services.client_excel_import_pipeline_v2._emit_payment_due",
-        return_value={"success": True},
-    ) as mock_emit:
-        emitted = maybe_force_high_risk_demo(db, user, [customer], trace_id="trace-1")
-
-    assert emitted is True
-    mock_emit.assert_called_once()
-    assert mock_emit.call_args.kwargs["importe"] == 1500.0
-    assert mock_emit.call_args.kwargs["source"] == "demo_boost"
+    assert not hasattr(pipeline, "maybe_force_high_risk_demo")
+    src = open(pipeline.__file__, encoding="utf-8").read()
+    assert "demo_boost" not in src and "1500.0" not in src
 
 
 def test_pipeline_name_constant():

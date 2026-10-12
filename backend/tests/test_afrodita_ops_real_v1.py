@@ -111,10 +111,13 @@ def test_create_route_persists(db, user):
             deliveries=[{"id": "D1"}, {"id": "D2"}],
         )
         db.commit()
-    assert out["route"]["distance"] > 0
+    # Sin servicio de rutas integrado la distancia no se inventa (Fase 2 / Step 2).
+    assert out["route"]["distance"] is None
+    assert out["route"]["plan"]["optimized"] is False and out["route"]["plan"]["stops"] == 2
+    assert "no calculados" in out["message"]
     row = db.query(OpsRoute).filter(OpsRoute.id == out["route"]["id"]).first()
     assert row is not None
-    assert row.origin == "Madrid"
+    assert row.origin == "Madrid" and row.distance is None
 
 
 def test_movement_rejects_negative_stock(db, user, product, company):

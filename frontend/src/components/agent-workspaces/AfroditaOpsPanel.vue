@@ -94,7 +94,7 @@
       </div>
       <ul v-if="routes.length" class="route-list">
         <li v-for="r in routes" :key="r.id">
-          {{ r.origin }} → {{ r.destination }} · {{ r.distance }} km
+          {{ r.origin }} → {{ r.destination }} · {{ r.distance != null ? `${r.distance} km` : 'distancia no calculada' }}
         </li>
       </ul>
       <pre v-if="routeResult">{{ routeResult }}</pre>
@@ -316,7 +316,7 @@ const runCreateRoute = async () => {
       error.value = 'Ruta no persistida'
       return
     }
-    routeResult.value = out.message || `Ruta #${out.route.id} — ${out.route.distance} km`
+    routeResult.value = out.message || `Ruta #${out.route.id} guardada`
     await loadRoutes(true)
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)

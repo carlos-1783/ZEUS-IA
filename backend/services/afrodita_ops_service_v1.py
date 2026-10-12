@@ -371,11 +371,10 @@ def create_inventory_movement(
     }
 
 
-def _estimate_route_distance(origin: str, destination: str, stops: int) -> float:
-    o = (origin or "").strip().lower()
-    d = (destination or "").strip().lower()
-    base = 8.0 if o == d else 32.0
-    return round(base + max(stops, 1) * 4.2, 2)
+_ROUTE_DISTANCE_NOTE = (
+    "Distancia y orden optimo no calculados: no hay servicio de rutas/geocodificacion "
+    "integrado. Las paradas se guardan en el orden indicado."
+)
 
 
 def create_ops_route(
@@ -386,23 +385,21 @@ def create_ops_route(
     destination: str,
     deliveries: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    from agents.afrodita import Afrodita
-
+    # Antes: un stub de optimizacion devolvia 0 km y se rellenaba con una distancia
+    # inventada (8/32 km + 4,2 km por parada). Ahora se guarda lo que de verdad se sabe.
     deliveries = deliveries or []
-    agent = Afrodita()
-    plan = agent.optimize_route(deliveries, origin)
     stops = len(deliveries)
-    distance = float(plan.get("estimated_distance_km") or 0)
-    if distance <= 0:
-        distance = _estimate_route_distance(origin, destination, stops)
+    distance = None
 
     company_id = primary_company_id_for_user(db, user)
     route_payload = {
-        **plan,
         "origin": origin,
         "destination": destination,
         "stops": stops,
-        "distance_km": distance,
+        "deliveries": deliveries,
+        "optimized": False,
+        "distance_km": None,
+        "note": _ROUTE_DISTANCE_NOTE,
     }
     row = OpsRoute(
         user_id=user.id,
@@ -443,7 +440,7 @@ def create_ops_route(
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "plan": route_payload,
         },
-        "message": f"Ruta persistida ({distance} km)",
+        "message": f"Ruta #{row.id} guardada ({stops} paradas). {_ROUTE_DISTANCE_NOTE}",
     }
 
 

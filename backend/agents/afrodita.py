@@ -281,44 +281,6 @@ Eres la voz humana de ZEUS-IA. El corazón del sistema. 💙""",
         else:
             return "general"
     
-    def get_employee_info(self, employee_id: str) -> Dict[str, Any]:
-        """Obtener información de un empleado"""
-        # TODO: Integrar con base de datos de empleados
-        return {
-            "id": employee_id,
-            "name": "Pendiente de implementar",
-            "position": "",
-            "department": "",
-            "hire_date": "",
-            "vacation_days_remaining": 0
-        }
-    
-    def calculate_payroll(self, employee_id: str, month: int, year: int) -> Dict[str, Any]:
-        """Calcular nómina de un empleado"""
-        # TODO: Implementar lógica de cálculo de nómina
-        return {
-            "employee_id": employee_id,
-            "period": f"{month}/{year}",
-            "base_salary": 0,
-            "overtime": 0,
-            "bonuses": 0,
-            "deductions": 0,
-            "net_salary": 0,
-            "status": "pending_calculation"
-        }
-    
-    def optimize_route(self, deliveries: list, start_location: str) -> Dict[str, Any]:
-        """Optimizar ruta de reparto"""
-        # TODO: Implementar algoritmo de optimización de rutas
-        return {
-            "start": start_location,
-            "stops": len(deliveries),
-            "optimized_order": [],
-            "estimated_distance_km": 0,
-            "estimated_time_minutes": 0,
-            "status": "pending_optimization"
-        }
-    
     def sync_tpv_employee(self, employee_id: str, ticket_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Sincronizar datos de empleado con TPV

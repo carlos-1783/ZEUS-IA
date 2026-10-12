@@ -69,12 +69,12 @@
         <input
           id="us-2fa"
           type="checkbox"
-          :checked="settingsStore.settings.two_factor_enabled"
-          :disabled="settingsStore.isPatching"
-          @change="onTwoFactorChange"
+          :checked="false"
+          disabled
+          :aria-describedby="'us-2fa-hint'"
         />
       </div>
-      <p class="setting-hint">{{ $t('userSettings.twoFactorHint') }}</p>
+      <p id="us-2fa-hint" class="setting-hint">{{ $t('userSettings.twoFactorHint') }}</p>
       <div class="setting-item">
         <label for="us-timeout">{{ $t('userSettings.sessionTimeout') }}</label>
         <select
@@ -167,12 +167,6 @@ async function onThemeChange(e: Event) {
 async function onLanguageChange(e: Event) {
   const v = (e.target as HTMLSelectElement).value
   const ok = await settingsStore.patchPartial({ language: v })
-  if (!ok) notifyError(t('userSettings.saveError'))
-}
-
-async function onTwoFactorChange(e: Event) {
-  const checked = (e.target as HTMLInputElement).checked
-  const ok = await settingsStore.patchPartial({ two_factor_enabled: checked })
   if (!ok) notifyError(t('userSettings.saveError'))
 }
 

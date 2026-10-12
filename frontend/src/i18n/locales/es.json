@@ -22,7 +22,7 @@
     "language": "Idioma",
     "security": "Seguridad",
     "twoFactor": "Autenticación en dos pasos",
-    "twoFactorHint": "Se guarda en tu cuenta; el flujo real de verificación puede activarse más adelante.",
+    "twoFactorHint": "No disponible todavía: ZEUS aún no tiene verificación en dos pasos en el inicio de sesión, así que no se puede activar.",
     "sessionTimeout": "Cierre por inactividad",
     "sessionTimeoutHint": "Tras este tiempo sin actividad se cerrará la sesión en este dispositivo.",
     "minutes": "minutos",

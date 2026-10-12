@@ -25,6 +25,7 @@ ZeusActionType = Literal[
     "get_legal_status",
     "run_compliance_audit",
     "get_inventory_status",
+    "get_security_status",  # Fase 2 / Step 3: THALOS
     "create_ops_route",
     "create_inventory_movement",
 ]

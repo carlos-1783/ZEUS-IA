@@ -30,6 +30,7 @@ READ_ACTIONS: Dict[str, Tuple[str, str]] = {
     "get_legal_status": ("get_legal_status", "JUSTICIA"),
     "run_compliance_audit": ("run_compliance_audit", "JUSTICIA"),
     "get_inventory_status": ("get_inventory_status", "AFRODITA"),
+    "get_security_status": ("get_security_status", "THALOS"),
 }
 WRITE_ACTIONS = frozenset({"create_ops_route", "create_inventory_movement"})
 # Consultas que un paso de plan puede ejecutar (nombre del ejecutor -> (accion del chat, agente)).
@@ -38,6 +39,7 @@ PLAN_READ_ACTIONS: Dict[str, Tuple[str, str]] = {
     "run_compliance_audit": ("run_compliance_audit", "JUSTICIA"),
     "get_inventory_status": ("get_inventory_status", "AFRODITA"),
     "get_shift_status": ("shift_status", "AFRODITA"),
+    "get_security_status": ("get_security_status", "THALOS"),
 }
 
 
@@ -48,6 +50,14 @@ def _format_read(chat_action: str, result: Dict[str, Any]) -> str:
         extra = f" Pendientes de revisión: {len(pend)} grupos." if isinstance(pend, (list, dict)) and pend else ""
         return (f"Estado legal de tu cuenta: {data['legal_documents']} documentos legales y "
                 f"{data.get('compliance_events', 0)} eventos de cumplimiento registrados.{extra}")
+    if chat_action == "get_security_status" and "events_total" in data:
+        if not data["events_total"]:
+            return f"THALOS no tiene eventos de seguridad de tu empresa en los últimos {data['window_days']} días."
+        rec = data.get("recent_denials") or []
+        tail = ("" if not rec else " Últimos rechazos: "
+                + ", ".join(f"{r.get('rule') or r.get('event_type')} ({r.get('severity')})" for r in rec[:3]) + ".")
+        return (f"Seguridad de tu empresa ({data['window_days']} días): {data['events_total']} eventos, "
+                f"{data['denied_total']} rechazados, {data['critical_total']} críticos.{tail}")
     if chat_action == "get_inventory_status" and "total_skus" in data:
         low = data.get("low_stock_items") or []
         names = ", ".join(f"{i.get('name')} ({i.get('stock'):g})" for i in low[:5] if isinstance(i.get("stock"), (int, float)))

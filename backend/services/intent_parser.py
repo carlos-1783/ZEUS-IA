@@ -64,6 +64,7 @@ INTENT_LABELS: Dict[str, str] = {
     "get_legal_status": "el estado legal / documentos legales",
     "run_compliance_audit": "una auditoría de cumplimiento",
     "get_inventory_status": "el estado del inventario",
+    "get_security_status": "el estado de seguridad de tu empresa",
     "create_ops_route": "crear una ruta operativa",
     "create_inventory_movement": "registrar un movimiento de inventario",
 }
@@ -594,6 +595,10 @@ def parse_ops_write(text: str, kind: str) -> Optional[Dict[str, Any]]:
     return {"product_text": prod, "quantity": qty, "movement": "in" if m.group("type") == "entrada" else "out"}
 
 
+_SECURITY_STATUS_RE = re.compile(
+    r"\b(?:estado|situacion|resumen|informe)\s+de\s+(?:la\s+)?seguridad\b"
+    r"|\beventos?\s+de\s+seguridad\b|\bintentos?\s+(?:de\s+acceso\s+)?bloqueados?\b"
+)
 _LEGAL_STATUS_RE = re.compile(
     r"\b(?:estado|situacion)\s+(?:legal|juridic[oa]|de\s+cumplimiento|normativ[oa])\b"
     r"|\bdocumentos?\s+legales\b|\bcumplimiento\s+(?:legal|normativo)\b"
@@ -861,6 +866,10 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
                 metadata=fields_ or {}, fields={"requires_confirmation": True},
                 missing=[] if fields_ else ["explicit_intent"], question=None if fields_ else QUESTION_OPS,
             ))
+
+    # --- Fase 2 / Step 3: THALOS consulta de seguridad de la empresa
+    if _SECURITY_STATUS_RE.search(f):
+        c.append(_Cand("get_security_status", "get_security_status", 0.85, "security_status"))
 
     # --- J9e: JUSTICIA consultas
     if _LEGAL_STATUS_RE.search(f):

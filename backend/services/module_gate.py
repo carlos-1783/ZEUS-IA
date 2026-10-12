@@ -66,6 +66,9 @@ EXECUTOR_ACTION_MODULE: Dict[str, str] = {
     "get_shift_status": "control_horario",
     "run_compliance_audit": "agents",
     "get_legal_status": "agents",
+    # Fase 2 / Step 3: THALOS sigue la decision J4 (modulo "admin"). Abrirlo a duenos de empresa
+    # (su propia empresa) es una decision de producto: bastaria con cambiar esto a "agents".
+    "get_security_status": "admin",
 }
 # Sin mapeo claro (permitidas): clientes/campanas existen en hosteleria y oficina (el rol ya las
 # gobierna, J3b); caja/metricas son transversales; RAFAEL (facturas, 303, resumen fiscal) vive en

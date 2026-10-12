@@ -31,11 +31,13 @@ MANDATORY_ACTIONS = {
     "AFRODITA": frozenset(
         {"get_shift_status", "get_inventory_status", "create_ops_route", "create_inventory_movement"}
     ),
+    # Fase 2 / Step 3: consulta real de seguridad de la empresa (thalos_security_events).
+    "THALOS": frozenset({"get_security_status"}),
 }
 # Acciones nuevas (J9c) que solo valen con su agente: un cliente no puede pedir una accion de
 # AFRODITA diciendo que es de otro agente (ni al reves).
 _STRICT_AGENT_ACTIONS: Dict[str, str] = {
-    a: ag for ag in ("JUSTICIA", "AFRODITA") for a in MANDATORY_ACTIONS[ag]
+    a: ag for ag in ("JUSTICIA", "AFRODITA", "THALOS") for a in MANDATORY_ACTIONS[ag]
 }
 _STRICT_AGENT_ACTIONS["register_qr_payment"] = "RAFAEL"  # J2b
 _MAX_DELIVERIES = 50
@@ -487,6 +489,23 @@ async def _dispatch(
         return {
             "success": True, "executed": True, "company_id": zeus_action.company_id,
             "message": "Auditoria de cumplimiento ejecutada.", "data": audit,
+        }
+
+    # THALOS (lectura; solo eventos de la empresa del usuario)
+    if action == "get_security_status":
+        from services.thalos_security_status_v1 import company_security_status
+
+        cid = zeus_action.company_id
+        if cid is None:
+            return _fail("El usuario no tiene empresa asociada.")
+        body = company_security_status(db, cid, days=int(payload.get("days") or 7))
+        return {
+            "success": True, "executed": True, "company_id": cid,
+            "message": (
+                f"Seguridad ({body['window_days']} días): {body['events_total']} eventos THALOS, "
+                f"{body['denied_total']} rechazos, {body['critical_total']} críticos."
+            ),
+            "data": body,
         }
 
     # AFRODITA

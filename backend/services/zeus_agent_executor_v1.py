@@ -202,7 +202,7 @@ async def execute_agent_action(
     data = dict(payload or {})
 
     from services.zeus_core_guard_v1 import (
-        SIMULATED_HANDLER_ACTIONS,
+        WORKFLOW_ONLY_ACTIONS,
         guard_enforce,
         validate_critical_action,
     )
@@ -218,12 +218,16 @@ async def execute_agent_action(
         db=db,
         payload=data,
     )
-    if act in SIMULATED_HANDLER_ACTIONS:
+    if act in WORKFLOW_ONLY_ACTIONS:
+        # Antes: success=True "Accion simulada". Ahora se dice que no se ha ejecutado.
+        _log_execution(agent_u, act, user, crm_svc.primary_company_id(db, user) if user else None,
+                       approval_id, "failed", {"status": "workflow_only_action"})
         return {
-            "success": True,
+            "success": False,
             "executed": False,
-            "execution_mode": "simulated",
-            "message": gr.human_message or "Acción simulada — sin mutación de BD",
+            "status": "workflow_only_action",
+            "execution_mode": "not_executed",
+            "message": gr.human_message,
             "guard": gr.to_dict(),
         }
     if not gr.allowed and guard_enforce():

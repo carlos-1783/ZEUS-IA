@@ -176,10 +176,20 @@ def _automation_cleanup() -> Dict[str, Any]:
         if h is handle_generic_internal:
             fake_remaining.append(action)
     unmapped_fail_closed = resolve_handler("UNKNOWN", "totally_unknown_action").__name__ == "handle_unmapped_no_fake"
+    from services.automation.handlers import HANDLER_MAP
+
+    generic_misuse = sorted(
+        f"{agent}:{action}"
+        for agent, actions in HANDLER_MAP.items()
+        for action, h in actions.items()
+        if h is handle_generic_internal and action not in GENERIC_INTERNAL_ACTION_TYPES
+    )
     checks = [
         _check("no_fake_critical_handlers", len(fake_remaining) == 0, str(fake_remaining)),
         _check("unmapped_fail_closed", unmapped_fail_closed, "no_generic_fallback"),
-        _check("generic_only_internal", all(a in GENERIC_INTERNAL_ACTION_TYPES for a in GENERIC_INTERNAL_ACTION_TYPES), "ok"),
+        # Antes: all(a in X for a in X), siempre True. Ahora: ninguna accion fuera de las de
+        # solo-registro acaba en el handler generico.
+        _check("generic_only_internal", not generic_misuse, str(generic_misuse)),
     ]
     passed = all(c["passed"] for c in checks)
     return _phase("AUTOMATION_CLEANUP", passed=passed, checks=checks)

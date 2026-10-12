@@ -21,6 +21,21 @@ logger = logging.getLogger(__name__)
 
 CRITICAL_DOMAINS = frozenset({"users", "payments", "invoices", "cashflow", "crm", "agents"})
 
+# Acciones que SOLO ejecutan los handlers de TeamFlow/automatizacion (con su empresa y
+# auditoria). Fase 2: antes se llamaban SIMULATED_HANDLER_ACTIONS y el ejecutor de chat
+# respondia success=True "Accion simulada" sin hacer nada. Ahora se rechazan de forma
+# explicita fuera de su flujo (executed=False, success=False).
+WORKFLOW_ONLY_ACTIONS = frozenset(
+    {
+        "image_analyzer",
+        "ads_campaign_builder",
+        "autonomo_paperwork_prepare",
+        "invoice_sent",
+        "contract_generator",
+        "contract_creator_rrhh",
+    }
+)
+
 DESTRUCTIVE_USER_ACTIONS = frozenset(
     {
         "block_user",
@@ -31,16 +46,6 @@ DESTRUCTIVE_USER_ACTIONS = frozenset(
     }
 )
 
-SIMULATED_HANDLER_ACTIONS = frozenset(
-    {
-        "image_analyzer",
-        "ads_campaign_builder",
-        "autonomo_paperwork_prepare",
-        "invoice_sent",
-        "contract_generator",
-        "contract_creator_rrhh",
-    }
-)
 
 
 class ZeusGuardViolation(Exception):
@@ -178,14 +183,17 @@ def validate_critical_action(
         )
         return result
 
-    if action_n in SIMULATED_HANDLER_ACTIONS:
+    if action_n in WORKFLOW_ONLY_ACTIONS:
         result = GuardResult(
             allowed=True,
             domain=domain_n,
             action=action_n,
-            reason="simulated_handler",
-            execution_mode="simulated",
-            human_message="Acción simulada — no puede mutar datos reales",
+            reason="workflow_only_action",
+            execution_mode="not_executed",
+            human_message=(
+                f"La acción «{action_n}» no se ejecuta desde aquí: solo la lanza su flujo de "
+                "trabajo (TeamFlow). No se ha hecho nada."
+            ),
             enforced=enforced,
         )
         _persist_audit(

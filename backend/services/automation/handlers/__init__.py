@@ -11,6 +11,7 @@ from app.models.agent_activity import AgentActivity
 
 from .justicia import handle_justicia_task
 from .no_real_logic import handle_no_real_logic
+from .stripe_readiness import handle_stripe_readiness_check
 from .zeus import handle_zeus_task
 from .zeus_launch import handle_zeus_launch_started
 from .zeus_automation_readiness import handle_automation_readiness_evaluate
@@ -55,13 +56,19 @@ def _normalize_agent_key(agent: str) -> str:
 
 HandlerType = Callable[[AgentActivity], Dict[str, object]]
 
-# ZEUS internal only — critical TeamFlow actions use real handlers
+# Acciones cuyo UNICO efecto es dejar constancia (registro interno): el handler generico
+# persiste el payload y eso es la accion completa. Fase 2: autonomo_paperwork_prepare y
+# pricing_review salian "executed_internal" sin hacer nada (ahora: sin logica real,
+# explicito) y stripe_readiness_check tiene comprobacion real propia.
 GENERIC_INTERNAL_ACTION_TYPES = frozenset({
-    "autonomo_paperwork_prepare",
-    "pricing_review",
-    "stripe_readiness_check",
     "daily_internal_log",
     "system_friction_detected",
+})
+
+# Acciones conocidas SIN logica real: se bloquean con motivo explicito.
+NO_REAL_LOGIC_ACTION_TYPES = frozenset({
+    "autonomo_paperwork_prepare",
+    "pricing_review",
 })
 
 HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
@@ -73,9 +80,9 @@ HANDLER_MAP: Dict[str, Dict[str, HandlerType]] = {
         "zeus_launch_started": handle_zeus_launch_started,
         "automation_readiness_evaluate": handle_automation_readiness_evaluate,
         "payroll_draft_generate": handle_payroll_draft_generate,
-        "autonomo_paperwork_prepare": handle_generic_internal,
-        "pricing_review": handle_generic_internal,
-        "stripe_readiness_check": handle_generic_internal,
+        "autonomo_paperwork_prepare": handle_no_real_logic,
+        "pricing_review": handle_no_real_logic,
+        "stripe_readiness_check": handle_stripe_readiness_check,
         "daily_internal_log": handle_generic_internal,
         "system_friction_detected": handle_generic_internal,
     },
@@ -133,6 +140,8 @@ def resolve_handler(agent: str, action_type: str) -> HandlerType:
             return agent_handlers[action_type]
     if action_type in GENERIC_INTERNAL_ACTION_TYPES:
         return handle_generic_internal
+    if action_type in NO_REAL_LOGIC_ACTION_TYPES:
+        return handle_no_real_logic
     if action_type in TEAMFLOW_REAL_ACTION_TYPES:
         return handle_unmapped_no_fake
     import logging

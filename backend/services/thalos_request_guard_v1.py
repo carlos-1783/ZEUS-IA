@@ -551,7 +551,7 @@ def thalos_audit_result(
     Falla si: el tenant esperado no coincide con la empresa del usuario o con la del
     resultado; el resultado es simulado/bloqueado; success/executed no son reales; o el
     propio registro de auditoria no puede persistirse (fail-closed)."""
-    from services.zeus_core_guard_v1 import SIMULATED_HANDLER_ACTIONS
+    from services.zeus_core_guard_v1 import WORKFLOW_ONLY_ACTIONS
     import services.crm_office_service as crm_svc
 
     reason: Optional[str] = None
@@ -568,7 +568,9 @@ def thalos_audit_result(
         reason = "tenant_mismatch_user"
     elif any(c != company_id for c in _result_company_ids(res)):
         reason = "tenant_mismatch_result"
-    elif res.get("execution_mode") in ("simulated", "blocked") or (action or "").lower() in SIMULATED_HANDLER_ACTIONS:
+    elif res.get("execution_mode") in ("simulated", "blocked", "not_executed") or (
+        (action or "").lower() in WORKFLOW_ONLY_ACTIONS
+    ):
         reason = "simulated_or_blocked"
     elif not res:
         reason = "empty_result"

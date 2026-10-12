@@ -25,6 +25,8 @@ ZeusIntentType = Literal[
     "get_inventory_status",
     "get_security_status",  # Fase 2 / Step 3: THALOS
     "track_leads",  # Fase 2 / Step 3: PERSEO
+    "get_daily_close",  # Fase 2 / Step 1: RAFAEL
+    "get_pending_invoices",  # Fase 2 / Step 1: RAFAEL
     "create_ops_route",
     "create_inventory_movement",
 ]

@@ -23,7 +23,9 @@ logger = logging.getLogger(__name__)
 MANDATORY_ACTIONS = {
     "ZEUS": frozenset({"create_customer", "get_customers", "send_campaign", "get_cashflow", "get_metrics"}),
     "RAFAEL": frozenset(
-        {"generate_invoice", "register_qr_payment", "generate_model_303", "get_tax_summary"}
+        {"generate_invoice", "register_qr_payment", "generate_model_303", "get_tax_summary",
+         # Fase 2 / Step 1: lecturas reales para chat/voz (cierre de ventas del dia, cobros pendientes)
+         "get_daily_close", "get_pending_invoices"}
     ),
     "PERSEO": frozenset({"create_campaign", "launch_campaign", "track_leads"}),
     # J9c. Lectura: sin aprobacion. Escritura (AFRODITA): siempre por aprobacion (CRITICAL_ACTIONS).
@@ -40,6 +42,8 @@ _STRICT_AGENT_ACTIONS: Dict[str, str] = {
     a: ag for ag in ("JUSTICIA", "AFRODITA", "THALOS") for a in MANDATORY_ACTIONS[ag]
 }
 _STRICT_AGENT_ACTIONS["register_qr_payment"] = "RAFAEL"  # J2b
+for _a in ("get_daily_close", "get_pending_invoices"):  # Fase 2 / Step 1
+    _STRICT_AGENT_ACTIONS[_a] = "RAFAEL"
 _MAX_DELIVERIES = 50
 
 
@@ -491,6 +495,26 @@ async def _dispatch(
             return _fail("Periodo fiscal no válido: indica año y trimestre (1-4).", status="invalid_payload")
         fin = fetch_period_financials(db, company_id=cid, year=year, quarter=quarter)
         return {"success": True, "executed": True, "message": "Resumen fiscal del periodo.", "data": fin}
+
+    if action in ("get_daily_close", "get_pending_invoices"):
+        from services import rafael_daily_reads_v1 as rafael_reads
+        from services.local_day_v1 import resolve_day
+
+        cid = zeus_action.company_id
+        if cid is None:
+            return _fail("El usuario no tiene empresa asociada.")
+        if action == "get_daily_close":
+            try:
+                day = resolve_day(payload.get("day"))
+            except (TypeError, ValueError):
+                return _fail("Fecha no válida: indica hoy, ayer o una fecha pasada (AAAA-MM-DD).",
+                             status="invalid_payload")
+            body = rafael_reads.daily_close_summary(db, cid, day)
+            msg = f"Cierre TPV {body['date']}: {body['tickets']} tickets, {body['total']:.2f} €."
+        else:
+            body = rafael_reads.pending_invoices_summary(db, cid)
+            msg = f"Facturas pendientes de cobro: {body['pending_count']} ({body['pending_amount']:.2f} €)."
+        return {"success": True, "executed": True, "company_id": cid, "message": msg, "data": body}
 
     # PERSEO
     if action == "track_leads":

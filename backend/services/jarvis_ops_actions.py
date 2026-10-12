@@ -32,6 +32,13 @@ READ_ACTIONS: Dict[str, Tuple[str, str]] = {
     "get_inventory_status": ("get_inventory_status", "AFRODITA"),
     "get_security_status": ("get_security_status", "THALOS"),
     "track_leads": ("track_leads", "PERSEO"),
+    "get_daily_close": ("get_daily_close", "RAFAEL"),
+    "get_pending_invoices": ("get_pending_invoices", "RAFAEL"),
+}
+# Claves del payload del chat que cada consulta puede pasar al ejecutor (lista blanca; el resto
+# del payload del chat, contexto incluido, nunca llega al ejecutor).
+READ_PAYLOAD_KEYS: Dict[str, Tuple[str, ...]] = {
+    "get_daily_close": ("day",),
 }
 WRITE_ACTIONS = frozenset({"create_ops_route", "create_inventory_movement"})
 # Consultas que un paso de plan puede ejecutar (nombre del ejecutor -> (accion del chat, agente)).
@@ -42,7 +49,13 @@ PLAN_READ_ACTIONS: Dict[str, Tuple[str, str]] = {
     "get_shift_status": ("shift_status", "AFRODITA"),
     "get_security_status": ("get_security_status", "THALOS"),
     "track_leads": ("track_leads", "PERSEO"),
+    "get_daily_close": ("get_daily_close", "RAFAEL"),
+    "get_pending_invoices": ("get_pending_invoices", "RAFAEL"),
 }
+
+
+def _eur(v: Any) -> str:
+    return f"{float(v or 0):,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def _format_read(chat_action: str, result: Dict[str, Any]) -> str:
@@ -52,6 +65,21 @@ def _format_read(chat_action: str, result: Dict[str, Any]) -> str:
         extra = f" Pendientes de revisión: {len(pend)} grupos." if isinstance(pend, (list, dict)) and pend else ""
         return (f"Estado legal de tu cuenta: {data['legal_documents']} documentos legales y "
                 f"{data.get('compliance_events', 0)} eventos de cumplimiento registrados.{extra}")
+    if chat_action == "get_daily_close" and "tickets" in data:
+        if not data["tickets"]:
+            return f"No hay ventas TPV registradas el {data['date']} en tu empresa. {data['note']}"
+        methods = ", ".join(f"{m} {_eur(v['total'])} ({v['count']})" for m, v in data["by_payment_method"].items())
+        return (f"Cierre del {data['date']}: {data['tickets']} tickets, total {_eur(data['total'])} "
+                f"(IVA {_eur(data['tax_total'])}, ticket medio {_eur(data['average_ticket'])}). "
+                f"Por forma de pago: {methods}. {data['note']}")
+    if chat_action == "get_pending_invoices" and "pending_count" in data:
+        drafts = f" Además tienes {data['drafts_count']} borrador(es) sin emitir." if data["drafts_count"] else ""
+        if not data["pending_count"]:
+            return f"No tienes facturas pendientes de cobro.{drafts}"
+        over = (f", {data['overdue_count']} vencida(s) por {_eur(data['overdue_amount'])}"
+                if data["overdue_count"] else "")
+        return (f"Facturas pendientes de cobro: {data['pending_count']} por {_eur(data['pending_amount'])}"
+                f"{over}.{drafts}")
     if chat_action == "track_leads" and "open_leads" in data:
         if not data["open_leads"]:
             return "No tienes leads abiertos en el CRM de tu empresa."
@@ -79,8 +107,10 @@ async def run_read_action(db: Session, user: User, action: ZeusAction) -> ZeusEx
     from services.zeus_agent_executor_v1 import execute_agent_action
 
     exec_name, agent = READ_ACTIONS[action.action_type]
+    src = action.payload or {}
+    payload = {k: src[k] for k in READ_PAYLOAD_KEYS.get(action.action_type, ()) if src.get(k) is not None}
     try:
-        out = await execute_agent_action(db, user=user, agent=agent, action=exec_name, payload={})
+        out = await execute_agent_action(db, user=user, agent=agent, action=exec_name, payload=payload)
     except HTTPException as exc:
         db.rollback()
         return ZeusExecutionResult(success=False, intent=action.action_type, message=str(exc.detail), executed=False)

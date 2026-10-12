@@ -134,8 +134,14 @@ def test_ingreso_suelto_no_basta_para_metricas():
     assert parse_intent("dame las métricas del mes").intent == "get_metrics"
 
 
-def test_ventas_de_ayer_pide_periodo_soportado():
+def test_ventas_de_ayer_es_el_cierre_del_dia():
+    # Fase 2 / Step 1: «ayer» ya es un periodo soportado (cierre de ventas TPV de RAFAEL).
     t = parse_intent("ventas de ayer")
+    assert t.intent == "get_daily_close" and t.metadata.get("day") == "yesterday"
+
+
+def test_ventas_de_la_semana_pasada_pide_periodo_soportado():
+    t = parse_intent("ventas de la semana pasada")
     assert t.needs_clarification and t.missing_entities == ["supported_period"]
 
 

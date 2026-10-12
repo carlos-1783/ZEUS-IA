@@ -66,6 +66,8 @@ INTENT_LABELS: Dict[str, str] = {
     "get_inventory_status": "el estado del inventario",
     "get_security_status": "el estado de seguridad de tu empresa",
     "track_leads": "el estado de tus leads",
+    "get_daily_close": "el cierre de ventas del día",
+    "get_pending_invoices": "tus facturas pendientes de cobro",
     "create_ops_route": "crear una ruta operativa",
     "create_inventory_movement": "registrar un movimiento de inventario",
 }
@@ -596,6 +598,13 @@ def parse_ops_write(text: str, kind: str) -> Optional[Dict[str, Any]]:
     return {"product_text": prod, "quantity": qty, "movement": "in" if m.group("type") == "entrada" else "out"}
 
 
+_CLOSE_WORD_RE = re.compile(r"\b(?:cierre|arqueo|cuadre)\b")
+_YESTERDAY_RE = re.compile(r"\bayer\b")
+_PENDING_INVOICES_RE = re.compile(
+    r"\bfacturas?\s+(?:pendientes?|sin\s+cobrar|por\s+cobrar|vencidas?|impagadas?|sin\s+pagar)\b"
+    r"|\b(?:que|cuantas)\s+facturas?\b.{0,30}?\b(?:pendientes?|cobrar|vencidas?|impagadas?)\b"
+    r"|\bpendientes?\s+de\s+cobro\b"
+)
 _LEADS_STATUS_RE = re.compile(
     r"\bleads?\s+(?:abiertos?|pendientes?|activos?)\b"
     r"|\b(?:estado|resumen|seguimiento)\s+de\s+(?:los\s+|mis\s+)?leads?\b"
@@ -872,6 +881,25 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
                 metadata=fields_ or {}, fields={"requires_confirmation": True},
                 missing=[] if fields_ else ["explicit_intent"], question=None if fields_ else QUESTION_OPS,
             ))
+
+    # --- Fase 2 / Step 1: RAFAEL cierre de ventas de un dia (ayer por defecto) y facturas pendientes
+    day = None
+    if _CLOSE_WORD_RE.search(f):  # «cierre» sin dia concreto (ayer/hoy/fecha) no se adivina
+        if _YESTERDAY_RE.search(f):
+            day = "yesterday"
+        elif _TODAY_RE.search(f) or re.search(r"\bdel\s+dia\b", f):
+            day = "today"
+        elif ent.dates:
+            day = ent.dates[0]
+    elif (sales or re.search(r"\bcaja\b", f)) and period.get("label") == "yesterday":
+        day = "yesterday"
+    if day is not None:
+        c.append(_Cand("get_daily_close", "get_daily_close", 0.88, "daily_close",
+                       suppresses={"tpv_sales_summary", "tpv_sales_today", "get_cashflow"},
+                       metadata={"day": day}))
+    if _PENDING_INVOICES_RE.search(f):
+        c.append(_Cand("get_pending_invoices", "get_pending_invoices", 0.86, "pending_invoices",
+                       suppresses={"tpv_sales_summary", "get_cashflow"}))
 
     # --- Fase 2 / Step 3: PERSEO seguimiento de leads (CrmLead de la empresa)
     if _LEADS_STATUS_RE.search(f):

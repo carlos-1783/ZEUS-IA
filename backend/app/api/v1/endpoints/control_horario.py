@@ -431,6 +431,28 @@ class CalculateHoursRequest(BaseModel):
     end_date: str  # ISO format
 
 
+def _scoped_counts(user: User, db: Optional[Session]) -> Dict[str, int]:
+    if db is None:
+        from app.db.base import SessionLocal
+
+        with SessionLocal() as own:
+            return _scoped_counts(user, own)
+    cids = _company_ids_for_control_horario(db, user)
+    active = (
+        db.query(TimeTrackingRecord)
+        .filter(_tt_scope_filter(user, cids), TimeTrackingRecord.status == RecordStatus.ACTIVE)
+        .count()
+    )
+    employees = (
+        db.query(CompanyEmployee)
+        .filter(CompanyEmployee.company_id.in_(cids), CompanyEmployee.is_active.is_(True))
+        .count()
+        if cids
+        else 0
+    )
+    return {"active_records_count": int(active), "employees_count": int(employees)}
+
+
 async def _get_control_horario_info(current_user: User, db: Optional[Session] = None):
     """Función auxiliar para obtener información del Control Horario"""
     is_superuser = getattr(current_user, 'is_superuser', False)
@@ -520,8 +542,9 @@ async def _get_control_horario_info(current_user: User, db: Optional[Session] = 
         "business_profile": control_horario_service.business_profile.value if control_horario_service.business_profile else None,
         "config": config,
         "blocked_methods": {"face": BIOMETRIC_BLOCK_REASON},
-        "active_records_count": len(control_horario_service.active_records),
-        "employees_count": len(control_horario_service.employees),
+        # Conteos de SU empresa desde BD. Antes salian del singleton en memoria del
+        # proceso (compartido entre todas las empresas): cifras de otros tenants.
+        **_scoped_counts(current_user, db),
         "integrations": {
             "afrodita": control_horario_service.afrodita_integration is not None,
             "rafael": control_horario_service.rafael_integration is not None,

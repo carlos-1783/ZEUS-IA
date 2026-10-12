@@ -96,25 +96,46 @@ class Justicia(BaseAgent):
         return result
     
     def _resolve_execution_mode(self, request_type: str) -> str:
+        """Modo de lo que JUSTICIA hace de verdad en esta respuesta.
+
+        Antes toda respuesta salia como "SIMULATED", aunque fuera una respuesta real del
+        LLM. Ahora: READ_ONLY = asesoria/borrador (no ejecuta nada; los documentos pasan
+        por el firewall y aprobacion humana). Las auditorias fijan su modo real en
+        `_attach_system_audit` (REAL, NOT_EXECUTED o ERROR).
+        """
         from app.core.config import settings
 
         if request_type in ("audit", "system_audit", "compliance_audit"):
-            if getattr(settings, "JUSTICE_REAL_AUDIT_ENABLED", False):
-                return "REAL"
-            return "SIMULATED"
-        return "SIMULATED"
+            return "REAL" if getattr(settings, "JUSTICE_REAL_AUDIT_ENABLED", False) else "NOT_EXECUTED"
+        return "READ_ONLY"
 
     def _attach_system_audit(self, result: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
-        """Adjunta auditoría read-only de BD cuando el flag está activo."""
+        """Adjunta la auditoria read-only real de BD. Si no se puede ejecutar, lo dice."""
         from app.core.config import settings
         from app.db.session import SessionLocal
         from services.justice_system_audit_v1 import run_system_audit
 
         user_id = context.get("user_id")
-        audit_mode = "SIMULATED"
+        audit_mode = "NOT_EXECUTED"
         audit_body: Dict[str, Any] = {}
 
-        if getattr(settings, "JUSTICE_REAL_AUDIT_ENABLED", False) and user_id:
+        if not getattr(settings, "JUSTICE_REAL_AUDIT_ENABLED", False):
+            audit_body = {
+                "executed": False,
+                "execution_mode": "NOT_EXECUTED",
+                "summary": "Auditoria NO ejecutada: JUSTICE_REAL_AUDIT_ENABLED=false.",
+                "audit_trace": [],
+                "conclusions": [],
+            }
+        elif not user_id:
+            audit_body = {
+                "executed": False,
+                "execution_mode": "NOT_EXECUTED",
+                "summary": "Auditoria NO ejecutada: falta el usuario de la peticion.",
+                "audit_trace": [],
+                "conclusions": [],
+            }
+        else:
             db = SessionLocal()
             try:
                 from app.models.user import User
@@ -123,18 +144,16 @@ class Justicia(BaseAgent):
                 if user:
                     audit_body = run_system_audit(db, user)
                     audit_mode = audit_body.get("execution_mode", "REAL")
-            except Exception as exc:
-                logger.warning("[JUSTICIA] system audit failed: %s", exc)
-                audit_body = {"error": "audit_unavailable", "execution_mode": "SIMULATED"}
+                else:
+                    audit_body = {"executed": False, "execution_mode": "NOT_EXECUTED",
+                                  "summary": "Auditoria NO ejecutada: usuario no encontrado."}
+            except Exception:
+                logger.exception("[JUSTICIA] system audit failed")
+                audit_mode = "ERROR"
+                audit_body = {"executed": False, "error": "audit_unavailable", "execution_mode": "ERROR",
+                              "summary": "La auditoria fallo; no hay conclusiones."}
             finally:
                 db.close()
-        else:
-            audit_body = {
-                "execution_mode": "SIMULATED",
-                "summary": "Activa JUSTICE_REAL_AUDIT_ENABLED para queries read-only a BD.",
-                "audit_trace": [],
-                "conclusions": [],
-            }
 
         result["execution_mode"] = audit_mode
         result["audit_trace"] = audit_body.get("audit_trace", [])

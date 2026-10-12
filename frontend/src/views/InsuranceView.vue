@@ -626,8 +626,8 @@ onMounted(async () => {
 /* Todos los demás botones: secundario blanco/borde, sin gradiente. */
 .btn-secondary, .btn-small {
   cursor: pointer;
-  border: 1px solid #D1D5DB;
-  background: #ffffff;
+  border: 1px solid var(--zeus-border-strong);
+  background: var(--zeus-surface);
   color: var(--zeus-text, #0f172a);
   padding: 8px 14px;
   border-radius: var(--zeus-radius-sm, 8px);
@@ -635,7 +635,7 @@ onMounted(async () => {
   box-shadow: none;
   transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
-.btn-secondary:hover, .btn-small:hover { border-color: #9aa2af; }
+.btn-secondary:hover, .btn-small:hover { border-color: var(--zeus-text-muted); }
 .btn-small { padding: 5px 10px; font-size: 13px; }
 .data-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
 .data-table th, .data-table td {
@@ -690,7 +690,7 @@ onMounted(async () => {
   border-radius: var(--zeus-radius-sm, 4px);
   font-size: 14px;
   color: var(--zeus-text, #0f172a);
-  background: #ffffff;
+  background: var(--zeus-surface);
   font-family: inherit;
 }
 .full-width { width: 100%; }

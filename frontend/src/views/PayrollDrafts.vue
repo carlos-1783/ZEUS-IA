@@ -201,9 +201,9 @@ onMounted(loadDrafts)
    vista (repetido, no unico), asi que no lleva el acento gradiente. */
 .btn-download {
   padding: 0.6rem 1.1rem;
-  background: #ffffff;
+  background: var(--zeus-surface);
   color: var(--zeus-text, #0f172a);
-  border: 1px solid #D1D5DB;
+  border: 1px solid var(--zeus-border-strong);
   border-radius: var(--zeus-radius-sm, 6px);
   cursor: pointer;
   font-size: 0.9rem;
@@ -212,7 +212,7 @@ onMounted(loadDrafts)
   transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 .btn-download:hover:not(:disabled) {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
 }
 .btn-download:disabled {
   opacity: 0.7;

@@ -163,8 +163,8 @@
    reservado para el unico boton primario real de la vista. */
 .office-crm .dock-tab--active {
   position: relative;
-  border-color: #9aa2af;
-  background: #ffffff;
+  border-color: var(--zeus-text-muted);
+  background: var(--zeus-surface);
   font-weight: 700;
 }
 
@@ -246,14 +246,14 @@
 }
 
 .office-crm .btn-primary {
-  background: #ffffff;
+  background: var(--zeus-surface);
   color: var(--zeus-text, #0f172a);
-  border: 1px solid #D1D5DB;
+  border: 1px solid var(--zeus-border-strong);
   box-shadow: none;
 }
 
 .office-crm .btn-primary:hover:not(:disabled) {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
 }
 
 .office-crm .btn-primary:disabled {
@@ -262,13 +262,13 @@
 }
 
 .office-crm .btn-secondary {
-  background: #ffffff;
+  background: var(--zeus-surface);
   color: var(--zeus-text, #0f172a);
-  border: 1px solid #D1D5DB;
+  border: 1px solid var(--zeus-border-strong);
 }
 
 .office-crm .btn-secondary:hover {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
 }
 
 .office-crm .btn-secondary:active {
@@ -715,7 +715,7 @@
 
 .office-crm .import-warnings {
   /* texto ambar oscuro fijo por legibilidad, ver nota en .access-denied arriba */
-  color: #b45309;
+  color: var(--zeus-warning-text);
 }
 
 /* Segundo bloque de tema oscuro obsoleto eliminado (mismo motivo que el

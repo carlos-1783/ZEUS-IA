@@ -2795,7 +2795,7 @@ onUnmounted(() => {
 }
 
 .back-to-dashboard-btn:hover {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
   transform: translateY(-1px);
 }
 
@@ -2941,7 +2941,7 @@ onUnmounted(() => {
    reservado para "Cobrar", la única acción primaria de esta vista. */
 .category-btn.active {
   background: var(--zeus-surface, #ffffff);
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
   color: var(--zeus-text, #0f172a);
   font-weight: 700;
   box-shadow: none;
@@ -3271,7 +3271,7 @@ onUnmounted(() => {
    gradiente queda reservado para "Cobrar", la única acción primaria. */
 .cart-item--active {
   background: var(--zeus-surface, #ffffff);
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
   box-shadow: none;
   padding-left: 12px;
 }
@@ -3751,7 +3751,7 @@ onUnmounted(() => {
   transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 .reservations-load-btn:hover:not(:disabled) {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
 }
 .reservations-load-btn:disabled {
   opacity: 0.6;
@@ -3847,7 +3847,7 @@ onUnmounted(() => {
 /* Mesa seleccionada: solo borde — el gradiente queda reservado para
    "Cobrar", la única acción primaria de esta vista. */
 .table-card.selected {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
   background: var(--zeus-surface, #ffffff);
   box-shadow: none;
 }
@@ -3998,7 +3998,7 @@ onUnmounted(() => {
 }
 
 .add-product-btn:hover {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
   transform: translateY(-1px);
 }
 
@@ -4031,7 +4031,7 @@ onUnmounted(() => {
 }
 
 .retry-btn:hover {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
 }
 
 /* Responsive: 1366x768 y 1920x1080 sin scroll (layout base). Tablet/móvil: columna única */
@@ -4438,7 +4438,7 @@ onUnmounted(() => {
 }
 
 .btn-secondary:hover:not(:disabled) {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
 }
 
 .btn-secondary:disabled {
@@ -4459,7 +4459,7 @@ onUnmounted(() => {
 }
 
 .btn-save:hover {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
 }
 
 @keyframes fadeIn {

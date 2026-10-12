@@ -777,9 +777,9 @@ onUnmounted(() => {
   gap: 8px;
   margin-bottom: 16px;
   padding: 12px 20px;
-  background: #ffffff;
+  background: var(--zeus-surface);
   color: var(--zeus-text, #0f172a);
-  border: 1px solid #D1D5DB;
+  border: 1px solid var(--zeus-border-strong);
   border-radius: var(--zeus-radius-sm, 8px);
   cursor: pointer;
   font-weight: 600;
@@ -790,7 +790,7 @@ onUnmounted(() => {
 }
 
 .back-to-dashboard-btn:hover {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
   transform: translateY(-1px);
 }
 
@@ -865,9 +865,9 @@ onUnmounted(() => {
    (esa es fichar entrada/salida) -> secundario blanco/borde. */
 .header-btn {
   padding: 10px 20px;
-  background: #ffffff;
+  background: var(--zeus-surface);
   color: var(--zeus-text, #0f172a);
-  border: 1px solid #D1D5DB;
+  border: 1px solid var(--zeus-border-strong);
   border-radius: var(--zeus-radius-sm, 8px);
   cursor: pointer;
   font-weight: 600;
@@ -875,7 +875,7 @@ onUnmounted(() => {
 }
 
 .header-btn:hover {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
 }
 
 .business-profile-badge {

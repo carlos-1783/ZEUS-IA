@@ -122,8 +122,11 @@
             />
           </div>
 
-          <div v-if="selectedMethod === 'location' && config.gps_required" class="location-info">
-            <p>📍 {{ $t('controlHorario.gpsRequired') }}</p>
+          <div v-if="selectedMethod === 'location'" class="location-info">
+            <p>📍 {{ config.gps_required ? $t('controlHorario.gpsRequired') : 'Se pedirá permiso del navegador para usar tu ubicación solo en este fichaje.' }}</p>
+            <p v-if="currentLocation.latitude != null">
+              Ubicación lista: {{ currentLocation.latitude.toFixed(5) }}, {{ currentLocation.longitude.toFixed(5) }}
+            </p>
             <button @click="getCurrentLocation" class="btn-location">
               📍 {{ $t('controlHorario.getLocation') }}
             </button>
@@ -490,7 +493,6 @@ const checkStatus = async () => {
     const infoData = bootstrap?.info || {}
     const statusData = bootstrap?.status || {}
     const employeesData = Array.isArray(bootstrap?.employees) ? bootstrap.employees : []
-    const employeesSource = bootstrap?.employees_source || 'memory'
     const recordsData = Array.isArray(bootstrap?.today_records) ? bootstrap.today_records : []
 
     businessProfile.value = infoData.business_profile
@@ -521,20 +523,9 @@ const checkStatus = async () => {
       })
     }
     
-    // En producción no usar empleados demo: mostrar vacío para forzar configuración real.
-    const isProd = import.meta.env.PROD
-    if (Object.keys(employeesMap).length === 0) {
-      if (employeesSource === 'database' || isProd) {
-        employees.value = []
-      } else {
-        employees.value = [
-          { id: 'emp1', name: 'Empleado 1', status: 'outside' },
-          { id: 'emp2', name: 'Empleado 2', status: 'outside' }
-        ]
-      }
-    } else {
-      employees.value = Object.values(employeesMap)
-    }
+    // Solo empleados reales de la empresa (company_employees). Sin plantilla: lista vacía
+    // (antes, fuera de producción, se inventaban emp1/emp2 que no existían en BD).
+    employees.value = Object.values(employeesMap)
     
     // Sincronizar con status del servicio (misma forma que devuelve get_current_status)
     const statusEmployees = statusData?.employees
@@ -593,6 +584,9 @@ const postCheckinV1 = async (type) => {
     body.pin = pin
   }
   if (method === 'geo') {
+    if (currentLocation.value.latitude == null || currentLocation.value.longitude == null) {
+      throw new Error('Pulsa "obtener ubicación" y acepta el permiso del navegador antes de fichar por geolocalización.')
+    }
     body.lat = currentLocation.value.latitude
     body.lng = currentLocation.value.longitude
   }

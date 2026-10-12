@@ -13,6 +13,7 @@ from app.models.cashflow_ledger import CashflowLedgerEntry
 from app.models.company import Company, UserCompany
 from app.models.user import User
 from app.schemas.customer import CustomerCreate
+from services.checkin_qr_token import issue_company_qr_token
 from services.cashflow_ledger_service import get_balance, record_movement
 from services.zeus_human_approval_v1 import requires_approval, resolve_approval
 from services.zeus_scoring_engine_v1 import convert_lead_to_customer, create_lead, score_lead
@@ -90,7 +91,7 @@ def test_checkin_cost_flow(db: Session):
         employee_id=emp.employee_code,
         checkin_type="entrada",
         method="qr",
-        metadata={"qr_token": "e2e"},
+        metadata={"qr_token": issue_company_qr_token(company.id)},
     )
     assert entrada["session_id"]
     refresh_partial_costs(db, company_id=company.id)

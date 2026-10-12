@@ -95,6 +95,22 @@
               :placeholder="$t('controlHorario.employeePhonePlaceholder')"
             />
           </div>
+          <div v-if="selectedMethod === 'qr'" class="employee-selector">
+            <label>Código QR del centro</label>
+            <input
+              v-model="qrCode"
+              type="text"
+              class="employee-select"
+              placeholder="Escanea el QR del centro (lector) o pega su código"
+              autocomplete="off"
+            />
+            <button type="button" class="btn-location" @click="loadCompanyQr">
+              Ver código QR de mi centro
+            </button>
+            <p v-if="companyQr" class="method-blocked-note">
+              Código del centro (imprímelo como QR en el puesto de fichaje): <code>{{ companyQr }}</code>
+            </p>
+          </div>
           <div v-if="selectedMethod === 'code'" class="employee-selector">
             <label>PIN empleado</label>
             <input
@@ -347,6 +363,8 @@ const smartTpv = ref(null)
 const todayHoursByEmployee = ref({})
 const costEngine = ref(null)
 const employeePin = ref('')
+const qrCode = ref('')
+const companyQr = ref('')
 let refreshTimer = null
 
 // Sin 'face': el fichaje biométrico está bloqueado por ley (el backend responde 501).
@@ -563,7 +581,11 @@ const postCheckinV1 = async (type) => {
     method
   }
   if (method === 'qr') {
-    body.qr_token = `ui-${selectedEmployee.value}-${Date.now()}`
+    // El token lo valida el backend (firmado por ZEUS y ligado a la empresa); antes se
+    // fabricaba aquí `ui-<empleado>-<timestamp>` y el backend aceptaba cualquier cadena.
+    const qr = (qrCode.value || '').trim()
+    if (!qr) throw new Error('Escanea o pega el código QR del centro para fichar por QR.')
+    body.qr_token = qr
   }
   if (method === 'pin') {
     const pin = (employeePin.value || '').trim()
@@ -579,6 +601,18 @@ const postCheckinV1 = async (type) => {
   }
   const api = (await import('@/services/api')).default
   return api.post('/api/v1/checkin', body, token)
+}
+
+const loadCompanyQr = async () => {
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    const cid = costEngine.value?.company_id
+    const api = (await import('@/services/api')).default
+    const data = await api.get(`/api/v1/checkin/qr-token${cid ? `?company_id=${cid}` : ''}`, token)
+    companyQr.value = data?.qr_token || ''
+  } catch (err) {
+    alert(`❌ ${err.message}`)
+  }
 }
 
 const handleCheckIn = async () => {

@@ -21,6 +21,7 @@ from app.models.time_tracking import RecordStatus, TimeTrackingRecord
 from app.models.user import User
 from services import smart_time_control_service as sm
 from services.checkin_biometric_block import reject_biometric
+from services.checkin_qr_token import verify_company_qr_token
 from services.zeus_office_mode import require_company_id
 
 logger = logging.getLogger(__name__)
@@ -235,6 +236,8 @@ def register_checkin(
 
     meta = dict(metadata or {})
     _validate_method_payload(m, meta)
+    if m == "qr":
+        verify_company_qr_token(meta.get("qr_token"), cid, user_id=user.id)
     emp = _resolve_employee(db, company_id=cid, employee_id=employee_id)
     if m == "pin":
         _verify_pin(emp, str(meta.get("pin") or ""))

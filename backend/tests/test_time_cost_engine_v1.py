@@ -19,6 +19,7 @@ from app.models.employee_work_session import EmployeeWorkSession
 from app.models.time_cost_checkin import TimeCostCheckin
 from app.models.time_tracking import RecordStatus, TimeTrackingRecord
 from app.models.user import User
+from services.checkin_qr_token import issue_company_qr_token
 from services.time_cost_engine_v1 import (
     get_cost_analytics,
     refresh_partial_costs,
@@ -76,7 +77,7 @@ def test_time_cost_engine_v1_e2e(db: Session):
         employee_id=employee_id,
         checkin_type="entrada",
         method="qr",
-        metadata={"qr_token": "tok-test-001"},
+        metadata={"qr_token": issue_company_qr_token(company.id)},
         client_ip="127.0.0.1",
         device_id="dev-e2e",
         user_agent="pytest",
@@ -160,7 +161,7 @@ def test_rejects_duplicate_open_session(db: Session):
         employee_id=emp.employee_code,
         checkin_type="entrada",
         method="qr",
-        metadata={"qr_token": "tok-a"},
+        metadata={"qr_token": issue_company_qr_token(company.id)},
     )
     with pytest.raises(HTTPException) as exc:
         register_checkin(
@@ -170,7 +171,7 @@ def test_rejects_duplicate_open_session(db: Session):
             employee_id=emp.employee_code,
             checkin_type="entrada",
             method="qr",
-            metadata={"qr_token": "tok-b"},
+            metadata={"qr_token": issue_company_qr_token(company.id)},
         )
     assert exc.value.status_code == 409
 

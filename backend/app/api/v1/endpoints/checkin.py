@@ -117,3 +117,30 @@ async def active_checkin_sessions(
         raise HTTPException(status_code=400, detail="company_id requerido.")
     sessions = get_active_sessions(db, user=current_user, company_id=cid)
     return {"success": True, "company_id": cid, "active_sessions": sessions}
+
+
+@router.get("/qr-token")
+async def company_checkin_qr_token(
+    company_id: Optional[int] = Query(None),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """QR de fichaje del centro (firmado y ligado a la empresa). Solo dueno/gestor, no empleados."""
+    import logging
+
+    from services.checkin_qr_token import issue_company_qr_token
+
+    if (getattr(current_user, "role", None) or "") == "employee":
+        raise HTTPException(status_code=403, detail="Solo el dueño o gestor puede obtener el QR del centro.")
+    cid = company_id or _primary_company_id(db, current_user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="company_id requerido.")
+    link = (
+        db.query(UserCompany)
+        .filter(UserCompany.user_id == current_user.id, UserCompany.company_id == cid)
+        .first()
+    )
+    if link is None:
+        raise HTTPException(status_code=403, detail="No tienes acceso a la empresa indicada.")
+    logging.getLogger(__name__).info("checkin qr-token emitido company_id=%s user_id=%s", cid, current_user.id)
+    return {"success": True, "company_id": cid, "qr_token": issue_company_qr_token(cid)}

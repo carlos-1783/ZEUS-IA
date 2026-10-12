@@ -13,7 +13,7 @@ class UserSettings(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
     language = Column(String(16), nullable=False, default="es")
-    theme = Column(String(32), nullable=False, default="dark")
+    theme = Column(String(32), nullable=False, default="light")
     two_factor_enabled = Column(Boolean, nullable=False, default=False)
     session_timeout = Column(Integer, nullable=False, default=60)  # minutos
     api_key_hash = Column(String(64), nullable=True)

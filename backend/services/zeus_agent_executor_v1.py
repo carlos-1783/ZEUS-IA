@@ -32,7 +32,9 @@ MANDATORY_ACTIONS = {
     # J9c. Lectura: sin aprobacion. Escritura (AFRODITA): siempre por aprobacion (CRITICAL_ACTIONS).
     "JUSTICIA": frozenset({"run_compliance_audit", "get_legal_status"}),
     "AFRODITA": frozenset(
-        {"get_shift_status", "get_inventory_status", "create_ops_route", "create_inventory_movement"}
+        {"get_shift_status", "get_inventory_status", "create_ops_route", "create_inventory_movement",
+         # Fase 2 / Step 1: fichajes de la empresa (sin biometria), agenda del dia y pedidos (sin modelo)
+         "get_attendance_status", "get_today_agenda", "get_weekly_orders"}
     ),
     # Fase 2 / Step 3: consulta real de seguridad de la empresa (thalos_security_events).
     "THALOS": frozenset({"get_security_status"}),
@@ -578,6 +580,24 @@ async def _dispatch(
     if action == "get_shift_status":
         r = orch.execute_shift_status(db, user, zeus_action)
         return r.model_dump()
+
+    if action in ("get_attendance_status", "get_today_agenda", "get_weekly_orders"):
+        from services import afrodita_daily_reads_v1 as afro_reads
+        from services.local_day_v1 import today_local
+
+        if action == "get_weekly_orders":
+            # No existe modelo de pedidos: bloqueo honesto, nunca una cifra inventada.
+            return _fail(afro_reads.ORDERS_NOT_AVAILABLE, status="not_available", reason="no_orders_model")
+        cid = zeus_action.company_id
+        if cid is None:
+            return _fail("El usuario no tiene empresa asociada.")
+        if action == "get_attendance_status":
+            body = afro_reads.attendance_today(db, cid, today_local())
+            msg = f"Fichajes hoy: {body['checkins_today']}, dentro ahora: {body['currently_in']}."
+        else:
+            body = afro_reads.agenda_today(db, cid, today_local())
+            msg = f"Agenda hoy: {body['reservations']} reservas, {body['meetings']} reuniones."
+        return {"success": True, "executed": True, "company_id": cid, "message": msg, "data": body}
 
     if action == "get_inventory_status":
         from fastapi import HTTPException

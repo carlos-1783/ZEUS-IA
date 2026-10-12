@@ -69,6 +69,9 @@ INTENT_LABELS: Dict[str, str] = {
     "get_daily_close": "el cierre de ventas del día",
     "get_pending_invoices": "tus facturas pendientes de cobro",
     "get_sales_performance": "cómo van tus ventas",
+    "get_attendance_status": "los fichajes de hoy",
+    "get_today_agenda": "tu agenda de hoy",
+    "get_weekly_orders": "los pedidos",
     "create_ops_route": "crear una ruta operativa",
     "create_inventory_movement": "registrar un movimiento de inventario",
 }
@@ -610,6 +613,24 @@ _SALES_PERF_RE = re.compile(
     r"\bcomo\s+(?:van|vamos|andan|marchan|estan|llevamos)\s+(?:de\s+)?(?:las\s+|mis\s+|nuestras\s+)?ventas\b"
     r"|\b(?:evolucion|tendencia|rendimiento)\s+de\s+(?:las\s+|mis\s+)?ventas\b"
 )
+# AFRODITA (Fase 2 / Step 1): fichajes de la EMPRESA (los propios siguen en shift_status), agenda de hoy
+# (sustantivo: «agenda una reunion» es un verbo y no casa) y pedidos (sin modelo: bloqueo honesto).
+_ATTENDANCE_RE = re.compile(
+    r"\bfichajes\b.{0,20}?\b(?:hoy|del\s+equipo|de\s+la\s+plantilla|de\s+los\s+empleados|de\s+la\s+empresa)\b"
+    r"|\b(?:estado|resumen|situacion)\s+de\s+(?:los\s+)?fichajes\b"
+    r"|\bquien(?:es)?\s+(?:ha|han)\s+fichado\b"
+    r"|\bquien(?:es)?\s+(?:esta|estan)\s+(?:trabajando|fichad[oa]s?|dentro)\b"
+    r"|\bcuantos\s+(?:empleados\s+|trabajadores\s+)?(?:han\s+fichado|estan\s+trabajando|hay\s+trabajando)\b"
+)
+_PERSONAL_RE = re.compile(r"\b(?:mi|mis|estoy|tengo|he)\b")
+_AGENDA_RE = re.compile(
+    r"\b(?:mi|la|nuestra|tu)\s+agenda\b|\bagenda\s+(?:de|del|para)\s+(?:hoy|el\s+dia|dia)\b"
+    r"|\b(?:reservas|reuniones|citas)\s+(?:de\s+|para\s+)?hoy\b"
+)
+_OTHER_DAY_RE = re.compile(
+    r"\b(?:manana|ayer|semana|mes|lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b"
+)
+_ORDERS_RE = re.compile(r"\bpedidos\b|\bpedido\s+(?:de|del|para)\b")
 _LEADS_STATUS_RE = re.compile(
     r"\bleads?\s+(?:abiertos?|pendientes?|activos?)\b"
     r"|\b(?:estado|resumen|seguimiento)\s+de\s+(?:los\s+|mis\s+)?leads?\b"
@@ -938,6 +959,16 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
     # --- turno
     if _SHIFT_RE.search(f) or _SHIFT_STATUS_RE.search(f):
         c.append(_Cand("shift_status", "shift_status", 0.85, "shift"))
+
+    # --- Fase 2 / Step 1: AFRODITA fichajes de la empresa, agenda de hoy, pedidos
+    if _ATTENDANCE_RE.search(f) and not _PERSONAL_RE.search(f):
+        c.append(_Cand("get_attendance_status", "get_attendance_status", 0.88, "attendance",
+                       suppresses={"shift_status"}))
+    if _AGENDA_RE.search(f) and not _OTHER_DAY_RE.search(f) and not ent.dates:
+        c.append(_Cand("get_today_agenda", "get_today_agenda", 0.86, "agenda_today"))
+    if _ORDERS_RE.search(f) and not ops_write:
+        c.append(_Cand("get_weekly_orders", "get_weekly_orders", 0.84, "orders",
+                       suppresses={"tpv_sales_summary", "tpv_sales_today"}))
     return c
 
 

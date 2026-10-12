@@ -35,6 +35,9 @@ READ_ACTIONS: Dict[str, Tuple[str, str]] = {
     "get_daily_close": ("get_daily_close", "RAFAEL"),
     "get_pending_invoices": ("get_pending_invoices", "RAFAEL"),
     "get_sales_performance": ("get_sales_performance", "PERSEO"),
+    "get_attendance_status": ("get_attendance_status", "AFRODITA"),
+    "get_today_agenda": ("get_today_agenda", "AFRODITA"),
+    "get_weekly_orders": ("get_weekly_orders", "AFRODITA"),
 }
 # Claves del payload del chat que cada consulta puede pasar al ejecutor (lista blanca; el resto
 # del payload del chat, contexto incluido, nunca llega al ejecutor).
@@ -54,6 +57,8 @@ PLAN_READ_ACTIONS: Dict[str, Tuple[str, str]] = {
     "get_daily_close": ("get_daily_close", "RAFAEL"),
     "get_pending_invoices": ("get_pending_invoices", "RAFAEL"),
     "get_sales_performance": ("get_sales_performance", "PERSEO"),
+    "get_attendance_status": ("get_attendance_status", "AFRODITA"),
+    "get_today_agenda": ("get_today_agenda", "AFRODITA"),
 }
 
 
@@ -100,6 +105,29 @@ def _format_read(chat_action: str, result: Dict[str, Any]) -> str:
         top = data.get("top_products") or []
         tops = (" Lo más vendido: " + ", ".join(f"{p['name']} ({_eur(p['revenue'])})" for p in top) + ".") if top else ""
         return f"Ventas de los últimos {d} días: {_eur(cur['total'])} ({' y '.join(parts)}).{trend}{tops}"
+    if chat_action == "get_attendance_status" and "checkins_today" in data:
+        if not data["checkins_today"] and not data["currently_in"]:
+            return "Hoy no hay fichajes registrados en tu empresa."
+        extra = []
+        if data["late_today"]:
+            extra.append(f"{data['late_today']} con entrada tarde")
+        if data["with_irregularities_today"]:
+            extra.append(f"{data['with_irregularities_today']} con incidencias")
+        tail = f" ({', '.join(extra)})" if extra else ""
+        return (f"Fichajes de hoy: {data['checkins_today']} entradas de {data['employees_today']} empleado(s); "
+                f"ahora mismo dentro: {data['currently_in']}{tail}.")
+    if chat_action == "get_today_agenda" and "reservations" in data:
+        if not data["items"]:
+            return "Hoy no tienes reservas ni reuniones en la agenda de tu empresa."
+        parts = []
+        for i in data["items"]:
+            if i["kind"] == "reservation":
+                parts.append(f"{i['time']} reserva {i['name']} ({i['guests']} pax)")
+            else:
+                parts.append(f"{i['time']} reunión con {i['name']}")
+        head = (f"Agenda de hoy: {data['reservations']} reserva(s) ({data['guests']} comensales) y "
+                f"{data['meetings']} reunión(es).")
+        return f"{head} " + "; ".join(parts) + "."
     if chat_action == "track_leads" and "open_leads" in data:
         if not data["open_leads"]:
             return "No tienes leads abiertos en el CRM de tu empresa."

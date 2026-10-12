@@ -102,7 +102,7 @@ class ClassifierStep(BaseModel):
         "send_campaign", "create_customer", "create_ops_route", "create_inventory_movement",
         "get_legal_status", "run_compliance_audit", "get_inventory_status", "get_shift_status",
         "get_security_status", "track_leads", "get_daily_close", "get_pending_invoices",
-        "get_sales_performance",
+        "get_sales_performance", "get_attendance_status", "get_today_agenda",
     ]] = None
 
 

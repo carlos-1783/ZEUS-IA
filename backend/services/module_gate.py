@@ -46,6 +46,7 @@ ACTION_MODULE: Dict[str, str] = {
     "run_compliance_audit": "agents",
     # Fase 2 / Step 1: el cierre del dia son ventas del TPV.
     "get_daily_close": "tpv",
+    "get_attendance_status": "control_horario",
 }
 # Sin mapeo claro (decision de producto pendiente; quedan permitidas): clientes y campanas existen en
 # hosteleria y oficina (send_campaign ya lo cubre el rol, J3b); el ledger de caja es transversal.
@@ -73,6 +74,8 @@ EXECUTOR_ACTION_MODULE: Dict[str, str] = {
     "get_security_status": "admin",
     # Fase 2 / Step 1: cierre de ventas del dia = datos del TPV.
     "get_daily_close": "tpv",
+    # Fase 2 / Step 1: fichajes de la empresa = control horario (como get_shift_status).
+    "get_attendance_status": "control_horario",
 }
 # Sin mapeo claro (permitidas): clientes/campanas existen en hosteleria y oficina (el rol ya las
 # gobierna, J3b); caja/metricas son transversales; RAFAEL (facturas, 303, resumen fiscal) vive en
@@ -85,6 +88,9 @@ EXECUTOR_UNMAPPED_ACTIONS = frozenset(
         "generate_invoice", "register_qr_payment", "generate_model_303", "get_tax_summary",
         "get_pending_invoices",  # Fase 2 / Step 1: facturacion de ambas verticales (como las de arriba)
         "get_sales_performance",  # Fase 2 / Step 1: TPV + facturas, ambas verticales (transversal)
+        # Fase 2 / Step 1: agenda = reservas (hosteleria) + reuniones CRM (oficina); pedidos no tiene
+        # modelo (bloqueo honesto, no lee nada).
+        "get_today_agenda", "get_weekly_orders",
         "get_inventory_status", "create_inventory_movement", "create_ops_route",
     }
 )

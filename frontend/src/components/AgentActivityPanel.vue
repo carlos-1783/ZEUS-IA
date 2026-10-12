@@ -1217,7 +1217,7 @@ const formatMetricValue = (value) => {
 .uploader-neutral {
   font-size: 13px;
   margin: 8px 0 0;
-  color: #64748b;
+  color: var(--zeus-text-secondary);
 }
 
 .uploader-success {
@@ -1461,7 +1461,7 @@ const formatMetricValue = (value) => {
   padding: 2px 8px;
   border-radius: 4px;
   background: var(--zeus-success-soft, #e9faf3);
-  color: #0d9668;
+  color: var(--zeus-success-text);
   font-weight: 600;
 }
 

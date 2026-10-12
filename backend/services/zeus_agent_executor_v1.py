@@ -21,7 +21,8 @@ import services.crm_office_service as crm_svc
 logger = logging.getLogger(__name__)
 
 MANDATORY_ACTIONS = {
-    "ZEUS": frozenset({"create_customer", "get_customers", "send_campaign", "get_cashflow", "get_metrics"}),
+    "ZEUS": frozenset({"create_customer", "get_customers", "send_campaign", "get_cashflow", "get_metrics",
+                       "get_coordination_report"}),  # Fase 2 / Step 1
     "RAFAEL": frozenset(
         {"generate_invoice", "register_qr_payment", "generate_model_303", "get_tax_summary",
          # Fase 2 / Step 1: lecturas reales para chat/voz (cierre de ventas del dia, cobros pendientes)
@@ -49,6 +50,7 @@ _STRICT_AGENT_ACTIONS["register_qr_payment"] = "RAFAEL"  # J2b
 for _a in ("get_daily_close", "get_pending_invoices"):  # Fase 2 / Step 1
     _STRICT_AGENT_ACTIONS[_a] = "RAFAEL"
 _STRICT_AGENT_ACTIONS["get_sales_performance"] = "PERSEO"
+_STRICT_AGENT_ACTIONS["get_coordination_report"] = "ZEUS"
 _MAX_DELIVERIES = 50
 
 
@@ -466,6 +468,22 @@ async def _dispatch(
             "executed": True,
             "message": f"Cashflow balance: {bal:.2f} €",
             "data": {"balance": bal, "summary": summary},
+        }
+
+    if action == "get_coordination_report":
+        # Informe real de coordinacion (actividad por agente, fallos/bloqueos y aprobaciones
+        # pendientes) de la empresa del usuario; mismo calculo que la tarea automatica de ZEUS.
+        from services.automation.handlers.zeus import build_coordination_report
+
+        cid = zeus_action.company_id
+        if cid is None:
+            return _fail("El usuario no tiene empresa asociada.")
+        body = build_coordination_report(db, cid)
+        return {
+            "success": True, "executed": True, "company_id": cid,
+            "message": (f"Coordinación {body['window_days']} días: {body['activities_total']} actividades, "
+                        f"{len(body['problems'])} fallidas/bloqueadas."),
+            "data": body,
         }
 
     if action == "get_metrics":

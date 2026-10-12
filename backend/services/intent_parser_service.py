@@ -75,6 +75,7 @@ def _map_intent_to_action_type(intent: str, legacy_action: Optional[str]) -> str
         "get_today_agenda": "get_today_agenda",
         "get_weekly_orders": "get_weekly_orders",
         "review_contracts": "review_contracts",
+        "get_coordination_report": "get_coordination_report",
         "create_ops_route": "create_ops_route",
         "create_inventory_movement": "create_inventory_movement",
     }
@@ -120,6 +121,8 @@ def _modules_for_intent(intent: str) -> List[str]:
         return ["perseo_agent", "activity_log"]
     if intent in ("get_attendance_status", "get_today_agenda", "get_weekly_orders"):
         return ["afrodita_agent", "activity_log"]
+    if intent == "get_coordination_report":
+        return ["zeus_core", "activity_log"]
     if intent == "confirm_pending":
         return ["activity_log"]
     return []

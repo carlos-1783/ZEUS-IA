@@ -73,6 +73,7 @@ INTENT_LABELS: Dict[str, str] = {
     "get_today_agenda": "tu agenda de hoy",
     "get_weekly_orders": "los pedidos",
     "review_contracts": "el estado de tus contratos",
+    "get_coordination_report": "el informe de coordinación de los agentes",
     "create_ops_route": "crear una ruta operativa",
     "create_inventory_movement": "registrar un movimiento de inventario",
 }
@@ -638,6 +639,13 @@ _CONTRACTS_RE = re.compile(
     r"(?:los\s+|mis\s+|nuestros\s+)?contratos\b"
     r"|\bcontratos\s+(?:pendientes?|sin\s+firmar|por\s+firmar)\b"
 )
+# ZEUS (Fase 2 / Step 1): informe de coordinacion de los agentes de la empresa.
+_COORDINATION_RE = re.compile(
+    r"\b(?:informe|resumen|estado)\s+de\s+(?:la\s+)?coordinacion\b"
+    r"|\b(?:informe|resumen|estado|situacion)\s+de\s+(?:los\s+|mis\s+|todos\s+los\s+)agentes\b"
+    r"|\bcomo\s+(?:van|estan|andan)\s+(?:los\s+|mis\s+)agentes\b"
+    r"|\bque\s+(?:han\s+hecho|hacen|estan\s+haciendo)\s+(?:los\s+|mis\s+)agentes\b"
+)
 _LEADS_STATUS_RE = re.compile(
     r"\bleads?\s+(?:abiertos?|pendientes?|activos?)\b"
     r"|\b(?:estado|resumen|seguimiento)\s+de\s+(?:los\s+|mis\s+)?leads?\b"
@@ -966,6 +974,11 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
     # --- turno
     if _SHIFT_RE.search(f) or _SHIFT_STATUS_RE.search(f):
         c.append(_Cand("shift_status", "shift_status", 0.85, "shift"))
+
+    # --- Fase 2 / Step 1: ZEUS informe de coordinacion (actividad, fallos y aprobaciones por agente)
+    if _COORDINATION_RE.search(f):
+        c.append(_Cand("get_coordination_report", "get_coordination_report", 0.88, "coordination",
+                       suppresses={"analytics_summary", "get_metrics"}))
 
     # --- Fase 2 / Step 1: JUSTICIA estado de los contratos de la empresa
     if _CONTRACTS_RE.search(f):

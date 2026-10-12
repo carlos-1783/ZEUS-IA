@@ -33,6 +33,7 @@ ZeusActionType = Literal[
     "get_today_agenda",  # Fase 2 / Step 1: AFRODITA
     "get_weekly_orders",  # Fase 2 / Step 1: AFRODITA (bloqueo honesto: no hay modelo de pedidos)
     "review_contracts",  # Fase 2 / Step 1: JUSTICIA
+    "get_coordination_report",  # Fase 2 / Step 1: ZEUS
     "create_ops_route",
     "create_inventory_movement",
 ]

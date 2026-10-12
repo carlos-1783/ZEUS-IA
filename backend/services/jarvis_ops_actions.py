@@ -39,6 +39,7 @@ READ_ACTIONS: Dict[str, Tuple[str, str]] = {
     "get_today_agenda": ("get_today_agenda", "AFRODITA"),
     "get_weekly_orders": ("get_weekly_orders", "AFRODITA"),
     "review_contracts": ("review_contracts", "JUSTICIA"),
+    "get_coordination_report": ("get_coordination_report", "ZEUS"),
 }
 # Claves del payload del chat que cada consulta puede pasar al ejecutor (lista blanca; el resto
 # del payload del chat, contexto incluido, nunca llega al ejecutor).
@@ -137,6 +138,20 @@ def _format_read(chat_action: str, result: Dict[str, Any]) -> str:
         pend = (f" {data['pending_review']} borrador(es) sin firmar pendientes de revisión."
                 if data["pending_review"] else " No hay borradores pendientes de revisión.")
         return f"Contratos de tu empresa: {data['total']} ({states}); firmados: {data['signed']}.{pend}"
+    if chat_action == "get_coordination_report" and "activities_by_agent" in data:
+        d = data["window_days"]
+        if not data["activities_total"]:
+            head = f"No hay actividad de los agentes de tu empresa en los últimos {d} días."
+        else:
+            agents = ", ".join(f"{a} {sum(st.values())}" for a, st in data["activities_by_agent"].items())
+            head = f"Coordinación ({d} días): {data['activities_total']} actividades ({agents})."
+        probs = data.get("problems") or []
+        ptxt = (f" {len(probs)} fallida(s)/bloqueada(s), la última: {probs[0]['agent']} {probs[0]['action_type']} "
+                f"({probs[0]['status']}).") if probs else " Ninguna fallida ni bloqueada."
+        pend = data.get("pending_approvals") or {}
+        atxt = (" Aprobaciones pendientes: " + ", ".join(f"{a} {n}" for a, n in pend.items()) + "."
+                if pend else " Sin aprobaciones pendientes.")
+        return head + ptxt + atxt
     if chat_action == "track_leads" and "open_leads" in data:
         if not data["open_leads"]:
             return "No tienes leads abiertos en el CRM de tu empresa."

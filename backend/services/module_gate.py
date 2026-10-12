@@ -48,6 +48,7 @@ ACTION_MODULE: Dict[str, str] = {
     "get_daily_close": "tpv",
     "get_attendance_status": "control_horario",
     "review_contracts": "agents",  # como el resto de JUSTICIA
+    "get_coordination_report": "agents",
 }
 # Sin mapeo claro (decision de producto pendiente; quedan permitidas): clientes y campanas existen en
 # hosteleria y oficina (send_campaign ya lo cubre el rol, J3b); el ledger de caja es transversal.
@@ -78,6 +79,7 @@ EXECUTOR_ACTION_MODULE: Dict[str, str] = {
     # Fase 2 / Step 1: fichajes de la empresa = control horario (como get_shift_status).
     "get_attendance_status": "control_horario",
     "review_contracts": "agents",
+    "get_coordination_report": "agents",  # Fase 2 / Step 1: ZEUS coordina a los agentes
 }
 # Sin mapeo claro (permitidas): clientes/campanas existen en hosteleria y oficina (el rol ya las
 # gobierna, J3b); caja/metricas son transversales; RAFAEL (facturas, 303, resumen fiscal) vive en

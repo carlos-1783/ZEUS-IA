@@ -84,3 +84,24 @@ def test_otra_empresa_no_obtiene_el_qr(db):
     r = TestClient(app).get(f"/api/v1/checkin/qr-token?company_id={cid_a}", headers=_h(b))
     assert r.status_code == 403
     assert TestClient(app).get("/api/v1/checkin/qr-token").status_code == 401
+
+
+def test_analytics_de_otra_empresa_403_sin_tocar_sus_sesiones(db):
+    from app.models.employee_work_session import EmployeeWorkSession
+
+    a, cid_a, code_a = _seed(db, "a")
+    b, _, _ = _seed(db, "b")
+    client = TestClient(app)
+    tok_a = client.get("/api/v1/checkin/qr-token", headers=_h(a)).json()["qr_token"]
+    assert client.post("/api/v1/checkin", json={"company_id": cid_a, "employee_id": code_a, "type": "entrada",
+                                                "method": "qr", "qr_token": tok_a}, headers=_h(a)).status_code == 200
+    db.expire_all()
+    ws = db.query(EmployeeWorkSession).filter(EmployeeWorkSession.company_id == cid_a).one()
+    ws.partial_cost = 777.0
+    db.commit()
+
+    r = client.get(f"/api/v1/checkin/analytics?company_id={cid_a}", headers=_h(b))
+    assert r.status_code == 403
+    db.expire_all()
+    assert db.query(EmployeeWorkSession).filter(EmployeeWorkSession.id == ws.id).one().partial_cost == 777.0
+    assert client.get(f"/api/v1/checkin/analytics?company_id={cid_a}", headers=_h(a)).status_code == 200

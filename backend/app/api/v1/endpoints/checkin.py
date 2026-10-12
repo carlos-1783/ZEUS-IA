@@ -14,6 +14,7 @@ from app.db.session import get_db
 from app.models.company import UserCompany
 from app.models.user import User
 from services.time_cost_engine_v1 import (
+    _assert_user_company_access,
     get_active_sessions,
     get_cost_analytics,
     refresh_partial_costs,
@@ -100,6 +101,9 @@ async def checkin_analytics(
     cid = company_id or _primary_company_id(db, current_user)
     if not cid:
         raise HTTPException(status_code=400, detail="company_id requerido.")
+    # Acceso a la empresa ANTES de recalcular costes: si no, una empresa ajena podia
+    # provocar escrituras (partial_cost/hours) en sesiones de otra antes del 403.
+    _assert_user_company_access(db, current_user, cid)
     refresh_partial_costs(db, company_id=cid)
     analytics = get_cost_analytics(db, user=current_user, company_id=cid)
     analytics["active_sessions"] = get_active_sessions(db, user=current_user, company_id=cid)

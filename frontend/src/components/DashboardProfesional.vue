@@ -649,7 +649,7 @@ const handleExportData = async () => {
 const dashboardMetrics = ref({
   totalInteractions: 0,
   avgResponseTime: '0.0s',
-  costSavings: '$0',
+  costSavings: 'Sin datos',
   successRate: '0%',
   interactionsTrend: '0%',
   responseTrend: '0%',
@@ -802,7 +802,7 @@ const loadDashboardMetrics = async () => {
       dashboardMetrics.value = {
         totalInteractions: data.metrics.total_interactions || 0,
         avgResponseTime: data.metrics.avg_response_time || '0.0s',
-        costSavings: data.metrics.cost_savings || '$0',
+        costSavings: data.metrics.cost_savings || 'Sin datos',
         successRate: data.metrics.success_rate || '0%',
         interactionsTrend: data.metrics.interactions_trend || '0%',
         responseTrend: data.metrics.response_trend || '0%',
@@ -959,7 +959,7 @@ const resetDashboardSessionState = () => {
   dashboardMetrics.value = {
     totalInteractions: 0,
     avgResponseTime: '0.0s',
-    costSavings: '$0',
+    costSavings: 'Sin datos',
     successRate: '0%',
     interactionsTrend: '0%',
     responseTrend: '0%',

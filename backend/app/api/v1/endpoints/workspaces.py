@@ -30,7 +30,6 @@ from services.workspaces import (
     read_qr_payload,
     scan_nfc_payload,
     parse_dnie_mrz,
-    generate_fiscal_forms,
     sign_pdf_document,
     generate_contract_kit,
     run_gdpr_audit,
@@ -571,19 +570,11 @@ async def workspace_rafael_forms(
             "result": result,
         }
 
-    result = generate_fiscal_forms(payload)
-    text = _text_generic("Generación de modelos fiscales (borrador manual)", result)
-    return _persist_agent_tool_response(
-        db,
-        current_user=current_user,
-        agent_name="RAFAEL",
-        workspace_category="fiscal_document",
-        content_type="fiscal_document",
-        title="Modelos fiscales RAFAEL",
-        text=text,
-        result=result,
-        event_name="rafael_forms_generated",
-        chain_steps=["trigger_tax_review"],
+    # Fase 2: sin empresa se generaba un "303 listo" con IVA soportado inventado (10 % de
+    # los gastos) y una "proyeccion 390" x4. Sin empresa no hay datos fiscales reales.
+    raise HTTPException(
+        status_code=403,
+        detail="No perteneces a ninguna empresa: RAFAEL solo calcula modelos con datos reales de tu empresa.",
     )
 
 

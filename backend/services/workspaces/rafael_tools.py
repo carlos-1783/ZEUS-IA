@@ -49,35 +49,3 @@ def parse_dnie_mrz(payload: Dict[str, Any]) -> Dict[str, Any]:
     result = parse_mrz(raw_mrz)
     log_tool_execution("RAFAEL", "dni_ocr_parser", "MRZ parseado", {"mrz": raw_mrz, "result": result})
     return result
-
-
-def generate_fiscal_forms(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Crear borrador de modelos fiscales."""
-    revenue = float(payload.get("revenue", 0))
-    expenses = float(payload.get("expenses", 0))
-    iva_type = float(payload.get("iva_type", 21))
-
-    iva_due = max(revenue * iva_type / 100 - expenses * 0.1, 0)
-    modelo_303 = {
-        "base_imponible": round(revenue, 2),
-        "cuota": round(iva_due, 2),
-        "status": "ready",
-    }
-    modelo_390 = {
-        "annual_revenue_projection": round(revenue * 4, 2),
-        "annual_tax_projection": round(iva_due * 4, 2),
-    }
-    result = {
-        "modelo_303": modelo_303,
-        "modelo_390": modelo_390,
-        "cashflow_alert": "Ingreso < gastos" if revenue < expenses else None,
-    }
-    log_tool_execution(
-        "RAFAEL",
-        "fiscal_forms_generator",
-        "Modelos fiscales generados",
-        {"payload": payload, "result": result},
-        metrics={"iva_due": iva_due},
-    )
-    return result
-

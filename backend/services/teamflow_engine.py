@@ -6,8 +6,8 @@ Coordinador de workflows multiagente para ZEUS IA.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import os
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -387,19 +387,25 @@ class TeamFlowEngine:
         return {agent: sorted(targets) for agent, targets in graph.items()}
 
     def validate_integrations(self) -> Dict[str, Any]:
-        """Valida integraciones básicas requeridas por los workflows."""
-        from app.core.config import settings  # import tardío para evitar ciclos
+        """Comprueba si las integraciones que usan los workflows estan CONFIGURADAS.
+
+        Antes "openai" y "stripe" salian en verde solo porque existia SECRET_KEY y
+        "agent_to_agent" era siempre True. Ahora cada check mira su credencial real; no se
+        hace ninguna llamada externa, y el resultado lo dice (check_type=configured_only).
+        """
+        from services import object_storage  # import tardío para evitar ciclos
 
         checks = {
-            "openai": bool(settings.SECRET_KEY and settings.DEBUG is not None),
-            "stripe": bool(settings.SECRET_KEY),  # placeholder sin exponer keys
-            "uploads": Path(settings.STATIC_DIR).exists(),
-            "agent_to_agent": True,
+            "openai": bool(os.getenv("OPENAI_API_KEY")),
+            "stripe": bool(os.getenv("STRIPE_API_KEY")),
+            "object_storage": object_storage.is_configured(),
         }
         result = {
             "timestamp": datetime.utcnow().isoformat(),
             "status": "ready" if all(checks.values()) else "degraded",
+            "check_type": "configured_only",
             "checks": checks,
+            "missing": sorted(k for k, ok in checks.items() if not ok),
         }
         self._last_validation = result
         return result

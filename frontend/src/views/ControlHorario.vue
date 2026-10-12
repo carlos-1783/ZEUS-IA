@@ -58,6 +58,7 @@
               class="method-btn"
               :class="{ active: selectedMethod === method.id }"
               :disabled="!isMethodEnabled(method.id)"
+              :title="blockedMethods[method.id] || undefined"
             >
               <span class="method-icon" aria-hidden="true">
                 <svg v-if="method.id === 'face'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z"/><circle cx="12" cy="13" r="3.5"/></svg>
@@ -69,6 +70,9 @@
               <span class="method-label">{{ method.label }}</span>
             </button>
           </div>
+          <p v-if="blockedMethods.face" class="method-blocked-note" role="note">
+            {{ blockedMethods.face }}
+          </p>
         </div>
 
         <!-- Formulario de Fichaje -->
@@ -345,7 +349,12 @@ const costEngine = ref(null)
 const employeePin = ref('')
 let refreshTimer = null
 
-const V1_METHOD_MAP = { qr: 'qr', code: 'pin', location: 'geo', remote: 'device', face: 'device' }
+// Sin 'face': el fichaje biométrico está bloqueado por ley (el backend responde 501).
+// Antes 'face' se mapeaba a 'device' y fichaba igualmente sin procesar ninguna cara.
+const V1_METHOD_MAP = { qr: 'qr', code: 'pin', location: 'geo', remote: 'device' }
+const FACE_BLOCKED_FALLBACK =
+  'Fichaje facial bloqueado: los datos biométricos no son proporcionales para el control horario (RGPD art. 9, AEPD). Usa PIN, QR del centro, geolocalización o registro manual.'
+const blockedMethods = ref({ face: FACE_BLOCKED_FALLBACK })
 
 // Traduce el código crudo de alerta (backend: smart_time_control_service.py,
 // alert_kind en minúsculas, mostrado en mayúsculas por CSS text-transform)
@@ -413,6 +422,7 @@ const entradaLabel = computed(() => {
 })
 
 const isMethodEnabled = (methodId) => {
+  if (blockedMethods.value[methodId]) return false
   const enabled = Array.isArray(config.value?.methods_enabled) ? config.value.methods_enabled : []
   if (enabled.includes(methodId)) return true
   // Compatibilidad backend: on_site equivale a location en UI.
@@ -467,12 +477,16 @@ const checkStatus = async () => {
 
     businessProfile.value = infoData.business_profile
     config.value = infoData.config || {}
+    blockedMethods.value = {
+      face: FACE_BLOCKED_FALLBACK,
+      ...(infoData.blocked_methods && typeof infoData.blocked_methods === 'object' ? infoData.blocked_methods : {})
+    }
     if (!isMethodEnabled(selectedMethod.value)) {
       const enabled = Array.isArray(config.value?.methods_enabled) ? config.value.methods_enabled : []
       const normalized = enabled.includes('on_site')
         ? enabled.map((m) => (m === 'on_site' ? 'location' : m))
         : enabled
-      selectedMethod.value = normalized[0] || 'qr'
+      selectedMethod.value = normalized.find((m) => !blockedMethods.value[m]) || 'code'
     }
 
     // Actualizar empleados con estado

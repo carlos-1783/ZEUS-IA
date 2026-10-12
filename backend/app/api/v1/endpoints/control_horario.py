@@ -23,6 +23,7 @@ from services.control_horario_service import HorarioBusinessProfile, CheckInMeth
 from services.control_horario_singleton import control_horario_service
 from services import smart_time_control_service as sm
 from services.event_bus import emit_time_control_event
+from services.checkin_biometric_block import BIOMETRIC_BLOCK_REASON, is_biometric_method, reject_biometric
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -502,6 +503,11 @@ async def _get_control_horario_info(current_user: User, db: Optional[Session] = 
             "superuser_override": True
         }
     
+    # Bloqueo legal: el fichaje biometrico nunca se ofrece como habilitado.
+    config = dict(config or {})
+    if isinstance(config.get("methods_enabled"), list):
+        config["methods_enabled"] = [m for m in config["methods_enabled"] if not is_biometric_method(m)]
+
     return {
         "success": True,
         "service": "Control Horario Universal Enterprise",
@@ -513,6 +519,7 @@ async def _get_control_horario_info(current_user: User, db: Optional[Session] = 
         },
         "business_profile": control_horario_service.business_profile.value if control_horario_service.business_profile else None,
         "config": config,
+        "blocked_methods": {"face": BIOMETRIC_BLOCK_REASON},
         "active_records_count": len(control_horario_service.active_records),
         "employees_count": len(control_horario_service.employees),
         "integrations": {
@@ -648,7 +655,15 @@ async def get_control_horario_status(
     return {
         "success": True,
         "business_profile": control_horario_service.business_profile.value if control_horario_service.business_profile else None,
-        "config": control_horario_service.config if control_horario_service.business_profile else {},
+        "config": {
+            **(control_horario_service.config if control_horario_service.business_profile else {}),
+            "methods_enabled": [
+                m
+                for m in (control_horario_service.config or {}).get("methods_enabled", [])
+                if not is_biometric_method(m)
+            ] if control_horario_service.business_profile else [],
+        },
+        "blocked_methods": {"face": BIOMETRIC_BLOCK_REASON},
         "status": status_data,
         "is_superuser": is_superuser
     }
@@ -662,6 +677,7 @@ async def check_in(
     db: Session = Depends(get_db),
 ):
     """Registrar entrada de un empleado"""
+    reject_biometric(request.method, user_id=current_user.id, company_id=_primary_company_id(db, current_user))
     try:
         if not control_horario_service.business_profile:
             await _get_control_horario_info(current_user, db)
@@ -864,6 +880,8 @@ async def check_out(
     db: Session = Depends(get_db),
 ):
     """Registrar salida de un empleado"""
+    if request.method:
+        reject_biometric(request.method, user_id=current_user.id, company_id=_primary_company_id(db, current_user))
     try:
         if not control_horario_service.business_profile:
             await _get_control_horario_info(current_user, db)

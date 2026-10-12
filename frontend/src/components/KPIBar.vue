@@ -55,8 +55,8 @@ const onKpiClick = (item) => {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  background: linear-gradient(160deg, #24262b 0%, #17181b 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--zeus-surface);
+  border: 1px solid var(--zeus-border);
   border-radius: var(--zeus-radius-sm, 8px);
   padding: 8px 4px;
   min-width: 0;
@@ -64,7 +64,7 @@ const onKpiClick = (item) => {
   font: inherit;
   color: inherit;
   text-align: center;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--zeus-shadow-sm);
 }
 
 .kpi-icon-badge {
@@ -79,12 +79,12 @@ const onKpiClick = (item) => {
   flex-shrink: 0;
 }
 
-.kpi-icon-badge--agents_active { background: rgba(99, 102, 241, 0.28); }
-.kpi-icon-badge--tasks_running { background: rgba(245, 158, 11, 0.28); }
-.kpi-icon-badge--efficiency { background: rgba(20, 184, 166, 0.28); }
-.kpi-icon-badge--alerts { background: rgba(239, 68, 68, 0.28); }
-.kpi-icon-badge--automations { background: rgba(148, 163, 184, 0.28); }
-.kpi-icon-badge--system_health { background: rgba(34, 197, 94, 0.28); }
+.kpi-icon-badge--agents_active { background: var(--violet-soft); }
+.kpi-icon-badge--tasks_running { background: var(--zeus-warning-soft); }
+.kpi-icon-badge--efficiency { background: rgba(54, 198, 198, 0.16); }
+.kpi-icon-badge--alerts { background: var(--zeus-danger-soft); }
+.kpi-icon-badge--automations { background: var(--zeus-raised); }
+.kpi-icon-badge--system_health { background: var(--zeus-success-soft); }
 
 .kpi-item--clickable {
   cursor: pointer;
@@ -109,7 +109,7 @@ const onKpiClick = (item) => {
 .kpi-value {
   font-size: 16px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--zeus-text);
   line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
@@ -119,7 +119,7 @@ const onKpiClick = (item) => {
 
 .kpi-label {
   font-size: 10px;
-  color: rgba(226, 229, 235, 0.6);
+  color: var(--zeus-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   text-align: center;

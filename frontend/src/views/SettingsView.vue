@@ -73,8 +73,8 @@ function goBack() {
   align-self: flex-start;
   padding: 8px 14px;
   border-radius: var(--zeus-radius-sm, 8px);
-  border: 1px solid #D1D5DB;
-  background: #ffffff;
+  border: 1px solid var(--zeus-border-strong);
+  background: var(--zeus-surface);
   color: var(--zeus-text, #0f172a);
   cursor: pointer;
   font-size: 0.9rem;
@@ -82,7 +82,7 @@ function goBack() {
 }
 
 .back-btn:hover {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
 }
 
 .settings-page-grid {

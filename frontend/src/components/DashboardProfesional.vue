@@ -1336,8 +1336,8 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 16px;
   padding: 10px 24px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 40%), #1a1c20;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--zeus-surface);
+  border-bottom: 1px solid var(--zeus-border);
   position: relative;
   z-index: 20;
 }
@@ -1361,7 +1361,7 @@ onUnmounted(() => {
   font-size: 18px;
   font-weight: 700;
   line-height: 1.1;
-  background: linear-gradient(135deg, #6366f1 0%, #a78bfa 100%);
+  background: linear-gradient(135deg, var(--violet) 0%, var(--violet-2) 100%);
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -1370,7 +1370,7 @@ onUnmounted(() => {
 .app-topbar-subtitle {
   margin: 1px 0 0;
   font-size: 11px;
-  color: rgba(226, 229, 235, 0.6);
+  color: var(--zeus-text-muted);
 }
 
 .app-topbar-right {
@@ -1385,7 +1385,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: rgba(226, 229, 235, 0.75);
+  color: var(--zeus-text-secondary);
   white-space: nowrap;
   margin-right: 4px;
 }
@@ -1415,16 +1415,16 @@ onUnmounted(() => {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #e2e5eb;
+  background: var(--zeus-surface-2);
+  border: 1px solid var(--zeus-border);
+  color: var(--zeus-text);
   font-size: 15px;
   cursor: pointer;
   transition: background var(--zeus-transition), transform var(--zeus-transition);
 }
 
 .topbar-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--zeus-raised);
   transform: translateY(-1px);
 }
 
@@ -1436,7 +1436,7 @@ onUnmounted(() => {
   height: 8px;
   border-radius: 50%;
   background: #ef4444;
-  border: 1.5px solid #1a1c20;
+  border: 1.5px solid var(--zeus-surface);
 }
 
 .topbar-user-btn {
@@ -1445,9 +1445,9 @@ onUnmounted(() => {
   gap: 6px;
   padding: 6px 10px 6px 8px;
   border-radius: var(--zeus-radius-full);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #e2e5eb;
+  background: var(--zeus-surface-2);
+  border: 1px solid var(--zeus-border);
+  color: var(--zeus-text);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -1456,7 +1456,7 @@ onUnmounted(() => {
 }
 
 .topbar-user-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--zeus-raised);
 }
 
 .topbar-user-icon {
@@ -1475,11 +1475,11 @@ onUnmounted(() => {
 }
 
 .topbar-logout {
-  color: #fca5a5;
+  color: var(--zeus-danger-text);
 }
 
 .topbar-logout:hover {
-  background: rgba(239, 68, 68, 0.16);
+  background: var(--zeus-danger-soft);
 }
 
 /* ---- Fila sidebar + contenido, debajo de la barra superior ---- */
@@ -1516,7 +1516,7 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(15, 23, 42, 0.4);
+  background: var(--zeus-overlay);
   z-index: 998;
   opacity: 0;
   pointer-events: none;
@@ -1531,8 +1531,8 @@ onUnmounted(() => {
 /* SIDEBAR */
 .sidebar-dark {
   width: 280px;
-  background: linear-gradient(180deg, #1f2937 0%, #161a22 55%, #12151b 100%);
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--zeus-surface);
+  border-right: 1px solid var(--zeus-border);
   padding: 24px 20px;
   display: flex;
   flex-direction: column;
@@ -1586,7 +1586,7 @@ onUnmounted(() => {
   border: none;
   border-left: 3px solid transparent;
   border-radius: 0 var(--zeus-radius-sm) var(--zeus-radius-sm) 0;
-  color: rgba(226, 229, 235, 0.75);
+  color: var(--zeus-text-secondary);
   cursor: pointer;
   transition: background var(--zeus-transition), color var(--zeus-transition), border-color var(--zeus-transition);
   font-size: 14px;
@@ -1594,50 +1594,51 @@ onUnmounted(() => {
 }
 
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #ffffff;
+  background: var(--zeus-surface-2);
+  color: var(--zeus-text);
 }
 
 .nav-item.active {
-  background: rgba(99, 102, 241, 0.18);
-  border-left-color: var(--zeus-accent-2, #6366f1);
-  color: #ffffff;
+  background: var(--zeus-accent-soft);
+  border-left-color: var(--zeus-accent);
+  color: var(--zeus-accent);
+  font-weight: 600;
 }
 
 .nav-item.admin-btn {
   margin-top: 8px;
   background: var(--zeus-accent-2-soft);
-  border: 1px solid rgba(139, 92, 246, 0.25);
-  color: #7c3aed;
+  border: 1px solid var(--zeus-border);
+  color: var(--zeus-accent);
 }
 
 .nav-item.admin-btn:hover {
-  background: rgba(124, 58, 237, 0.14);
-  color: #7c3aed;
-  border-color: rgba(139, 92, 246, 0.4);
+  background: var(--zeus-accent-soft);
+  color: var(--zeus-accent);
+  border-color: var(--zeus-border-strong);
 }
 
 .nav-item.tpv-nav-btn {
   background: var(--zeus-success-soft);
   border: 1px solid rgba(16, 185, 129, 0.25);
-  color: #0d9668;
+  color: var(--zeus-success-text);
 }
 
 .nav-item.tpv-nav-btn:hover {
   background: rgba(16, 185, 129, 0.16);
-  color: #0d9668;
+  color: var(--zeus-success-text);
   border-color: rgba(16, 185, 129, 0.4);
 }
 
 .nav-item.control-horario-nav-btn {
   background: var(--zeus-info-soft);
   border: 1px solid rgba(59, 130, 246, 0.25);
-  color: #2563eb;
+  color: var(--zeus-info-text);
 }
 
 .nav-item.control-horario-nav-btn:hover {
   background: rgba(59, 130, 246, 0.16);
-  color: #2563eb;
+  color: var(--zeus-info-text);
   border-color: rgba(59, 130, 246, 0.4);
 }
 
@@ -1649,7 +1650,7 @@ onUnmounted(() => {
   display: flex;
   gap: 16px;
   padding-top: 24px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--zeus-border);
 }
 
 .metric-item {
@@ -1659,12 +1660,12 @@ onUnmounted(() => {
 .metric-value {
   font-size: 24px;
   font-weight: 700;
-  color: #a5b4fc;
+  color: var(--zeus-accent);
 }
 
 .metric-label {
   font-size: 11px;
-  color: rgba(226, 229, 235, 0.55);
+  color: var(--zeus-text-muted);
   margin-top: 4px;
 }
 
@@ -1672,7 +1673,7 @@ onUnmounted(() => {
   margin: 16px 4px 0;
   font-size: 11px;
   line-height: 1.4;
-  color: rgba(226, 229, 235, 0.45);
+  color: var(--zeus-text-muted);
   font-style: italic;
 }
 
@@ -1788,8 +1789,8 @@ onUnmounted(() => {
   max-width: 900px;
   height: 100%;
   padding: 10px 20px;
-  background: linear-gradient(145deg, #2a2d33 0%, #1c1e23 55%, #24262b 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--zeus-surface);
+  border: 1px solid var(--zeus-border);
   border-radius: var(--zeus-radius-lg);
   box-shadow: var(--zeus-shadow-md);
   box-sizing: border-box;
@@ -1800,7 +1801,7 @@ onUnmounted(() => {
 
 .zeus-core-card:hover {
   box-shadow: var(--zeus-shadow-lg);
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: var(--zeus-border-strong);
 }
 
 .zeus-core-info {
@@ -1884,7 +1885,7 @@ onUnmounted(() => {
   margin: 0;
   font-size: 18px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--zeus-text);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1893,7 +1894,7 @@ onUnmounted(() => {
 .zeus-core-role {
   margin: 2px 0 8px;
   font-size: 12px;
-  color: rgba(226, 229, 235, 0.7);
+  color: var(--zeus-text-secondary);
 }
 
 .zeus-core-metrics {
@@ -1908,15 +1909,15 @@ onUnmounted(() => {
 }
 
 .zeus-core-status.online {
-  color: #10b981;
+  color: var(--zeus-success-text);
 }
 
 .zeus-core-status.degraded {
-  color: #f59e0b;
+  color: var(--zeus-warning-text);
 }
 
 .zeus-core-activity {
-  color: rgba(226, 229, 235, 0.55);
+  color: var(--zeus-text-muted);
 }
 
 .executive-agents-grid {
@@ -1961,13 +1962,13 @@ onUnmounted(() => {
 
 .status-badge.degraded {
   background: var(--zeus-warning-soft);
-  color: #b45309;
+  color: var(--zeus-warning-text);
   border-color: rgba(245, 158, 11, 0.3);
 }
 
 .status-badge.online {
   background: var(--zeus-success-soft);
-  color: #0d9668;
+  color: var(--zeus-success-text);
   border-color: rgba(16, 185, 129, 0.25);
 }
 
@@ -2180,8 +2181,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  background: linear-gradient(145deg, #2a2d33 0%, #1c1e23 55%, #24262b 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--zeus-surface);
+  border: 1px solid var(--zeus-border);
   border-radius: var(--zeus-radius);
   padding: 10px;
   padding-right: 26px;
@@ -2205,13 +2206,13 @@ onUnmounted(() => {
   transform: translateY(-50%);
   font-size: 20px;
   line-height: 1;
-  color: rgba(255, 255, 255, 0.32);
+  color: var(--zeus-text-muted);
   pointer-events: none;
   transition: color var(--zeus-transition), transform var(--zeus-transition);
 }
 
 .agent-card:hover .agent-card-arrow {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--zeus-text-secondary);
   transform: translateY(-50%) translateX(2px);
 }
 
@@ -2370,7 +2371,7 @@ onUnmounted(() => {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 2px solid #24262b;
+  border: 2px solid var(--zeus-surface);
   background: #cbd5e1;
 }
 
@@ -2450,11 +2451,11 @@ onUnmounted(() => {
   font-size: 16px;
   font-weight: 700;
   margin: 0;
-  color: #ffffff;
+  color: var(--zeus-text);
 }
 
 .agent-role {
-  color: rgba(226, 229, 235, 0.6);
+  color: var(--zeus-text-secondary);
   font-size: 12px;
   margin: 0;
 }
@@ -2474,7 +2475,7 @@ onUnmounted(() => {
 
 .stat-label {
   font-size: 11px;
-  color: rgba(226, 229, 235, 0.55);
+  color: var(--zeus-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
@@ -2482,26 +2483,26 @@ onUnmounted(() => {
 .stat-value {
   font-size: 16px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--zeus-text);
 }
 
 .status-active {
-  color: #0d9668;
+  color: var(--zeus-success-text);
 }
 
 /* Texto del stat "Estado" en la tarjeta — coloreado según el estado
    real devuelto por GET /api/v1/agents/status (mismo criterio de color
    que el punto de estado del avatar). */
 .status-online {
-  color: #0d9668;
+  color: var(--zeus-success-text);
 }
 
 .status-idle {
-  color: #b45309;
+  color: var(--zeus-warning-text);
 }
 
 .status-offline {
-  color: #64748b;
+  color: var(--zeus-text-muted);
 }
 
 .status-loading {
@@ -2517,10 +2518,10 @@ onUnmounted(() => {
    panel de agente ya abierto (ej. "Actualizar"). */
 .btn-interact {
   padding: 8px 16px;
-  background: #ffffff;
-  border: 1px solid #D1D5DB;
+  background: var(--zeus-surface);
+  border: 1px solid var(--zeus-border-strong);
   border-radius: var(--zeus-radius-sm);
-  color: var(--zeus-text, #0f172a);
+  color: var(--zeus-text);
   font-weight: 600;
   cursor: pointer;
   box-shadow: none;
@@ -2535,7 +2536,7 @@ onUnmounted(() => {
 }
 
 .btn-interact:hover {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2807,7 +2808,7 @@ onUnmounted(() => {
 }
 
 .stat-change.positive {
-  color: #0d9668;
+  color: var(--zeus-success-text);
 }
 
 .chart-placeholder {

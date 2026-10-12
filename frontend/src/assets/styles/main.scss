@@ -90,8 +90,9 @@ body {
 // Importar Tailwind CSS
 @import './tailwind.css';
 
-// Tema claro: dashboard + página /settings (colores base del dashboard son oscuros fijos)
-@import './dashboard-profesional-theme.scss';
+// (dashboard-profesional-theme.scss eliminado: sus overrides [data-theme='light']
+// con paleta antigua quedan cubiertos por los tokens de zeus-theme-tokens.css,
+// que ahora consumen directamente DashboardProfesional/KPIBar/Ajustes.)
 @import './office-crm-theme.scss';
 
 // Componentes personalizados

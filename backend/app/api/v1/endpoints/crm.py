@@ -22,6 +22,7 @@ from app.schemas.crm_office import (
     RecordChargeOut,
 )
 import services.crm_office_service as crm_svc
+from services.crm_export_audit import log_personal_data_export
 
 router = APIRouter()
 
@@ -190,7 +191,9 @@ def crm_export_clients(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    content = crm_svc.customers_to_csv(crm_svc.list_customers(db, current_user))
+    rows = crm_svc.list_customers(db, current_user)
+    content = crm_svc.customers_to_csv(rows)
+    log_personal_data_export(db, current_user, entity="clients", fmt="csv", rows=len(rows))
     return StreamingResponse(
         BytesIO(content.encode("utf-8")),
         media_type="text/csv",
@@ -203,7 +206,9 @@ def crm_export_cases(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    content = crm_svc.cases_to_csv(crm_svc.list_cases_table(db, current_user))
+    rows = crm_svc.list_cases_table(db, current_user)
+    content = crm_svc.cases_to_csv(rows)
+    log_personal_data_export(db, current_user, entity="cases", fmt="csv", rows=len(rows))
     return StreamingResponse(
         BytesIO(content.encode("utf-8")),
         media_type="text/csv",
@@ -216,7 +221,9 @@ def crm_export_payments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    content = crm_svc.payments_to_csv(crm_svc.list_payments_table(db, current_user))
+    rows = crm_svc.list_payments_table(db, current_user)
+    content = crm_svc.payments_to_csv(rows)
+    log_personal_data_export(db, current_user, entity="payments", fmt="csv", rows=len(rows))
     return StreamingResponse(
         BytesIO(content.encode("utf-8")),
         media_type="text/csv",

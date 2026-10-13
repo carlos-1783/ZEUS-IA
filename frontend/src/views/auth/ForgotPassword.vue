@@ -11,9 +11,6 @@
           <p class="text-sm text-green-700">
             {{ successMessage }}
           </p>
-          <p v-if="resetLink" class="mt-2 text-sm">
-            <a :href="resetLink" class="font-medium text-indigo-600 hover:text-indigo-500">Haz clic aquí para restablecer tu contraseña</a>
-          </p>
         </div>
       </div>
     </div>
@@ -113,7 +110,6 @@ const route = useRoute();
 const isLoading = ref(false);
 const error = ref('');
 const successMessage = ref('');
-const resetLink = ref('');
 const form = reactive({
   email: ''
 });
@@ -161,14 +157,10 @@ const handleSubmit = async () => {
   
   isLoading.value = true;
   error.value = '';
-  resetLink.value = '';
   
   try {
     const response = await api.forgotPassword(form.email);
     successMessage.value = response.msg || 'Si tu correo está registrado, recibirás un enlace para restablecer la contraseña. Revisa tu bandeja de entrada.';
-    if (response.reset_link) {
-      resetLink.value = response.reset_link;
-    }
   } catch (err) {
     console.error('Password reset request failed:', err);
     // @ts-ignore optional chaining types en tiempo de compilación

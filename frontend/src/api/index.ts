@@ -595,7 +595,7 @@ const api: ApiClient = {
   },
 
   forgotPassword: async (email: string) => {
-    const response = await axiosInstance.post<{ msg: string; reset_link?: string }>('auth/reset-password', {
+    const response = await axiosInstance.post<{ msg: string }>('auth/reset-password', {
       email: email.trim().toLowerCase(),
     });
     return response.data;

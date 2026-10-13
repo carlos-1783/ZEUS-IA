@@ -1046,6 +1046,44 @@ def _onboarding_profile_impl(
 RESET_TOKEN_EXPIRE_MINUTES = 60
 
 
+_RESET_GENERIC_MSG = (
+    "Si tu correo está registrado, recibirás un enlace para restablecer la contraseña."
+)
+
+
+async def _deliver_reset_email(email: str, reset_link: str) -> bool:
+    """Envia el enlace de restablecimiento SOLO al correo del titular. Sin proveedor de
+    correo configurado no hay forma segura de entregarlo: se registra y no se entrega."""
+    from services.email_service import email_service
+
+    configured = (
+        email_service.is_configured()
+        or email_service.is_resend_configured()
+        or email_service.is_smtp_configured()
+    )
+    if not configured:
+        logger.warning("reset-password: sin proveedor de correo configurado; enlace NO entregado")
+        return False
+    try:
+        result = await email_service.send_email(
+            to_email=email,
+            subject="Restablecer tu contraseña de ZEUS IA",
+            content=(
+                "<p>Has solicitado restablecer tu contraseña.</p>"
+                f'<p><a href="{reset_link}">Restablecer contraseña</a></p>'
+                f"<p>El enlace caduca en {RESET_TOKEN_EXPIRE_MINUTES} minutos. "
+                "Si no lo has pedido tú, ignora este correo.</p>"
+            ),
+        )
+    except Exception:
+        logger.exception("reset-password: fallo enviando el correo")
+        return False
+    ok = bool(isinstance(result, dict) and result.get("success"))
+    if not ok:
+        logger.warning("reset-password: el proveedor no confirmo el envio")
+    return ok
+
+
 @router.post(
     "/reset-password",
     operation_id="auth_reset_password_api_v1",
@@ -1056,11 +1094,12 @@ async def reset_password(
     reset_data: ResetPasswordRequest,
     db: Session = Depends(get_db),
 ):
-    """Request password reset: genera token, lo guarda y opcionalmente env?a email. Si no hay email configurado, devuelve reset_link."""
+    """Genera el token, lo guarda y envia el enlace SOLO por correo al titular. La respuesta es
+    siempre el mismo mensaje generico (no revela si la cuenta existe ni contiene el token)."""
     user = db.query(User).filter(User.email == reset_data.email).first()
     if not user:
         # No revelar si el email existe o no
-        return {"msg": "Si tu correo est? registrado, recibir?s un enlace para restablecer la contrase?a."}
+        return {"msg": _RESET_GENERIC_MSG}
 
     # Invalidar tokens previos para este email
     db.query(PasswordResetToken).filter(PasswordResetToken.email == reset_data.email).delete()
@@ -1071,14 +1110,11 @@ async def reset_password(
     db.commit()
 
     reset_link = f"{settings.FRONTEND_URL}/auth/reset-password/{token}"
-
-    # TODO: Si tienes email configurado (SMTP), enviar correo con reset_link aqu?.
-    # if settings.SMTP_HOST: send_reset_email(reset_data.email, reset_link)
-
-    return {
-        "msg": "Si tu correo est? registrado, recibir?s un enlace para restablecer la contrase?a.",
-        "reset_link": reset_link,  # Para desarrollo / cuando no hay email; en producci?n puede omitirse
-    }
+    # HOTFIX: el enlace (con el token) NUNCA va en la respuesta HTTP. Antes se devolvia como
+    # `reset_link` a cualquier llamante anonimo: con solo el email se podia fijar la contrasena
+    # de cualquier cuenta (incluida la de superusuario). Solo se entrega por correo al titular.
+    await _deliver_reset_email(reset_data.email, reset_link)
+    return {"msg": _RESET_GENERIC_MSG}
 
 
 @router.post(

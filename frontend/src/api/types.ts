@@ -82,7 +82,7 @@ export interface ApiClient {
   refreshToken: (refreshToken: string) => Promise<AuthTokens>;
   getCurrentUser: () => Promise<UserProfile>;
   getSystemStatus: () => Promise<SystemStatus>;
-  forgotPassword: (email: string) => Promise<{ msg: string; reset_link?: string }>;
+  forgotPassword: (email: string) => Promise<{ msg: string }>;
   setNewPassword: (payload: { token: string; new_password: string }) => Promise<{ msg: string }>;
   request: <T = any>(config: AxiosRequestConfig) => Promise<T>;
 }

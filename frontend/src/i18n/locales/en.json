@@ -73,7 +73,12 @@
       "costSavings": "Cost savings",
       "successRate": "Success rate",
       "chartTitle": "Performance",
-      "chartSoon": "Detailed charts coming soon"
+      "chartSoon": "Detailed charts coming soon",
+      "totalRevenue": "Total revenue",
+      "salesCount": "Number of sales",
+      "avgTicket": "Average ticket",
+      "activeCustomers": "Active customers",
+      "noSalesData": "No sales data yet"
     },
     "notifications": {
       "title": "Notifications",
@@ -89,7 +94,10 @@
       "download": "Download"
     },
     "settingsEmbed": "Language, theme and session:",
-    "settingsEmbedLink": "Open account settings"
+    "settingsEmbedLink": "Open account settings",
+    "systemVersion": "System online v{version}",
+    "sidebarTagline": "More than tools, your strategic ally.",
+    "zeusCoreBannerText": "Artificial intelligence that works for you"
   },
   "layout": {
     "openMenu": "Open menu",
@@ -291,7 +299,10 @@
       "farmacia": "Pharmacy",
       "logística": "Logistics",
       "otros": "Other"
-    }
+    },
+    "shareComandero": "Share order pad",
+    "comanderoLinkCopied": "Link copied with the current order. The employee must sign in and open this link.",
+    "comanderoLinkCopyFailed": "Could not generate the link. Please try again."
   },
   "agents": {
     "disclaimers": {
@@ -405,7 +416,8 @@
       "done": "Close",
       "imported": "Imported: {count}",
       "skipped": "Skipped: {count}",
-      "skippedDuplicates": "Duplicates (email/phone): {count}"
+      "skippedDuplicates": "Duplicates (email/phone): {count}",
+      "updated": "Updated: {count}"
     }
   },
   "controlHorario": {

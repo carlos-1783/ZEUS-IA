@@ -76,7 +76,12 @@
       "costSavings": "Ahorro estimado",
       "successRate": "Tasa de éxito",
       "chartTitle": "Rendimiento",
-      "chartSoon": "Gráficos detallados próximamente"
+      "chartSoon": "Gráficos detallados próximamente",
+      "totalRevenue": "Facturación total",
+      "salesCount": "Número de ventas",
+      "avgTicket": "Ticket medio",
+      "activeCustomers": "Clientes activos",
+      "noSalesData": "Sin datos de ventas todavía"
     },
     "notifications": {
       "title": "Notificaciones",
@@ -294,7 +299,10 @@
       "farmacia": "Farmacia",
       "logística": "Logística",
       "otros": "Otros"
-    }
+    },
+    "shareComandero": "Compartir comandero",
+    "comanderoLinkCopied": "Enlace copiado con la comanda actual. El empleado debe iniciar sesión y abrir este enlace.",
+    "comanderoLinkCopyFailed": "No se pudo generar el enlace. Inténtalo de nuevo."
   },
   "agents": {
     "disclaimers": {
@@ -408,7 +416,8 @@
       "done": "Cerrar",
       "imported": "Importados: {count}",
       "skipped": "Omitidas: {count}",
-      "skippedDuplicates": "Duplicados (email/teléfono): {count}"
+      "skippedDuplicates": "Duplicados (email/teléfono): {count}",
+      "updated": "Actualizados: {count}"
     }
   },
   "controlHorario": {

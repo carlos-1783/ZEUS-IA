@@ -36,7 +36,7 @@
           title="Copiar enlace del TPV con la comanda actual para compartir con empleados"
         >
           <span class="header-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg></span>
-          {{ $t('tpv.shareComandero') || 'Compartir comandero' }}
+          {{ $t('tpv.shareComandero') }}
         </button>
         <button @click="checkStatus" class="header-btn">
           <span class="header-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-5h5"/></svg></span>
@@ -75,7 +75,7 @@
         <!-- Con mesa seleccionada: barra "Mesa X" + volver a mesas -->
         <div v-if="tablesMode && tpvConfig.tables_enabled && selectedTable" class="tables-selected-bar">
           <button type="button" @click="backToTablesList" class="back-to-tables-btn" title="Volver a mesas">
-            <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg></span> {{ $t('tpv.tablesMode') || 'Mesas' }}
+            <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg></span> {{ $t('tpv.tablesMode') }}
           </button>
           <span class="tables-selected-label">Añadir productos a Mesa {{ selectedTable?.number }}</span>
         </div>
@@ -109,7 +109,7 @@
           >
             <div class="add-product-content">
               <span class="add-product-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span class="add-product-label">{{ $t('tpv.products.add') || 'Añadir Producto' }}</span>
+              <span class="add-product-label">{{ $t('tpv.products.add') }}</span>
             </div>
           </button>
           
@@ -324,7 +324,7 @@
             
             <div v-if="cart.length === 0" class="empty-cart">
               <div class="empty-cart-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="17" cy="20" r="1"/><path d="M2 4h2l2.6 12.4a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.6L21 8H6"/></svg></div>
-              <p class="empty-cart-message">{{ $t('tpv.cart.emptyMessage') || 'Añade productos o servicios para comenzar' }}</p>
+              <p class="empty-cart-message">{{ $t('tpv.cart.emptyMessage') }}</p>
               <p class="empty-cart-hint"><span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a6 6 0 0 0-4 10.5c.6.5 1 1.3 1 2.1V15h6v-.4c0-.8.4-1.6 1-2.1A6 6 0 0 0 12 2Z"/></svg></span> Haz clic en cualquier producto para añadirlo al carrito</p>
             </div>
           </div>
@@ -2027,7 +2027,7 @@ const handleKeyPress = (key) => {
 
 const toggleTablesMode = () => {
   if (!tpvConfig.value.tables_enabled) {
-    warning(t('tpv.messages.tablesNotAvailable') || 'Las mesas no están disponibles para este tipo de negocio')
+    warning(t('tpv.messages.tablesNotAvailable'))
     return
   }
   tablesMode.value = !tablesMode.value
@@ -2053,7 +2053,7 @@ const selectTable = (table) => {
 
 const addTable = async () => {
   if (!tpvConfig.value.tables_enabled) {
-    warning(t('tpv.messages.tablesNotAvailable') || 'Las mesas no están disponibles para este tipo de negocio')
+    warning(t('tpv.messages.tablesNotAvailable'))
     return
   }
   const token = await getAuthToken()
@@ -2125,14 +2125,11 @@ const copyComanderoLink = async () => {
     const base = baseRaw.replace(/\/?$/, '/')
     const url = `${base}tpv?comanda=${encodeURIComponent(sid)}`
     await navigator.clipboard.writeText(url)
-    success(
-      t('tpv.comanderoLinkCopied') ||
-        'Enlace copiado con la comanda actual. El empleado debe iniciar sesión y abrir este enlace.'
-    )
+    success(t('tpv.comanderoLinkCopied'))
     scheduleComandaPush()
   } catch (e) {
     console.error(e)
-    warning(t('tpv.comanderoLinkCopyFailed') || 'No se pudo generar el enlace. Inténtalo de nuevo.')
+    warning(t('tpv.comanderoLinkCopyFailed'))
   }
 }
 

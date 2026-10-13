@@ -19,7 +19,7 @@
           type="button"
           class="topbar-icon-btn"
           :class="{ 'has-alert': (executiveAnalytics.alerts ?? 0) > 0 }"
-          :title="t('dashboardPro.nav.alerts') || 'Alertas'"
+          :title="t('dashboardPro.nav.alerts')"
           @click="router.push('/alerts')"
         >
           🔔

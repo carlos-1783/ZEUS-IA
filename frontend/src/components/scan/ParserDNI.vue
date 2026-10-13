@@ -22,22 +22,12 @@ const canvasRef = ref<HTMLCanvasElement | null>(null)
 const cameraActive = ref(false)
 let stream: MediaStream | null = null
 
-const DEMO_MRZ = `I<UTOD231458907<<<<<<<
-7408122F1204159UTO<<<<<<<<<<<6
-ERIKSSON<<ANNA<MARIA<<<<<<<<<<`
-
 function normalizeMrzInput(value: string) {
   return value
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
     .join('\n')
-}
-
-function fillDemoMrz() {
-  mrz.value = DEMO_MRZ
-  mode.value = 'manual'
-  status.value = 'MRZ de ejemplo cargado. Pulsa «Crear cliente desde DNI».'
 }
 
 function stopCamera() {
@@ -190,8 +180,7 @@ onBeforeUnmount(stopCamera)
         placeholder="I&lt;ESPABC123456&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&#10;9001011M3001017ESP&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;2&#10;APELLIDO&lt;&lt;NOMBRE&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;"
         spellcheck="false"
       />
-      <small class="hint">El texto gris no cuenta como MRZ. Pega las líneas o carga el ejemplo.</small>
-      <button type="button" class="zeus-btn zeus-btn-secondary" @click="fillDemoMrz">Cargar MRZ de ejemplo</button>
+      <small class="hint">El texto gris no cuenta como MRZ. Pega las líneas del documento real.</small>
       <button type="button" class="zeus-btn zeus-btn-accent" :disabled="loading" @click="submitMrz">
         {{ loading ? 'Procesando…' : 'Crear cliente desde DNI' }}
       </button>

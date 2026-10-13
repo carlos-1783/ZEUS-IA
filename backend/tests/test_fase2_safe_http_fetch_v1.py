@@ -179,3 +179,25 @@ def test_content_type_tamano_y_http_error(dns, opener):
 def test_dominio_que_no_resuelve_falla_controlado(dns, opener):
     with pytest.raises(sf.FetchFailedError):
         sf.safe_fetch("https://no-existe.example/", allowed_content_types=["text/html"])
+
+
+def test_fallo_de_red_prueba_la_siguiente_ip_validada_y_luego_falla_controlado(dns, monkeypatch):
+    dns["example.com"] = ["93.184.216.34", "93.184.216.35"]
+    tried = []
+
+    def flaky(scheme, ip, port, hostname, path, timeout):
+        tried.append(ip)
+        if ip.endswith(".34"):
+            raise ConnectionResetError("reset")
+        return 200, {"content-type": "text/html"}, [b"ok"]
+
+    monkeypatch.setattr(sf, "_opener", flaky)
+    assert sf.safe_fetch("https://example.com/", allowed_content_types=["text/html"]).body == b"ok"
+    assert tried == ["93.184.216.34", "93.184.216.35"]
+
+    def down(*a, **k):
+        raise ConnectionResetError("reset")
+
+    monkeypatch.setattr(sf, "_opener", down)
+    with pytest.raises(sf.FetchFailedError):
+        sf.safe_fetch("https://example.com/", allowed_content_types=["text/html"])

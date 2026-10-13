@@ -205,13 +205,24 @@ def safe_fetch(
     for _ in range(max_redirects + 1):
         scheme, hostname, port, path = validate_url(current, allow_http=allow_http)
         ips = _resolve_public_ips(hostname, port)
-        try:
-            status, headers, chunks = _opener(scheme, ips[0], port, hostname, path, timeout)
-        except SafeFetchError:
-            raise
-        except Exception as exc:  # urllib3/SSL/socket: error real de red, se informa
-            logger.info("safe_fetch: fallo de red host=%s: %s", hostname, exc)
-            raise FetchFailedError(f"No se pudo conectar con '{hostname}': {type(exc).__name__}.") from exc
+        last_exc: Optional[Exception] = None
+        opened = None
+        # Todas las IPs ya están validadas como públicas: si una falla a nivel de red se
+        # prueba la siguiente (no se vuelve a resolver el nombre).
+        for ip in ips:
+            try:
+                opened = _opener(scheme, ip, port, hostname, path, timeout)
+                break
+            except SafeFetchError:
+                raise
+            except Exception as exc:  # urllib3/SSL/socket: error real de red
+                logger.info("safe_fetch: fallo de red host=%s ip=%s: %s", hostname, ip, exc)
+                last_exc = exc
+        if opened is None:
+            raise FetchFailedError(
+                f"No se pudo conectar con '{hostname}': {type(last_exc).__name__}."
+            ) from last_exc
+        status, headers, chunks = opened
 
         if status in _REDIRECT_CODES:
             location = headers.get("location")

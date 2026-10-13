@@ -19,6 +19,7 @@ from app.models.company import Company, UserCompany
 from app.models.user import User
 from app.schemas.customer import CustomerCreate
 import services.crm_office_service as crm_svc
+from services.outbound_consent_v1 import set_marketing_consent
 from services.zeus_agent_executor_v1 import execute_agent_action
 
 
@@ -46,7 +47,10 @@ def _user(db):
 
 def test_create_campaign_is_preview_and_sends_nothing(db):
     u, c = _user(db)
-    crm_svc.create_customer(db, u, CustomerCreate(name="Ana", email=f"ana_{uuid.uuid4().hex[:6]}@example.com"))
+    ana = crm_svc.create_customer(db, u, CustomerCreate(name="Ana", email=f"ana_{uuid.uuid4().hex[:6]}@example.com"))
+    # Fase 2 (#3): solo cuentan clientes con consentimiento comercial registrado.
+    set_marketing_consent(db, u, ana.id, granted=True, source="test")
+    crm_svc.create_customer(db, u, CustomerCreate(name="Sin", email=f"sin_{uuid.uuid4().hex[:6]}@example.com"))
     db.commit()
     sent = AsyncMock(return_value={"success": True})
     with patch("services.zeus_orchestrator_handlers.email_service.send_email", sent), \
@@ -68,7 +72,8 @@ def test_create_campaign_is_preview_and_sends_nothing(db):
 def test_create_campaign_counts_only_own_company(db):
     u, _ = _user(db)
     other, _ = _user(db)
-    crm_svc.create_customer(db, other, CustomerCreate(name="Otro", email=f"o_{uuid.uuid4().hex[:6]}@example.com"))
+    otro = crm_svc.create_customer(db, other, CustomerCreate(name="Otro", email=f"o_{uuid.uuid4().hex[:6]}@example.com"))
+    set_marketing_consent(db, other, otro.id, granted=True, source="test")
     db.commit()
     r = asyncio.run(execute_agent_action(db, user=u, agent="PERSEO", action="create_campaign", payload={}))
     assert r["executed"] is False

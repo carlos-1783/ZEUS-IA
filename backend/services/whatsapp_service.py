@@ -3,8 +3,12 @@
 
 Credenciales: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN y TWILIO_WHATSAPP_NUMBER (o TWILIO_WHATSAPP_FROM).
 
-TWILIO_WHATSAPP_ENABLED=false (o 0/no) desactiva el envío aunque existan credenciales (útil hasta
-activar sandbox o número de WhatsApp Business en Twilio).
+TWILIO_WHATSAPP_ENABLED: DESACTIVADO por defecto (Fase 2, auditoria #16). Hay que ponerlo a
+true/1/yes de forma explicita para enviar, aunque existan credenciales.
+
+Mensajes entrantes: no se responde automaticamente a remitentes que no se puedan asociar a una
+empresa (hoy no existe mapeo numero -> empresa en el modelo de datos), solo se registran.
+Logs con PII minimizada: telefono enmascarado y nunca el cuerpo del mensaje.
 
 Twilio 63031: "From" y "To" no pueden ser el mismo identificador; se valida antes de llamar a la API.
 """
@@ -20,6 +24,13 @@ def _env_flag(name: str, default: bool = True) -> bool:
     if not raw:
         return default
     return raw in ("1", "true", "yes", "on")
+
+
+def _mask(addr: Optional[str]) -> str:
+    """Telefono enmascarado para logs (PII minima)."""
+    from services.outbound_consent_v1 import mask_phone
+
+    return mask_phone(addr)
 
 
 def _whatsapp_canonical(addr: str) -> str:
@@ -43,7 +54,7 @@ class WhatsAppService:
     def __init__(self):
         self.account_sid = os.getenv("TWILIO_ACCOUNT_SID")
         self.auth_token = os.getenv("TWILIO_AUTH_TOKEN")
-        self.whatsapp_enabled = _env_flag("TWILIO_WHATSAPP_ENABLED", default=True)
+        self.whatsapp_enabled = _env_flag("TWILIO_WHATSAPP_ENABLED", default=False)
         # TWILIO_WHATSAPP_FROM o TWILIO_WHATSAPP_NUMBER (número productivo o sandbox)
         self.whatsapp_number = (
             os.getenv("TWILIO_WHATSAPP_FROM")
@@ -131,13 +142,13 @@ class WhatsAppService:
                 ActivityLogger.log_activity(
                     agent_name="ZEUS",
                     action_type="whatsapp_sent",
-                    action_description=f"WhatsApp enviado a {to_number}",
+                    action_description=f"WhatsApp enviado a {_mask(to_number)}",
                     details={
-                        "to": to_number,
+                        "to_masked": _mask(to_number),
                         "from": self.whatsapp_number,
                         "message_sid": twilio_message.sid,
                         "status": twilio_message.status,
-                        "body_preview": (message[:100] if message else None),
+                        "body_chars": len(message or ""),
                     },
                     metrics={"status": twilio_message.status},
                     status="completed",
@@ -158,139 +169,59 @@ class WhatsAppService:
                 ActivityLogger.log_activity(
                     agent_name="ZEUS",
                     action_type="whatsapp_send_error",
-                    action_description=f"Error enviando WhatsApp a {to_number}: {str(e)}",
+                    action_description=f"Error enviando WhatsApp a {_mask(to_number)}: {type(e).__name__}",
                     details={
-                        "to": to_number,
+                        "to_masked": _mask(to_number),
                         "from": self.whatsapp_number,
-                        "error": str(e),
+                        "error": str(e)[:300],
                     },
                     status="failed",
                     priority="high"
                 )
-            except Exception:
-                pass
+            except Exception as log_error:
+                logger.warning("[WHATSAPP] Error registrando fallo de envio: %s", log_error)
             return error_result
     
     async def process_incoming_message(
-        self, 
-        from_number: str, 
+        self,
+        from_number: str,
         message_body: str,
-        agent_name: str = "ZEUS CORE"
+        agent_name: str = "ZEUS CORE",
+        to_number: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """
-        Procesar mensaje entrante y generar respuesta automática
-        
-        Args:
-            from_number: Número del remitente
-            message_body: Contenido del mensaje
-            agent_name: Agente que debe responder
-            
-        Returns:
-            Dict con respuesta del agente
-        """
-        try:
-            # Importar agentes y logger
-            from agents.zeus_core import ZeusCore
-            from agents.perseo import Perseo
-            from services.activity_logger import activity_logger
-            
-            # Mapeo de agentes
-            agents_map = {
-                "ZEUS CORE": ZeusCore(),
-                "PERSEO": Perseo()
-            }
-            
-            agent = agents_map.get(agent_name, agents_map["ZEUS CORE"])
-            
-            # Procesar solicitud
-            context = {
-                "user_message": message_body,
-                "channel": "whatsapp",
-                "from_number": from_number,
-                "priority": "high"
-            }
-            
-            result = agent.process_request(context)
-            
-            # Preparar respuesta
-            if result.get("success"):
-                response_text = result.get("content", result.get("response", "Mensaje procesado"))
-                
-                # Enviar respuesta automática
-                send_result = await self.send_message(from_number, response_text)
-                
-                # ✅ REGISTRAR ACTIVIDAD
-                activity_logger.log_activity(
-                    agent_name=agent_name,
-                    action_type="whatsapp_response",
-                    action_description=f"Respondido WhatsApp de {from_number}",
-                    details={
-                        "from": from_number,
-                        "message": message_body[:100],  # Primeros 100 caracteres
-                        "response": response_text[:100],
-                        "channel": "whatsapp"
-                    },
-                    metrics={
-                        "response_time": "instant",
-                        "message_sent": send_result.get("success", False)
-                    },
-                    status="completed",
-                    priority="high"
-                )
-                
-                return {
-                    "success": True,
-                    "agent": agent_name,
-                    "response": response_text,
-                    "whatsapp_status": send_result
-                }
-            else:
-                error_msg = "Lo siento, tuve un problema procesando tu mensaje."
-                await self.send_message(from_number, error_msg)
-                
-                # ✅ REGISTRAR ERROR
-                activity_logger.log_activity(
-                    agent_name=agent_name,
-                    action_type="whatsapp_error",
-                    action_description=f"Error procesando WhatsApp de {from_number}",
-                    details={
-                        "from": from_number,
-                        "message": message_body[:100],
-                        "error": result.get("error", "Unknown")
-                    },
-                    status="failed",
-                    priority="high"
-                )
-                
-                return {
-                    "success": False,
-                    "error": result.get("error", "Unknown error")
-                }
-                
-        except Exception as e:
-            error_msg = "Lo siento, ocurrió un error. Por favor intenta más tarde."
-            if self.is_configured():
-                await self.send_message(from_number, error_msg)
-            
-            # ✅ REGISTRAR EXCEPCIÓN
-            from services.activity_logger import activity_logger
-            activity_logger.log_activity(
-                agent_name=agent_name,
-                action_type="whatsapp_exception",
-                action_description=f"Excepción procesando WhatsApp",
-                details={
-                    "from": from_number,
-                    "exception": str(e)
-                },
-                status="failed",
-                priority="critical"
-            )
-            
-            return {
-                "success": False,
-                "error": str(e)
-            }
-    
+        """Registrar un mensaje entrante. NO responde automaticamente si el mensaje no se puede
+        asociar a una empresa (no hay mapeo numero -> empresa): antes respondia con el LLM a
+        cualquier remitente, sin tenant, y con un texto fijo de relleno si el agente no daba
+        contenido. Ahora solo se registra (telefono enmascarado, sin cuerpo).
+
+        Hoy NO existe en el modelo de datos un mapeo numero de WhatsApp -> empresa (todas las
+        empresas comparten el numero de Twilio de la plataforma), asi que ningun entrante se puede
+        asociar a una empresa y ninguno recibe respuesta automatica. Cuando exista ese mapeo, la
+        respuesta por empresa se implementa aqui (con contenido real del agente, nunca relleno)."""
+        from services.activity_logger import ActivityLogger
+
+        ActivityLogger.log_activity(
+            agent_name=agent_name,
+            action_type="whatsapp_inbound_unrouted",
+            action_description="WhatsApp entrante sin empresa asociada: no se responde automaticamente",
+            details={
+                "from_masked": _mask(from_number),
+                "to": to_number,
+                "body_chars": len(message_body or ""),
+                "auto_reply": False,
+                "reason": "sin_empresa_asociada",
+            },
+            status="blocked",
+            priority="normal",
+        )
+        logger.info("[WHATSAPP] entrante sin empresa asociada de %s: sin respuesta automatica", _mask(from_number))
+        return {
+            "success": True,
+            "processed": False,
+            "auto_reply": False,
+            "reason": "sin_empresa_asociada",
+        }
+
     def get_status(self) -> Dict[str, Any]:
         """Estado del servicio. Envío permitido si configured=True (credenciales + enabled)."""
         return {

@@ -402,6 +402,7 @@ async def twilio_webhook_handler(request: Request):
     import logging
     logger = logging.getLogger(__name__)
     logger.info(f"[WEBHOOK] Twilio webhook recibido - Method: {request.method}")
+    from services.outbound_consent_v1 import mask_phone
     
     try:
         form_data = await request.form()
@@ -433,11 +434,12 @@ async def twilio_webhook_handler(request: Request):
         ActivityLogger.log_activity(
             agent_name="ZEUS",
             action_type="whatsapp_received",
-            action_description=f"WhatsApp recibido de {from_number}",
+            action_description=f"WhatsApp recibido de {mask_phone(from_number)}",
             details={
-                "from": from_number,
+                # PII minima (auditoria #16): telefono enmascarado y nunca el cuerpo.
+                "from_masked": mask_phone(from_number),
                 "to": to_number,
-                "body": message_body[:200],  # Primeros 200 caracteres
+                "body_chars": len(message_body or ""),
                 "message_sid": message_sid,
                 "account_sid": account_sid,
                 "num_media": num_media,
@@ -454,12 +456,13 @@ async def twilio_webhook_handler(request: Request):
         
         # Procesar mensaje con agente (si no está en sandbox o si se permite procesar sandbox)
         if is_sandbox:
-            logger.warning(f"[WEBHOOK] Mensaje recibido en sandbox de {from_number}")
+            logger.warning("[WEBHOOK] Mensaje recibido en sandbox de %s", mask_phone(from_number))
         
         result = await whatsapp_service.process_incoming_message(
             from_number=from_number,
             message_body=message_body,
-            agent_name="ZEUS CORE"
+            agent_name="ZEUS CORE",
+            to_number=to_number,
         )
         
         # Registrar respuesta enviada si fue exitosa
@@ -467,11 +470,10 @@ async def twilio_webhook_handler(request: Request):
             ActivityLogger.log_activity(
                 agent_name="ZEUS",
                 action_type="whatsapp_sent",
-                action_description=f"WhatsApp enviado a {from_number} (respuesta automática)",
+                action_description=f"WhatsApp enviado a {mask_phone(from_number)} (respuesta automática)",
                 details={
-                    "to": from_number,
+                    "to_masked": mask_phone(from_number),
                     "from": to_number,
-                    "response_preview": result.get("response", "")[:100],
                     "message_sid": result.get("whatsapp_status", {}).get("message_sid"),
                     "executed_handler": "TWILIO_WEBHOOK_HANDLER",
                 },
@@ -484,8 +486,8 @@ async def twilio_webhook_handler(request: Request):
         
         return {
             "received": True,
-            "processed": True,
-            "from": from_number,
+            "processed": bool(result.get("processed", False)),
+            "auto_reply": bool(result.get("auto_reply", False)),
             "message_sid": message_sid,
             "agent_response": result.get("success", False),
         }

@@ -1,5 +1,5 @@
 """Reservas web + TPV: multi-tenant por company_id, con fallback a user_id para filas legado."""
-from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey
+from sqlalchemy import Boolean, Column, Integer, String, DateTime, Date, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.base import Base
@@ -24,6 +24,10 @@ class Reservation(Base):
     status = Column(String(20), nullable=False, default="pending", index=True)  # pending | confirmed | cancelled | no_show | seated
     table_id = Column(String(50), nullable=True)
     table_name = Column(String(100), nullable=True)
+
+    # Consentimiento explicito del cliente para la confirmacion por WhatsApp (alembic 0069).
+    whatsapp_consent = Column(Boolean, nullable=True, default=False, server_default="0")
+    whatsapp_consent_at = Column(DateTime(timezone=True), nullable=True)
 
     source = Column(String(20), nullable=False, default="web")  # web | manual
     confirmed_at = Column(DateTime(timezone=True), nullable=True)

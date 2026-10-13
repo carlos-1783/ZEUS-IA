@@ -133,6 +133,7 @@ def ensure_schema_patches():
         _migrate_zeus_approvals_execution_columns()
         _migrate_zeus_approvals_chat_columns()
         _migrate_zeus_approvals_executing_at()
+        _migrate_consent_columns()
         _migrate_role_check_constraints()
         _migrate_rename_misleading_company_id_columns()
         _migrate_company_billing_fields()
@@ -198,6 +199,7 @@ def create_tables():
             from app.models.thalos_workspace_item import ThalosWorkspaceItem
             from app.models.workspace_file import WorkspaceFile
             from app.models.stored_file import StoredFile
+            from app.models.outbound_message import OutboundMessage
             from app.models.workspace_playbook import WorkspacePlaybook
             from app.models.ops_route import OpsRoute
             from app.models.zeus_transaction import ZeusTransaction
@@ -874,6 +876,46 @@ def _migrate_zeus_approvals_executing_at():
         print(f"[MIGRATION] [OK] {table_name}.executing_at agregada")
     except Exception as e:
         print(f"[MIGRATION] [WARN] zeus_pending_approvals executing_at: {e}")
+
+
+def _migrate_consent_columns():
+    """Consentimiento de envios (alembic 0069): columnas en customers y reservations. Idempotente.
+    Red de seguridad si `alembic upgrade head` falla en el arranque: sin estas columnas cualquier
+    consulta ORM de clientes/reservas fallaria."""
+    from sqlalchemy import inspect, text
+
+    is_postgres = "postgres" in settings.DATABASE_URL.lower()
+    ts = "TIMESTAMP WITH TIME ZONE" if is_postgres else "DATETIME"
+    wanted = {
+        "customers": (
+            ("marketing_consent", "BOOLEAN DEFAULT FALSE" if is_postgres else "BOOLEAN DEFAULT 0"),
+            ("marketing_consent_at", ts),
+            ("marketing_consent_source", "VARCHAR(50)"),
+            ("marketing_unsubscribed_at", ts),
+        ),
+        "reservations": (
+            ("whatsapp_consent", "BOOLEAN DEFAULT FALSE" if is_postgres else "BOOLEAN DEFAULT 0"),
+            ("whatsapp_consent_at", ts),
+        ),
+    }
+    try:
+        inspector = inspect(engine)
+        tables = set(inspector.get_table_names())
+        for table_name, cols in wanted.items():
+            if table_name not in tables:
+                continue
+            existing = {c["name"] for c in inspector.get_columns(table_name)}
+            for col, ddl in cols:
+                if col in existing:
+                    continue
+                with engine.begin() as conn:
+                    if is_postgres:
+                        conn.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "{col}" {ddl}'))
+                    else:
+                        conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col} {ddl}"))
+                print(f"[MIGRATION] [OK] {table_name}.{col} agregada")
+    except Exception as e:
+        print(f"[MIGRATION] [WARN] columnas de consentimiento: {e}")
 
 
 def _migrate_agent_activities_company_id():

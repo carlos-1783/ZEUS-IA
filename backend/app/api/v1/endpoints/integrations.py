@@ -19,6 +19,11 @@ from services.thalos_request_guard_v1 import thalos_request_guard
 from app.core.auth import require_scopes
 from app.core.auth import get_current_active_superuser
 from app.models.user import User
+from app.models.company import Company
+from app.db.session import get_db
+from sqlalchemy.orm import Session
+import services.crm_office_service as crm_svc
+import services.outbound_consent_v1 as consent_svc
 # Tabla de precios oficial (misma fuente de verdad que usa
 # /onboarding/create-account al verificar el pago) -- se reutiliza aquí
 # para calcular el importe del checkout público en el servidor, nunca
@@ -84,22 +89,70 @@ class PublicCheckoutPaymentIntent(BaseModel):
 # WHATSAPP ENDPOINTS
 # ============================================================================
 
+async def _direct_send(db: Session, user: User, channel: str, recipient: str, send_coro_factory):
+    """Envio directo con destinatario legitimo + limite por empresa + registro.
+
+    - Superusuario: envio de plataforma (company_id NULL), a cualquier destinatario.
+    - Resto: solo clientes de SU empresa con consentimiento comercial y sin baja, o empleados
+      activos de su empresa (403 y registro del bloqueo en otro caso). A los clientes se les
+      anade siempre el enlace de baja; sin PUBLIC_BASE_URL no se envia (503).
+    - Limite de envios directos por empresa y canal por hora (429), contado en outbound_messages.
+    """
+    target = consent_svc.resolve_direct_recipient(db, user, channel, recipient)
+    company_id = target["company_id"]
+    purpose = "platform" if target["kind"] == "platform" else "direct"
+    if company_id is not None:
+        consent_svc.enforce_company_direct_limit(db, company_id, channel)
+    unsubscribe = None
+    if target["kind"] == "customer":
+        unsubscribe = consent_svc.unsubscribe_url(company_id, target["ref_id"])
+        if unsubscribe is None:
+            consent_svc.record_outbound(
+                db, company_id=company_id, user_id=user.id, channel=channel, purpose=purpose,
+                recipient=recipient, status_value="blocked", detail="sin PUBLIC_BASE_URL para el enlace de baja",
+                recipient_kind=target["kind"], recipient_ref_id=target["ref_id"],
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="No se puede enviar a clientes sin enlace de baja: PUBLIC_BASE_URL no esta configurado.",
+            )
+    try:
+        result = await send_coro_factory(unsubscribe)
+    except Exception as exc:
+        logger.exception("envio directo %s company_id=%s fallo", channel, company_id)
+        result = {"success": False, "error": type(exc).__name__}
+    ok = bool(result.get("success"))
+    consent_svc.record_outbound(
+        db, company_id=company_id, user_id=user.id, channel=channel, purpose=purpose,
+        recipient=recipient, status_value="sent" if ok else "failed",
+        detail=None if ok else str(result.get("error") or "error del proveedor"),
+        recipient_kind=target["kind"], recipient_ref_id=target["ref_id"],
+    )
+    if not ok:
+        raise HTTPException(status_code=502, detail=result.get("error") or "El proveedor no acepto el envio.")
+    return result
+
+
 @router.post("/whatsapp/send", dependencies=[Depends(thalos_request_guard)])
 async def send_whatsapp(
     message: WhatsAppMessage,
-    _: User = Depends(require_scopes(["marketing:write"])),
+    current_user: User = Depends(require_scopes(["marketing:write"])),
+    db: Session = Depends(get_db),
 ):
-    """Enviar mensaje de WhatsApp"""
-    result = await whatsapp_service.send_message(
-        to_number=message.to_number,
-        message=message.message,
-        media_url=message.media_url
-    )
-    
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
-    
-    return result
+    """Enviar WhatsApp a un cliente (con consentimiento) o empleado de tu empresa."""
+    if not whatsapp_service.is_configured():
+        raise HTTPException(status_code=503, detail="WhatsApp no configurado (Twilio o TWILIO_WHATSAPP_ENABLED).")
+    to_number = consent_svc.normalize_phone(message.to_number)
+
+    async def _send(unsubscribe):
+        body = message.message
+        if unsubscribe:
+            body = f"{body}\n\nPara no recibir mas mensajes: {unsubscribe}"
+        return await whatsapp_service.send_message(
+            to_number=to_number, message=body, media_url=message.media_url
+        )
+
+    return await _direct_send(db, current_user, consent_svc.CHANNEL_WHATSAPP, message.to_number, _send)
 
 @router.post("/whatsapp/webhook")
 async def whatsapp_webhook(request: Request):
@@ -117,10 +170,12 @@ async def whatsapp_webhook(request: Request):
         raise HTTPException(status_code=400, detail="Missing required fields")
     
     # Procesar mensaje con agente
+    # Sin mapeo numero -> empresa no hay respuesta automatica (auditoria #16): solo se registra.
     result = await whatsapp_service.process_incoming_message(
         from_number=from_number,
         message_body=message_body,
-        agent_name="ZEUS CORE"  # Por defecto, ZEUS responde
+        agent_name="ZEUS CORE",
+        to_number=form_data.get("To", ""),
     )
     
     return result
@@ -139,20 +194,30 @@ async def whatsapp_status(
 @router.post("/email/send", dependencies=[Depends(thalos_request_guard)])
 async def send_email(
     message: EmailMessage,
-    _: User = Depends(require_scopes(["marketing:write"])),
+    current_user: User = Depends(require_scopes(["marketing:write"])),
+    db: Session = Depends(get_db),
 ):
-    """Enviar email"""
-    result = await email_service.send_email(
-        to_email=message.to_email,
-        subject=message.subject,
-        content=message.content,
-        content_type=message.content_type
-    )
-    
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error"))
-    
-    return result
+    """Enviar email a un cliente (con consentimiento) o empleado de tu empresa."""
+    if not (email_service.is_configured() or email_service.is_resend_configured() or email_service.is_smtp_configured()):
+        raise HTTPException(status_code=503, detail="Email no configurado (SMTP, SENDGRID_API_KEY o RESEND_API_KEY).")
+
+    async def _send(unsubscribe):
+        content = message.content
+        if unsubscribe:
+            company = db.get(Company, crm_svc.primary_company_id(db, current_user))
+            name = (getattr(company, "company_name", None) or "este negocio").strip()
+            if message.content_type == "text/html":
+                content = content + consent_svc.unsubscribe_footer_html(unsubscribe, name)
+            else:
+                content = f"{content}\n\n--\nPara darte de baja de las comunicaciones de {name}: {unsubscribe}"
+        return await email_service.send_email(
+            to_email=message.to_email,
+            subject=message.subject,
+            content=content,
+            content_type=message.content_type,
+        )
+
+    return await _direct_send(db, current_user, consent_svc.CHANNEL_EMAIL, str(message.to_email), _send)
 
 @router.post("/email/webhook")
 async def email_webhook(request: Request):

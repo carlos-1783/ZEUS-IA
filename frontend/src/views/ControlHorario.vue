@@ -344,6 +344,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
+import { formatServerTime, formatServerDateTime } from '@/utils/serverDate'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -435,11 +436,7 @@ const jornadaActiva = computed(() => !!(authStore.user && authStore.user.jornada
 const entradaLabel = computed(() => {
   const j = authStore.user?.jornada
   if (!j?.check_in_time) return ''
-  try {
-    return new Date(j.check_in_time).toLocaleString()
-  } catch {
-    return ''
-  }
+  return formatServerDateTime(j.check_in_time)
 })
 
 const isMethodEnabled = (methodId) => {
@@ -737,15 +734,8 @@ const getInitials = (name) => {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
-const formatTime = (timeStr) => {
-  if (!timeStr) return ''
-  try {
-    const date = new Date(timeStr)
-    return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return timeStr
-  }
-}
+// Hora local (zona del navegador) en es-ES; el backend envía ISO en UTC sin zona.
+const formatTime = (timeStr) => formatServerTime(timeStr) || (timeStr ? String(timeStr) : '')
 
 const getEmployeeName = (employeeId) => {
   const emp = employees.value.find(e => e.id === employeeId)

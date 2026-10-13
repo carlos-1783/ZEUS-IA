@@ -81,25 +81,25 @@
           <div class="stat-card">
             <div class="stat-icon">💰</div>
             <div class="stat-value">€{{ formatCurrency(stats.monthlyRevenue) }}</div>
-            <div class="stat-label">Ingresos Mensuales</div>
+            <div class="stat-label">Cuota mensual estimada (según plan)</div>
           </div>
           
           <div class="stat-card">
             <div class="stat-icon">📈</div>
             <div class="stat-value">€{{ formatCurrency(stats.totalRevenue) }}</div>
-            <div class="stat-label">Ingresos Totales</div>
+            <div class="stat-label">Estimado: altas + 12 meses de cuota</div>
           </div>
           
           <div class="stat-card">
             <div class="stat-icon">🎯</div>
             <div class="stat-value">{{ formatNumber(stats.activeSubscriptions) }}</div>
-            <div class="stat-label">Suscripciones Activas</div>
+            <div class="stat-label">Cuentas activas</div>
           </div>
         </div>
 
         <!-- Revenue Chart -->
         <div class="chart-section">
-          <h3>Ingresos por Mes</h3>
+          <h3>Ingresos estimados por mes (precio de plan, no cobros reales de Stripe)</h3>
           <div class="chart-container">
             <canvas ref="revenueChartCanvas"></canvas>
             <div v-if="loading && !chartReady" class="chart-loading">
@@ -303,9 +303,9 @@
         
         <div class="revenue-summary">
           <div class="revenue-card">
-            <h3>Este mes</h3>
+            <h3>Cuota mensual estimada</h3>
             <p class="amount">€{{ formatCurrency(stats.monthlyRevenue) }}</p>
-            <p class="detail">{{ formatNumber(stats.activeSubscriptions) }} suscripciones activas</p>
+            <p class="detail">{{ formatNumber(stats.activeSubscriptions) }} cuentas activas · calculado con el precio de cada plan, no con cobros reales</p>
           </div>
           
           <div class="revenue-card">
@@ -383,21 +383,14 @@
           </div>
         </div>
 
+        <!-- Notificaciones por email al admin: no existe endpoint (/admin/settings daba 404)
+             ni envío detrás; antes el botón "guardaba localmente" y decía que se había guardado. -->
         <div class="settings-section">
           <h3>Notificaciones</h3>
-          <label class="checkbox-label">
-            <input type="checkbox" v-model="settings.emailOnNewCustomer" />
-            <span>Email cuando hay nuevo cliente</span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" v-model="settings.emailOnPaymentFailed" />
-            <span>Email cuando falla un pago</span>
-          </label>
+          <p class="integration-hint">
+            No disponible: ZEUS todavía no envía avisos por email al administrador (nuevo cliente, pago fallido).
+          </p>
         </div>
-
-        <button class="btn-save" @click="saveSettings">
-          💾 Guardar configuración
-        </button>
       </section>
     </main>
   </div>
@@ -483,12 +476,6 @@ const revenueByPlan = ref([])
 const revenueChartCanvas = ref(null)
 let revenueChart = null
 const chartReady = ref(false)
-
-// Settings
-const settings = ref({
-  emailOnNewCustomer: true,
-  emailOnPaymentFailed: true
-})
 
 // Integration status
 const integrationStatus = ref({
@@ -1157,31 +1144,6 @@ const toggleCustomerStatus = async (customer) => {
   } catch (error) {
     console.error('Error cambiando estado del cliente:', error)
     alert('❌ ' + (error.message || 'No se pudo cambiar el estado'))
-  }
-}
-
-const saveSettings = async () => {
-  try {
-    const token = authStore.getToken ? authStore.getToken() : authStore.token
-    if (!token) {
-      alert('Error: No hay token de autenticación')
-      return
-    }
-    
-    const api = (await import('@/services/api')).default
-    await api.post('/api/v1/admin/settings', {
-      notifications: {
-        email_on_new_customer: settings.value.emailOnNewCustomer,
-        email_on_payment_failed: settings.value.emailOnPaymentFailed
-      }
-    }, token)
-    
-    alert('✅ Configuración guardada correctamente')
-  } catch (error) {
-    console.error('Error guardando configuración:', error)
-    // Fallback a localStorage
-    localStorage.setItem('zeus_admin_settings', JSON.stringify(settings.value))
-    alert('✅ Configuración guardada localmente')
   }
 }
 

@@ -12,6 +12,7 @@ from app.core.auth import get_current_active_user
 from app.db.session import get_db
 from app.models.user import User
 from services import crm_office_service as crm_svc
+from services.crm_export_audit import log_personal_data_export
 from services.zeus_office_mode import OFFICE_MODE_V1
 
 router = APIRouter()
@@ -86,6 +87,7 @@ def export_entity_excel(
     else:
         raise HTTPException(status_code=404, detail="Entidad no exportable")
 
+    log_personal_data_export(db, current_user, entity=entity, fmt="xlsx", rows=max(ws.max_row - 1, 0))
     buffer = BytesIO()
     wb.save(buffer)
     buffer.seek(0)

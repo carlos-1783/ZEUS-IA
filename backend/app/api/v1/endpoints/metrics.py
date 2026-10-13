@@ -15,6 +15,48 @@ from services.chain_log import business_activities, is_success_status
 
 router = APIRouter()
 
+NO_DATA = "Sin datos"
+
+
+def _avg_response_seconds(rows) -> Optional[float]:
+    times = [
+        (a.completed_at - a.created_at).total_seconds()
+        for a in rows
+        if a.completed_at and a.created_at
+    ]
+    return (sum(times) / len(times)) if times else None
+
+
+def _success_pct(rows) -> Optional[float]:
+    return (len([a for a in rows if is_success_status(a.status)]) / len(rows) * 100) if rows else None
+
+
+def _real_trends(current: list, previous: list) -> Dict[str, Any]:
+    """Tendencias SOLO contra el periodo anterior real del mismo tenant.
+
+    Antes: "ahorro" = exitos x 50 EUR inventados, "tendencia de exito" contra un 96 % fijo y
+    "tendencia de respuesta" contra 1 s fijo. Sin base real para un ahorro en euros, se
+    devuelve "Sin datos" en lugar de inventarlo.
+    """
+    out: Dict[str, Any] = {"cost_savings": NO_DATA, "savings_trend": NO_DATA}
+    if previous:
+        change = (len(current) - len(previous)) / len(previous) * 100
+        out["interactions_trend"] = f"{change:+.0f}% vs periodo anterior" if change else "estable"
+    else:
+        out["interactions_trend"] = NO_DATA
+    cur_rt, prev_rt = _avg_response_seconds(current), _avg_response_seconds(previous)
+    if cur_rt is not None and prev_rt:
+        out["response_trend"] = f"{(cur_rt - prev_rt) / prev_rt * 100:+.0f}% vs periodo anterior"
+    else:
+        out["response_trend"] = NO_DATA
+    cur_ok, prev_ok = _success_pct(current), _success_pct(previous)
+    if cur_ok is not None and prev_ok is not None:
+        out["success_trend"] = f"{cur_ok - prev_ok:+.1f} pp vs periodo anterior"
+    else:
+        out["success_trend"] = NO_DATA
+    return out
+
+
 @router.get("/dashboard")
 async def get_dashboard_metrics(
     days: int = Query(30, ge=1, le=365),
@@ -77,46 +119,39 @@ async def get_dashboard_metrics(
 
         avg_response = sum(response_times) / len(response_times) if response_times else 0
 
-        # Calcular ahorro de costos (estimado)
-        # Cada interacción exitosa ahorra ~€50 en trabajo manual
-        cost_savings = completed * 50
-
-        # Calcular tendencias (comparar con período anterior)
+        # Tendencias: comparar con el período anterior real del mismo tenant
         prev_start = start_date - timedelta(days=days)
         prev_activities_query = db.query(AgentActivity).filter(
             AgentActivity.created_at >= prev_start,
             AgentActivity.created_at < start_date,
             tenant_filter,
         )
-        prev_activities = len(business_activities(prev_activities_query.all()))  # J7: sin chain_*
-
-        interactions_change = ((total_interactions - prev_activities) / prev_activities * 100) if prev_activities > 0 else 0
+        prev_activities = business_activities(prev_activities_query.all())  # J7: sin chain_*
 
         return {
             "success": True,
             "total_interactions": total_interactions,
-            "avg_response_time": f"{avg_response:.1f}s",
-            "cost_savings": f"€{cost_savings:,}",
-            "success_rate": f"{success_rate:.1f}%",
-            "interactions_trend": f"{interactions_change:+.0f}% this week" if interactions_change != 0 else "stable",
-            "response_trend": f"-{abs(avg_response-1):.0f}% faster" if avg_response < 1 else "stable",
-            "savings_trend": f"+{interactions_change:+.0f}% this month" if interactions_change > 0 else "stable",
-            "success_trend": f"+{success_rate-96:.1f}% improvement" if success_rate > 96 else "stable"
+            "avg_response_time": f"{avg_response:.1f}s" if response_times else NO_DATA,
+            "success_rate": f"{success_rate:.1f}%" if total_interactions else NO_DATA,
+            **_real_trends(activities, prev_activities),
         }
 
     except Exception as e:
-        print(f"❌ Error calculando métricas: {e}")
-        # Devolver valores por defecto si hay error
+        import logging
+
+        logging.getLogger(__name__).error("get_dashboard_metrics: %s", e, exc_info=True)
+        # Sin falso éxito ni ceros que parezcan medidos.
         return {
-            "success": True,
-            "total_interactions": 0,
-            "avg_response_time": "0.0s",
-            "cost_savings": "€0",
-            "success_rate": "0%",
-            "interactions_trend": "No data",
-            "response_trend": "No data",
-            "savings_trend": "No data",
-            "success_trend": "No data"
+            "success": False,
+            "error": "No se pudieron calcular las métricas.",
+            "total_interactions": None,
+            "avg_response_time": NO_DATA,
+            "cost_savings": NO_DATA,
+            "success_rate": NO_DATA,
+            "interactions_trend": NO_DATA,
+            "response_trend": NO_DATA,
+            "savings_trend": NO_DATA,
+            "success_trend": NO_DATA,
         }
 
 @router.get("/performance")
@@ -209,9 +244,6 @@ async def get_dashboard_summary(
         
         avg_response = sum(response_times) / len(response_times) if response_times else 0
         
-        # Calcular ahorro de costos (estimado)
-        cost_savings = completed * 50
-        
         # Calcular tendencias (comparar con período anterior)
         prev_start = start_date - timedelta(days=days)
         prev_activities_query = db.query(AgentActivity).filter(
@@ -223,10 +255,8 @@ async def get_dashboard_summary(
             AgentActivity.user_email == current_user.email
         )
         
-        prev_activities = len(business_activities(prev_activities_query.all()))  # J7: sin chain_*
-        
-        interactions_change = ((total_interactions - prev_activities) / prev_activities * 100) if prev_activities > 0 else 0
-        
+        prev_activities = business_activities(prev_activities_query.all())  # J7: sin chain_*
+
         tpv_business_profile = getattr(current_user, 'tpv_business_profile', None) if not is_superuser else None
         control_horario_business_profile = getattr(current_user, 'control_horario_business_profile', None) if not is_superuser else None
 
@@ -257,13 +287,9 @@ async def get_dashboard_summary(
             "company_type": company_cfg.get("company_type"),
             "metrics": {
                 "total_interactions": total_interactions,
-                "avg_response_time": f"{avg_response:.1f}s",
-                "cost_savings": f"€{cost_savings:,}",
-                "success_rate": f"{success_rate:.1f}%",
-                "interactions_trend": f"{interactions_change:+.0f}%" if interactions_change != 0 else "stable",
-                "response_trend": f"-{abs(avg_response-1):.0f}% faster" if avg_response < 1 else "stable",
-                "savings_trend": f"+{interactions_change:+.0f}%" if interactions_change > 0 else "stable",
-                "success_trend": f"+{success_rate-96:.1f}%" if success_rate > 96 else "stable",
+                "avg_response_time": f"{avg_response:.1f}s" if response_times else NO_DATA,
+                "success_rate": f"{success_rate:.1f}%" if total_interactions else NO_DATA,
+                **_real_trends(activities, prev_activities),
                 "total_revenue": analytics["financial"]["total_revenue"],
                 "sales_count": analytics["financial"]["sales_count"],
                 "avg_ticket": analytics["financial"]["avg_ticket"],
@@ -301,13 +327,13 @@ async def get_dashboard_summary(
             },
             "metrics": {
                 "total_interactions": 0,
-                "avg_response_time": "0.0s",
-                "cost_savings": "€0",
-                "success_rate": "0%",
-                "interactions_trend": "No data",
-                "response_trend": "No data",
-                "savings_trend": "No data",
-                "success_trend": "No data"
+                "avg_response_time": NO_DATA,
+                "cost_savings": NO_DATA,
+                "success_rate": NO_DATA,
+                "interactions_trend": NO_DATA,
+                "response_trend": NO_DATA,
+                "savings_trend": NO_DATA,
+                "success_trend": NO_DATA
             },
             "available_modules": (
                 get_company_config_for_user(db, current_user)["modules"]

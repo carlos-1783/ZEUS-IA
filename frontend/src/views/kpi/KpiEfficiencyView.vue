@@ -3,19 +3,19 @@
     <div v-if="metrics" class="efficiency-grid">
       <div class="metric-card">
         <span class="label">Eficiencia</span>
-        <span class="value">{{ metrics.efficiency }}%</span>
+        <span class="value">{{ metrics.efficiency == null ? 'Sin datos' : `${metrics.efficiency}%` }}</span>
       </div>
       <div class="metric-card">
         <span class="label">Eventos 24h</span>
-        <span class="value">{{ metrics.tasks24h }}</span>
+        <span class="value">{{ metrics.tasks24h ?? 'Sin datos' }}</span>
       </div>
       <div class="metric-card">
         <span class="label">Éxitos 24h</span>
-        <span class="value">{{ metrics.success_events_24h }}</span>
+        <span class="value">{{ metrics.success_events_24h ?? 'Sin datos' }}</span>
       </div>
       <div class="metric-card">
         <span class="label">Fuente</span>
-        <span class="value small">{{ metrics.real_data ? 'BD real' : 'fallback' }}</span>
+        <span class="value small">{{ metrics.real_data ? 'BD real' : 'No disponible' }}</span>
       </div>
     </div>
   </KpiPageShell>

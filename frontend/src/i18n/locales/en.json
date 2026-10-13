@@ -24,7 +24,7 @@
     "language": "Language",
     "security": "Security",
     "twoFactor": "Two-factor authentication",
-    "twoFactorHint": "Stored on your account; full verification flow may be enabled later.",
+    "twoFactorHint": "Not available yet: ZEUS does not have two-step verification at sign-in, so it cannot be enabled.",
     "sessionTimeout": "Idle sign-out",
     "sessionTimeoutHint": "After this period without activity, your session closes on this device.",
     "minutes": "minutes",

@@ -16,6 +16,20 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# No existe flujo real de verificacion en dos pasos (ni TOTP ni codigo por SMS/email en el
+# login). Guardar "activado" daba al usuario una proteccion que no existe: se bloquea con
+# 501 y la respuesta refleja el estado real (desactivada).
+TWO_FACTOR_NOT_AVAILABLE = (
+    "La verificación en dos pasos todavía no está disponible en ZEUS; "
+    "no se puede activar hasta que exista el flujo real de verificación en el login."
+)
+
+
+def _real_settings(row) -> Dict[str, Any]:
+    out = uss.settings_to_api(row)
+    out["two_factor_enabled"] = False
+    return out
+
 
 class UserSettingsResponse(BaseModel):
     language: str
@@ -37,7 +51,7 @@ def get_user_settings(
     current_user: User = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     row = uss.get_or_create_user_settings(db, current_user.id)
-    out = uss.settings_to_api(row)
+    out = _real_settings(row)
     logger.info("GET /settings user_id=%s payload=%s", current_user.id, out)
     return out
 
@@ -49,9 +63,12 @@ def patch_user_settings_endpoint(
     current_user: User = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     data = body.model_dump(exclude_unset=True)
+    if data.get("two_factor_enabled") is True:
+        logger.warning("PATCH /settings user_id=%s two_factor_enabled=true bloqueado: 2FA no implementado", current_user.id)
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=TWO_FACTOR_NOT_AVAILABLE)
     if not data:
         row = uss.get_or_create_user_settings(db, current_user.id)
-        return uss.settings_to_api(row)
+        return _real_settings(row)
     try:
         row = uss.patch_user_settings(
             db,
@@ -76,6 +93,6 @@ def patch_user_settings_endpoint(
                 detail=f"session_timeout debe estar entre {uss.SESSION_TIMEOUT_MIN} y {uss.SESSION_TIMEOUT_MAX} minutos.",
             )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Datos no válidos")
-    out = uss.settings_to_api(row)
+    out = _real_settings(row)
     logger.info("PATCH /settings user_id=%s body=%s result=%s", current_user.id, data, out)
     return out

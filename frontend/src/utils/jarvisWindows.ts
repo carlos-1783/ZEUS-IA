@@ -162,8 +162,10 @@ export function shapeData(
   }
 }
 
+// Estados de bloqueo honesto del backend (ChatResponse.status / execution.status):
+// blocked_* (modulo, guard THALOS) y not_available (falta modelo/integracion real).
 function isBlockedStatus(s: unknown): boolean {
-  return typeof s === 'string' && /^blocked/i.test(s);
+  return typeof s === 'string' && (/^blocked/i.test(s) || s === 'not_available');
 }
 
 let seq = 0;

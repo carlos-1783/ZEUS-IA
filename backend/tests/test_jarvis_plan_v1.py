@@ -165,7 +165,7 @@ def _user(db, company_type="office", superuser=False, name=None):
              full_name="J9b", is_active=True, is_superuser=superuser)
     db.add(u)
     db.flush()
-    db.add(Customer(name="Cli", email=f"cli_{suf}@example.test", company_id=co.id))
+    db.add(Customer(name="Cli", email=f"cli_{suf}@example.test", company_id=co.id, marketing_consent=True))
     db.add(UserCompany(user_id=u.id, company_id=co.id, role="owner"))
     db.commit()
     db.refresh(u)

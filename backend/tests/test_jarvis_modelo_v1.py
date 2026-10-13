@@ -117,7 +117,7 @@ def _seed(db):
     co = Company(company_name=f"J8B {suf}", slug=f"j8b-{suf}")
     db.add(co)
     db.flush()
-    db.add(Customer(name="Cli", email=f"cli_{suf}@example.test", company_id=co.id))
+    db.add(Customer(name="Cli", email=f"cli_{suf}@example.test", company_id=co.id, marketing_consent=True))
     db.add(UserCompany(user_id=u.id, company_id=co.id, role="owner"))
     db.commit()
     db.refresh(u)

@@ -648,16 +648,20 @@ const handleExportData = async () => {
 }
 
 // Métricas reales desde backend
-const dashboardMetrics = ref({
-  totalInteractions: 0,
-  avgResponseTime: '0.0s',
-  costSavings: 'Sin datos',
-  successRate: '0%',
-  interactionsTrend: '0%',
-  responseTrend: '0%',
-  savingsTrend: '0%',
-  successTrend: '0%'
+// 'Sin datos' hasta que el backend devuelva un valor real (o si falla la carga): nunca un cero inventado.
+const NO_DATA = 'Sin datos'
+const EMPTY_DASHBOARD_METRICS = Object.freeze({
+  totalInteractions: NO_DATA,
+  avgResponseTime: NO_DATA,
+  costSavings: NO_DATA,
+  successRate: NO_DATA,
+  interactionsTrend: NO_DATA,
+  responseTrend: NO_DATA,
+  savingsTrend: NO_DATA,
+  successTrend: NO_DATA
 })
+const dashboardMetrics = ref({ ...EMPTY_DASHBOARD_METRICS })
+const metricOrNoData = (v) => (v === null || v === undefined || v === '' ? NO_DATA : v)
 
 // null = "sin datos" (aún no cargado o el backend no pudo calcularlo): nunca un número fijo.
 const EMPTY_EXECUTIVE = Object.freeze({
@@ -797,19 +801,22 @@ const loadDashboardMetrics = async () => {
 
     const api = (await import('@/services/api')).default
     const data = await api.get('/api/v1/metrics/summary?days=30').catch(() => null)
-    if (!data) return
+    if (!data || !data.success) {
+      dashboardMetrics.value = { ...EMPTY_DASHBOARD_METRICS }
+      return
+    }
     
     if (data.success && data.metrics) {
       // Actualizar métricas
       dashboardMetrics.value = {
-        totalInteractions: data.metrics.total_interactions || 0,
-        avgResponseTime: data.metrics.avg_response_time || '0.0s',
-        costSavings: data.metrics.cost_savings || 'Sin datos',
-        successRate: data.metrics.success_rate || '0%',
-        interactionsTrend: data.metrics.interactions_trend || '0%',
-        responseTrend: data.metrics.response_trend || '0%',
-        savingsTrend: data.metrics.savings_trend || '0%',
-        successTrend: data.metrics.success_trend || '0%'
+        totalInteractions: metricOrNoData(data.metrics.total_interactions),
+        avgResponseTime: metricOrNoData(data.metrics.avg_response_time),
+        costSavings: metricOrNoData(data.metrics.cost_savings),
+        successRate: metricOrNoData(data.metrics.success_rate),
+        interactionsTrend: metricOrNoData(data.metrics.interactions_trend),
+        responseTrend: metricOrNoData(data.metrics.response_trend),
+        savingsTrend: metricOrNoData(data.metrics.savings_trend),
+        successTrend: metricOrNoData(data.metrics.success_trend)
       }
 
       if (data.company_type) {
@@ -958,16 +965,7 @@ watch(isAdmin, (isAdmin) => {
 }, { immediate: true })
 
 const resetDashboardSessionState = () => {
-  dashboardMetrics.value = {
-    totalInteractions: 0,
-    avgResponseTime: '0.0s',
-    costSavings: 'Sin datos',
-    successRate: '0%',
-    interactionsTrend: '0%',
-    responseTrend: '0%',
-    savingsTrend: '0%',
-    successTrend: '0%',
-  }
+  dashboardMetrics.value = { ...EMPTY_DASHBOARD_METRICS }
   executiveAnalytics.value = { ...EMPTY_EXECUTIVE }
   financialMetrics.value = {
     totalRevenue: 0,

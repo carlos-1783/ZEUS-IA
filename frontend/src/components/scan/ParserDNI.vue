@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { scanFlowApi } from '@/api/scanFlow'
 import { capturePhotoBase64, getScanRuntime } from '@/services/scanHardware'
 
@@ -14,7 +14,9 @@ const email = ref('')
 const phone = ref('')
 const status = ref('Pega las 3 líneas completas del MRZ o usa la cámara del reverso')
 const loading = ref(false)
-const lastResult = ref<Record<string, unknown> | null>(null)
+const lastResult = ref<Record<string, any> | null>(null)
+// Resumen legible para el operario (antes se mostraba el JSON en crudo).
+const resultIdentity = computed<Record<string, any>>(() => (lastResult.value?.identity as Record<string, any>) || {})
 const runtime = ref({ native: false, platform: 'web', nfcMode: 'manual' as string })
 
 const videoRef = ref<HTMLVideoElement | null>(null)
@@ -201,7 +203,7 @@ onBeforeUnmount(stopCamera)
 
     <div class="row">
       <div class="field">
-        <label>Email (opcional)</label>
+        <label>Email del cliente (obligatorio si es nuevo)</label>
         <input v-model="email" type="email" class="input" placeholder="cliente@empresa.com" />
       </div>
       <div class="field">
@@ -210,7 +212,14 @@ onBeforeUnmount(stopCamera)
       </div>
     </div>
 
-    <pre v-if="lastResult" class="result">{{ JSON.stringify(lastResult, null, 2) }}</pre>
+    <dl v-if="lastResult" class="result">
+      <dt>Cliente</dt>
+      <dd>{{ resultIdentity.full_name || '—' }} · {{ lastResult.customer_created ? 'creado' : 'ya existía' }}</dd>
+      <dt>NIF</dt>
+      <dd>{{ resultIdentity.personal_number || 'no leído del documento' }}</dd>
+      <dt>Prioridad</dt>
+      <dd>{{ lastResult.customer_priority || 'sin calcular' }}</dd>
+    </dl>
   </div>
 </template>
 

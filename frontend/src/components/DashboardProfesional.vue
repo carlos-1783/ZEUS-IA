@@ -2228,6 +2228,43 @@ onUnmounted(() => {
   font-size: 14px;
 }
 
+/* Escritorio/tablet: avatar a la izquierda y datos a la derecha. En
+   columna, con tarjetas de ~140px de alto, la info (justify flex-end)
+   desbordaba hacia arriba y el avatar tapaba el nombre del agente. */
+@media (min-width: 769px) {
+  .agent-card--executive {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 16px;
+    padding-left: 16px;
+  }
+
+  .agent-card--executive .avatar-container {
+    margin: 0;
+  }
+
+  .agent-card--executive .agent-info {
+    flex: 1;
+    min-width: 0;
+    justify-content: center;
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .agent-card--executive .agent-name {
+    justify-content: flex-start;
+  }
+
+  .agent-card--executive .agent-stats {
+    justify-content: flex-start;
+  }
+
+  .agent-card--executive .btn-interact {
+    align-self: flex-start;
+  }
+}
+
 .agent-card--executive .agent-role {
   font-size: 11px;
 }

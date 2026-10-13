@@ -58,8 +58,10 @@ def _requires_phone_verification(user: User) -> bool:
     tpv_profile = str(getattr(user, "tpv_business_profile", "") or "").strip().lower()
     if tpv_profile in {"bar", "restaurante", "restaurant"}:
         return True
-    current = control_horario_service.business_profile
-    return current == HorarioBusinessProfile.RESTAURANTE
+    # Perfil del PROPIO usuario (antes: el del singleton global, que dependia de la
+    # ultima empresa que hubiera hecho una peticion en este proceso).
+    own = str(getattr(user, "control_horario_business_profile", "") or "").strip().lower()
+    return own == HorarioBusinessProfile.RESTAURANTE.value
 
 
 def _verify_employee_phone_or_raise(
@@ -319,39 +321,6 @@ def _infer_profile_from_company_context(db: Session, user: User) -> Optional[Hor
     return None
 
 
-def _load_schedules_into_runtime(db: Session, user: User) -> None:
-    """
-    Carga horarios desde BD al runtime del servicio para validación strict_check_in.
-    """
-    company_ids = _company_ids_for_control_horario(db, user)
-    if not company_ids:
-        control_horario_service.schedules = {}
-        return
-
-    rows = (
-        db.query(CompanyEmployee, EmployeeSchedule)
-        .join(EmployeeSchedule, EmployeeSchedule.employee_id == CompanyEmployee.employee_code)
-        .filter(
-            CompanyEmployee.company_id.in_(company_ids),
-            CompanyEmployee.is_active.is_(True),
-            EmployeeSchedule.is_active.is_(True),
-        )
-        .all()
-    )
-    schedules_map: Dict[str, List[Dict[str, Any]]] = {}
-    for _, sch in rows:
-        emp_id = str(sch.employee_id)
-        schedules_map.setdefault(emp_id, []).append(
-            {
-                "day_of_week": int(sch.day_of_week),
-                "start_time": str(sch.start_time),
-                "end_time": str(sch.end_time),
-                "shift_type": str(sch.shift_type or "completo"),
-            }
-        )
-    control_horario_service.schedules = schedules_map
-
-
 def _backfill_default_schedules_if_missing(db: Session, user: User) -> None:
     """
     Autorreparación para empleados antiguos sin turnos: crea L-V 09:00-17:00.
@@ -402,23 +371,30 @@ class CheckInRequest(BaseModel):
     location: Optional[str] = Field(None, description="Ubicación del fichaje")
     latitude: Optional[float] = Field(None, description="Latitud GPS")
     longitude: Optional[float] = Field(None, description="Longitud GPS")
+    pin: Optional[str] = Field(None, description="PIN del empleado (método code)")
+    qr_token: Optional[str] = Field(None, description="Código QR del centro (método qr)")
 
 
 class CheckOutRequest(BaseModel):
     employee_id: str = Field(..., description="ID del empleado")
-    method: Optional[str] = Field(None, description="Método de fichaje: face, qr, code, location, remote")
+    method: Optional[str] = Field(None, description="Método de fichaje: qr, code, location, remote")
     employee_phone: Optional[str] = Field(None, description="Móvil del empleado para verificación")
     location: Optional[str] = Field(None, description="Ubicación del fichaje")
     latitude: Optional[float] = Field(None, description="Latitud GPS")
     longitude: Optional[float] = Field(None, description="Longitud GPS")
+    pin: Optional[str] = Field(None, description="PIN del empleado (método code)")
+    qr_token: Optional[str] = Field(None, description="Código QR del centro (método qr)")
 
 
 class BreakToggleRequest(BaseModel):
     employee_id: str = Field(..., description="ID del empleado")
+    method: Optional[str] = Field(None, description="Método de fichaje: qr, code, location, remote")
     employee_phone: Optional[str] = Field(None, description="Móvil del empleado para verificación")
     location: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    pin: Optional[str] = None
+    qr_token: Optional[str] = None
 
 
 class SetBusinessProfileRequest(BaseModel):
@@ -487,7 +463,6 @@ async def _get_control_horario_info(current_user: User, db: Optional[Session] = 
             if inferred and (current is None or current == HorarioBusinessProfile.OFICINA):
                 control_horario_service.set_business_profile(inferred, user.id)
             _backfill_default_schedules_if_missing(db, user)
-            _load_schedules_into_runtime(db, user)
         else:
             if not control_horario_service.business_profile:
                 user_data = {
@@ -692,6 +667,95 @@ async def get_control_horario_status(
     }
 
 
+# --------------------------------------------------------------------------------------
+# Endpoints legacy de fichaje -> motor v1 (services/time_cost_engine_v1.register_checkin)
+#
+# Antes usaban el singleton global `control_horario_service` (active_records en memoria
+# por employee_id, compartido entre TODAS las empresas: dos empresas con el mismo codigo
+# de empleado se pisaban) y aceptaban cualquier metodo sin verificarlo. Ahora delegan en
+# el motor v1: empresa del usuario, PIN contra hash, QR firmado por empresa, lat/lng para
+# geolocalizacion, bloqueo biometrico 501, registro en BD y log. Sin estado en memoria.
+# Ruta recomendada: POST /api/v1/checkin.
+# --------------------------------------------------------------------------------------
+
+_LEGACY_TO_V1_METHOD = {
+    "code": "pin",
+    "pin": "pin",
+    "qr": "qr",
+    "location": "geo",
+    "on_site": "geo",
+    "geo": "geo",
+    "remote": "device",
+    "device": "device",
+}
+
+
+def _legacy_checkin(
+    *,
+    db: Session,
+    http_req: Request,
+    current_user: User,
+    employee_id: str,
+    checkin_type: str,
+    method: Optional[str],
+    employee_phone: Optional[str],
+    pin: Optional[str],
+    qr_token: Optional[str],
+    latitude: Optional[float],
+    longitude: Optional[float],
+    location: Optional[str],
+) -> Dict[str, Any]:
+    from app.core.security_middleware import get_real_client_ip
+    from services.time_cost_engine_v1 import register_checkin
+
+    cid = _primary_company_id(db, current_user)
+    reject_biometric(method, user_id=current_user.id, company_id=cid)
+    if not cid:
+        raise HTTPException(status_code=400, detail="No hay empresa asociada. Configura la empresa antes de fichar.")
+    raw_method = str(method or "remote").strip().lower()
+    v1_method = _LEGACY_TO_V1_METHOD.get(raw_method)
+    if v1_method is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Método inválido: {method}. Métodos válidos: qr, code, location, remote",
+        )
+    _verify_employee_phone_or_raise(db, user=current_user, employee_id=employee_id, employee_phone=employee_phone)
+
+    user_agent = (http_req.headers.get("user-agent") or "")[:512] or None
+    device_id = (http_req.headers.get("x-device-id") or "").strip() or (user_agent or "")[:128] or None
+    metadata: Dict[str, Any] = {"source": "control_horario_legacy"}
+    if pin:
+        metadata["pin"] = pin
+    if qr_token:
+        metadata["qr_token"] = qr_token
+    if latitude is not None:
+        metadata["lat"] = latitude
+    if longitude is not None:
+        metadata["lng"] = longitude
+    if location:
+        metadata["location"] = location[:255]
+    if device_id:
+        metadata["device_id"] = device_id
+
+    out = register_checkin(
+        db,
+        user=current_user,
+        company_id=cid,
+        employee_id=str(employee_id),
+        checkin_type=checkin_type,
+        method=v1_method,
+        metadata=metadata,
+        client_ip=get_real_client_ip(http_req),
+        device_id=device_id,
+        user_agent=user_agent,
+    )
+    logger.info(
+        "control_horario legacy -> v1 type=%s method=%s employee=%s company_id=%s user_id=%s",
+        checkin_type, v1_method, employee_id, cid, current_user.id,
+    )
+    return {**out, "success": True, "via": "/api/v1/checkin"}
+
+
 @router.post("/check-in")
 async def check_in(
     request: CheckInRequest,
@@ -699,200 +763,13 @@ async def check_in(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Registrar entrada de un empleado"""
-    reject_biometric(request.method, user_id=current_user.id, company_id=_primary_company_id(db, current_user))
-    try:
-        if not control_horario_service.business_profile:
-            await _get_control_horario_info(current_user, db)
-        _verify_employee_phone_or_raise(
-            db,
-            user=current_user,
-            employee_id=request.employee_id,
-            employee_phone=request.employee_phone,
-        )
-
-        sm.sync_runtime_active_records(db, current_user, control_horario_service)
-
-        pex = sm.geo_payload_for_event(request.latitude, request.longitude)
-        if (
-            getattr(settings, "CONTROL_HORARIO_FAIL_IF_OUTSIDE_ZONE", False)
-            and pex.get("geo_validated")
-            and pex.get("location_ok") is False
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Fichaje fuera de la zona permitida",
-            )
-
-        try:
-            method = CheckInMethod(request.method.lower())
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Método inválido: {request.method}. Métodos válidos: face, qr, code, location, remote, on_site",
-            )
-
-        method_val = method.value
-        if method_val == "on_site":
-            method_val = "location"
-
-        device = (http_req.headers.get("user-agent") or "")[:512] or None
-        cids = _company_ids_for_control_horario(db, current_user)
-        company_id_for_record = _primary_company_id(db, current_user)
-
-        existing_pre = (
-            db.query(TimeTrackingRecord)
-            .filter(
-                _tt_scope_filter(current_user, cids),
-                TimeTrackingRecord.employee_id == request.employee_id,
-                TimeTrackingRecord.status == RecordStatus.ACTIVE,
-            )
-            .order_by(TimeTrackingRecord.id.desc())
-            .first()
-        )
-
-        if existing_pre:
-            now_ts = datetime.now(timezone.utc)
-            existing_pre.check_in_time = now_ts
-            existing_pre.check_in_method = method_val
-            if request.location:
-                existing_pre.check_in_location = request.location
-            if request.latitude is not None:
-                existing_pre.check_in_latitude = request.latitude
-            if request.longitude is not None:
-                existing_pre.check_in_longitude = request.longitude
-            db.add(existing_pre)
-            db.flush()
-            db.commit()
-            sm.sync_runtime_active_records(db, current_user, control_horario_service)
-            if getattr(settings, "SMART_TIME_CONTROL_LOG_AFRODITA", True):
-                emit_time_control_event(
-                    user_id=current_user.id,
-                    user_email=current_user.email,
-                    company_id=_primary_company_id(db, current_user),
-                    employee_id=str(request.employee_id),
-                    event_type="check-in",
-                    record_id=existing_pre.id,
-                    details={"idempotent": True, "geo": pex or {}},
-                )
-            return {
-                "success": True,
-                "record": _db_row_to_service_record(existing_pre),
-                "message": "Entrada ya activa; datos actualizados",
-            }
-
-        result = control_horario_service.check_in(
-            employee_id=request.employee_id,
-            method=method,
-            location=request.location,
-            latitude=request.latitude,
-            longitude=request.longitude,
-            user_id=current_user.id,
-        )
-        
-        if not result.get("success"):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=result.get("error", "Error al registrar entrada"),
-            )
-
-        rec = result.get("record", {}) or {}
-        check_in_time = rec.get("check_in_time")
-        if isinstance(check_in_time, str):
-            check_in_time = datetime.fromisoformat(check_in_time.replace("Z", "+00:00"))
-        if not isinstance(check_in_time, datetime):
-            check_in_time = datetime.now(timezone.utc)
-
-        existing = (
-            db.query(TimeTrackingRecord)
-            .filter(
-                _tt_scope_filter(current_user, cids),
-                TimeTrackingRecord.employee_id == request.employee_id,
-                TimeTrackingRecord.status == RecordStatus.ACTIVE,
-            )
-            .order_by(TimeTrackingRecord.id.desc())
-            .first()
-        )
-        if existing:
-            existing.check_in_time = check_in_time
-            existing.check_in_method = rec.get("check_in_method", method_val)
-            existing.check_in_location = rec.get("check_in_location") or request.location
-            existing.check_in_latitude = rec.get("check_in_latitude") or request.latitude
-            existing.check_in_longitude = rec.get("check_in_longitude") or request.longitude
-            existing.irregularities = rec.get("irregularities") or []
-            existing.irregularities_count = int(rec.get("irregularities_count") or 0)
-            existing.is_late_check_in = bool(rec.get("is_late_check_in") or False)
-            db.add(existing)
-        else:
-            db.add(
-                TimeTrackingRecord(
-                    employee_id=request.employee_id,
-                    user_id=current_user.id,
-                    company_id=company_id_for_record,
-                    check_in_time=check_in_time,
-                    check_in_method=rec.get("check_in_method", method_val),
-                    check_in_location=rec.get("check_in_location") or request.location,
-                    check_in_latitude=rec.get("check_in_latitude") or request.latitude,
-                    check_in_longitude=rec.get("check_in_longitude") or request.longitude,
-                    status=RecordStatus.ACTIVE,
-                    irregularities=rec.get("irregularities") or [],
-                    irregularities_count=int(rec.get("irregularities_count") or 0),
-                    is_late_check_in=bool(rec.get("is_late_check_in") or False),
-                )
-            )
-        db.flush()
-        row = (
-            db.query(TimeTrackingRecord)
-            .filter(
-                _tt_scope_filter(current_user, cids),
-                TimeTrackingRecord.employee_id == request.employee_id,
-                TimeTrackingRecord.status == RecordStatus.ACTIVE,
-            )
-            .order_by(TimeTrackingRecord.id.desc())
-            .first()
-        )
-        if row:
-            sm.append_event(
-                db,
-                user_id=current_user.id,
-                employee_id=str(request.employee_id),
-                record_id=row.id,
-                event_type="check-in",
-                occurred_at=row.check_in_time or check_in_time,
-                location=request.location,
-                latitude=request.latitude,
-                longitude=request.longitude,
-                device=device,
-                extra_payload={"geo": pex or {}},
-            )
-        db.commit()
-        sm.sync_runtime_active_records(db, current_user, control_horario_service)
-
-        if getattr(settings, "SMART_TIME_CONTROL_LOG_AFRODITA", True) and row:
-            emit_time_control_event(
-                user_id=current_user.id,
-                user_email=current_user.email,
-                company_id=_primary_company_id(db, current_user),
-                employee_id=str(request.employee_id),
-                event_type="check-in",
-                record_id=row.id,
-                details={"geo": pex or {}},
-            )
-
-        if control_horario_service.afrodita_integration:
-            control_horario_service.sync_with_afrodita(request.employee_id, result["record"])
-        
-        logger.info("Check-in registrado: %s", request.employee_id)
-        return result
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Error en check-in")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno al registrar la entrada.",
-        )
+    """Registrar entrada (delegado en el motor v1 por empresa)."""
+    return _legacy_checkin(
+        db=db, http_req=http_req, current_user=current_user, employee_id=request.employee_id,
+        checkin_type="entrada", method=request.method, employee_phone=request.employee_phone,
+        pin=request.pin, qr_token=request.qr_token, latitude=request.latitude,
+        longitude=request.longitude, location=request.location,
+    )
 
 
 @router.post("/check-out")
@@ -902,170 +779,13 @@ async def check_out(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Registrar salida de un empleado"""
-    if request.method:
-        reject_biometric(request.method, user_id=current_user.id, company_id=_primary_company_id(db, current_user))
-    try:
-        if not control_horario_service.business_profile:
-            await _get_control_horario_info(current_user, db)
-        _verify_employee_phone_or_raise(
-            db,
-            user=current_user,
-            employee_id=request.employee_id,
-            employee_phone=request.employee_phone,
-        )
-
-        sm.sync_runtime_active_records(db, current_user, control_horario_service)
-
-        method = None
-        if request.method:
-            try:
-                method = CheckInMethod(request.method.lower())
-            except ValueError:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Método inválido: {request.method}",
-                )
-        
-        result = control_horario_service.check_out(
-            employee_id=request.employee_id,
-            method=method,
-            location=request.location,
-            latitude=request.latitude,
-            longitude=request.longitude,
-        )
-        
-        if not result.get("success"):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=result.get("error", "Error al registrar salida"),
-            )
-
-        rec = result.get("record", {}) or {}
-        check_out_time = rec.get("check_out_time")
-        if isinstance(check_out_time, str):
-            check_out_time = datetime.fromisoformat(check_out_time.replace("Z", "+00:00"))
-        if not isinstance(check_out_time, datetime):
-            check_out_time = datetime.now(timezone.utc)
-
-        device = (http_req.headers.get("user-agent") or "")[:512] or None
-        pex = sm.geo_payload_for_event(request.latitude, request.longitude)
-        cids = _company_ids_for_control_horario(db, current_user)
-        company_id_for_record = _primary_company_id(db, current_user)
-
-        active = (
-            db.query(TimeTrackingRecord)
-            .filter(
-                _tt_scope_filter(current_user, cids),
-                TimeTrackingRecord.employee_id == request.employee_id,
-                TimeTrackingRecord.status == RecordStatus.ACTIVE,
-            )
-            .order_by(TimeTrackingRecord.id.desc())
-            .first()
-        )
-        fallback_break = 0.0
-        if active:
-            net, brk, extra = sm.compute_hours_with_break_events(
-                db,
-                user_id=current_user.id,
-                record=active,
-                check_out_time=check_out_time,
-                fallback_break_hours=fallback_break,
-            )
-            active.check_out_time = check_out_time
-            active.check_out_method = rec.get("check_out_method", request.method or "code")
-            active.check_out_location = rec.get("check_out_location") or request.location
-            active.check_out_latitude = rec.get("check_out_latitude") or request.latitude
-            active.check_out_longitude = rec.get("check_out_longitude") or request.longitude
-            active.hours_worked = net
-            active.break_duration = brk
-            active.extra_hours = extra
-            active.status = RecordStatus.COMPLETED
-            active.irregularities = rec.get("irregularities") or []
-            active.irregularities_count = int(rec.get("irregularities_count") or 0)
-            active.is_early_check_out = bool(rec.get("is_early_check_out") or False)
-            db.add(active)
-            db.flush()
-            sm.append_event(
-                db,
-                user_id=current_user.id,
-                employee_id=str(request.employee_id),
-                record_id=active.id,
-                event_type="check-out",
-                occurred_at=check_out_time,
-                location=request.location,
-                latitude=request.latitude,
-                longitude=request.longitude,
-                device=device,
-                extra_payload={"geo": pex or {}, "hours_worked": net, "extra_hours": extra},
-            )
-        else:
-            db.add(
-                TimeTrackingRecord(
-                    employee_id=request.employee_id,
-                    user_id=current_user.id,
-                    company_id=company_id_for_record,
-                    check_in_time=datetime.now(timezone.utc) - timedelta(hours=float(result.get("hours_worked") or 0)),
-                    check_out_time=check_out_time,
-                    check_in_method="code",
-                    check_out_method=rec.get("check_out_method", request.method or "code"),
-                    status=RecordStatus.COMPLETED,
-                    hours_worked=float(result.get("hours_worked") or 0),
-                    break_duration=float(rec.get("break_duration") or 0),
-                    irregularities=rec.get("irregularities") or [],
-                    irregularities_count=int(rec.get("irregularities_count") or 0),
-                )
-            )
-        db.commit()
-        sm.sync_runtime_active_records(db, current_user, control_horario_service)
-
-        if active:
-            result["hours_worked"] = float(active.hours_worked or 0)
-
-        if getattr(settings, "SMART_TIME_CONTROL_LOG_AFRODITA", True) and active:
-            emit_time_control_event(
-                user_id=current_user.id,
-                user_email=current_user.email,
-                company_id=_primary_company_id(db, current_user),
-                employee_id=str(request.employee_id),
-                event_type="check-out",
-                record_id=active.id,
-                details={
-                    "hours_worked": float(active.hours_worked or 0),
-                    "extra_hours": float(active.extra_hours or 0),
-                    "geo": pex or {},
-                },
-            )
-
-        if control_horario_service.rafael_integration and result.get("hours_worked"):
-            control_horario_service.sync_with_rafael(
-                request.employee_id,
-                {
-                    "hours_worked": result.get("hours_worked"),
-                    "date": datetime.now(timezone.utc).date().isoformat(),
-                    "record": result.get("record"),
-                },
-            )
-
-        if control_horario_service.afrodita_integration:
-            control_horario_service.sync_with_afrodita(request.employee_id, result["record"])
-        
-        logger.info(
-            "Check-out registrado: %s — %sh",
-            request.employee_id,
-            result.get("hours_worked", 0),
-        )
-        
-        return result
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Error en check-out")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno al registrar la salida.",
-        )
+    """Registrar salida (delegado en el motor v1 por empresa)."""
+    return _legacy_checkin(
+        db=db, http_req=http_req, current_user=current_user, employee_id=request.employee_id,
+        checkin_type="salida", method=request.method, employee_phone=request.employee_phone,
+        pin=request.pin, qr_token=request.qr_token, latitude=request.latitude,
+        longitude=request.longitude, location=request.location,
+    )
 
 
 @router.post("/break-start")
@@ -1075,67 +795,13 @@ async def break_start(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Inicio de pausa (requiere entrada activa)."""
-    try:
-        if not control_horario_service.business_profile:
-            await _get_control_horario_info(current_user, db)
-        _verify_employee_phone_or_raise(
-            db,
-            user=current_user,
-            employee_id=request.employee_id,
-            employee_phone=request.employee_phone,
-        )
-        sm.sync_runtime_active_records(db, current_user, control_horario_service)
-        cids = _company_ids_for_control_horario(db, current_user)
-        active = (
-            db.query(TimeTrackingRecord)
-            .filter(
-                _tt_scope_filter(current_user, cids),
-                TimeTrackingRecord.employee_id == request.employee_id,
-                TimeTrackingRecord.status == RecordStatus.ACTIVE,
-            )
-            .order_by(TimeTrackingRecord.id.desc())
-            .first()
-        )
-        if not active:
-            raise HTTPException(status_code=400, detail="No hay fichaje de entrada activo")
-        try:
-            sm.validate_break_transition(db, current_user.id, active, "break-start")
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        now_ts = datetime.now(timezone.utc)
-        device = (http_req.headers.get("user-agent") or "")[:512] or None
-        pex = sm.geo_payload_for_event(request.latitude, request.longitude)
-        sm.append_event(
-            db,
-            user_id=current_user.id,
-            employee_id=str(request.employee_id),
-            record_id=active.id,
-            event_type="break-start",
-            occurred_at=now_ts,
-            location=request.location,
-            latitude=request.latitude,
-            longitude=request.longitude,
-            device=device,
-            extra_payload={"geo": pex or {}},
-        )
-        db.commit()
-        if getattr(settings, "SMART_TIME_CONTROL_LOG_AFRODITA", True):
-            emit_time_control_event(
-                user_id=current_user.id,
-                user_email=current_user.email,
-                company_id=_primary_company_id(db, current_user),
-                employee_id=str(request.employee_id),
-                event_type="break-start",
-                record_id=active.id,
-                details={"geo": pex or {}},
-            )
-        return {"success": True, "message": "Pausa iniciada", "employee_id": request.employee_id}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("break_start")
-        raise HTTPException(status_code=500, detail="No se pudo iniciar la pausa. Inténtalo de nuevo.")
+    """Iniciar pausa (delegado en el motor v1 por empresa)."""
+    return _legacy_checkin(
+        db=db, http_req=http_req, current_user=current_user, employee_id=request.employee_id,
+        checkin_type="pausa_inicio", method=request.method, employee_phone=request.employee_phone,
+        pin=request.pin, qr_token=request.qr_token, latitude=request.latitude,
+        longitude=request.longitude, location=request.location,
+    )
 
 
 @router.post("/break-end")
@@ -1145,67 +811,13 @@ async def break_end(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Fin de pausa."""
-    try:
-        if not control_horario_service.business_profile:
-            await _get_control_horario_info(current_user, db)
-        _verify_employee_phone_or_raise(
-            db,
-            user=current_user,
-            employee_id=request.employee_id,
-            employee_phone=request.employee_phone,
-        )
-        sm.sync_runtime_active_records(db, current_user, control_horario_service)
-        cids = _company_ids_for_control_horario(db, current_user)
-        active = (
-            db.query(TimeTrackingRecord)
-            .filter(
-                _tt_scope_filter(current_user, cids),
-                TimeTrackingRecord.employee_id == request.employee_id,
-                TimeTrackingRecord.status == RecordStatus.ACTIVE,
-            )
-            .order_by(TimeTrackingRecord.id.desc())
-            .first()
-        )
-        if not active:
-            raise HTTPException(status_code=400, detail="No hay fichaje de entrada activo")
-        try:
-            sm.validate_break_transition(db, current_user.id, active, "break-end")
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        now_ts = datetime.now(timezone.utc)
-        device = (http_req.headers.get("user-agent") or "")[:512] or None
-        pex = sm.geo_payload_for_event(request.latitude, request.longitude)
-        sm.append_event(
-            db,
-            user_id=current_user.id,
-            employee_id=str(request.employee_id),
-            record_id=active.id,
-            event_type="break-end",
-            occurred_at=now_ts,
-            location=request.location,
-            latitude=request.latitude,
-            longitude=request.longitude,
-            device=device,
-            extra_payload={"geo": pex or {}},
-        )
-        db.commit()
-        if getattr(settings, "SMART_TIME_CONTROL_LOG_AFRODITA", True):
-            emit_time_control_event(
-                user_id=current_user.id,
-                user_email=current_user.email,
-                company_id=_primary_company_id(db, current_user),
-                employee_id=str(request.employee_id),
-                event_type="break-end",
-                record_id=active.id,
-                details={"geo": pex or {}},
-            )
-        return {"success": True, "message": "Pausa finalizada", "employee_id": request.employee_id}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("break_end")
-        raise HTTPException(status_code=500, detail="No se pudo finalizar la pausa. Inténtalo de nuevo.")
+    """Finalizar pausa (delegado en el motor v1 por empresa)."""
+    return _legacy_checkin(
+        db=db, http_req=http_req, current_user=current_user, employee_id=request.employee_id,
+        checkin_type="pausa_fin", method=request.method, employee_phone=request.employee_phone,
+        pin=request.pin, qr_token=request.qr_token, latitude=request.latitude,
+        longitude=request.longitude, location=request.location,
+    )
 
 
 @router.get("/employees")
@@ -1270,14 +882,33 @@ async def calculate_hours(
         start_date = datetime.fromisoformat(request.start_date.replace('Z', '+00:00'))
         end_date = datetime.fromisoformat(request.end_date.replace('Z', '+00:00'))
         
-        result = control_horario_service.calculate_hours(
-            employee_id=request.employee_id,
-            start_date=start_date,
-            end_date=end_date
+        # Antes: suma de active_records del singleton en memoria (todas las empresas,
+        # ignorando el periodo). Ahora: registros cerrados de SU empresa en el periodo.
+        cids = _company_ids_for_control_horario(db, current_user)
+        rows = (
+            db.query(TimeTrackingRecord)
+            .filter(
+                _tt_scope_filter(current_user, cids),
+                TimeTrackingRecord.employee_id == str(request.employee_id),
+                TimeTrackingRecord.check_in_time >= start_date,
+                TimeTrackingRecord.check_in_time < end_date,
+                TimeTrackingRecord.hours_worked.isnot(None),
+            )
+            .all()
         )
-        
-        return result
-        
+        total_hours = sum(float(r.hours_worked or 0) for r in rows)
+        days = {r.check_in_time.date() for r in rows if r.check_in_time}
+        return {
+            "success": True,
+            "employee_id": request.employee_id,
+            "period": {"start": start_date.isoformat(), "end": end_date.isoformat()},
+            "total_hours": round(total_hours, 2),
+            "records_count": len(rows),
+            "average_hours_per_day": round(total_hours / len(days), 2) if days else 0,
+        }
+
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Fechas inválidas: usa formato ISO 8601.")
     except Exception as e:
         logger.exception("Error calculando horas")
         raise HTTPException(

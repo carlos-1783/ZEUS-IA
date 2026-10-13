@@ -128,41 +128,6 @@ def today_completed_hours_by_employee(db: Session, user: User) -> Dict[str, floa
     return acc
 
 
-def sync_runtime_active_records(db: Session, user: User, control_horario_service: Any) -> None:
-    """Hidrata active_records del servicio desde BD (reinicios / multi-worker)."""
-    cids = _company_ids(db, user)
-    rows = (
-        db.query(TimeTrackingRecord)
-        .filter(
-            _tt_scope_filter(user, cids),
-            TimeTrackingRecord.status == RecordStatus.ACTIVE,
-        )
-        .all()
-    )
-    for r in rows:
-        emp = str(r.employee_id)
-        method_val = str(
-            r.check_in_method.value if hasattr(r.check_in_method, "value") else (r.check_in_method or "code")
-        )
-        control_horario_service.active_records[emp] = {
-            "id": f"record_{emp}_{r.id}",
-            "employee_id": emp,
-            "user_id": user.id,
-            "check_in_time": r.check_in_time,
-            "check_in_method": method_val,
-            "check_in_location": r.check_in_location or "Oficina Principal",
-            "check_in_latitude": r.check_in_latitude,
-            "check_in_longitude": r.check_in_longitude,
-            "status": "active",
-            "irregularities": r.irregularities or [],
-            "irregularities_count": int(r.irregularities_count or 0),
-            "is_late_check_in": bool(r.is_late_check_in),
-            "synced_with_afrodita": bool(r.synced_with_afrodita),
-            "synced_with_rafael": bool(r.synced_with_rafael),
-            "db_record_id": r.id,
-        }
-
-
 def append_event(
     db: Session,
     *,
@@ -438,7 +403,7 @@ def detect_patterns(db: Session, user: User, employee_ids: List[str]) -> Dict[st
     por TimeTrackingRecord.user_id == user.id, por lo que un segundo usuario de la misma
     empresa (UserCompany) obtenia 0 retrasos/horas extra/ausencias para fichajes
     registrados bajo la cuenta del primer usuario. Usa _tt_scope_filter (mismo patron
-    que today_completed_hours_by_employee / sync_runtime_active_records en este mismo
+    que today_completed_hours_by_employee en este mismo
     modulo).
     """
     since = _utc_now() - timedelta(days=14)

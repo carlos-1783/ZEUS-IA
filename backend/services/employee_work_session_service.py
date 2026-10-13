@@ -18,7 +18,6 @@ from app.models.employee_work_session import EmployeeWorkSession
 from app.models.time_tracking import CheckInMethod, RecordStatus, TimeTrackingRecord
 from app.models.user import User
 from services import smart_time_control_service as sm
-from services.control_horario_singleton import control_horario_service
 from services.event_bus import emit_time_control_event
 from services.tpv_operator_context import (
     active_operator_company_employee,
@@ -95,17 +94,8 @@ def _close_active_sessions_and_records(
     reason: str,
 ) -> None:
     """Cierra sesiones de trabajo y registros ACTIVE previos (login duplicado / superseded)."""
-    sm.sync_runtime_active_records(db, user, control_horario_service)
-    if employee_code in getattr(control_horario_service, "active_records", {}):
-        try:
-            control_horario_service.check_out(
-                employee_id=employee_code,
-                method=CheckInMethod.REMOTE,
-                location="auto_session_close",
-            )
-        except Exception as e:
-            logger.warning("check_out memoria previo: %s", e)
-
+    # Sin estado en memoria: antes se hidrataba y cerraba active_records del singleton
+    # global (clave employee_code, compartido entre empresas). La BD es la unica verdad.
     # E1 (backlog ejecutor-produccion): cerrar sesiones activas de ESTE empleado en la
     # empresa, no solo las que el propio `user` registro -- evita fichajes ACTIVE
     # duplicados cuando un segundo usuario de la misma empresa (vinculado via
@@ -152,7 +142,6 @@ def _close_active_sessions_and_records(
         db.add(ws)
 
     db.commit()
-    sm.sync_runtime_active_records(db, user, control_horario_service)
 
 
 def begin_work_session_on_login(db: Session, user: User) -> Dict[str, Any]:
@@ -243,7 +232,6 @@ def begin_work_session_on_login(db: Session, user: User) -> Dict[str, Any]:
     )
     db.add(ews)
     db.commit()
-    sm.sync_runtime_active_records(db, user, control_horario_service)
 
     if getattr(settings, "SMART_TIME_CONTROL_LOG_AFRODITA", True):
         try:
@@ -320,7 +308,6 @@ def apply_idle_timeout_if_needed(db: Session, user: User) -> None:
     ws.close_reason = "idle_timeout"
     db.add(ws)
     db.commit()
-    sm.sync_runtime_active_records(db, user, control_horario_service)
 
 
 def touch_work_session_activity(db: Session, user: User) -> None:
@@ -347,7 +334,6 @@ def end_work_session_on_logout(db: Session, user: User) -> Dict[str, Any]:
     employee_code = str(ce.employee_code)
     now_ts = datetime.now(timezone.utc)
 
-    sm.sync_runtime_active_records(db, user, control_horario_service)
     ws = _active_work_session(db, user)
 
     active = (
@@ -381,7 +367,6 @@ def end_work_session_on_logout(db: Session, user: User) -> Dict[str, Any]:
         db.add(ws)
 
     db.commit()
-    sm.sync_runtime_active_records(db, user, control_horario_service)
 
     if getattr(settings, "SMART_TIME_CONTROL_LOG_AFRODITA", True) and active and rec_id:
         try:
@@ -496,7 +481,6 @@ def ensure_active_shift_for_tpv_operator_login(
             ws_same.last_activity_at = now_ts
             db.add(ws_same)
             db.commit()
-            sm.sync_runtime_active_records(db, user, control_horario_service)
             return {
                 "shift_started": False,
                 "continued": True,
@@ -564,7 +548,6 @@ def ensure_active_shift_for_tpv_operator_login(
     )
     db.add(ews)
     db.commit()
-    sm.sync_runtime_active_records(db, user, control_horario_service)
 
     if getattr(settings, "SMART_TIME_CONTROL_LOG_AFRODITA", True):
         try:
@@ -606,7 +589,6 @@ def close_active_shift_after_tpv_operator_logout(
     employee_code = str(employee_code).strip()
     now_ts = datetime.now(timezone.utc)
 
-    sm.sync_runtime_active_records(db, user, control_horario_service)
     active = (
         db.query(TimeTrackingRecord)
         .filter(
@@ -649,7 +631,6 @@ def close_active_shift_after_tpv_operator_logout(
         db.add(ws)
 
     db.commit()
-    sm.sync_runtime_active_records(db, user, control_horario_service)
 
     if getattr(settings, "SMART_TIME_CONTROL_LOG_AFRODITA", True) and active and rec_id:
         try:

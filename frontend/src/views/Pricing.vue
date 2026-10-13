@@ -346,7 +346,7 @@
           <div class="feature-item">
             <div class="feature-icon">🏛️</div>
             <h3>Facturación + Hacienda</h3>
-            <p>Automatiza facturas y modelos fiscales (AEAT/SII)</p>
+            <p>Facturas y borradores de modelos fiscales (303) para tu asesor. La presentación ante la AEAT no está incluida.</p>
           </div>
           <div class="feature-item">
             <div class="feature-icon">👥</div>

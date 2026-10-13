@@ -2236,6 +2236,24 @@ onUnmounted(() => {
     justify-content: center;
     align-items: flex-start;
     text-align: left;
+    gap: 4px;
+  }
+
+  /* Estado y actividad en una sola línea ("Estado En línea · Actividades 24 h 2") para
+     que la tarjeta quepa entera también a 1366x768. */
+  .agent-card--executive .agent-stats {
+    margin-bottom: 2px;
+  }
+
+  .agent-card--executive .stat {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  /* Si aun así falta alto, la fila crece y la rejilla hace scroll: nunca se recorta la tarjeta. */
+  .executive-agents-grid {
+    grid-auto-rows: minmax(min-content, 1fr);
   }
 
   .agent-card--executive .agent-name {
@@ -2971,6 +2989,17 @@ onUnmounted(() => {
 
 /* Mobile-only executive dashboard (≤768px) */
 @media (max-width: 768px) {
+  /* Móvil: la banda decorativa de ZEUS CORE se estrecha y pierde su lema para no tapar
+     el estado ni las actividades de la tarjeta. */
+  .zeus-core-banner {
+    width: 30%;
+    min-width: 0;
+  }
+
+  .zeus-core-banner-text {
+    display: none;
+  }
+
   /* Topbar: en móvil no cabe marca + versión + campana + usuario + logout
      en una sola fila (ver AUDIT_REDISENO_TARJETAS_AGENTE.md) — se oculta
      el texto secundario y se deja solo lo accionable, sin perder ninguna

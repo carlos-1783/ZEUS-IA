@@ -4,6 +4,7 @@ API de herramientas para los workspaces de los agentes.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -37,6 +38,8 @@ from services.workspaces import (
     detect_threat_events,
     revoke_credentials,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 tools_router = APIRouter(prefix="/tools", tags=["tools"])
@@ -711,9 +714,9 @@ async def workspace_thalos_logs(
         actor_id=current_user.id,
     )
     result = monitor_security_logs(request.model_dump())
-    text = _text_generic("Monitor de logs de seguridad", result)
     cid = primary_company_id_for_user(db, current_user)
     real_written = False
+    real_scan_error: Optional[str] = None
     try:
         from services.thalos_security_engine import scan_logs
         from services.thalos_workspace_writer_v1 import write_workspace_item
@@ -732,8 +735,22 @@ async def workspace_thalos_logs(
         )
         db.flush()
         real_written = True
-    except Exception:
-        pass
+    except Exception as exc:
+        # Fase 2 (#23): antes `except: pass` -> el fallo del escaneo real desaparecia en silencio.
+        logger.exception("THALOS log-monitor: fallo el escaneo real (user=%s company=%s)", current_user.id, cid)
+        # Transaccion abortada (Postgres): se deshace y se re-fija el contexto de tenant
+        # (este endpoint solo lo usa superusuario -> contexto sin empresa, igual que get_db_scoped).
+        db.rollback()
+        from app.db.tenant_context import set_tenant_context
+
+        set_tenant_context(db, None, user_id=current_user.id, user_email=current_user.email)
+        real_scan_error = f"{type(exc).__name__}: {exc}"[:300]
+        result = {**result, "real_scan_error": real_scan_error}
+    text = _text_generic("Monitor de logs de seguridad", result)
+    if real_written:
+        text += " Escaneo real de logs (24 h) guardado en el workspace de THALOS."
+    elif real_scan_error:
+        text += f" El escaneo real de logs falló: {real_scan_error}"
     response = _persist_agent_tool_response(
         db,
         current_user=current_user,

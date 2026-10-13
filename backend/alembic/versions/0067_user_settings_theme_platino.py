@@ -1,7 +1,7 @@
 """user_settings.theme: default 'light' (platino es el tema base)
 
 Revision ID: 0067
-Revises: 0064
+Revises: 0065_hosteleria
 Create Date: 2026-10-12
 
 Fase 2 / JARVIS: el tema base aprobado es el PLATINO ('light'); el oscuro queda como opcion
@@ -13,7 +13,7 @@ Si se decide migrar a todos a platino, es una decision aparte:
 Nota de integracion: al juntar ramas de Fase 2, encadenar tras la ultima revision (0065/0066)
 para no dejar varias cabezas.
 
-Rollback: `alembic downgrade 0064` restaura server_default 'dark'.
+Rollback: `alembic downgrade 0065_hosteleria` restaura server_default 'dark'.
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ import sqlalchemy as sa
 from sqlalchemy import inspect
 
 revision = "0067"
-down_revision = "0064"
+down_revision = "0065_hosteleria"
 branch_labels = None
 depends_on = None
 

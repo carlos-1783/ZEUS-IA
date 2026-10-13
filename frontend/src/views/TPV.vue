@@ -14,6 +14,10 @@
           {{ $t('tpv.title') }}
         </h1>
         <p class="tpv-subtitle">{{ $t('tpv.subtitle') }}</p>
+        <p class="tpv-legal-notice" role="note">
+          Aviso: este TPV aún no está adaptado a Verifactu (sin huella encadenada ni QR de la AEAT) y no envía
+          nada a Hacienda. Revisa con tu asesor el cumplimiento antes de la fecha de obligatoriedad.
+        </p>
       </div>
       <div class="header-actions">
         <button
@@ -4636,5 +4640,10 @@ onUnmounted(() => {
   .fade-slide-leave-active {
     transition-duration: 1ms;
   }
+}
+.tpv-legal-notice {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--zeus-warning-text, var(--amber, #b45309));
 }
 </style>

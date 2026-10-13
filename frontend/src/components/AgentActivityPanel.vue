@@ -12,8 +12,9 @@
         </div>
       </div>
 
-      <!-- Toggle Texto/Voz -->
-      <div class="communication-toggle">
+      <!-- Toggle Texto/Voz: solo gobierna la pestaña Chat. En el Workspace el orbe arranca en voz
+           y tiene su propio micro/teclado; mostrar aquí "Texto" activo contradecía lo que se ve. -->
+      <div v-if="activeTab === 'chat'" class="communication-toggle">
         <button 
           :class="{ active: communicationMode === 'text' }"
           @click="communicationMode = 'text'"

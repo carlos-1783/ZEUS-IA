@@ -114,23 +114,57 @@ def recommend_video_ai(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def seo_audit_ai(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Real AI SEO audit — score, improvements, keywords, meta tags."""
+    """Auditoría SEO sobre la página REAL.
+
+    El score y las incidencias salen SIEMPRE de las comprobaciones deterministas
+    (``run_seo_audit_heuristic`` descarga el HTML con el fetch seguro; sin página → 422).
+    Si OpenAI está configurado, el LLM solo añade recomendaciones de texto, etiquetadas
+    como tales; cualquier puntuación que devuelva se descarta.
+    """
+    from services.workspaces.perseo_tools_heuristic import run_seo_audit_heuristic
+
+    out = run_seo_audit_heuristic(payload)
     if not openai_configured():
-        from services.workspaces.perseo_tools_heuristic import run_seo_audit_heuristic
+        return {**out, "mode": "deterministic"}
 
-        out = run_seo_audit_heuristic(payload)
-        return {**out, "ai_powered": False, "mode": "heuristic_fallback"}
-
-    url = payload.get("url") or ""
     keywords: List[str] = payload.get("keywords") or []
-    html = (payload.get("html_snapshot") or "")[:12000]
     system = (
-        "Eres PERSEO, auditor SEO técnico. Responde SOLO JSON con: "
-        "seo_score (0-100), keyword_score (0-100), improvements (array), "
-        "keywords (array sugeridas), meta_tags (objeto title/description/og), issues (array)."
+        "Eres PERSEO, consultor SEO. Te paso el resultado de comprobaciones técnicas YA "
+        "medidas sobre una página real. NO puntúes la página. Responde SOLO JSON con: "
+        "recommendations (array de strings accionables), suggested_title (string), "
+        "suggested_meta_description (string)."
     )
-    user_text = f"URL: {url or 'no proporcionada'}. Keywords objetivo: {', '.join(keywords)}. HTML:\n{html or '(sin snapshot)'}"
-    return _text_completion(system, user_text)
+    facts = {
+        "url": out.get("url"),
+        "checks": out.get("checks"),
+        "keywords": out.get("keywords"),
+    }
+    user_text = (
+        f"Keywords objetivo: {', '.join(keywords) or 'ninguna'}.\n"
+        f"Resultados medidos: {json.dumps(facts, ensure_ascii=False)[:8000]}"
+    )
+    try:
+        ai = _text_completion(system, user_text)
+    except Exception as exc:
+        logger.warning("PERSEO seo_audit: recomendaciones IA no disponibles: %s", exc)
+        return {
+            **out,
+            "mode": "deterministic",
+            "ai_recommendations": {"available": False, "error": str(exc)[:300]},
+        }
+    return {
+        **out,
+        "mode": "deterministic+ai_text",
+        "ai_powered": True,
+        "ai_recommendations": {
+            "available": True,
+            "label": "Recomendaciones de texto generadas por IA (no influyen en el score)",
+            "model": ai.get("model"),
+            "recommendations": ai.get("recommendations") or [],
+            "suggested_title": ai.get("suggested_title"),
+            "suggested_meta_description": ai.get("suggested_meta_description"),
+        },
+    }
 
 
 def generate_ads_ai(payload: Dict[str, Any]) -> Dict[str, Any]:

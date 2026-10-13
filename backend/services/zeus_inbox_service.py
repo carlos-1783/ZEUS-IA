@@ -117,7 +117,7 @@ def _vision_call(data: bytes, content_type: str, filename: str, note: Optional[s
     content = response.choices[0].message.content or ""
     parsed = parse_json_response(content)
     if not isinstance(parsed, dict):
-        raise ClassificationFailed("El modelo de vision no devolvio un JSON valido.")
+        raise ClassificationFailed("El modelo de visión no devolvió un JSON válido.")
     return parsed
 
 
@@ -235,11 +235,11 @@ def validate_fields(doc_type: str, fields: Dict[str, Any]) -> Dict[str, Any]:
         valid = nif_is_valid(nif)
         checks["nif"] = "valido" if valid else "formato_o_control_invalido"
         if not valid:
-            issues.append("el NIF/CIF leido no supera la comprobacion de formato/control")
+            issues.append("el NIF/CIF leído no supera la comprobación de formato/control")
     else:
         checks["nif"] = "ausente"
         if doc_type == "factura_proveedor":
-            issues.append("no se ha leido el NIF/CIF del proveedor")
+            issues.append("no se ha leído el NIF/CIF del proveedor")
 
     fecha = fields.get("fecha")
     if fecha:
@@ -247,10 +247,10 @@ def validate_fields(doc_type: str, fields: Dict[str, Any]) -> Dict[str, Any]:
             d = date.fromisoformat(fecha)
             checks["fecha"] = "futura" if d > date.today() else "valida"
             if d > date.today():
-                issues.append("la fecha leida es futura")
+                issues.append("la fecha leída es futura")
         except ValueError:
             checks["fecha"] = "formato_invalido"
-            issues.append("la fecha leida no tiene formato AAAA-MM-DD")
+            issues.append("la fecha leída no tiene formato AAAA-MM-DD")
     else:
         checks["fecha"] = "ausente"
 
@@ -281,7 +281,7 @@ def classify_document(
         raise
     except Exception as exc:  # error de red / API de OpenAI
         logger.error("ZEUS inbox: fallo del modelo de vision: %s", type(exc).__name__)
-        raise ClassificationFailed(f"El modelo de vision fallo ({type(exc).__name__}).") from exc
+        raise ClassificationFailed(f"El modelo de visión falló ({type(exc).__name__}).") from exc
     norm = normalize_model_output(raw)
     validation = validate_fields(norm["doc_type"], norm["fields"])
     return {

@@ -134,7 +134,7 @@ def test_upload_without_r2_is_explicit_503_and_writes_nothing(db, no_r2, as_user
     before = _static_uploads_snapshot()
     resp = as_user(user).post("/api/v1/upload", files={"file": ("a.png", PNG, "image/png")})
     assert resp.status_code == 503
-    assert "no esta configurado" in resp.json()["detail"]
+    assert "no está configurado" in resp.json()["detail"]
     assert db.query(StoredFile).filter(StoredFile.user_id == user.id).count() == 0
     assert _static_uploads_snapshot() == before
 

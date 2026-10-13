@@ -79,7 +79,7 @@ def storage_http_error(exc: Exception) -> HTTPException:
     if isinstance(exc, object_storage.StorageNotConfigured):
         return HTTPException(
             status_code=503,
-            detail="El almacenamiento de ficheros no esta configurado todavia. "
+            detail="El almacenamiento de ficheros no está configurado todavía. "
             "No se ha guardado nada; contacta con el administrador.",
         )
     if isinstance(exc, object_storage.ContentMismatch):

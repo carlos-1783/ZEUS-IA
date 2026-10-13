@@ -333,7 +333,7 @@ def test_sin_r2_503_no_guarda_ni_clasifica_nada(db, no_r2, vision, as_user):
     vision.response = _factura()
     resp = as_user(user).post(P, files={"file": ("f.jpg", JPG, "image/jpeg")})
     assert resp.status_code == 503
-    assert "no esta configurado" in resp.json()["detail"]
+    assert "no está configurado" in resp.json()["detail"]
     assert vision.calls == []
     db.expire_all()
     assert db.query(ZeusInboxItem).filter(ZeusInboxItem.company_id == company.id).count() == 0

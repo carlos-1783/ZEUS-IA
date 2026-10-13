@@ -64,11 +64,11 @@ ALLOWED_CONTENT_TYPES = frozenset({"image/jpeg", "image/png", "image/webp", "app
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 REVIEW_NOTICE = (
-    "Documento leido por IA y pendiente de revision humana. ZEUS no lo ha contabilizado, "
+    "Documento leído por IA y pendiente de revisión humana. ZEUS no lo ha contabilizado, "
     "no lo ha registrado como factura y no lo ha enviado a nadie."
 )
 CLOSED_REVIEW_NOTICE = (
-    "Revision humana cerrada. ZEUS no lo ha contabilizado, no lo ha registrado como factura "
+    "Revisión humana cerrada. ZEUS no lo ha contabilizado, no lo ha registrado como factura "
     "y no lo ha enviado a nadie."
 )
 
@@ -221,7 +221,7 @@ def _classify_and_route(
             content={
                 "success": False,
                 "detail": "No se pudo clasificar el documento ahora; queda guardado como "
-                "pendiente. Reintenta mas tarde.",
+                "pendiente. Reinténtalo más tarde.",
                 "item": serialize_item(item),
             },
         )
@@ -340,7 +340,7 @@ async def receive_document(
     if content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=415,
-            detail=f"Tipo de archivo no permitido: {content_type}. Envia una foto JPG/PNG/WEBP o un PDF.",
+            detail=f"Tipo de archivo no permitido: {content_type}. Envía una foto JPG/PNG/WEBP o un PDF.",
         )
     data = await read_limited(file, MAX_BYTES)
     try:
@@ -359,7 +359,7 @@ async def receive_document(
         db.commit()
         raise HTTPException(
             status_code=503,
-            detail="El almacenamiento de ficheros no esta configurado todavia. No se ha guardado "
+            detail="El almacenamiento de ficheros no está configurado todavía. No se ha guardado "
             "ni clasificado el documento; contacta con el administrador.",
         )
 
@@ -457,13 +457,13 @@ def retry_classification(
     company_id = _company_id(db, current_user)
     item = _get_item(db, company_id, item_id)
     if item.status != STATUS_PENDING_CLASSIFICATION:
-        raise HTTPException(status_code=409, detail="El documento ya esta clasificado y asignado.")
+        raise HTTPException(status_code=409, detail="El documento ya está clasificado y asignado.")
     if not inbox.classification_available():
         # Comprobacion previa: no se descarga el fichero de R2 si no se puede clasificar.
         return _classify_and_route(db, current_user, item, b"")
     row = object_storage.get_for_companies(db, item.stored_file_id or "", [company_id])
     if row is None:
-        raise HTTPException(status_code=410, detail="El fichero original ya no esta disponible.")
+        raise HTTPException(status_code=410, detail="El fichero original ya no está disponible.")
     try:
         data = object_storage.read_bytes(row)
     except (object_storage.StorageNotConfigured, object_storage.StorageError) as exc:
@@ -503,12 +503,12 @@ def review_inbox_item(
     if approval is None:
         raise HTTPException(
             status_code=409,
-            detail="El documento aun no esta clasificado: no hay revision pendiente que cerrar.",
+            detail="El documento aún no está clasificado: no hay revisión pendiente que cerrar.",
         )
     if approval.status != "pending_review":
         raise HTTPException(
             status_code=409,
-            detail=f"La revision de este documento ya esta cerrada (estado: {approval.status}).",
+            detail=f"La revisión de este documento ya está cerrada (estado: {approval.status}).",
         )
 
     new_status = REVIEW_DECISIONS[body.decision]

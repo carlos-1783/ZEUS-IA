@@ -50,6 +50,16 @@ PRICING_PLANS = {
 }
 
 
+# Fase 2 (#12): en el repo NO hay tabla de pagos/suscripciones de Stripe (los pagos solo quedan
+# como agent_activities "payment_confirmed"). Estas cifras NO son cobros: son la tarifa del plan
+# x usuarios activos. Se declara en cada respuesta para que nadie las lea como ingresos reales.
+REVENUE_BASIS = "theoretical_plan_price"
+REVENUE_NOTE = (
+    "Ingresos teóricos según plan (tarifa del plan × usuarios activos y meses desde el alta). "
+    "No son cobros reales: no hay registro de pagos de Stripe en la base de datos."
+)
+
+
 @router.get("/stats")
 async def get_admin_stats(
     current_user: User = Depends(get_current_active_superuser),
@@ -115,6 +125,13 @@ async def get_admin_stats(
                 "total_setup_fees": round(total_setup_fees, 2)
             },
             "revenue_by_plan": revenue_by_plan_list,
+            "revenue_basis": REVENUE_BASIS,
+            "revenue_note": REVENUE_NOTE,
+            "theoretical_revenue": {
+                "monthly": round(monthly_revenue, 2),
+                "twelve_months_plus_setup": round(total_revenue, 2),
+                "setup_fees": round(total_setup_fees, 2),
+            },
             "timestamp": datetime.utcnow().isoformat()
         }
     except Exception as e:
@@ -384,14 +401,14 @@ async def get_revenue_chart_data(
             "labels": sorted_months,
             "datasets": [
                 {
-                    "label": "Ingresos Mensuales (€)",
+                    "label": "Ingresos teóricos según plan (€)",
                     "data": [revenue_by_month[month]["revenue"] for month in sorted_months],
                     "backgroundColor": "rgba(59, 130, 246, 0.6)",
                     "borderColor": "rgba(59, 130, 246, 1)",
                     "borderWidth": 2
                 },
                 {
-                    "label": "Setup Fees (€)",
+                    "label": "Altas teóricas según plan (€)",
                     "data": [revenue_by_month[month]["setup"] for month in sorted_months],
                     "backgroundColor": "rgba(16, 185, 129, 0.6)",
                     "borderColor": "rgba(16, 185, 129, 1)",
@@ -404,6 +421,8 @@ async def get_revenue_chart_data(
             "success": True,
             "chart_data": chart_data,
             "months": months,
+            "revenue_basis": REVENUE_BASIS,
+            "revenue_note": REVENUE_NOTE,
             "timestamp": datetime.utcnow().isoformat()
         }
     except Exception as e:

@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gray-100 flex">
+  <div class="min-h-screen flex main-layout">
     <!-- Mobile menu button -->
     <div class="md:hidden fixed top-4 left-4 z-50">
       <button 
@@ -86,18 +86,19 @@
     <!-- Main content -->
     <div class="flex-1 flex flex-col md:pl-64">
       <!-- Top navigation -->
-      <header class="bg-white shadow-sm">
+      <header class="main-layout-header shadow-sm">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <h1 class="text-lg font-semibold text-gray-900">
+          <h1 class="text-lg font-semibold main-layout-title">
             {{ pageTitle }}
           </h1>
           <div class="flex items-center space-x-4">
-            <label class="text-sm text-gray-600">
+            <ThemeToggle />
+            <label class="text-sm main-layout-muted">
               {{ t('layout.languageLabel') }}
             </label>
             <select
               v-model="currentLocale"
-              class="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              class="text-sm main-layout-select rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             >
               <option v-for="localeOption in supportedLocales" :key="localeOption" :value="localeOption">
                 {{ localeOption.toUpperCase() }}
@@ -133,6 +134,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useI18n } from 'vue-i18n';
+import ThemeToggle from '@/components/ThemeToggle.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -198,6 +200,31 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* Tokens de tema (zeus-theme-tokens.css): platino por defecto, oscuro opcional */
+.main-layout {
+  background-image: var(--zeus-bg);
+  color: var(--zeus-text);
+}
+
+.main-layout-header {
+  background: var(--zeus-surface);
+  border-bottom: 1px solid var(--zeus-border);
+}
+
+.main-layout-title {
+  color: var(--zeus-text);
+}
+
+.main-layout-muted {
+  color: var(--zeus-text-secondary);
+}
+
+.main-layout-select {
+  background: var(--zeus-surface);
+  color: var(--zeus-text);
+  border: 1px solid var(--zeus-border-strong);
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease;

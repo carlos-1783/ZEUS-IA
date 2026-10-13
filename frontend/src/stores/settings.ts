@@ -12,9 +12,12 @@ export interface UserAppSettingsState {
   session_timeout: number
 }
 
+// Platino ('light') es el tema base por defecto; el oscuro es opción del
+// cliente (toggle de la barra superior o Ajustes). Tokens en
+// assets/styles/zeus-theme-tokens.css.
 const DEFAULTS: UserAppSettingsState = {
   language: 'es',
-  theme: 'dark',
+  theme: 'light',
   two_factor_enabled: false,
   session_timeout: 60,
 }
@@ -61,13 +64,10 @@ function applyThemeToDom(theme: AppTheme) {
   const applyResolved = () => {
     const resolved = resolveResolved()
     document.documentElement.setAttribute('data-theme', resolved)
-    if (resolved === 'light') {
-      document.body.style.backgroundColor = '#e8eef5'
-      document.body.style.color = '#0f172a'
-    } else {
-      document.body.style.backgroundColor = '#0a0e1a'
-      document.body.style.color = '#f8fafc'
-    }
+    // Fondo/texto del body salen de los tokens (zeus-theme-tokens.css);
+    // se limpian restos de estilos inline de versiones anteriores.
+    document.body.style.backgroundColor = ''
+    document.body.style.color = ''
   }
 
   applyResolved()
@@ -225,7 +225,8 @@ export const useSettingsStore = defineStore('settings', () => {
     settings.value = { ...DEFAULTS }
     hasSynced.value = false
     lastError.value = null
-    document.documentElement.setAttribute('data-theme', 'dark')
+    // Tras logout se vuelve al tema base (platino), no al oscuro.
+    document.documentElement.setAttribute('data-theme', 'light')
     document.body.style.backgroundColor = ''
     document.body.style.color = ''
   }

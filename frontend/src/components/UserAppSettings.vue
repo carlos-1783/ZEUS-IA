@@ -11,8 +11,8 @@
           :disabled="settingsStore.isPatching"
           @change="onThemeChange"
         >
-          <option value="dark">{{ $t('userSettings.themeDark') }}</option>
           <option value="light">{{ $t('userSettings.themeLight') }}</option>
+          <option value="dark">{{ $t('userSettings.themeDark') }}</option>
           <option value="auto">{{ $t('userSettings.themeAuto') }}</option>
         </select>
       </div>
@@ -234,7 +234,7 @@ async function onSessionTimeoutChange(e: Event) {
   padding: 10px 12px;
   border-radius: var(--zeus-radius-sm, 8px);
   border: 1px solid var(--zeus-border-strong, #cdd3db);
-  background: #ffffff;
+  background: var(--zeus-surface);
   color: var(--zeus-text, #0f172a);
   box-sizing: border-box;
 }
@@ -264,7 +264,7 @@ async function onSessionTimeoutChange(e: Event) {
 }
 
 .setting-hint.ok {
-  color: #0d9668;
+  color: var(--zeus-success-text);
 }
 
 .setting-select {
@@ -272,7 +272,7 @@ async function onSessionTimeoutChange(e: Event) {
   padding: 8px 12px;
   border-radius: var(--zeus-radius-sm, 8px);
   border: 1px solid var(--zeus-border-strong, #cdd3db);
-  background: #ffffff;
+  background: var(--zeus-surface);
   color: var(--zeus-text, #0f172a);
   font-size: 0.95rem;
   box-sizing: border-box;

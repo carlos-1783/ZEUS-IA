@@ -208,8 +208,8 @@ onMounted(async () => {
 .phase-c-btn {
   padding: 10px 16px;
   border-radius: var(--zeus-radius-sm, 8px);
-  border: 1px solid #D1D5DB;
-  background: #ffffff;
+  border: 1px solid var(--zeus-border-strong);
+  background: var(--zeus-surface);
   color: var(--zeus-text, #0f172a);
   font-size: 14px;
   font-weight: var(--zeus-weight-medium, 500);
@@ -217,7 +217,7 @@ onMounted(async () => {
   transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 .phase-c-btn:hover:not(:disabled) {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
 }
 
 .phase-b-btn:disabled,

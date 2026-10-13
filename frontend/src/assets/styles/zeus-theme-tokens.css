@@ -1,0 +1,153 @@
+/**
+ * ZEUS-IA — Tokens de tema (FUENTE ÚNICA, sistema JARVIS)
+ * -------------------------------------------------------
+ * PLATINO (data-theme="light") es el tema BASE por defecto; OSCURO
+ * (data-theme="dark") es una opción que activa el cliente (toggle
+ * sol/luna de la barra superior o Ajustes → Tema). El atributo lo pone
+ * en <html> el script inline de index.html (antes de pintar, sin
+ * flash) y después el store de ajustes (stores/settings.ts).
+ *
+ * Los valores son los de la spec aprobada (DISENO_APROBADO_JARVIS.md,
+ * sección 2). Debajo se MAPEAN los nombres antiguos (--zeus-*,
+ * --bg-main/--bg-card/--text-primary…) a los nuevos, en vez de
+ * romperlos: cualquier componente que ya consumía var(--zeus-surface)
+ * o var(--zeus-text) cambia de tema solo.
+ *
+ * Especificidad: los bloques usan :root[data-theme=…] / html:root para
+ * ganar a los :root{} antiguos (zeus-light-system.css, theme.css) sin
+ * depender del orden de importación.
+ */
+
+/* ---- Comunes a ambos temas ---- */
+:root {
+  --blue: #5b8cff;
+  --amber: #f5a623;
+  --teal: #36c6c6;
+  --red: #ff5d6c;
+  --green: #3ecf8e;
+}
+
+/* ---- PLATINO (default; también sin atributo) ---- */
+:root:not([data-theme]),
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #e6e8ef;
+  --bg-2: #dfe2ea;
+  --panel: #ffffff;
+  --panel-2: #f3f5f9;
+  --raised: #eceff5;
+  --line: rgba(20, 28, 56, 0.10);
+  --line-2: rgba(20, 28, 56, 0.16);
+  --fg: #141a2b;
+  --muted: #56607a;
+  --faint: #8891a6;
+  --violet: #6a5cff;
+  --violet-2: #5243d6;
+  --violet-soft: rgba(106, 92, 255, 0.12);
+  --btn: #141a2b;
+  --btn-fg: #ffffff;
+
+  /* Estados (texto legible sobre panel claro) */
+  --zeus-success-soft: #e9faf3;
+  --zeus-warning-soft: #fef6e7;
+  --zeus-danger-soft: #fdecec;
+  --zeus-info-soft: #eaf2ff;
+  --zeus-success-text: #0d9668;
+  --zeus-warning-text: #b45309;
+  --zeus-danger-text: #b91c1c;
+  --zeus-info-text: #2563eb;
+
+  --zeus-overlay: rgba(20, 26, 43, 0.40);
+}
+
+/* ---- OSCURO (opción del cliente) ---- */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0a0e1a;
+  --bg-2: #0c1120;
+  --panel: #131a2c;
+  --panel-2: #1a2238;
+  --raised: #202a44;
+  --line: rgba(140, 162, 214, 0.14);
+  --line-2: rgba(140, 162, 214, 0.24);
+  --fg: #eceef6;
+  --muted: #9aa3bd;
+  --faint: #6b7496;
+  --violet: #8b7bff;
+  --violet-2: #b3a8ff;
+  --violet-soft: rgba(139, 123, 255, 0.16);
+  --btn: #ffffff;
+  --btn-fg: #0a0e1a;
+
+  --zeus-success: var(--green);
+  --zeus-warning: var(--amber);
+  --zeus-danger: var(--red);
+  --zeus-info: var(--blue);
+  --zeus-success-soft: rgba(62, 207, 142, 0.14);
+  --zeus-warning-soft: rgba(245, 166, 35, 0.14);
+  --zeus-danger-soft: rgba(255, 93, 108, 0.14);
+  --zeus-info-soft: rgba(91, 140, 255, 0.14);
+  --zeus-success-text: var(--green);
+  --zeus-warning-text: var(--amber);
+  --zeus-danger-text: var(--red);
+  --zeus-info-text: var(--blue);
+
+  --zeus-overlay: rgba(0, 0, 0, 0.55);
+
+  --zeus-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --zeus-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.25);
+  --zeus-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --zeus-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --zeus-shadow-btn-ghost: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --zeus-shadow-btn-ghost-hover: 0 3px 8px rgba(0, 0, 0, 0.40);
+}
+
+/* ---- Mapeo de nombres antiguos → tokens nuevos (ambos temas) ---- */
+html:root {
+  /* Fondo de página: el de la spec. Se expresa solo con capas de imagen
+     (linear-gradient plano para el color) porque muchos componentes lo
+     consumen como background-image: var(--zeus-bg). */
+  --zeus-bg: radial-gradient(900px 500px at 80% -8%, var(--violet-soft), transparent 60%),
+    linear-gradient(var(--bg), var(--bg));
+  --zeus-bg-bands: linear-gradient(var(--bg), var(--bg));
+  --zeus-bg-sheen: linear-gradient(transparent, transparent);
+  --zeus-metal-bg: var(--zeus-bg);
+  --zeus-bg-flat: var(--bg);
+  --zeus-bg-subtle: var(--bg-2);
+
+  --zeus-surface: var(--panel);
+  --zeus-surface-raised: var(--panel);
+  --zeus-surface-2: var(--panel-2);
+  --zeus-raised: var(--raised);
+  --zeus-border: var(--line);
+  --zeus-border-strong: var(--line-2);
+
+  --zeus-text: var(--fg);
+  --zeus-text-secondary: var(--muted);
+  --zeus-text-muted: var(--faint);
+  --zeus-text-on-accent: #ffffff;
+
+  --zeus-accent: var(--violet);
+  --zeus-accent-hover: var(--violet-2);
+  --zeus-accent-soft: var(--violet-soft);
+  --zeus-accent-2: var(--violet);
+  --zeus-accent-2-soft: var(--violet-soft);
+
+  /* theme.css / css_system_enforcer_v1 */
+  --bg-main: var(--bg);
+  --bg-card: var(--panel);
+  --text-primary: var(--fg);
+  --text-secondary: var(--muted);
+  --border-soft: var(--line);
+
+  /* Crítico de index.html */
+  --bg-color: var(--bg);
+  --text-color: var(--fg);
+}
+
+/* Base del documento: gana a html,body{} de index.css y body{} de main.scss */
+html:root,
+html:root body {
+  background-color: var(--bg);
+  color: var(--fg);
+}

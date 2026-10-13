@@ -1274,8 +1274,8 @@ const goToDashboard = () => {
 
 .btn-back {
   padding: 12px;
-  background: #ffffff;
-  border: 1px solid #D1D5DB;
+  background: var(--zeus-surface);
+  border: 1px solid var(--zeus-border-strong);
   border-radius: var(--zeus-radius-sm, 8px);
   color: var(--zeus-text, #0f172a);
   cursor: pointer;
@@ -1284,7 +1284,7 @@ const goToDashboard = () => {
 }
 
 .btn-back:hover {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
 }
 
 /* Main Content */
@@ -1397,12 +1397,12 @@ td {
 
 .plan-badge.startup {
   background: var(--zeus-success-soft, #e9faf3);
-  color: #0d9668;
+  color: var(--zeus-success-text);
 }
 
 .plan-badge.growth {
   background: var(--zeus-info-soft, #eaf2ff);
-  color: #2563eb;
+  color: var(--zeus-info-text);
 }
 
 .plan-badge.business {
@@ -1412,7 +1412,7 @@ td {
 
 .plan-badge.enterprise {
   background: var(--zeus-warning-soft, #fef6e7);
-  color: #b45309;
+  color: var(--zeus-warning-text);
 }
 
 .status-badge {
@@ -1425,7 +1425,7 @@ td {
 
 .status-badge.active {
   background: var(--zeus-success-soft, #e9faf3);
-  color: #0d9668;
+  color: var(--zeus-success-text);
 }
 
 .status-badge.inactive {
@@ -1435,8 +1435,8 @@ td {
 
 .btn-action {
   padding: 6px 12px;
-  background: #ffffff;
-  border: 1px solid #D1D5DB;
+  background: var(--zeus-surface);
+  border: 1px solid var(--zeus-border-strong);
   border-radius: var(--zeus-radius-sm, 6px);
   color: var(--zeus-text, #0f172a);
   cursor: pointer;
@@ -1446,7 +1446,7 @@ td {
 }
 
 .btn-action:hover {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
 }
 
 /* Acción de pausar/activar cuenta o eliminar: semánticamente peligrosa,
@@ -1454,7 +1454,7 @@ td {
    tercer color arbitrario) para que siga siendo distinguible de las
    acciones neutras. */
 .btn-action.danger {
-  background: #ffffff;
+  background: var(--zeus-surface);
   border-color: #f3b6b6;
   color: #b91c1c;
 }
@@ -1465,8 +1465,8 @@ td {
 
 .btn-refresh {
   padding: 10px 20px;
-  background: #ffffff;
-  border: 1px solid #D1D5DB;
+  background: var(--zeus-surface);
+  border: 1px solid var(--zeus-border-strong);
   border-radius: var(--zeus-radius-sm, 8px);
   color: var(--zeus-text, #0f172a);
   cursor: pointer;
@@ -1474,7 +1474,7 @@ td {
 }
 
 .btn-refresh:hover {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
 }
 
 .empty-state {
@@ -1510,7 +1510,7 @@ td {
 .revenue-card .amount {
   font-size: 32px;
   font-weight: 700;
-  color: #0d9668;
+  color: var(--zeus-success-text);
   margin: 0 0 8px;
 }
 
@@ -1660,9 +1660,9 @@ td {
 .btn-e2e {
   margin-top: 8px;
   padding: 12px 20px;
-  border: 1px solid #D1D5DB;
+  border: 1px solid var(--zeus-border-strong);
   border-radius: var(--zeus-radius-sm, 8px);
-  background: #ffffff;
+  background: var(--zeus-surface);
   color: var(--zeus-text, #0f172a);
   font-weight: 600;
   cursor: pointer;
@@ -1670,7 +1670,7 @@ td {
 }
 
 .btn-e2e:hover:not(:disabled) {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
 }
 
 .btn-e2e:disabled {
@@ -1721,12 +1721,12 @@ td {
   gap: 4px 12px;
   padding: 8px 10px;
   border-radius: var(--zeus-radius-sm, 6px);
-  background: #ffffff;
+  background: var(--zeus-surface);
   border: 1px solid var(--zeus-border, #e1e5eb);
 }
 
 .e2e-checks li.pass strong {
-  color: #0d9668;
+  color: var(--zeus-success-text);
 }
 
 .e2e-checks li.fail strong {
@@ -1844,7 +1844,7 @@ td {
   padding: 8px 12px;
   border-radius: var(--zeus-radius-sm, 8px);
   border: 1px solid var(--zeus-border-strong, #cdd3db);
-  background: #ffffff;
+  background: var(--zeus-surface);
   color: var(--zeus-text, #0f172a);
   font-size: 1rem;
 }
@@ -1890,7 +1890,7 @@ td {
   cursor: not-allowed;
 }
 .admin-modal-hint.warn {
-  color: #b45309;
+  color: var(--zeus-warning-text);
 }
 .admin-companies-list ul {
   margin: 8px 0 0;
@@ -1964,8 +1964,8 @@ td {
 
   .admin-mobile-back {
     padding: 8px 12px;
-    background: #ffffff;
-    border: 1px solid #D1D5DB;
+    background: var(--zeus-surface);
+    border: 1px solid var(--zeus-border-strong);
     border-radius: var(--zeus-radius-sm, 8px);
     color: var(--zeus-text, #0f172a);
     font-size: 14px;

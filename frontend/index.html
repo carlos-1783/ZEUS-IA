@@ -19,9 +19,26 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="ZEUS IA">
     
+    <!-- Tema inicial ANTES de pintar (sin flash): platino ('light') por
+         defecto; oscuro solo si el usuario lo eligió (localStorage
+         'zeus_theme', mismo valor que guarda stores/settings.ts) o 'auto'
+         con el sistema en oscuro. Tokens en src/assets/styles/zeus-theme-tokens.css. -->
+    <script>
+      (function () {
+        var t = 'light';
+        try {
+          var s = localStorage.getItem('zeus_theme');
+          if (s === 'dark' || s === 'light') t = s;
+          else if (s === 'auto') {
+            t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+        } catch (e) { /* sin localStorage: tema base */ }
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
+
     <!-- Theme Color -->
-    <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#e6e8ef">
     <meta name="msapplication-TileColor" content="#0f172a">
     
     <!-- Preconnect to external domains -->
@@ -67,12 +84,18 @@
         --grad-start: #0f4c81;
         --grad-mid: #0575E6;
         --grad-end: #00F260;
-        --text-color: #f8fafc;
-        --bg-color: #0f172a;
+        /* Platino por defecto; oscuro con data-theme="dark" (ver script de arriba) */
+        --text-color: #141a2b;
+        --bg-color: #e6e8ef;
         --card-bg: rgba(255, 255, 255, 0.05);
         --card-hover: rgba(255, 255, 255, 0.1);
         --primary: #3b82f6;
         --primary-hover: #2563eb;
+      }
+
+      :root[data-theme='dark'] {
+        --text-color: #eceef6;
+        --bg-color: #0a0e1a;
       }
       
       * {
@@ -136,7 +159,7 @@
       .loading-spinner {
         width: 50px;
         height: 50px;
-        border: 3px solid rgba(255, 255, 255, 0.1);
+        border: 3px solid rgba(128, 140, 170, 0.2);
         border-radius: 50%;
         border-top-color: var(--primary);
         animation: spin 1s ease-in-out infinite;

@@ -217,7 +217,7 @@ onMounted(load)
   padding: 4px 10px;
   border-radius: var(--zeus-radius-sm, 6px);
   background: var(--zeus-warning-soft, #fef6e7);
-  color: #b45309;
+  color: var(--zeus-warning-text);
 }
 
 .refresh-btn {
@@ -324,7 +324,7 @@ th {
   border-radius: var(--zeus-radius-sm, 6px);
 }
 
-.status-pill.partial { background: var(--zeus-warning-soft, #fef6e7); color: #b45309; }
+.status-pill.partial { background: var(--zeus-warning-soft, #fef6e7); color: var(--zeus-warning-text); }
 .status-pill.fake { background: var(--zeus-danger-soft, #fdecec); color: #b91c1c; }
 .status-pill.disconnected { background: var(--zeus-bg-subtle, #eef1f6); color: var(--zeus-text-secondary, #52607a); }
 .status-pill.real { background: var(--zeus-success-soft, #e9faf3); color: #15803d; }

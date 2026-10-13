@@ -84,7 +84,7 @@ defineProps({
 }
 
 .kpi-error {
-  color: #b45309;
+  color: var(--zeus-warning-text);
   border: 1px solid rgba(245, 158, 11, 0.3);
   background: var(--zeus-warning-soft, #fef6e7);
 }

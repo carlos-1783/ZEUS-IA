@@ -18,7 +18,7 @@ SESSION_TIMEOUT_MAX = 24 * 60
 def _defaults_dict() -> Dict[str, Any]:
     return {
         "language": "es",
-        "theme": "dark",
+        "theme": "light",
         "two_factor_enabled": False,
         "session_timeout": 60,
     }

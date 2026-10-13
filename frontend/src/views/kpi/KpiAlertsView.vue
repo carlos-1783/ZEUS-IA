@@ -87,7 +87,8 @@ onMounted(async () => {
   gap: 12px;
   align-items: start;
   padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--zeus-surface);
+  border: 1px solid var(--zeus-border);
   border-radius: 8px;
   border-left: 3px solid rgba(245, 158, 11, 0.6);
 }
@@ -104,6 +105,6 @@ onMounted(async () => {
 }
 
 .empty {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--zeus-text-muted);
 }
 </style>

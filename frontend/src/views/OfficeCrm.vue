@@ -867,8 +867,8 @@ onMounted(bootstrapPage)
    cobro" pueden coexistir en la misma vista — ninguno es EL unico boton
    primario, asi que ninguno lleva el acento gradiente. */
 .btn-primary {
-  border: 1px solid #D1D5DB;
-  background: #ffffff;
+  border: 1px solid var(--zeus-border-strong);
+  background: var(--zeus-surface);
   color: var(--zeus-text, #0f172a);
   border-radius: 6px;
   padding: 8px 12px;
@@ -877,7 +877,7 @@ onMounted(bootstrapPage)
   transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 .btn-primary:hover:not(:disabled) {
-  border-color: #9aa2af;
+  border-color: var(--zeus-text-muted);
 }
 .btn-primary:disabled {
   opacity: 0.6;

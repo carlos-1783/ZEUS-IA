@@ -369,12 +369,12 @@ onMounted(async () => {
    acento vibrante debe aparecer como mucho una vez por vista, no
    repetido en cada tarjeta. */
 .pill.online {
-  color: #0d9668;
+  color: var(--zeus-success-text);
   background: var(--zeus-success-soft, #e9faf3);
 }
 
 .pill.idle {
-  color: #b45309;
+  color: var(--zeus-warning-text);
   background: var(--zeus-warning-soft, #fef3e2);
 }
 

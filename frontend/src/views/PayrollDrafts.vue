@@ -60,10 +60,14 @@ async function downloadDraft(id) {
   downloading.value = id
   try {
     const blob = await api.getBlob(`/api/v1/payroll/drafts/${id}/download`)
+    // Extensión según el tipo real que devuelve el backend: PDF (reportlab) o TXT
+    // (respaldo sin reportlab). Antes se guardaba siempre como .pdf.
+    const mime = String(blob?.type || '').split(';')[0].trim().toLowerCase()
+    const ext = mime === 'application/pdf' ? 'pdf' : mime === 'text/plain' ? 'txt' : 'bin'
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `nomina-borrador-${id}.pdf`
+    a.download = `nomina-borrador-${id}.${ext}`
     a.click()
     URL.revokeObjectURL(url)
   } catch (e) {

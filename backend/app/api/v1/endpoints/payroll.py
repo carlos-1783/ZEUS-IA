@@ -7,7 +7,7 @@ from typing import Optional
 import os
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user
@@ -18,7 +18,6 @@ from app.models.payroll_draft import PayrollDraft
 router = APIRouter(prefix="/payroll", tags=["payroll"])
 logger = logging.getLogger(__name__)
 
-PAYROLL_OUTPUT_DIR = Path(os.getenv("PAYROLL_OUTPUT_DIR", "storage/outputs/payroll_drafts"))
 
 
 def _require_owner_or_superuser(current_user: User) -> None:
@@ -91,19 +90,27 @@ async def download_payroll_draft(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Descarga el PDF/TXT del borrador de nómina. Solo owner o superuser."""
+    """Descarga el PDF/TXT del borrador de nómina. Solo owner o superuser.
+
+    El documento sale de R2 (empresa del owner) o, si no se guardó allí (R2 sin configurar
+    o borrador antiguo cuyo fichero local se perdió en un deploy), se regenera desde la
+    fila de BD. Nunca depende del disco local del contenedor."""
+    from services.payroll_assistant_service import draft_document
+
     _require_owner_or_superuser(current_user)
     draft = db.query(PayrollDraft).filter(PayrollDraft.id == draft_id).first()
     if not draft:
         raise HTTPException(status_code=404, detail="Borrador no encontrado")
     if draft.owner_user_id != current_user.id and not current_user.is_superuser:
+        logger.warning(
+            "payroll_draft_download denegado draft_id=%s user_id=%s owner_user_id=%s",
+            draft_id, current_user.id, draft.owner_user_id,
+        )
         raise HTTPException(status_code=403, detail="No autorizado")
-    if not draft.pdf_path or not Path(draft.pdf_path).exists():
-        raise HTTPException(status_code=404, detail="Archivo no encontrado")
-    filename = os.path.basename(draft.pdf_path)
-    media_type = "application/pdf" if filename.lower().endswith(".pdf") else "text/plain"
-    return FileResponse(
-        draft.pdf_path,
+    data, filename, media_type = draft_document(db, draft)
+    logger.info("payroll_draft_download draft_id=%s user_id=%s bytes=%s", draft_id, current_user.id, len(data))
+    return Response(
+        content=data,
         media_type=media_type,
-        filename=filename,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

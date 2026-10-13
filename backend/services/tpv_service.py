@@ -1172,49 +1172,10 @@ class TPVService:
             },
         }
     
-    def close_register(
-        self,
-        terminal_id: str,
-        employee_id: str,
-        initial_cash: float,
-        final_cash: float
-    ) -> Dict[str, Any]:
-        """
-        Cerrar caja del terminal
-        
-        Args:
-            terminal_id: ID del terminal
-            employee_id: ID del empleado que cierra
-            initial_cash: Efectivo inicial
-            final_cash: Efectivo final
-        
-        Returns:
-            Dict con cierre de caja
-        """
-        # Calcular diferencias
-        expected_cash = initial_cash  # + ventas en efectivo del día
-        difference = final_cash - expected_cash
-        
-        closure = {
-            "id": f"CIERRE_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
-            "type": TPVDocumentType.CIERRE_CAJA.value,
-            "terminal_id": terminal_id,
-            "employee_id": employee_id,
-            "date": datetime.utcnow().isoformat(),
-            "initial_cash": initial_cash,
-            "final_cash": final_cash,
-            "expected_cash": expected_cash,
-            "difference": difference,
-            "status": "ok" if abs(difference) < 0.01 else "discrepancy"
-        }
-        
-        logger.info(f"💰 Cierre de caja: Terminal {terminal_id} - Diferencia: €{difference:.2f}")
-        
-        return {
-            "success": True,
-            "closure": closure
-        }
-    
+    # El cierre de caja vive en services/tpv_cash_closure_service.py (arqueo contra
+    # tpv_sales y cierre persistido por empresa). Aqui habia un calculo en memoria que
+    # ignoraba las ventas (expected_cash = initial_cash) y no guardaba nada.
+
     def set_integrations(
         self,
         rafael: Optional[Any] = None,

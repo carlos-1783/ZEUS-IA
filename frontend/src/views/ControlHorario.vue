@@ -58,6 +58,7 @@
               class="method-btn"
               :class="{ active: selectedMethod === method.id }"
               :disabled="!isMethodEnabled(method.id)"
+              :title="blockedMethods[method.id] || undefined"
             >
               <span class="method-icon" aria-hidden="true">
                 <svg v-if="method.id === 'face'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z"/><circle cx="12" cy="13" r="3.5"/></svg>
@@ -69,6 +70,9 @@
               <span class="method-label">{{ method.label }}</span>
             </button>
           </div>
+          <p v-if="blockedMethods.face" class="method-blocked-note" role="note">
+            {{ blockedMethods.face }}
+          </p>
         </div>
 
         <!-- Formulario de Fichaje -->
@@ -91,6 +95,22 @@
               :placeholder="$t('controlHorario.employeePhonePlaceholder')"
             />
           </div>
+          <div v-if="selectedMethod === 'qr'" class="employee-selector">
+            <label>Código QR del centro</label>
+            <input
+              v-model="qrCode"
+              type="text"
+              class="employee-select"
+              placeholder="Escanea el QR del centro (lector) o pega su código"
+              autocomplete="off"
+            />
+            <button type="button" class="btn-location" @click="loadCompanyQr">
+              Ver código QR de mi centro
+            </button>
+            <p v-if="companyQr" class="method-blocked-note">
+              Código del centro (imprímelo como QR en el puesto de fichaje): <code>{{ companyQr }}</code>
+            </p>
+          </div>
           <div v-if="selectedMethod === 'code'" class="employee-selector">
             <label>PIN empleado</label>
             <input
@@ -102,8 +122,11 @@
             />
           </div>
 
-          <div v-if="selectedMethod === 'location' && config.gps_required" class="location-info">
-            <p>📍 {{ $t('controlHorario.gpsRequired') }}</p>
+          <div v-if="selectedMethod === 'location'" class="location-info">
+            <p>📍 {{ config.gps_required ? $t('controlHorario.gpsRequired') : 'Se pedirá permiso del navegador para usar tu ubicación solo en este fichaje.' }}</p>
+            <p v-if="currentLocation.latitude != null">
+              Ubicación lista: {{ currentLocation.latitude.toFixed(5) }}, {{ currentLocation.longitude.toFixed(5) }}
+            </p>
             <button @click="getCurrentLocation" class="btn-location">
               📍 {{ $t('controlHorario.getLocation') }}
             </button>
@@ -343,9 +366,16 @@ const smartTpv = ref(null)
 const todayHoursByEmployee = ref({})
 const costEngine = ref(null)
 const employeePin = ref('')
+const qrCode = ref('')
+const companyQr = ref('')
 let refreshTimer = null
 
-const V1_METHOD_MAP = { qr: 'qr', code: 'pin', location: 'geo', remote: 'device', face: 'device' }
+// Sin 'face': el fichaje biométrico está bloqueado por ley (el backend responde 501).
+// Antes 'face' se mapeaba a 'device' y fichaba igualmente sin procesar ninguna cara.
+const V1_METHOD_MAP = { qr: 'qr', code: 'pin', location: 'geo', remote: 'device' }
+const FACE_BLOCKED_FALLBACK =
+  'Fichaje facial bloqueado: los datos biométricos no son proporcionales para el control horario (RGPD art. 9, AEPD). Usa PIN, QR del centro, geolocalización o registro manual.'
+const blockedMethods = ref({ face: FACE_BLOCKED_FALLBACK })
 
 // Traduce el código crudo de alerta (backend: smart_time_control_service.py,
 // alert_kind en minúsculas, mostrado en mayúsculas por CSS text-transform)
@@ -413,6 +443,7 @@ const entradaLabel = computed(() => {
 })
 
 const isMethodEnabled = (methodId) => {
+  if (blockedMethods.value[methodId]) return false
   const enabled = Array.isArray(config.value?.methods_enabled) ? config.value.methods_enabled : []
   if (enabled.includes(methodId)) return true
   // Compatibilidad backend: on_site equivale a location en UI.
@@ -462,17 +493,20 @@ const checkStatus = async () => {
     const infoData = bootstrap?.info || {}
     const statusData = bootstrap?.status || {}
     const employeesData = Array.isArray(bootstrap?.employees) ? bootstrap.employees : []
-    const employeesSource = bootstrap?.employees_source || 'memory'
     const recordsData = Array.isArray(bootstrap?.today_records) ? bootstrap.today_records : []
 
     businessProfile.value = infoData.business_profile
     config.value = infoData.config || {}
+    blockedMethods.value = {
+      face: FACE_BLOCKED_FALLBACK,
+      ...(infoData.blocked_methods && typeof infoData.blocked_methods === 'object' ? infoData.blocked_methods : {})
+    }
     if (!isMethodEnabled(selectedMethod.value)) {
       const enabled = Array.isArray(config.value?.methods_enabled) ? config.value.methods_enabled : []
       const normalized = enabled.includes('on_site')
         ? enabled.map((m) => (m === 'on_site' ? 'location' : m))
         : enabled
-      selectedMethod.value = normalized[0] || 'qr'
+      selectedMethod.value = normalized.find((m) => !blockedMethods.value[m]) || 'code'
     }
 
     // Actualizar empleados con estado
@@ -489,20 +523,9 @@ const checkStatus = async () => {
       })
     }
     
-    // En producción no usar empleados demo: mostrar vacío para forzar configuración real.
-    const isProd = import.meta.env.PROD
-    if (Object.keys(employeesMap).length === 0) {
-      if (employeesSource === 'database' || isProd) {
-        employees.value = []
-      } else {
-        employees.value = [
-          { id: 'emp1', name: 'Empleado 1', status: 'outside' },
-          { id: 'emp2', name: 'Empleado 2', status: 'outside' }
-        ]
-      }
-    } else {
-      employees.value = Object.values(employeesMap)
-    }
+    // Solo empleados reales de la empresa (company_employees). Sin plantilla: lista vacía
+    // (antes, fuera de producción, se inventaban emp1/emp2 que no existían en BD).
+    employees.value = Object.values(employeesMap)
     
     // Sincronizar con status del servicio (misma forma que devuelve get_current_status)
     const statusEmployees = statusData?.employees
@@ -549,7 +572,11 @@ const postCheckinV1 = async (type) => {
     method
   }
   if (method === 'qr') {
-    body.qr_token = `ui-${selectedEmployee.value}-${Date.now()}`
+    // El token lo valida el backend (firmado por ZEUS y ligado a la empresa); antes se
+    // fabricaba aquí `ui-<empleado>-<timestamp>` y el backend aceptaba cualquier cadena.
+    const qr = (qrCode.value || '').trim()
+    if (!qr) throw new Error('Escanea o pega el código QR del centro para fichar por QR.')
+    body.qr_token = qr
   }
   if (method === 'pin') {
     const pin = (employeePin.value || '').trim()
@@ -557,6 +584,9 @@ const postCheckinV1 = async (type) => {
     body.pin = pin
   }
   if (method === 'geo') {
+    if (currentLocation.value.latitude == null || currentLocation.value.longitude == null) {
+      throw new Error('Pulsa "obtener ubicación" y acepta el permiso del navegador antes de fichar por geolocalización.')
+    }
     body.lat = currentLocation.value.latitude
     body.lng = currentLocation.value.longitude
   }
@@ -565,6 +595,18 @@ const postCheckinV1 = async (type) => {
   }
   const api = (await import('@/services/api')).default
   return api.post('/api/v1/checkin', body, token)
+}
+
+const loadCompanyQr = async () => {
+  try {
+    const token = authStore.getToken ? authStore.getToken() : authStore.token
+    const cid = costEngine.value?.company_id
+    const api = (await import('@/services/api')).default
+    const data = await api.get(`/api/v1/checkin/qr-token${cid ? `?company_id=${cid}` : ''}`, token)
+    companyQr.value = data?.qr_token || ''
+  } catch (err) {
+    alert(`❌ ${err.message}`)
+  }
 }
 
 const handleCheckIn = async () => {

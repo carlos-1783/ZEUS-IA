@@ -1313,17 +1313,34 @@ async def close_register(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Cerrar caja del terminal"""
+    """Cerrar caja: arqueo contra las ventas reales de la empresa (tpv_sales) y cierre persistido."""
+    from services.tpv_cash_closure_service import close_register as _close_register_db
+
     _ensure_employee_tpv_jornada(db, current_user)
     svc = _tpv_service_for_user(db, current_user)
     effective_employee_id = resolve_tpv_operator_employee_code(db, current_user, svc)
-    result = svc.close_register(
+    return _close_register_db(
+        db,
+        company_id=_primary_company_id(db, current_user),
+        user_id=current_user.id,
         terminal_id=request.terminal_id,
-        employee_id=effective_employee_id,
+        employee_code=effective_employee_id,
         initial_cash=request.initial_cash,
         final_cash=request.final_cash,
     )
-    return result
+
+
+@router.get("/close-register")
+async def list_register_closures(
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Ultimos cierres de caja de la empresa del usuario (solo su empresa)."""
+    from services.tpv_cash_closure_service import list_closures
+
+    cid = _primary_company_id(db, current_user)
+    return {"success": True, "company_id": cid, "closures": list_closures(db, company_id=cid, limit=limit)}
 
 
 # ----- ZEUS_TPV_FULL_FISCAL_INFRASTRUCTURE_ES_003: perfil fiscal y exportación modelo 303 -----

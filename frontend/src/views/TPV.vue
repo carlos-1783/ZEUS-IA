@@ -38,6 +38,15 @@
           <span class="header-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-5h5"/></svg></span>
           {{ $t('tpv.refresh') }}
         </button>
+        <button
+          type="button"
+          class="header-btn"
+          :disabled="closingRegister"
+          title="Arqueo contra las ventas registradas desde el último cierre"
+          @click="closeRegister"
+        >
+          {{ closingRegister ? 'Cerrando caja…' : 'Cierre de caja' }}
+        </button>
         <div v-if="authStore.isEmployee && tpvJornada" class="tpv-jornada-badge" :class="{ on: tpvJornada.in_turno }">
           {{ tpvJornada.in_turno ? $t('controlHorario.enTurno') : $t('controlHorario.fueraTurno') }}
         </div>
@@ -2206,6 +2215,57 @@ const processPayment = async () => {
     error('Error al procesar el pago: ' + err.message)
     // Volver al estado PRE_PAYMENT en caso de error
     tpvState.value = TPV_STATES.PRE_PAYMENT
+  }
+}
+
+// Cierre de caja: el backend suma las ventas reales de la empresa desde el último
+// cierre (tpv_sales) y persiste el arqueo; aquí solo se piden los importes contados.
+const closingRegister = ref(false)
+const parseEuros = (raw) => {
+  if (raw === null) return null
+  const n = Number(String(raw).replace(',', '.').trim())
+  return Number.isFinite(n) && n >= 0 ? n : NaN
+}
+const closeRegister = async () => {
+  if (closingRegister.value) return
+  const initialCash = parseEuros(window.prompt('Efectivo inicial en caja (EUR):', '0'))
+  if (initialCash === null) return
+  const finalCash = parseEuros(window.prompt('Efectivo contado ahora en caja (EUR):', ''))
+  if (finalCash === null) return
+  if (Number.isNaN(initialCash) || Number.isNaN(finalCash)) {
+    warning('Importe no válido: usa un número igual o mayor que 0')
+    return
+  }
+  closingRegister.value = true
+  try {
+    const token = await getAuthToken()
+    if (!token) {
+      warning('Sesión expirada. Por favor, inicia sesión nuevamente.')
+      router.push(loginRedirectPath())
+      return
+    }
+    const api = (await import('@/services/api')).default
+    const result = await api.post('/api/v1/tpv/close-register', {
+      terminal_id: 'tpv-web',
+      initial_cash: initialCash,
+      final_cash: finalCash
+    }, token)
+    const c = result?.closure
+    if (!c) {
+      error('El backend no devolvió el cierre de caja')
+      return
+    }
+    const resumen = `Cierre #${c.id}: ${c.sales_count} ventas · efectivo EUR ${formatPrice(c.cash_sales_total)} · tarjeta EUR ${formatPrice(c.card_sales_total)} · otros EUR ${formatPrice(c.other_sales_total)}. Esperado en caja EUR ${formatPrice(c.expected_cash)}, contado EUR ${formatPrice(c.final_cash)}`
+    if (c.status === 'ok') {
+      success(`${resumen}. Caja cuadrada.`)
+    } else {
+      warning(`${resumen}. Descuadre: EUR ${formatPrice(c.difference)}`)
+    }
+  } catch (err) {
+    console.error('Error en cierre de caja:', err)
+    error('No se pudo cerrar la caja: ' + (err?.detail || err.message))
+  } finally {
+    closingRegister.value = false
   }
 }
 

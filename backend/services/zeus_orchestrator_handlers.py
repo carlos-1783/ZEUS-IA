@@ -20,6 +20,8 @@ from app.schemas.zeus_task import ZeusExecutionResult, ZeusExecutionStepResult, 
 from services.activity_logger import ActivityLogger
 from services.email_service import email_service
 import services.crm_office_service as crm_svc
+import services.outbound_consent_v1 as consent_svc
+from app.models.company import Company
 
 logger = logging.getLogger(__name__)
 
@@ -127,30 +129,49 @@ def execute_list_customers(db: Session, user: User, action: ZeusAction) -> ZeusE
     )
 
 
+def _campaign_audience(db: Session, user: User, company_id: int):
+    """Destinatarios de campana de la empresa activa: solo clientes con email, con consentimiento
+    comercial registrado y sin baja. Devuelve (elegibles, excluidos_sin_consentimiento)."""
+    customers = [
+        c for c in crm_svc.list_customers(db, user)
+        if c.company_id == company_id and c.email and str(c.email).strip()
+    ]
+    eligible = [c for c in customers if consent_svc.customer_marketing_allowed(c)]
+    return eligible, len(customers) - len(eligible)
+
+
+def _no_consent_message(excluded: int) -> str:
+    detalle = f" ({excluded} cliente(s) con email sin consentimiento o dados de baja)" if excluded else ""
+    return (
+        "Ningún cliente de tu empresa tiene consentimiento comercial registrado"
+        f"{detalle}. No se envió ningún mensaje. Registra el consentimiento de cada cliente "
+        "en el CRM antes de enviar campañas."
+    )
+
+
 def preview_send_campaign(db: Session, user: User, action: ZeusAction) -> Dict[str, Any]:
     task = _action_to_task(action)
-    customers = crm_svc.list_customers(db, user)
-    with_email = [c for c in customers if c.email and str(c.email).strip()]
+    cid = _active_company_id(db, user, action)
+    if cid is None:
+        return {"message": _no_company_result("create_campaign_send").message, "customer_count": 0}
+    eligible, excluded = _campaign_audience(db, user, cid)
     discount = task.discount_percent
     pct = f"{int(discount)}%" if discount else "especial"
-    n = len(with_email)
+    n = len(eligible)
     if n == 0:
-        return {
-            "message": (
-                "No hay clientes con email en tu CRM. Añade correos o importa un archivo antes de enviar."
-            ),
-            "customer_count": 0,
-        }
+        return {"message": _no_consent_message(excluded), "customer_count": 0, "excluded_no_consent": excluded}
     cap = min(n, MAX_EMAILS_PER_RUN)
     extra = f" (máximo {MAX_EMAILS_PER_RUN} por envío)" if n > MAX_EMAILS_PER_RUN else ""
+    excl = f" Se excluyen {excluded} sin consentimiento o dados de baja." if excluded else ""
     name = task.campaign_name or "Campaña"
     return {
         "message": (
-            f"Preparado: «{name}» con oferta {pct} para {n} cliente(s) con email. "
-            f"Se enviarán {cap} mensaje(s){extra}. "
+            f"Preparado: «{name}» con oferta {pct} para {n} cliente(s) con consentimiento comercial. "
+            f"Se enviarán {cap} mensaje(s){extra}, cada uno con enlace de baja.{excl} "
             f"Responde «confirmar» para ejecutar."
         ),
         "customer_count": n,
+        "excluded_no_consent": excluded,
         "will_send": cap,
         "discount_percent": discount,
     }
@@ -163,12 +184,14 @@ async def execute_send_campaign(db: Session, user: User, action: ZeusAction) -> 
     discount = task.discount_percent
     pct_label = f"{int(discount)}%" if discount else "especial"
 
+    cid = _active_company_id(db, user, action)
+    if cid is None:
+        return _no_company_result("create_campaign_send")
     try:
-        customers = crm_svc.list_customers(db, user)
+        eligible, excluded = _campaign_audience(db, user, cid)
         recipients = [
             {"id": c.id, "name": c.name, "email": str(c.email).strip().lower()}
-            for c in customers
-            if c.email and str(c.email).strip()
+            for c in eligible
         ]
     except Exception as exc:
         logger.exception("crm list_customers")
@@ -181,12 +204,43 @@ async def execute_send_campaign(db: Session, user: User, action: ZeusAction) -> 
         )
 
     if not recipients:
+        log_central(
+            user=user,
+            action_type="campaign_blocked",
+            description="Campaña no enviada: ningún cliente con consentimiento comercial",
+            details={"company_id": cid, "reason": "no_consent", "excluded_no_consent": excluded},
+            metrics={"recipients": 0, "excluded_no_consent": excluded},
+            agent_name="PERSEO",
+            status="failed",
+        )
         return ZeusExecutionResult(
             success=False,
             intent="create_campaign_send",
-            message="No hay clientes con email en el CRM. No se envió ningún mensaje.",
+            message=_no_consent_message(excluded),
             executed=False,
-            metrics={"recipients": 0},
+            metrics={"recipients": 0, "excluded_no_consent": excluded, "company_id": cid},
+            steps=steps,
+        )
+
+    if consent_svc.unsubscribe_url(cid, recipients[0]["id"]) is None:
+        log_central(
+            user=user,
+            action_type="campaign_blocked",
+            description="Campaña no enviada: falta PUBLIC_BASE_URL para el enlace de baja",
+            details={"company_id": cid, "reason": "no_unsubscribe_url"},
+            metrics={"recipients": len(recipients)},
+            agent_name="PERSEO",
+            status="failed",
+        )
+        return ZeusExecutionResult(
+            success=False,
+            intent="create_campaign_send",
+            message=(
+                "No se puede enviar la campaña: cada correo comercial debe llevar un enlace de baja y "
+                "PUBLIC_BASE_URL no está configurado en el servidor. No se envió ningún mensaje."
+            ),
+            executed=False,
+            metrics={"recipients": len(recipients), "sent": 0, "company_id": cid},
             steps=steps,
         )
 
@@ -195,7 +249,7 @@ async def execute_send_campaign(db: Session, user: User, action: ZeusAction) -> 
             agent=AGENT_CRM,
             step="filter_target",
             success=True,
-            detail=f"{len(recipients)} destinatarios",
+            detail=f"{len(recipients)} destinatarios con consentimiento ({excluded} excluidos)",
         )
     )
 
@@ -208,8 +262,8 @@ async def execute_send_campaign(db: Session, user: User, action: ZeusAction) -> 
         user=user,
         action_type="campaign_created",
         description=f"Campaña: {task.campaign_name}",
-        details={"campaign_id": campaign_id, "discount_percent": discount},
-        metrics={"recipients_planned": len(recipients)},
+        details={"campaign_id": campaign_id, "discount_percent": discount, "company_id": cid},
+        metrics={"recipients_planned": len(recipients), "excluded_no_consent": excluded},
         agent_name="PERSEO",
         status="in_progress",
     )
@@ -231,8 +285,14 @@ async def execute_send_campaign(db: Session, user: User, action: ZeusAction) -> 
             metrics={"recipients": len(recipients), "sent": 0},
         )
 
+    company = db.get(Company, cid)
+    business_name = (getattr(company, "company_name", None) or "este negocio").strip()
     for rec in to_send:
         personalized = body_html.replace("Hola,", f"Hola {rec['name']},")
+        personalized += consent_svc.unsubscribe_footer_html(
+            consent_svc.unsubscribe_url(cid, rec["id"]), business_name
+        )
+        error = None
         try:
             out = await email_service.send_email(
                 to_email=rec["email"],
@@ -240,13 +300,34 @@ async def execute_send_campaign(db: Session, user: User, action: ZeusAction) -> 
                 content=personalized,
                 content_type="text/html",
             )
-            if out.get("success"):
-                sent += 1
-            else:
-                failed += 1
-        except Exception:
+            ok_send = bool(out.get("success"))
+            error = None if ok_send else out.get("error")
+        except Exception as exc:
+            ok_send = False
+            error = type(exc).__name__
+            logger.exception("send_email campaña company_id=%s customer_id=%s", cid, rec["id"])
+        if ok_send:
+            sent += 1
+        else:
             failed += 1
-            logger.exception("send_email %s", rec["email"])
+        consent_svc.record_outbound(
+            db,
+            company_id=cid,
+            user_id=user.id,
+            channel=consent_svc.CHANNEL_EMAIL,
+            purpose="campaign",
+            recipient=rec["email"],
+            status_value="sent" if ok_send else "failed",
+            detail=f"campaign_id={campaign_id}" + (f" error={error}" if error else ""),
+            recipient_kind="customer",
+            recipient_ref_id=rec["id"],
+            commit=False,
+        )
+    db.commit()
+    logger.info(
+        "campaña company_id=%s campaign_id=%s destinatarios=%s excluidos=%s enviados=%s fallidos=%s",
+        cid, campaign_id, len(recipients), excluded, sent, failed,
+    )
 
     steps.append(
         ZeusExecutionStepResult(
@@ -258,7 +339,6 @@ async def execute_send_campaign(db: Session, user: User, action: ZeusAction) -> 
         )
     )
 
-    cid = _active_company_id(db, user, action)
     if cid is not None:
         try:
             crm_svc.log_activity(
@@ -279,7 +359,7 @@ async def execute_send_campaign(db: Session, user: User, action: ZeusAction) -> 
             user=user,
             action_type="message_sent",
             description=f"Mensajes de campaña enviados: {sent}",
-            details={"campaign_id": campaign_id, "sent": sent, "failed": failed},
+            details={"campaign_id": campaign_id, "company_id": cid, "sent": sent, "failed": failed},
             metrics={"emails_sent": sent},
             agent_name="PERSEO",
         )
@@ -287,7 +367,7 @@ async def execute_send_campaign(db: Session, user: User, action: ZeusAction) -> 
         user=user,
         action_type="campaign_sent",
         description=f"Campaña enviada: {sent} emails",
-        details={"campaign_id": campaign_id, "sent": sent, "failed": failed},
+        details={"campaign_id": campaign_id, "company_id": cid, "excluded_no_consent": excluded, "sent": sent, "failed": failed},
         metrics={"emails_sent": sent, "emails_failed": failed},
         agent_name="PERSEO",
         status="completed" if sent else "failed",
@@ -311,7 +391,14 @@ async def execute_send_campaign(db: Session, user: User, action: ZeusAction) -> 
         intent="create_campaign_send",
         message=msg,
         executed=True,
-        metrics={"campaign_id": campaign_id, "recipients": len(recipients), "sent": sent, "failed": failed},
+        metrics={
+            "campaign_id": campaign_id,
+            "company_id": cid,
+            "recipients": len(recipients),
+            "excluded_no_consent": excluded,
+            "sent": sent,
+            "failed": failed,
+        },
         steps=steps,
     )
 

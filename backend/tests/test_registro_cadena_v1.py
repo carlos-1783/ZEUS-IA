@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
 
 from app.core.auth import get_current_active_user
+from app.core.config import settings
 from app.core.security import get_password_hash
 from app.db.base import Base, SessionLocal, engine
 from app.main import app
@@ -58,6 +59,8 @@ def sent(monkeypatch):
         return {"success": True}
 
     es = orch.handlers.email_service
+    # Fase 2 (#3): la campana exige enlace de baja (PUBLIC_BASE_URL) y clientes con consentimiento.
+    monkeypatch.setattr(settings, "PUBLIC_BASE_URL", "https://api.zeus.test", raising=False)
     monkeypatch.setattr(es, "is_configured", lambda: True)
     monkeypatch.setattr(es, "send_email", _send)
     return calls
@@ -68,7 +71,7 @@ def _seed(db):
     co = Company(company_name=f"J7 {suf}", slug=f"j7-{suf}")
     db.add(co)
     db.flush()
-    db.add(Customer(name="Cli", email=f"cli_{suf}@example.test", company_id=co.id))
+    db.add(Customer(name="Cli", email=f"cli_{suf}@example.test", company_id=co.id, marketing_consent=True))
     u = User(email=f"j7_{suf}@example.test", hashed_password=get_password_hash("TestPass1"),
              full_name="J7", is_active=True)
     db.add(u)

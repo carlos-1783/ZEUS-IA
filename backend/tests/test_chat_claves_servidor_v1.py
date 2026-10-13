@@ -61,6 +61,10 @@ def sent(monkeypatch):
         return {"success": True}
 
     es = orch.handlers.email_service
+    # Fase 2 (#3): la campana exige enlace de baja (PUBLIC_BASE_URL) y clientes con consentimiento.
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "PUBLIC_BASE_URL", "https://api.zeus.test", raising=False)
     monkeypatch.setattr(es, "is_configured", lambda: True)
     monkeypatch.setattr(es, "send_email", _send)
     return calls
@@ -73,7 +77,8 @@ def _seed(db: Session, company=None, tag="u", with_customer=True, role="owner"):
         db.add(company)
         db.flush()
         if with_customer:
-            db.add(Customer(name="Cli", email=f"cli_{suf}@example.test", company_id=company.id))
+            db.add(Customer(name="Cli", email=f"cli_{suf}@example.test", company_id=company.id,
+                            marketing_consent=True))
     user = User(
         email=f"j3_{tag}_{suf}@example.test",
         hashed_password=get_password_hash("TestPass1"),

@@ -45,23 +45,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         raise credentials_exception
     return user
 
-@router.get(
-    "/status",
-    operation_id="commands_status_api_v1",
-    summary="Get System Status",
-    description="Get the current system status. No authentication required.",
-    response_description="Current system status information"
-)
-async def get_status():
-    """
-    Obtiene el estado actual del sistema.
-    No requiere autenticación para permitir verificación de estado sin credenciales.
-    """
-    return {
-        "status": "operational",
-        "timestamp": datetime.utcnow().isoformat(),
-        "version": "1.0.0"
-    }
+# Fase 2 (#27): GET /commands/status devolvia "operational" fijo sin comprobar nada y nadie lo
+# usaba. Eliminado: el estado real del servicio esta en GET /api/v1/health.
 
 @router.post(
     "/execute",

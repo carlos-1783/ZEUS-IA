@@ -11,8 +11,8 @@ seguía vivo aquí. Ver AUDIT_JUSTICIA_ESTADO_FINAL.md.
 
 Después: ejecuta GDPR real (`services.gdpr_engine.run_gdpr_check`) y lee
 documentos pendientes reales (`services.justice_audit_service`) scopeados
-al usuario real de la actividad; si el payload trae `document_id` también
-intenta una firma real.
+al usuario real de la actividad; si el payload trae `document_id` NO firma
+(Fase 2: firmar/sellar exige acción humana explícita).
 """
 
 from __future__ import annotations
@@ -124,7 +124,9 @@ def test_handle_justicia_task_fails_honestly_without_user(db: Session):
     assert "error" in result["details_update"]
 
 
-def test_handle_justicia_task_signs_real_document_when_document_id_present(db: Session):
+def test_handle_justicia_task_never_signs_from_workflow(db: Session):
+    """Fase 2 (riesgo legal, #2): un workflow ya NO firma ni aprueba documentos aunque el payload
+    traiga document_id; queda bloqueado honestamente y el documento sigue en draft sin sello."""
     user = _seed_user(db)
     doc = LegalDocument(
         user_id=user.id,
@@ -148,26 +150,21 @@ def test_handle_justicia_task_signs_real_document_when_document_id_present(db: S
 
     assert result["status"] == "completed"
     signature = result["details_update"]["automation"]["signature"]
-    assert signature is not None
-    assert signature["document_id"] == doc.public_id
-    assert result["metrics_update"]["documents_signed"] == 1
+    assert signature == {"status": "no_real_logic", "document_id": doc.public_id,
+                         "reason": "signature_requires_explicit_human_action"}
+    assert result["metrics_update"]["documents_signed"] == 0
+    assert "NO aplicado" in result["notes"]
 
     db.refresh(doc)
-    assert doc.status == "approved"
-    assert doc.signature_hash is not None
+    assert doc.status == "draft"
+    assert doc.signature_hash is None
 
 
-def test_handle_justicia_task_reports_signature_error_without_crashing(db: Session):
+def test_handle_justicia_task_without_document_id_has_no_signature(db: Session):
     user = _seed_user(db)
-    activity = _make_activity(
-        db,
-        action_type="compliance_check",
-        user_email=user.email,
-        details={"payload": {"document_id": "no-existe-id"}},
-    )
+    activity = _make_activity(db, action_type="compliance_check", user_email=user.email)
     result = handle_justicia_task(activity)
 
     assert result["status"] == "completed"
-    automation = result["details_update"]["automation"]
-    assert automation["signature"] is None
-    assert automation["signature_error"]
+    assert result["details_update"]["automation"]["signature"] is None
+    assert result["metrics_update"]["documents_signed"] == 0

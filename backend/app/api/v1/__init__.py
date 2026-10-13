@@ -55,6 +55,7 @@ from app.api.v1.endpoints import (
     products,
     insurance,
     zeus_closure_v1,
+    zeus_inbox_v1,
     zeus_core_v2,
     webhooks,
     payroll,
@@ -162,6 +163,8 @@ api_router.include_router(workspace_playbooks_v1.router, tags=["workspace-playbo
 api_router.include_router(justicia_v1.router, tags=["justicia-v1"])
 api_router.include_router(justice.router, tags=["justice"])
 api_router.include_router(zeus_closure_v1.router, tags=["zeus-closure"])
+# ZEUS recepcionista: entrada unica por foto/PDF -> clasificacion -> agente responsable
+api_router.include_router(zeus_inbox_v1.router, tags=["zeus-inbox"])
 
 # ZEUS final closure v2
 api_router.include_router(zeus_core_v2.router, prefix="/zeus-core", tags=["zeus-core-v2"])

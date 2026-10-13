@@ -77,12 +77,19 @@ def _format_read(chat_action: str, result: Dict[str, Any]) -> str:
         return (f"Estado legal de tu cuenta: {data['legal_documents']} documentos legales y "
                 f"{data.get('compliance_events', 0)} eventos de cumplimiento registrados.{extra}")
     if chat_action == "get_daily_close" and "tickets" in data:
+        closures = data.get("cash_closures") or []
+        if closures:
+            diff = sum(c["difference"] for c in closures)
+            cash_txt = (f"Arqueo de caja: {len(closures)} cierre(s), efectivo contado "
+                        f"{_eur(sum(c['counted_cash'] for c in closures))}, descuadre {_eur(diff)}.")
+        else:
+            cash_txt = data.get("note") or ""
         if not data["tickets"]:
-            return f"No hay ventas TPV registradas el {data['date']} en tu empresa. {data['note']}"
+            return f"No hay ventas TPV registradas el {data['date']} en tu empresa. {cash_txt}".strip()
         methods = ", ".join(f"{m} {_eur(v['total'])} ({v['count']})" for m, v in data["by_payment_method"].items())
         return (f"Cierre del {data['date']}: {data['tickets']} tickets, total {_eur(data['total'])} "
                 f"(IVA {_eur(data['tax_total'])}, ticket medio {_eur(data['average_ticket'])}). "
-                f"Por forma de pago: {methods}. {data['note']}")
+                f"Por forma de pago: {methods}. {cash_txt}").strip()
     if chat_action == "get_pending_invoices" and "pending_count" in data:
         drafts = f" Además tienes {data['drafts_count']} borrador(es) sin emitir." if data["drafts_count"] else ""
         if not data["pending_count"]:

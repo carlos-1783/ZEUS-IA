@@ -2,9 +2,10 @@
 
 Todo sale de la BD filtrado por la empresa (`company_id`) que resuelve el ejecutor en servidor.
 
-Cierre del dia: el TPV NO guarda arqueo de caja (`POST /tpv/close-register` no persiste nada), asi
-que el "cierre" son las ventas TPV registradas ese dia local (tickets, total, IVA, por forma de
-pago). Se dice explicitamente en la salida; no se inventa un efectivo contado.
+Cierre del dia: las ventas TPV registradas ese dia local (tickets, total, IVA, por forma de pago)
+y, si se hizo, el arqueo real guardado por `POST /tpv/close-register` (`tpv_cash_closures`:
+efectivo esperado, contado y descuadre). Sin arqueo ese dia se dice explicitamente; no se inventa
+un efectivo contado.
 """
 
 from __future__ import annotations
@@ -18,9 +19,27 @@ from sqlalchemy.orm import Session
 from services.local_day_v1 import day_bounds_utc, local_tz
 
 NO_CASH_COUNT_NOTE = (
-    "El TPV no guarda el arqueo de caja (efectivo contado), así que el cierre son las ventas "
-    "registradas ese día."
+    "Ese día no se hizo arqueo de caja en el TPV, así que el cierre son las ventas registradas."
 )
+
+
+def _cash_closures(db: Session, company_id: int, start: datetime, end: datetime) -> List[Dict[str, Any]]:
+    from app.models.tpv_cash_closure import TPVCashClosure
+
+    rows = (
+        db.query(TPVCashClosure)
+        .filter(TPVCashClosure.company_id == company_id,
+                TPVCashClosure.period_end >= start, TPVCashClosure.period_end < end)
+        .order_by(TPVCashClosure.period_end.asc())
+        .all()
+    )
+    return [{
+        "terminal": c.terminal_id,
+        "expected_cash": round(float(c.expected_cash or 0), 2),
+        "counted_cash": round(float(c.final_cash or 0), 2),
+        "difference": round(float(c.difference or 0), 2),
+        "status": c.status,
+    } for c in rows]
 
 
 def daily_close_summary(db: Session, company_id: int, day: date) -> Dict[str, Any]:
@@ -39,6 +58,7 @@ def daily_close_summary(db: Session, company_id: int, day: date) -> Dict[str, An
         .group_by(TPVSale.payment_method)
         .all()
     )
+    closures = _cash_closures(db, company_id, start, end)
     by_method: Dict[str, Dict[str, Any]] = {}
     tickets = 0
     total = tax = subtotal = 0.0
@@ -57,8 +77,9 @@ def daily_close_summary(db: Session, company_id: int, day: date) -> Dict[str, An
         "tax_total": round(tax, 2),
         "average_ticket": round(total / tickets, 2) if tickets else 0.0,
         "by_payment_method": by_method,
-        "cash_count_recorded": False,
-        "note": NO_CASH_COUNT_NOTE,
+        "cash_count_recorded": bool(closures),
+        "cash_closures": closures,
+        "note": None if closures else NO_CASH_COUNT_NOTE,
         "source": "tpv_sales",
     }
 

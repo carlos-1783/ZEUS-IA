@@ -151,3 +151,32 @@ def test_intents():
     assert parse_intent("ventas de hoy").intent == "tpv_sales_today"
     # «cierre» sin dia no se adivina: sigue siendo la consulta de caja/tesoreria de antes
     assert parse_intent("cierre de caja").intent != "get_daily_close"
+
+
+def test_daily_close_includes_real_cash_count_only_own_company(db):
+    from decimal import Decimal
+
+    from app.models.tpv_cash_closure import TPVCashClosure
+
+    u, c = _user(db)
+    ou, other = _user(db)
+    start, end = day_bounds_utc(resolve_day("yesterday"))
+    mid = start + (end - start) / 2
+    _sale(db, u, c.id, mid, 40.0, "efectivo")
+
+    def _closure(cid, uid, counted, diff):
+        db.add(TPVCashClosure(company_id=cid, user_id=uid, terminal_id="T1", period_start=start,
+                              period_end=mid + timedelta(hours=2), sales_count=1,
+                              cash_sales_total=Decimal("40"), card_sales_total=Decimal("0"),
+                              other_sales_total=Decimal("0"), sales_total=Decimal("40"),
+                              initial_cash=Decimal("100"), final_cash=Decimal(counted),
+                              expected_cash=Decimal("140"), difference=Decimal(diff),
+                              status="ok" if diff == "0" else "discrepancy"))
+    _closure(c.id, u.id, "138", "-2")
+    _closure(other.id, ou.id, "999", "859")  # otra empresa: no se ve
+    db.commit()
+    r = _chat(db, u, c.id, "get_daily_close", {"day": "yesterday"})
+    assert r.success and r.metrics["cash_count_recorded"] is True
+    assert r.metrics["cash_closures"] == [{"terminal": "T1", "expected_cash": 140.0, "counted_cash": 138.0,
+                                          "difference": -2.0, "status": "discrepancy"}]
+    assert "Arqueo de caja: 1 cierre(s)" in r.message

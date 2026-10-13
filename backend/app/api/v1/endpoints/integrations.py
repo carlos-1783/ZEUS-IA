@@ -170,10 +170,12 @@ async def whatsapp_webhook(request: Request):
         raise HTTPException(status_code=400, detail="Missing required fields")
     
     # Procesar mensaje con agente
+    # Sin mapeo numero -> empresa no hay respuesta automatica (auditoria #16): solo se registra.
     result = await whatsapp_service.process_incoming_message(
         from_number=from_number,
         message_body=message_body,
-        agent_name="ZEUS CORE"  # Por defecto, ZEUS responde
+        agent_name="ZEUS CORE",
+        to_number=form_data.get("To", ""),
     )
     
     return result

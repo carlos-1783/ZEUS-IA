@@ -186,15 +186,15 @@ onBeforeUnmount(stopCamera)
       <button v-if="cameraAvailable" type="button" class="zeus-btn zeus-btn-secondary" @click="startCamera">Reiniciar</button>
     </div>
     <div class="fallback">
-      <label>Contenido QR (manual o demo)</label>
+      <label>Contenido del QR (escríbelo o pégalo)</label>
       <input
         v-model="manualQr"
         class="input"
-        placeholder="ZEUS|Cliente Demo|120.00|EUR|cliente@empresa.com"
+        placeholder="ZEUS|Nombre del cliente|120.00|EUR|cliente@empresa.com"
         spellcheck="false"
       />
       <button type="button" class="zeus-btn zeus-btn-accent" @click="submitManualQr">Procesar QR manual</button>
-      <small class="hint">Útil en escritorio sin cámara o para probar el flujo fiscal sin escanear.</small>
+      <small class="hint">Útil en un equipo sin cámara: pega el contenido del QR tal cual.</small>
     </div>
     <pre v-if="lastResult" class="result">{{ JSON.stringify(lastResult, null, 2) }}</pre>
   </div>

@@ -105,3 +105,6 @@ class ZeusExecutionResult(BaseModel):
     # Empresa con la que realmente se ejecuto la accion (la rellena execute_action desde el
     # contexto de servidor). La usa la auditoria THALOS post-accion.
     company_id: Optional[int] = None
+    # Fase 2 / Step 1: codigo del resultado no exitoso (blocked_module, not_available, invalid_payload,
+    # agent_mismatch, blocked_guard, error...) para que el cliente distinga bloqueo de error.
+    status: Optional[str] = None

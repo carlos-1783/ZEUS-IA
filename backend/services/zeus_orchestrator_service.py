@@ -262,6 +262,7 @@ def _to_chat_payload(result: ZeusExecutionResult) -> Dict[str, Any]:
         "executed": result.executed,
         "needs_confirmation": result.needs_confirmation,
         "execution": result.model_dump(),
+        "status": result.status,
     }
 
 
@@ -296,7 +297,7 @@ async def execute_action(
         )
         return ZeusExecutionResult(
             success=False, intent=action.action_type, message=blocked["message"],
-            executed=False, company_id=exec_company,
+            executed=False, company_id=exec_company, status="blocked_module",
         )
     result = await _dispatch_action(db, user, action, force_execute=force_execute)
     result.company_id = exec_company
@@ -357,6 +358,7 @@ async def _dispatch_action(
         intent="unknown",
         message="Acción no reconocida por el orquestador.",
         executed=False,
+        status="unknown_action",
     )
 
 
@@ -540,7 +542,8 @@ async def try_handle_zeus_chat(
         if not blocked:
             return None
         _step("ORQUESTAR", action_type, "blocked_module", module=blocked["module"], action_type=action_type)
-        return {"handled": True, "success": False, "executed": False, "message": blocked["message"]}
+        return {"handled": True, "success": False, "executed": False, "message": blocked["message"],
+                "status": "blocked_module"}
 
     pending_row = _find_chat_pending(db, company_int, user, thread_id)
     expired_notice = False
@@ -732,4 +735,58 @@ async def try_handle_zeus_chat(
     return payload
 
 
-__all__ = ["try_handle_zeus_chat", "execute_action", "AGENT_ZEUS", "enrich_chat_context"]
+async def try_handle_agent_read(
+    db: Session,
+    user: User,
+    agent_name: str,
+    message: str,
+    context: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Fase 2 / Step 1: consulta real pedida en el chat del PROPIO agente (workspace de PERSEO,
+    RAFAEL, JUSTICIA, AFRODITA, THALOS). Si el mensaje es, sin dudas, una consulta de lectura de ESE
+    agente (READ_ACTIONS), se ejecuta por el mismo camino que el chat de ZEUS (modulo de la empresa,
+    ejecutor con guard THALOS, registro, auditoria THALOS post-accion) y se devuelve con `execution`.
+    En cualquier otro caso devuelve None y el agente responde como siempre (LLM). Nunca ejecuta
+    escrituras ni crea aprobaciones: eso sigue siendo solo del chat de ZEUS (J3/J3b)."""
+    agent = (agent_name or "").strip().upper()
+    if agent in ("", AGENT_ZEUS, "ZEUS") or has_negation(message):
+        return None
+    task = parse_message(message)
+    if (task.intent == "unknown" or task.needs_clarification or task.ambiguous_with
+            or task.confidence < MIN_CONFIDENCE):
+        return None
+    action = build_action(db, user, task)
+    spec = ops_actions.READ_ACTIONS.get(action.action_type)
+    if spec is None or spec[1] != agent:
+        return None
+    company_int = action.company_id
+    log_chain_step(
+        "COMPRENDER", company_id=company_int, user=user, agent=agent, action="derive_action",
+        status="success", details={"intent": task.intent, "action_type": action.action_type,
+                                   "source": "agent_workspace"},
+    )
+    result = await execute_action(db, user, action, force_execute=False)
+    log_chain_step(
+        "ACTUAR", company_id=company_int, user=user, agent=agent, action=action.action_type,
+        status="success" if result.executed else "failed",
+        details={"executed": bool(result.executed), "result_company_id": result.company_id,
+                 "status": result.status, "source": "agent_workspace"},
+    )
+    payload = _to_chat_payload(result)
+    payload["intent"] = task.intent
+    if result.executed:
+        from services.thalos_request_guard_v1 import thalos_audit_result
+
+        audit = thalos_audit_result(
+            db, user=user, company_id=company_int, agent=agent, action=action.action_type,
+            result={"success": result.success, "executed": result.executed, "company_id": result.company_id},
+            source="thalos_audit_agent_chat",
+        )
+        if not audit["ok"]:
+            return {"handled": True, "success": False, "executed": False, "status": "audit_failed",
+                    "message": f"No se puede confirmar la consulta: auditoria THALOS fallida ({audit['reason']})."}
+    return payload
+
+
+__all__ = ["try_handle_zeus_chat", "try_handle_agent_read", "execute_action", "AGENT_ZEUS",
+           "enrich_chat_context"]

@@ -253,6 +253,9 @@ class ChatResponse(BaseModel):
     next_step: Optional[str] = None
     # Solo servidor: tipo del siguiente paso (se registra en J7; no sale en la respuesta).
     next_step_type: Optional[str] = Field(default=None, exclude=True)
+    # Fase 2 / Step 1: codigo del resultado cuando no hay exito (blocked_module, not_available,
+    # invalid_payload, agent_mismatch, blocked_guard, error...): bloqueo != error para el cliente.
+    status: Optional[str] = None
 
 class AgentCommunicationRequest(BaseModel):
     from_agent: str
@@ -477,7 +480,7 @@ async def _chat_impl(
             )
             return ChatResponse(
                 agent=agent_name, message=blocked_agent["message"], success=False,
-                error=blocked_agent["message"],
+                error=blocked_agent["message"], status="blocked_module",
             )
 
         if agent_name == "ZEUS CORE":
@@ -563,6 +566,37 @@ async def _chat_impl(
                     intent=bridge.get("intent"),
                     steps=bridge.get("steps") if isinstance(bridge.get("steps"), list) else None,
                     error=None if bridge.get("success") else bridge.get("message"),
+                    status=bridge.get("status") if isinstance(bridge.get("status"), str) else None,
+                )
+
+        # Fase 2 / Step 1: una consulta real del propio agente (p. ej. «facturas pendientes» en RAFAEL)
+        # se ejecuta por el orquestador (modulo, ejecutor con THALOS, registro) en vez de ir al LLM, y
+        # devuelve `execution` como el chat de ZEUS. Lo demas sigue al agente conversacional.
+        if agent_name != "ZEUS CORE":
+            from services.zeus_orchestrator_service import try_handle_agent_read
+
+            direct = await try_handle_agent_read(db, current_user, agent_name, request.message, context)
+            if direct and direct.get("handled"):
+                direct_msg = direct.get("message", "") or ""
+                _persist_assistant(db, current_user, agent_name, thread_id, direct_msg, company_id=company_id)
+                log_chain_step(
+                    "ACTUAR", company_id=chain_company, user=current_user, agent=agent_name,
+                    action="agent_chat_read", action_type="chat_request_processed",
+                    description=f"Consulta real procesada por {agent_name}",
+                    status="completed" if direct.get("success") else "failed",
+                    details={"request_type": "chat", "thread_id": thread_id, "intent": direct.get("intent"),
+                             "executed_action": bool(direct.get("executed"))},
+                    visible_to_client=True,
+                )
+                return ChatResponse(
+                    agent=agent_name,
+                    message=direct_msg,
+                    success=bool(direct.get("success")),
+                    executed_action=bool(direct.get("executed")),
+                    execution=direct.get("execution") if isinstance(direct.get("execution"), dict) else None,
+                    intent=direct.get("intent"),
+                    error=None if direct.get("success") else direct_msg,
+                    status=direct.get("status") if isinstance(direct.get("status"), str) else None,
                 )
 
         # Servidor-only (prefijo `_`: no llega al prompt): habilita el espacio "platform" de memoria

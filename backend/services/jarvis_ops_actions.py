@@ -185,13 +185,14 @@ async def run_read_action(db: Session, user: User, action: ZeusAction) -> ZeusEx
         out = await execute_agent_action(db, user=user, agent=agent, action=exec_name, payload=payload)
     except HTTPException as exc:
         db.rollback()
-        return ZeusExecutionResult(success=False, intent=action.action_type, message=str(exc.detail), executed=False)
+        return ZeusExecutionResult(success=False, intent=action.action_type, message=str(exc.detail), executed=False,
+                                   status="error")
     except Exception:
         db.rollback()
         logger.exception("jarvis_ops: fallo ejecutando %s", exec_name)
         return ZeusExecutionResult(
             success=False, intent=action.action_type, executed=False,
-            message="No se pudo completar la consulta; inténtalo de nuevo.",
+            message="No se pudo completar la consulta; inténtalo de nuevo.", status="error",
         )
     ok = bool(out.get("success")) and bool(out.get("executed"))
     return ZeusExecutionResult(
@@ -199,6 +200,9 @@ async def run_read_action(db: Session, user: User, action: ZeusAction) -> ZeusEx
         message=_format_read(action.action_type, out) if ok else str(out.get("message") or "No se pudo completar la consulta."),
         metrics=out.get("data") if isinstance(out.get("data"), dict) else {},
         company_id=out.get("company_id"),
+        status=None if ok else str(
+            out.get("status") or ("blocked_guard" if out.get("execution_mode") == "blocked" else "failed")
+        ),
     )
 
 

@@ -296,3 +296,75 @@ export function infoWindow(title: string, source: string, text: string): JarvisW
 export function errorWindow(title: string, source: string, text: string): JarvisWindow {
   return emptyWindow('error', title, source, text);
 }
+
+// ---------------------------------------------------------------------------------------------
+// 📷 Bandeja de ZEUS (POST /api/v1/zeus/inbox): ventana con lo que el modelo leyó DE VERDAD.
+// Lo que no se leyó llega a null y se muestra "no leído"; nunca se rellena ni se corrige.
+// ---------------------------------------------------------------------------------------------
+const INBOX_DOC_LABELS: Record<string, string> = {
+  factura_proveedor: 'Factura de proveedor',
+  ticket: 'Ticket',
+  nomina: 'Nómina',
+  albaran: 'Albarán',
+  pedido: 'Pedido',
+  contrato: 'Contrato',
+  otro: 'Otro documento',
+};
+const INBOX_FIELD_LABELS: Array<[string, string]> = [
+  ['proveedor', 'Proveedor'],
+  ['nif', 'NIF'],
+  ['fecha', 'Fecha'],
+  ['numero', 'Número'],
+  ['base', 'Base imponible'],
+  ['iva', 'IVA'],
+  ['total', 'Total'],
+];
+
+function inboxMoney(v: unknown): string {
+  if (v === null || v === undefined || v === '') return 'no leído';
+  const n = Number(v);
+  return Number.isFinite(n)
+    ? n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })
+    : String(v);
+}
+
+function agentName(a: unknown): string {
+  const s = String(a || '');
+  return s ? s.charAt(0) + s.slice(1).toLowerCase() : 'ZEUS';
+}
+
+export function windowForInboxItem(item: any, detail?: string): JarvisWindow {
+  const src = sourceLabel('ZEUS');
+  if (!item || item.status !== 'clasificado') {
+    const w = emptyWindow(
+      'blocked',
+      'Documento guardado · sin clasificar',
+      src,
+      String(detail || item?.classification_error || 'La clasificación no está disponible ahora mismo.') +
+        ' El documento queda en la bandeja de ZEUS como pendiente; no se ha leído ni repartido.',
+    );
+    return w;
+  }
+  const doc = INBOX_DOC_LABELS[item.doc_type] || 'Documento';
+  const to = agentName(item.assigned_agent);
+  const w = emptyWindow(
+    'answer',
+    `${doc} recibido · vía ZEUS`,
+    `ZEUS → ${to}`,
+    `ZEUS ha recibido tu foto y la ha dirigido a ${to} para revisión. ${String(item.notice || '')}`.trim(),
+  );
+  const f = item.fields || {};
+  for (const [key, label] of INBOX_FIELD_LABELS) {
+    const raw = f[key];
+    const value = ['base', 'iva', 'total'].includes(key)
+      ? inboxMoney(raw)
+      : raw === null || raw === undefined || raw === ''
+        ? 'no leído'
+        : String(raw);
+    w.rows.push({ label, value });
+  }
+  if (item.confidence) w.rows.push({ label: 'Confianza de la lectura', value: String(item.confidence) });
+  const issues: string[] = Array.isArray(item.validation?.issues) ? item.validation.issues : [];
+  issues.forEach((t, i) => w.rows.push({ label: `Aviso ${i + 1}`, value: String(t) }));
+  return w;
+}

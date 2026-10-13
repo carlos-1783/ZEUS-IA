@@ -142,6 +142,13 @@
       >
         📷
       </button>
+      <input
+        ref="photoInput"
+        type="file"
+        accept="image/jpeg,image/png,image/webp,application/pdf"
+        hidden
+        @change="onPhotoChosen"
+      />
       <button
         type="button"
         class="orb-mic"
@@ -176,11 +183,12 @@ import { getAgentChatUrl, AGENT_CHAT_TIMEOUT_MS, openEvidence, type ChatEvidence
 import {
   windowsForChatResponse,
   windowForHttpError,
-  infoWindow,
   errorWindow,
   sourceLabel,
+  windowForInboxItem,
   type JarvisWindow,
 } from '@/utils/jarvisWindows';
+import { API_BASE_URL } from '@/config';
 
 const props = defineProps<{
   agent: { name: string; role?: string; image?: string };
@@ -344,18 +352,65 @@ async function sendTyped(): Promise<void> {
 }
 
 /**
- * 📷 Foto / factura. El backend NO tiene hoy un endpoint que lea una factura o nómina desde una foto
- * y la reparta (factura -> RAFAEL, nómina/pedido -> AFRODITA): /scan/ingest solo admite QR, NFC y
- * MRZ de DNI. No se simula ninguna extracción: se informa con honestidad y no se envía nada.
+ * 📷 Foto / factura estilo WhatsApp: la recibe ZEUS (POST /api/v1/zeus/inbox), la guarda en R2, la
+ * clasifica con visión y la reparte para revisión humana (factura/ticket -> RAFAEL, nómina/albarán/
+ * pedido -> AFRODITA, contrato -> JUSTICIA). La ventana muestra solo lo que el servidor leyó; si falta
+ * R2 u OPENAI_API_KEY el servidor responde 503 y se enseña el bloqueo tal cual. Empresa: la de la sesión.
  */
+const photoInput = ref<HTMLInputElement | null>(null);
+const MAX_PHOTO_BYTES = 15 * 1024 * 1024;
+
 function onPhoto(): void {
-  showWindows([
-    infoWindow(
-      'Foto / factura · todavía no disponible',
-      sourceLabel('ZEUS'),
-      'Falta el enrutado de ZEUS: todavía no hay un servicio que lea una factura, nómina o pedido desde una foto y lo reparta a Rafael o Afrodita. No se ha enviado nada. Mientras tanto, registra la factura desde el workspace de Rafael.',
-    ),
-  ]);
+  if (busy.value) return;
+  photoInput.value?.click();
+}
+
+async function onPhotoChosen(ev: Event): Promise<void> {
+  const input = ev.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file || busy.value) return;
+  if (file.size > MAX_PHOTO_BYTES) {
+    showWindows([errorWindow('Archivo demasiado grande', sourceLabel('ZEUS'), 'El máximo son 15 MB.')]);
+    return;
+  }
+  voice.stop();
+  voice.cancel();
+  lastAsked.value = `📷 ${file.name}`;
+  busy.value = true;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), AGENT_CHAT_TIMEOUT_MS);
+  try {
+    const headers: Record<string, string> = {};
+    const t = token();
+    if (t) headers.Authorization = `Bearer ${t}`;
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`${API_BASE_URL.replace(/\/+$/, '')}/zeus/inbox`, {
+      method: 'POST',
+      headers,
+      body: form,
+      signal: controller.signal,
+    });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok && body?.item) {
+      showWindows([windowForInboxItem(body.item)]);
+    } else if (body?.item) {
+      // 502/503 con el documento guardado como pendiente de clasificar.
+      showWindows([windowForInboxItem(body.item, body.detail)]);
+    } else {
+      showWindows([windowForHttpError(res.status, body, 'ZEUS')]);
+    }
+  } catch (err: any) {
+    const text =
+      err?.name === 'AbortError'
+        ? 'Tiempo de espera agotado. Revisa la bandeja de ZEUS antes de volver a enviarla.'
+        : 'No se pudo enviar la foto. Comprueba la conexión.';
+    showWindows([errorWindow('No se pudo enviar', sourceLabel('ZEUS'), text)]);
+  } finally {
+    clearTimeout(timer);
+    busy.value = false;
+  }
 }
 </script>
 

@@ -315,28 +315,36 @@ def run_seo_audit_heuristic(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+# --------------------------------------------------------------------------- Ads
+
+
+ADS_TEMPLATE_LABEL = "Plantilla orientativa (sin datos de tu cuenta)"
+
+
 def build_ads_blueprint_heuristic(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Reparto orientativo de presupuesto. No conoce tu cuenta: no da KPIs numéricos."""
     budget = payload.get("budget", 1000)
     audience = payload.get("audience", "general")
-    objective = payload.get("objective", "leads")
 
     channel_mix = [
-        {"channel": "Meta Ads", "allocation": round(budget * 0.45, 2), "why": "Optimiza awareness + conversión rápida."},
-        {"channel": "Google Search", "allocation": round(budget * 0.35, 2), "why": "Captura demanda intensional."},
+        {"channel": "Meta Ads", "allocation": round(budget * 0.45, 2), "why": "Awareness + conversión rápida."},
+        {"channel": "Google Search", "allocation": round(budget * 0.35, 2), "why": "Captura demanda con intención."},
         {"channel": "YouTube Shorts", "allocation": round(budget * 0.20, 2), "why": "Construye autoridad visual."},
     ]
 
-    kpis = {
-        "cpl_target": 15 if objective == "leads" else None,
-        "roas_target": 3.5 if objective == "ventas" else None,
-        "ctr_target": 1.8,
-    }
-
     return {
+        "label": ADS_TEMPLATE_LABEL,
+        "is_template": True,
+        "based_on_account_data": False,
         "audience": audience,
         "budget": budget,
         "channels": channel_mix,
-        "kpis": {k: v for k, v in kpis.items() if v is not None},
+        "kpis_to_track": ["coste por lead (CPL)", "ROAS", "CTR"],
+        "kpi_targets": None,
+        "kpi_note": (
+            "Sin datos reales de tu cuenta publicitaria no se fijan objetivos numéricos; "
+            "defínelos tras las primeras semanas de campaña."
+        ),
         "next_steps": [
             "Configurar UTMs coherentes por canal",
             "Cargar creatividades validadas por JUSTICIA",

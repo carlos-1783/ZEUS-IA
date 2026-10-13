@@ -166,12 +166,13 @@ def _text_for_seo(result: Dict[str, Any]) -> str:
 
 
 def _text_for_ads(result: Dict[str, Any]) -> str:
-    channels = result.get("channels") or []
-    kpis = result.get("kpis") or {}
-    kpi_txt = ", ".join([f"{k}={v}" for k, v in kpis.items()]) or "sin KPI"
+    channels = result.get("channels") or (result.get("budget_strategy") or {}).get("channel_mix") or []
+    label = result.get("label") or "Plantilla orientativa (sin datos de tu cuenta)"
+    tracked = result.get("kpis_to_track") or []
+    track_txt = f" Métricas a vigilar: {', '.join(map(str, tracked))}." if tracked else ""
     return (
-        f"Plan de Ads generado con {len(channels)} canales y reparto de presupuesto listo para ejecutar. "
-        f"KPIs sugeridos: {kpi_txt}."
+        f"{label}: reparto de presupuesto en {len(channels)} canales. "
+        f"Sin objetivos numéricos de KPI: no hay datos reales de tu cuenta publicitaria.{track_txt}"
     )
 
 

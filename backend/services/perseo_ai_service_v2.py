@@ -183,7 +183,17 @@ def generate_ads_ai(payload: Dict[str, Any]) -> Dict[str, Any]:
         "Eres PERSEO, media buyer senior. Responde SOLO JSON con: "
         "ad_copy (array de variantes), creatives (array de ideas visuales), "
         "targeting (objeto demographics/interests/placements), "
-        "budget_strategy (objeto con channel_mix array), kpis (objeto), next_steps (array)."
+        "budget_strategy (objeto con channel_mix array), kpis_to_track (array de nombres de "
+        "métricas, SIN cifras objetivo: no conoces la cuenta), next_steps (array)."
     )
     user_text = f"Producto: {product}. Presupuesto: {budget}€. Audiencia: {audience}. Objetivo: {objective}."
-    return _text_completion(system, user_text)
+    out = _text_completion(system, user_text)
+    # El LLM no tiene datos de la cuenta: cualquier objetivo numérico sería inventado.
+    out.pop("kpis", None)
+    return {
+        **out,
+        "label": "Propuesta generada por IA (sin datos de tu cuenta)",
+        "is_template": True,
+        "based_on_account_data": False,
+        "kpi_targets": None,
+    }

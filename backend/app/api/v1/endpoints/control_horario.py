@@ -3,7 +3,8 @@ Endpoints para el módulo de Control Horario Universal
 """
 from datetime import datetime, timedelta, timezone
 import re
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
+import copy
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy import or_, and_
 from sqlalchemy.orm import Session
@@ -429,81 +430,55 @@ def _scoped_counts(user: User, db: Optional[Session]) -> Dict[str, int]:
     return {"active_records_count": int(active), "employees_count": int(employees)}
 
 
+def _resolve_profile_config(db: Session, user: User) -> Tuple[HorarioBusinessProfile, Dict[str, Any]]:
+    """Perfil y configuracion del Control Horario calculados POR PETICION para el usuario.
+
+    Antes se guardaban en el singleton global (`business_profile`/`config`), compartido por
+    todas las empresas del proceso: la configuracion de una empresa podia salir en la
+    respuesta de otra. Ahora no hay estado: se lee de BD (perfil guardado del usuario o
+    inferido de su empresa) y la config es una copia del catalogo de perfiles."""
+    row = db.query(User).filter(User.id == user.id).first() or user
+    stored = str(getattr(row, "control_horario_business_profile", "") or "").strip().lower()
+    profile: Optional[HorarioBusinessProfile] = None
+    if stored:
+        try:
+            profile = HorarioBusinessProfile(stored)
+        except ValueError:
+            logger.warning("control_horario_business_profile invalido user_id=%s valor=%s", user.id, stored)
+    if profile is None:
+        profile = control_horario_service._auto_detect_business_profile(
+            {"tpv_business_profile": getattr(row, "tpv_business_profile", None)}
+        )
+        # Si quedo en oficina por datos incompletos, inferir de la empresa real.
+        inferred = _infer_profile_from_company_context(db, row)
+        if inferred and profile == HorarioBusinessProfile.OFICINA:
+            profile = inferred
+    config = copy.deepcopy(control_horario_service.get_business_config(profile))
+    # Bloqueo legal: el fichaje biometrico nunca se ofrece como habilitado.
+    if isinstance(config.get("methods_enabled"), list):
+        config["methods_enabled"] = [m for m in config["methods_enabled"] if not is_biometric_method(m)]
+    return profile, config
+
+
 async def _get_control_horario_info(current_user: User, db: Optional[Session] = None):
-    """Función auxiliar para obtener información del Control Horario"""
+    """Informacion del Control Horario del usuario (sin estado compartido entre empresas)."""
     is_superuser = getattr(current_user, 'is_superuser', False)
-    
-    # Cargar business_profile del usuario (reusar sesión del request si existe).
     own_db = False
     if db is None:
         from app.db.base import SessionLocal
         db = SessionLocal()
         own_db = True
     try:
-        user = db.query(User).filter(User.id == current_user.id).first()
-        if user:
-            user_data = {
-                "id": user.id,
-                "control_horario_business_profile": getattr(user, 'control_horario_business_profile', None),
-                "tpv_business_profile": getattr(user, 'tpv_business_profile', None),
-                "company_name": getattr(user, 'company_name', None)
-            }
-            try:
-                control_horario_service.load_user_profile(user_data)
-            except Exception as e:
-                logger.warning(f"Error cargando perfil de usuario: {e}")
-                if not control_horario_service.business_profile and not is_superuser:
-                    control_horario_service.set_business_profile(HorarioBusinessProfile.OFICINA)
-                elif not control_horario_service.business_profile and is_superuser:
-                    control_horario_service.set_business_profile(HorarioBusinessProfile.OFICINA)
-
-            # Corrección automática: si quedó en oficina por datos incompletos, inferir perfil real de negocio.
-            inferred = _infer_profile_from_company_context(db, user)
-            current = control_horario_service.business_profile
-            if inferred and (current is None or current == HorarioBusinessProfile.OFICINA):
-                control_horario_service.set_business_profile(inferred, user.id)
-            _backfill_default_schedules_if_missing(db, user)
-        else:
-            if not control_horario_service.business_profile:
-                user_data = {
-                    "id": current_user.id,
-                    "company_name": getattr(current_user, 'company_name', None)
-                }
-                control_horario_service.load_user_profile(user_data)
-                if not control_horario_service.business_profile and not is_superuser:
-                    control_horario_service.set_business_profile(HorarioBusinessProfile.OFICINA)
-                elif not control_horario_service.business_profile and is_superuser:
-                    control_horario_service.set_business_profile(HorarioBusinessProfile.OFICINA)
-    except Exception as e:
-        logger.error(f"Error cargando perfil de usuario: {e}")
-        if not control_horario_service.business_profile:
-            control_horario_service.set_business_profile(HorarioBusinessProfile.OFICINA)
+        profile, config = _resolve_profile_config(db, current_user)
+        try:
+            _backfill_default_schedules_if_missing(db, current_user)
+        except Exception:
+            logger.exception("backfill de horarios por defecto fallo user_id=%s", current_user.id)
+            db.rollback()
+        counts = _scoped_counts(current_user, db)
     finally:
         if own_db:
             db.close()
-
-    config = control_horario_service.config if control_horario_service.business_profile else {}
-    
-    # Para superusuarios, asegurar configuración completa
-    if is_superuser and not config:
-        config = {
-            "strict_check_in": True,
-            "gps_required": False,
-            "multiple_shifts_per_day": True,
-            "break_time_required": True,
-            "auto_check_out": False,
-            "irregularity_alerts": True,
-            "methods_enabled": ["face", "qr", "code", "location", "remote"],
-            "location_tracking": False,
-            "remote_allowed": True,
-            "flexible_hours": True,
-            "superuser_override": True
-        }
-    
-    # Bloqueo legal: el fichaje biometrico nunca se ofrece como habilitado.
-    config = dict(config or {})
-    if isinstance(config.get("methods_enabled"), list):
-        config["methods_enabled"] = [m for m in config["methods_enabled"] if not is_biometric_method(m)]
 
     return {
         "success": True,
@@ -514,12 +489,11 @@ async def _get_control_horario_info(current_user: User, db: Optional[Session] = 
             "is_superuser": is_superuser,
             "is_active": current_user.is_active
         },
-        "business_profile": control_horario_service.business_profile.value if control_horario_service.business_profile else None,
+        "business_profile": profile.value,
         "config": config,
         "blocked_methods": {"face": BIOMETRIC_BLOCK_REASON},
-        # Conteos de SU empresa desde BD. Antes salian del singleton en memoria del
-        # proceso (compartido entre todas las empresas): cifras de otros tenants.
-        **_scoped_counts(current_user, db),
+        # Conteos de SU empresa desde BD (antes: singleton compartido entre empresas).
+        **counts,
         "integrations": {
             "afrodita": control_horario_service.afrodita_integration is not None,
             "rafael": control_horario_service.rafael_integration is not None,
@@ -635,10 +609,8 @@ async def get_control_horario_status(
     """Obtener estado actual del Control Horario"""
     is_superuser = getattr(current_user, 'is_superuser', False)
     
-    # Cargar perfil si no está cargado
-    if not control_horario_service.business_profile:
-        await _get_control_horario_info(current_user, db)
-    
+    profile, config = _resolve_profile_config(db, current_user)
+
     # Obtener estado
     status_data = _active_status_from_db(db, current_user)
     if employee_id:
@@ -652,15 +624,8 @@ async def get_control_horario_status(
     
     return {
         "success": True,
-        "business_profile": control_horario_service.business_profile.value if control_horario_service.business_profile else None,
-        "config": {
-            **(control_horario_service.config if control_horario_service.business_profile else {}),
-            "methods_enabled": [
-                m
-                for m in (control_horario_service.config or {}).get("methods_enabled", [])
-                if not is_biometric_method(m)
-            ] if control_horario_service.business_profile else [],
-        },
+        "business_profile": profile.value,
+        "config": config,
         "blocked_methods": {"face": BIOMETRIC_BLOCK_REASON},
         "status": status_data,
         "is_superuser": is_superuser
@@ -827,8 +792,6 @@ async def get_employees(
 ):
     """Listar empleados con estado actual"""
     try:
-        if not control_horario_service.business_profile:
-            await _get_control_horario_info(current_user, db)
 
         status_data = _active_status_from_db(db, current_user)
         raw = status_data.get("employees") or {}
@@ -876,8 +839,6 @@ async def calculate_hours(
 ):
     """Calcular horas trabajadas en un período"""
     try:
-        if not control_horario_service.business_profile:
-            await _get_control_horario_info(current_user, db)
         
         start_date = datetime.fromisoformat(request.start_date.replace('Z', '+00:00'))
         end_date = datetime.fromisoformat(request.end_date.replace('Z', '+00:00'))
@@ -926,7 +887,7 @@ async def set_business_profile(
     """Establecer business_profile para Control Horario"""
     try:
         profile_str = request.business_profile.lower()
-        
+
         try:
             profile = HorarioBusinessProfile(profile_str)
         except ValueError:
@@ -934,28 +895,28 @@ async def set_business_profile(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Perfil inválido: {profile_str}. Perfiles válidos: {[p.value for p in HorarioBusinessProfile]}"
             )
-        
-        # Actualizar en base de datos
+
+        # Se guarda solo en BD (perfil del usuario); nada en el singleton compartido.
         user = db.query(User).filter(User.id == current_user.id).first()
-        if user:
-            try:
-                setattr(user, 'control_horario_business_profile', profile.value)
-                db.commit()
-                logger.info(f"✅ Business profile actualizado: {profile.value}")
-            except Exception as e:
-                logger.warning(f"Error actualizando control_horario_business_profile: {e}")
-                db.rollback()
-        
-        # Actualizar servicio
-        control_horario_service.set_business_profile(profile, current_user.id)
-        
+        if user is None:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        try:
+            user.control_horario_business_profile = profile.value
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("No se pudo guardar control_horario_business_profile user_id=%s", current_user.id)
+            raise HTTPException(status_code=500, detail="No se pudo guardar el perfil de negocio.")
+        logger.info("control horario perfil actualizado user_id=%s perfil=%s", current_user.id, profile.value)
+        _, config = _resolve_profile_config(db, user)
+
         return {
             "success": True,
             "message": f"Business profile actualizado a: {profile.value}",
             "business_profile": profile.value,
-            "config": control_horario_service.config
+            "config": config,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -976,8 +937,6 @@ async def get_reports(
 ):
     """Obtener reportes de asistencia"""
     try:
-        if not control_horario_service.business_profile:
-            await _get_control_horario_info(current_user, db)
         
         # Por ahora, devolver datos básicos
         # En producción, consultaría la base de datos

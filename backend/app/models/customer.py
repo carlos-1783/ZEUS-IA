@@ -21,6 +21,13 @@ class Customer(Base):
     # Status flags
     is_active = Column(Boolean, default=True)
     is_company = Column(Boolean, default=False)
+
+    # Consentimiento comercial (alembic 0069). Por defecto NO: sin consentimiento registrado o
+    # con baja, el cliente no recibe campanas ni envios directos (services/outbound_consent_v1).
+    marketing_consent = Column(Boolean, nullable=True, default=False, server_default="0")
+    marketing_consent_at = Column(DateTime(timezone=True), nullable=True)
+    marketing_consent_source = Column(String(50), nullable=True)
+    marketing_unsubscribed_at = Column(DateTime(timezone=True), nullable=True)
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)

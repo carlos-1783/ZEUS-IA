@@ -11,7 +11,7 @@ from io import BytesIO
 from app.core.auth import get_current_active_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.customer import CustomerCreate, CustomerOut, CustomerUpdate
+from app.schemas.customer import CustomerCreate, CustomerOut, CustomerUpdate, MarketingConsentIn
 from app.schemas.crm_office import (
     CrmActivityOut,
     CrmListResponse,
@@ -66,6 +66,24 @@ def crm_update_customer(
         phone=body.phone,
         status="active" if body.is_active is not False else "inactive",
     )
+    return CustomerOut.model_validate(customer)
+
+
+@router.post(
+    "/customers/{customer_id}/marketing-consent",
+    response_model=CustomerOut,
+    dependencies=[Depends(thalos_request_guard)],
+)
+def crm_set_marketing_consent(
+    body: MarketingConsentIn,
+    customer_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Registra o retira el consentimiento comercial de un cliente de tu empresa (404 si es ajeno)."""
+    from services.outbound_consent_v1 import set_marketing_consent
+
+    customer = set_marketing_consent(db, current_user, customer_id, granted=body.granted, source=body.source)
     return CustomerOut.model_validate(customer)
 
 

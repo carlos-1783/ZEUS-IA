@@ -4,7 +4,10 @@ GET /p/{slug}/info → info negocio y si acepta reservas.
 POST /p/{slug}/reservations → crear reserva (público, sin auth) + confirmación WhatsApp si está configurado.
 """
 import logging
-from fastapi import APIRouter, HTTPException, Depends
+from html import escape
+
+from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import date
@@ -14,6 +17,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.reservation import Reservation
 from services.tpv_operator_context import primary_company_id
+from services.thalos_request_guard_v1 import thalos_anonymous_guard
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -45,6 +49,46 @@ class CreateReservationRequest(BaseModel):
     reservation_time: str  # "20:00"
     num_guests: int = 2
     notes: Optional[str] = None
+
+
+def _unsubscribe_page(title: str, text: str, form_token: Optional[str] = None, code: int = 200) -> HTMLResponse:
+    form = ""
+    if form_token:
+        form = (
+            f'<form method="post" action="?token={escape(form_token, quote=True)}">'
+            '<button type="submit">Confirmar baja</button></form>'
+        )
+    html = (
+        '<!doctype html><html lang="es"><head><meta charset="utf-8">'
+        f"<title>{escape(title)}</title></head><body><h1>{escape(title)}</h1><p>{escape(text)}</p>{form}</body></html>"
+    )
+    return HTMLResponse(html, status_code=code)
+
+
+@router.get("/unsubscribe", response_class=HTMLResponse)
+def unsubscribe_page(token: str = Query(..., max_length=200), db: Session = Depends(get_db)):
+    """Enlace de baja del pie de los correos. GET solo muestra la confirmacion (los clientes de
+    correo precargan enlaces); la baja se hace con POST."""
+    from services.outbound_consent_v1 import parse_unsubscribe_token
+
+    if not parse_unsubscribe_token(token):
+        return _unsubscribe_page("Enlace no valido", "Este enlace de baja no es valido.", code=400)
+    return _unsubscribe_page(
+        "Darse de baja",
+        "Pulsa el boton para dejar de recibir comunicaciones comerciales de este negocio.",
+        form_token=token,
+    )
+
+
+@router.post("/unsubscribe", response_class=HTMLResponse, dependencies=[Depends(thalos_anonymous_guard)])
+def unsubscribe_confirm(token: str = Query(..., max_length=200), db: Session = Depends(get_db)):
+    """Marca la baja comercial del cliente del token (firmado, ligado a empresa y cliente)."""
+    from services.outbound_consent_v1 import apply_unsubscribe
+
+    customer = apply_unsubscribe(db, token)
+    if customer is None:
+        return _unsubscribe_page("Enlace no valido", "Este enlace de baja no es valido.", code=400)
+    return _unsubscribe_page("Baja registrada", "No recibiras mas comunicaciones comerciales de este negocio.")
 
 
 def _get_user_by_slug(db: Session, slug: str) -> Optional[User]:

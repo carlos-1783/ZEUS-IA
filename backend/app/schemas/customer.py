@@ -85,6 +85,11 @@ class CustomerOut(CustomerBase):
     id: int
     created_at: datetime
     updated_at: datetime
+    # Consentimiento comercial (solo lectura aqui; se cambia en POST .../marketing-consent).
+    marketing_consent: Optional[bool] = False
+    marketing_consent_at: Optional[datetime] = None
+    marketing_consent_source: Optional[str] = None
+    marketing_unsubscribed_at: Optional[datetime] = None
     contacts: List[ContactPersonOut] = []
     metadata: Optional[Dict[str, Any]] = Field(
         default=None,
@@ -93,6 +98,11 @@ class CustomerOut(CustomerBase):
     )
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+class MarketingConsentIn(BaseModel):
+    granted: bool = Field(..., description="True si el cliente ha dado consentimiento comercial; False lo retira")
+    source: str = Field("manual", min_length=1, max_length=50, description="Origen del consentimiento (formulario, tienda, contrato...)")
+
 
 # Response models for API endpoints
 class CustomerResponse(BaseModel):

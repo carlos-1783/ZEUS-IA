@@ -144,7 +144,8 @@ def _format_read(chat_action: str, result: Dict[str, Any]) -> str:
         states = ", ".join(f"{n} {st}" for st, n in sorted(data["by_status"].items()))
         pend = (f" {data['pending_review']} borrador(es) sin firmar pendientes de revisión."
                 if data["pending_review"] else " No hay borradores pendientes de revisión.")
-        return f"Contratos de tu empresa: {data['total']} ({states}); firmados: {data['signed']}.{pend}"
+        return (f"Contratos de tu empresa: {data['total']} ({states}); con sello de integridad (hash, "
+                f"no es firma eIDAS): {data['integrity_sealed']}.{pend}")
     if chat_action == "get_coordination_report" and "activities_by_agent" in data:
         d = data["window_days"]
         if not data["activities_total"]:

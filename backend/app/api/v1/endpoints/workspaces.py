@@ -589,18 +589,29 @@ async def workspace_justicia_signer(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
+    # Fase 2: es un SELLO DE INTEGRIDAD (hash), no una firma electronica eIDAS, y no aprueba
+    # el documento. Sin sello real no se persiste entregable ni se emite evento.
     result = sign_pdf_document(request.model_dump(), user_id=current_user.id, db=db)
-    text = _text_generic("Firma digital", result)
+    if not result.get("real_execution"):
+        raise HTTPException(
+            status_code=503,
+            detail={"error": result.get("error"), "message": result.get("message")},
+        )
+    text = (
+        f"Sello de integridad (hash) guardado para «{result.get('document')}»: "
+        f"{str(result.get('integrity_hash', ''))[:16]}… (estado del documento: "
+        f"{result.get('document_status')}). {result.get('legal_notice', '')}"
+    )
     return _persist_agent_tool_response(
         db,
         current_user=current_user,
         agent_name="JUSTICIA",
         workspace_category="legal_document",
         content_type="legal_document",
-        title="Firma digital JUSTICIA",
+        title="Sello de integridad (hash) JUSTICIA",
         text=text,
         result=result,
-        event_name="justicia_pdf_signed",
+        event_name="justicia_integrity_sealed",
         chain_steps=["trigger_legal_archive"],
     )
 

@@ -1,7 +1,7 @@
 """JUSTICIA: «revisa mis contratos» con los contratos reales de la empresa (`legal_documents`).
 
-Cuenta los contratos de la empresa por estado y lista los ultimos: los borradores sin firmar son
-los que requieren revision. No analiza el texto con un modelo ni da asesoria: es el estado real.
+Cuenta los contratos de la empresa por estado y lista los ultimos: los borradores son los que
+requieren revision (un sello de integridad/hash NO es firma ni aprobacion, Fase 2). No analiza el texto con un modelo ni da asesoria: es el estado real.
 Solo filas con `company_id` de la empresa (las legado sin empresa no se atribuyen a nadie).
 """
 
@@ -27,20 +27,22 @@ def contracts_status(db: Session, company_id: int, *, latest: int = 5) -> Dict[s
         .group_by(LegalDocument.status)
         .all()
     }
-    unsigned_drafts = base.filter(LegalDocument.status == "draft", LegalDocument.signed_at.is_(None)).count()
-    signed = base.filter(LegalDocument.signed_at.isnot(None)).count()
+    # `signed_at`/`signature_hash` solo guardan el sello de integridad (hash): no es una firma
+    # electronica eIDAS ni aprueba el contrato, asi que un borrador sellado sigue pendiente.
+    drafts = base.filter(LegalDocument.status == "draft").count()
+    sealed = base.filter(LegalDocument.signed_at.isnot(None)).count()
     rows = base.order_by(LegalDocument.updated_at.desc(), LegalDocument.id.desc()).limit(latest).all()
     return {
         "total": sum(by_status.values()),
         "by_status": by_status,
-        "pending_review": int(unsigned_drafts),
-        "signed": int(signed),
+        "pending_review": int(drafts),
+        "integrity_sealed": int(sealed),
         "latest": [
             {
                 "document_id": r.public_id,
                 "version": r.version,
                 "status": r.status,
-                "signed": r.signed_at is not None,
+                "integrity_sealed": r.signed_at is not None,
                 "updated_at": r.updated_at.isoformat() if r.updated_at else None,
             }
             for r in rows

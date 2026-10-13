@@ -42,13 +42,17 @@
     <div class="tools-grid">
       <div class="tool-card" :class="{ real: moduleBadge('pdf_signer') === 'REAL' }">
         <div class="card-title-row">
-          <h5>Firma digital</h5>
+          <h5>Sello de integridad (hash)</h5>
           <ThalosExecutionBadge :module-badge="moduleBadge('pdf_signer')" :inline="true" :show-global="false" />
         </div>
+        <p class="hint">
+          Guarda un hash SHA-256 con fecha y usuario para probar que el documento no ha cambiado.
+          No equivale a una firma electrónica eIDAS y no aprueba el documento.
+        </p>
         <input v-model="signerForm.document_name" placeholder="Nombre documento.pdf" />
         <input v-model="signerForm.file_hash" placeholder="Hash SHA-256 (opcional)" />
         <button :disabled="loading.signer" @click="runSigner">
-          {{ loading.signer ? 'Firmando…' : 'Firmar y persistir' }}
+          {{ loading.signer ? 'Sellando…' : 'Generar sello de integridad' }}
         </button>
         <p v-if="signerResult" class="tool-text">{{ signerResult }}</p>
       </div>
@@ -173,7 +177,8 @@ const runSigner = async () => {
   loading.signer = true
   try {
     const out = await justiciaSign({ ...signerForm })
-    signerResult.value = `Firma: ${(out as { signature?: string }).signature?.slice(0, 16)}… · doc ${(out as { document_id?: string }).document_id}`
+    const seal = out as { integrity_hash?: string; document_id?: string; document_status?: string }
+    signerResult.value = `Sello (hash): ${seal.integrity_hash?.slice(0, 16)}… · doc ${seal.document_id} · estado ${seal.document_status} · no es firma eIDAS`
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {

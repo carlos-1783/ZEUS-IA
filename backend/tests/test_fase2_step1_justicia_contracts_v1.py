@@ -65,7 +65,7 @@ def test_contracts_real_and_tenant_scoped(db):
     assert r.success and r.executed
     m = r.metrics
     assert m["total"] == 3 and m["by_status"] == {"draft": 2, "approved": 1}
-    assert m["pending_review"] == 2 and m["signed"] == 1 and len(m["latest"]) == 3
+    assert m["pending_review"] == 2 and m["integrity_sealed"] == 1 and len(m["latest"]) == 3
     assert "2 borrador(es) sin firmar" in r.message
     log = (db.query(AgentActivity)
            .filter(AgentActivity.company_id == c.id, AgentActivity.action_type == "agent_action_review_contracts")

@@ -1,7 +1,7 @@
 """
 Endpoints para gestión y estado de agentes IA
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -119,6 +119,10 @@ ONLINE_WINDOW = timedelta(hours=24)
 LOOKBACK_WINDOW = timedelta(days=30)
 
 
+
+def _utc_naive(dt: datetime) -> datetime:
+    return dt.astimezone(timezone.utc).replace(tzinfo=None) if dt.tzinfo is not None else dt
+
 @router.get("/status")
 async def get_agents_status(
     current_user: User = Depends(get_current_active_user),
@@ -165,10 +169,13 @@ async def get_agents_status(
         activities = per_agent[name]
         total = len(activities)
         completed = sum(1 for a in activities if is_success_status(a.status))
-        decisions_today = sum(1 for a in activities if a.created_at >= today_start)
+        # PostgreSQL devuelve created_at con zona (timestamptz) y SQLite sin ella: se normaliza
+        # a UTC naive antes de comparar con `now` (antes: TypeError -> 500 en produccion).
+        stamps = [_utc_naive(a.created_at) for a in activities if a.created_at is not None]
+        decisions_today = sum(1 for ts in stamps if ts >= today_start)
         # Actividad de negocio de las últimas 24 h (la que muestran las tarjetas del panel).
-        activities_24h = sum(1 for a in activities if (now - a.created_at) <= ONLINE_WINDOW)
-        last_activity = max((a.created_at for a in activities), default=None)
+        activities_24h = sum(1 for ts in stamps if (now - ts) <= ONLINE_WINDOW)
+        last_activity = max(stamps, default=None)
 
         if last_activity is not None and (now - last_activity) <= ONLINE_WINDOW:
             status = "online"

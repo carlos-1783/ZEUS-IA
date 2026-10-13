@@ -106,6 +106,12 @@ const onKpiClick = (item) => {
   box-shadow: 0 0 12px rgba(245, 158, 11, 0.15);
 }
 
+.kpi-value,
+.kpi-label {
+  /* Nunca se comprimen: si falta alto, crece la tarjeta, no desaparece la cifra. */
+  flex-shrink: 0;
+}
+
 .kpi-value {
   font-size: 16px;
   font-weight: 700;

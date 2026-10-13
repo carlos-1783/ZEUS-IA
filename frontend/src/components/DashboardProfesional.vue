@@ -1756,9 +1756,12 @@ onUnmounted(() => {
 }
 
 .executive-section--kpi {
-  flex: 0 0 12%;
-  max-height: 12%;
-  min-height: 88px;
+  /* Altura según contenido (no un % del alto de la ventana): con 12% a
+     1366x820 la fila quedaba en ~52px útiles tras el padding superior y
+     las cifras de los KPI se comprimían a 0px de alto. */
+  flex: 0 0 auto;
+  max-height: none;
+  min-height: 0;
   /* Compensa el mismo hueco que .executive-pwa-bar (position:absolute,
      top:4px, ~32px de alto) reserva ya en el breakpoint móvil de abajo
      (@media max-width: 1024px) — en escritorio esa barra no tenía

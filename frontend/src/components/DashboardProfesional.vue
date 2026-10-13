@@ -1013,7 +1013,6 @@ const refreshDashboardData = async () => {
   }
   if (pollTick % 2 === 0) {
     await loadBackendHealth()
-    await loadAgentsActivities()
     await loadAgentsStatus()
   }
 }
@@ -1169,6 +1168,11 @@ const loadAgentsStatus = async () => {
     agentsData.value.forEach((agent) => {
       const info = backendAgents[agent.name]
       agent.status = info?.status || 'offline'
+      // Actividad de negocio de las últimas 24 h, del mismo cálculo que el estado (alias
+      // ZEUS/ZEUS CORE incluidos; sin trazas internas chain_*). Antes salía de
+      // /activities/{agente}, que para ZEUS CORE consultaba "ZEUS" y daba 0.
+      const n = Number(info?.activities_24h ?? info?.decisions_today)
+      agent.activities_24h = Number.isFinite(n) ? n : 0
     })
   } catch (error) {
     console.error('Error cargando estado de agentes:', error)
@@ -1261,28 +1265,6 @@ const executiveKpis = computed(() => {
     },
   ]
 })
-
-// Cargar actividades reales de cada agente (últimas 24h) — requiere JWT (igual que /metrics/summary)
-const loadAgentsActivities = async () => {
-  if (!authStore.getToken?.() && !authStore.token) {
-    console.warn('⚠️ No hay token, no se pueden cargar actividades de agentes')
-    return
-  }
-  await authStore.ensureAccessTokenFresh(300)
-  const api = (await import('@/services/api')).default
-  for (const agent of agentsData.value) {
-    try {
-      const agentName = agent.name.split(' ')[0].toUpperCase()
-      const data = await api.get(`/api/v1/activities/${agentName}?days=1`)
-      if (data.success) {
-        agent.activities_24h = data.total_activities || 0
-      }
-    } catch (error) {
-      console.error(`Error cargando actividades de ${agent.name}:`, error)
-      agent.activities_24h = 0
-    }
-  }
-}
 
 const selectAgent = (agent) => {
   selectedAgent.value = agent

@@ -40,6 +40,7 @@ def test_correct_chat_counts_completed_and_chain_rows_do_not_dilute(db, client, 
     st = client.get("/api/v1/agents/status").json()
     assert st["agents"]["RAFAEL"]["uptime"] == "100.00%"
     assert st["agents"]["RAFAEL"]["decisions_last_30d"] == 1  # solo la actividad de negocio
+    assert st["agents"]["RAFAEL"]["activities_24h"] == 1  # lo que muestra la tarjeta del panel
 
     perf = client.get("/api/v1/metrics/performance", params={"agent": "RAFAEL"}).json()
     assert perf["total_activities"] == 1 and perf["success_rate"] == "100.0%"

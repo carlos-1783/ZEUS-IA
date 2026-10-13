@@ -166,6 +166,8 @@ async def get_agents_status(
         total = len(activities)
         completed = sum(1 for a in activities if is_success_status(a.status))
         decisions_today = sum(1 for a in activities if a.created_at >= today_start)
+        # Actividad de negocio de las últimas 24 h (la que muestran las tarjetas del panel).
+        activities_24h = sum(1 for a in activities if (now - a.created_at) <= ONLINE_WINDOW)
         last_activity = max((a.created_at for a in activities), default=None)
 
         if last_activity is not None and (now - last_activity) <= ONLINE_WINDOW:
@@ -185,6 +187,7 @@ async def get_agents_status(
             "uptime": f"{(completed / total * 100):.2f}%" if total > 0 else None,
             "last_activity": last_activity.isoformat() if last_activity else None,
             "decisions_today": decisions_today,
+            "activities_24h": activities_24h,
             "decisions_last_30d": total,
             **{k: v for k, v in meta.items() if k != "role"},
         }

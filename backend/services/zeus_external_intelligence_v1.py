@@ -1,18 +1,26 @@
 """
-Inteligencia externa v1 — sin inventar datos; unknown si no hay fuente.
+Inteligencia externa v1 — sin fuente externa configurada no hay investigacion.
+
+Fase 2 (#14): antes devolvia success=True con todos los campos a "unknown" y, ademas,
+SOBRESCRIBIA `crm_leads.external_insights_json` / `customers.metadata_.external_insights` con
+ese bloque vacio (borrando lo que hubiera). No existe ninguna API externa de datos de empresas
+integrada en el repo, asi que ahora se responde 501 `external_source_not_configured` y no se
+escribe nada en BD. Queda registrado en log.
 """
 
 from __future__ import annotations
 
-import json
-from typing import Any, Dict, Optional
+import logging
+from typing import Optional
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.models.crm_lead import CrmLead
-from app.models.customer import Customer
 from app.models.user import User
-import services.crm_office_service as crm_svc
+
+logger = logging.getLogger(__name__)
+
+EXTERNAL_SOURCE_ERROR = "external_source_not_configured"
 
 
 def research_business(
@@ -22,38 +30,22 @@ def research_business(
     query: str,
     lead_id: Optional[int] = None,
     customer_id: Optional[int] = None,
-) -> Dict[str, Any]:
-    """
-    Investiga datos públicos disponibles. Si no hay API configurada → unknown.
-    Persiste insights en CRM (lead o customer metadata).
-    """
-    q = (query or "").strip()
-    insights: Dict[str, Any] = {
-        "public_business_data": "unknown",
-        "insurance_estimations": "unknown",
-        "market_pricing": "unknown",
-        "competitor_analysis": "unknown",
-        "query": q,
-        "note": "Sin fuente externa configurada; no se inventan datos.",
-    }
-
-    # Placeholder for future real APIs — explicitly unknown
-    cid = crm_svc.primary_company_id(db, user)
-    payload = json.dumps(insights, ensure_ascii=False)
-
-    if lead_id:
-        lead = db.query(CrmLead).filter(CrmLead.id == lead_id, CrmLead.company_id == cid).first()
-        if lead:
-            lead.external_insights_json = payload
-            db.add(lead)
-            db.commit()
-    elif customer_id:
-        cust = db.query(Customer).filter(Customer.id == customer_id, Customer.company_id == cid).first()
-        if cust:
-            meta = dict(cust.metadata_ or {}) if isinstance(cust.metadata_, dict) else {}
-            meta["external_insights"] = insights
-            cust.metadata_ = meta
-            db.add(cust)
-            db.commit()
-
-    return {"success": True, "insights": insights, "persisted": bool(lead_id or customer_id)}
+):
+    """Sin fuente externa real: 501 honesto, sin tocar CRM."""
+    _ = db
+    logger.info(
+        "intelligence/research no disponible (sin fuente externa): user=%s lead=%s customer=%s",
+        getattr(user, "id", None), lead_id, customer_id,
+    )
+    raise HTTPException(
+        status_code=501,
+        detail={
+            "error": EXTERNAL_SOURCE_ERROR,
+            "message": (
+                "No hay ninguna fuente externa de datos de empresas configurada: no se ha "
+                "investigado nada y no se ha modificado el lead ni el cliente."
+            ),
+            "query": (query or "").strip(),
+            "persisted": False,
+        },
+    )

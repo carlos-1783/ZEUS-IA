@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.user import User
+from services.perseo_platform_access_v1 import require_platform_credential_access
 from services.zeus_execution_controller_v1 import get_execution_status
 
 logger = logging.getLogger(__name__)
@@ -103,14 +104,16 @@ def create_ad_campaign(
         raise HTTPException(status_code=503, detail="execution_mode ERROR")
     if not execution["writes_enabled"]:
         raise HTTPException(status_code=403, detail="writes_enabled false")
-    _ = user
     plat = platform.lower()
     if plat in ("meta", "meta_ads", "facebook"):
+        # Credencial global de plataforma: solo superusuario (ver perseo_platform_access_v1).
+        require_platform_credential_access(user, "meta_ads")
         return {
             **create_meta_campaign(name=name, daily_budget_cents=int(budget * 100)),
             "transaction_id": transaction_id,
         }
     if plat in ("google", "google_ads"):
+        require_platform_credential_access(user, "google_ads")
         return {
             **create_google_campaign(name=name, daily_budget_micros=int(budget * 1_000_000)),
             "transaction_id": transaction_id,

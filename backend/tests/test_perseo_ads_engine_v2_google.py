@@ -14,6 +14,7 @@ reaparezca.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -61,7 +62,9 @@ def test_create_ad_campaign_google_end_to_end_fails_honestly_when_writes_enabled
         with pytest.raises(HTTPException) as exc_info:
             create_ad_campaign(
                 db=None,
-                user=None,
+                # Superusuario: único que puede usar la credencial global de plataforma
+                # (un usuario de empresa recibe 503 antes; ver test_fase2_perseo_meta_*).
+                user=SimpleNamespace(id=1, is_superuser=True),
                 platform="google",
                 name="Test Revisor End-to-End",
                 budget=100.0,

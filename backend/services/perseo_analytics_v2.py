@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.user import User
+from services.perseo_platform_access_v1 import require_platform_credential_access
 from services.zeus_execution_controller_v1 import get_execution_status
 
 logger = logging.getLogger(__name__)
@@ -63,11 +64,14 @@ def fetch_analytics(
     execution = get_execution_status(db)
     if execution["execution_mode"] == "ERROR":
         raise HTTPException(status_code=503, detail="execution_mode ERROR")
-    _ = user
     src = source.lower()
     if src in ("meta", "meta_ads"):
+        # Token global de plataforma: un usuario de empresa no puede leer insights de la
+        # cuenta de la plataforma ni de ningún campaign_id con ese token.
+        require_platform_credential_access(user, "meta_insights")
         return fetch_meta_insights(campaign_id=campaign_id)
     if src in ("google", "google_ads"):
+        require_platform_credential_access(user, "google_ads")
         if not (os.getenv("GOOGLE_ADS_CUSTOMER_ID") and os.getenv("GOOGLE_ADS_DEVELOPER_TOKEN")):
             raise HTTPException(status_code=503, detail={"error": "google_ads_not_configured"})
         raise HTTPException(status_code=501, detail={"error": "google_ads_reporting_requires_client_library"})

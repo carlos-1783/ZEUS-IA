@@ -27,6 +27,7 @@ from services.perseo_image_engine_v2 import create_image_generation_job, _provid
 from services.perseo_job_queue_v1 import count_jobs_by_status, get_job
 from services.perseo_pipeline_v2 import pipeline_status, run_pipeline
 from services.perseo_publishing_v1 import publish_post, _instagram_configured
+from services.perseo_platform_access_v1 import platform_credential_usable_by
 from services.perseo_storage_v2 import s3_configured, storage_backend
 from services.perseo_video_engine_v2 import create_video_edit_job_v2
 from services.perseo_video_gen_engine_v2 import create_video_generation_job, video_gen_configured
@@ -122,8 +123,10 @@ def perseo_v2_status(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    _ = current_user
     execution = get_execution_status(db)
+    # Las credenciales Meta/Instagram/Google Ads son globales de plataforma: solo el
+    # superusuario puede usarlas, asi que a un usuario de empresa no se le anuncian.
+    platform_ok = platform_credential_usable_by(current_user)
     return {
         "success": True,
         "version": "v2",
@@ -141,9 +144,17 @@ def perseo_v2_status(
             "image_generation": {"configured": _provider_configured(), "provider": settings.PERSEO_IMAGE_PROVIDER},
             "ai_tools": {"openai": openai_configured(), "model": settings.PERSEO_AI_MODEL},
             "pipeline": pipeline_status(db),
-            "ads_engine_v2": {"meta": _meta_configured(), "google": _google_configured()},
-            "publishing_v1": {"instagram": _instagram_configured(), "mode": "semi_auto", "requires_approval": True},
-            "analytics_v2": {"meta": _meta_configured()},
+            "ads_engine_v2": {
+                "meta": platform_ok and _meta_configured(),
+                "google": platform_ok and _google_configured(),
+                "scope": "plataforma" if platform_ok else "no_conectado_para_tu_empresa",
+            },
+            "publishing_v1": {
+                "instagram": platform_ok and _instagram_configured(),
+                "mode": "semi_auto",
+                "requires_approval": True,
+            },
+            "analytics_v2": {"meta": platform_ok and _meta_configured()},
         },
         "queue": {
             "active": count_jobs_by_status(db, "processing"),

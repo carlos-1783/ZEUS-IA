@@ -229,7 +229,6 @@ async def execute_agent_action(
 
     from services.zeus_core_guard_v1 import (
         WORKFLOW_ONLY_ACTIONS,
-        guard_enforce,
         validate_critical_action,
     )
 
@@ -256,7 +255,7 @@ async def execute_agent_action(
             "message": gr.human_message,
             "guard": gr.to_dict(),
         }
-    if not gr.allowed and guard_enforce():
+    if not gr.allowed and gr.enforced:
         return {
             "success": False,
             "executed": False,

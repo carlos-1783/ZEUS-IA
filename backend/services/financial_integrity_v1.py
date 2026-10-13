@@ -12,7 +12,6 @@ from services.zeus_core_guard_v1 import (
     ZeusGuardViolation,
     apply_guard,
     closure_active,
-    guard_enforce,
     validate_critical_action,
 )
 
@@ -49,7 +48,7 @@ def assert_financial_record_valid(
         except ZeusGuardViolation as exc:
             return {"valid": False, "blocked": True, "guard": exc.result.to_dict()}
 
-    if not gr.allowed and guard_enforce():
+    if not gr.allowed and gr.enforced:
         return {"valid": False, "blocked": True, "guard": gr.to_dict()}
 
     return {"valid": True, "blocked": False, "guard": gr.to_dict()}
@@ -63,4 +62,4 @@ def validate_invoice_company(company_id: Optional[int], *, db: Optional[Session]
         layer="service",
         db=db,
     )
-    return gr.allowed or not guard_enforce()
+    return gr.allowed or not gr.enforced

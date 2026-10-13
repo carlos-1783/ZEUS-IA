@@ -38,7 +38,7 @@
         <label>Horario del negocio</label>
         <textarea
           v-model="form.business_hours"
-          placeholder="Ej: L-V 08:00-22:00, S-D 10:00-00:00"
+          :placeholder="isOffice ? 'Ej: L-V 09:00-14:00 y 16:00-19:00' : 'Ej: L-V 08:00-22:00, S-D 10:00-00:00'"
           rows="3"
         />
       </section>
@@ -93,7 +93,7 @@
         <input
           v-model.trim="form.legal_name"
           type="text"
-          placeholder="Ej: Restauración Zeus S.L."
+          :placeholder="isOffice ? 'Ej: Gestoría Zeus S.L.' : 'Ej: Restauración Zeus S.L.'"
         >
 
         <label>CIF/NIF de la empresa *</label>
@@ -177,7 +177,14 @@ const saving = ref(false)
 const error = ref('')
 const success = ref('')
 type EmployeeRow = { full_name: string; phone: string; role_title: string }
-const employeeRoles = ['camarero', 'cocina', 'encargado', 'caja', 'limpieza', 'reparto', 'administración']
+// Roles según la vertical de la empresa: una oficina no tiene camareros ni cocina.
+const HOSPITALITY_ROLES = ['camarero', 'cocina', 'encargado', 'caja', 'limpieza', 'reparto', 'administración']
+const OFFICE_ROLES = ['administración', 'comercial', 'gestión', 'atención al cliente', 'técnico', 'dirección']
+const isOffice = computed(
+  () => String(authStore.companyType || (authStore.user as any)?.company_type || '').toLowerCase() === 'office'
+)
+const employeeRoles = computed(() => (isOffice.value ? OFFICE_ROLES : HOSPITALITY_ROLES))
+const defaultRole = () => employeeRoles.value[0]
 
 const availableChannels = ['instagram', 'facebook', 'tiktok', 'google', 'youtube', 'linkedin']
 const form = reactive({
@@ -197,7 +204,7 @@ const form = reactive({
   email_gestor_fiscal: '',
   autoriza_envio_documentos_a_asesores: true,
   control_horario_policy: '',
-  employees: [{ full_name: '', phone: '', role_title: 'camarero' }] as EmployeeRow[],
+  employees: [] as EmployeeRow[],
   tax_id: '',
   legal_name: '',
   iban: '',
@@ -236,7 +243,7 @@ watch(
       return
     }
     while (form.employees.length < count) {
-      form.employees.push({ full_name: '', phone: '', role_title: 'camarero' })
+      form.employees.push({ full_name: '', phone: '', role_title: defaultRole() })
     }
     if (form.employees.length > count) {
       form.employees = form.employees.slice(0, count)
@@ -255,6 +262,14 @@ onMounted(async () => {
   if (!token) {
     window.location.href = '/auth/login?redirect=/onboarding-setup'
     return
+  }
+  // Oficina: sin TPV marcado por defecto y con roles de oficina (lo guardado en el cuestionario,
+  // si existe, se respeta más abajo).
+  if (isOffice.value) {
+    form.uses_tpv = false
+    form.employees.forEach((e) => {
+      if (!OFFICE_ROLES.includes(e.role_title)) e.role_title = defaultRole()
+    })
   }
   try {
     const status = await api.get('/api/v1/auth/onboarding/status', token)

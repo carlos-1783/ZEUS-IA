@@ -1808,7 +1808,9 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  background: linear-gradient(90deg, rgba(20, 22, 26, 0) 0%, rgba(15, 17, 20, 0.55) 30%, rgba(10, 11, 13, 0.92) 100%);
+  /* Tokens del tema (platino base / oscuro): antes una banda casi negra fija con texto
+     blanco, ajena al platino. */
+  background: linear-gradient(90deg, transparent 0%, var(--zeus-accent-soft) 38%, var(--violet-soft) 100%);
 }
 
 .zeus-core-banner-img {
@@ -1822,19 +1824,21 @@ onUnmounted(() => {
   filter: grayscale(0.15) contrast(1.05);
   opacity: 0.9;
   pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 35%);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 35%);
 }
 
 .zeus-core-banner-text {
   position: relative;
   z-index: 2;
-  max-width: 55%;
-  margin: 0 16px 0 0;
+  max-width: 50%;
+  /* El texto queda a la izquierda de la imagen, nunca encima. */
+  margin: 0 clamp(96px, 34%, 150px) 0 0;
   padding: 0;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.35;
-  color: #ffffff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  color: var(--zeus-text-secondary);
   text-align: right;
 }
 

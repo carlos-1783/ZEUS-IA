@@ -158,7 +158,6 @@ def run_real_audit(db: Session, user: User) -> Dict[str, Any]:
     base["gdpr"] = gdpr
     base["real_execution"] = True
     base["strict_mode"] = True
-    base["simulation_detected"] = False
     return {"success": True, **base}
 
 

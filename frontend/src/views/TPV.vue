@@ -4416,6 +4416,13 @@ onUnmounted(() => {
   max-width: 440px;
 }
 
+.operator-switch-hint {
+  margin: 14px 20px 10px;
+  color: var(--zeus-text-secondary, #52607a);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
 .operator-switch-warning {
   margin: 0 20px 12px;
   color: var(--zeus-warning, #f59e0b);

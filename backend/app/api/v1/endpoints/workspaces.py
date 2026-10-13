@@ -151,19 +151,28 @@ def _text_for_video(result: Dict[str, Any]) -> str:
 
 def _text_for_seo(result: Dict[str, Any]) -> str:
     score = result.get("score")
+    origin = result.get("url") or "el HTML aportado"
+    passed, total = result.get("checks_passed"), result.get("checks_total")
     kw = result.get("keyword_score")
+    kw_txt = f" Cobertura de keywords: {kw}%." if kw is not None else ""
     issues = result.get("issues") or []
-    issue = issues[0] if issues else "Checklist técnico aprobado."
-    return f"Auditoría SEO completada: score {score}/100, cobertura keywords {kw}%. Prioridad inmediata: {issue}"
+    issue = issues[0] if issues else "todas las comprobaciones técnicas superadas."
+    ai = result.get("ai_recommendations") or {}
+    ai_txt = " Incluye recomendaciones de texto generadas por IA (no afectan al score)." if ai.get("available") else ""
+    return (
+        f"Auditoría SEO de {origin}: score {score}/100 calculado con {passed} de {total} "
+        f"comprobaciones técnicas superadas.{kw_txt} Prioridad inmediata: {issue}{ai_txt}"
+    )
 
 
 def _text_for_ads(result: Dict[str, Any]) -> str:
-    channels = result.get("channels") or []
-    kpis = result.get("kpis") or {}
-    kpi_txt = ", ".join([f"{k}={v}" for k, v in kpis.items()]) or "sin KPI"
+    channels = result.get("channels") or (result.get("budget_strategy") or {}).get("channel_mix") or []
+    label = result.get("label") or "Plantilla orientativa (sin datos de tu cuenta)"
+    tracked = result.get("kpis_to_track") or []
+    track_txt = f" Métricas a vigilar: {', '.join(map(str, tracked))}." if tracked else ""
     return (
-        f"Plan de Ads generado con {len(channels)} canales y reparto de presupuesto listo para ejecutar. "
-        f"KPIs sugeridos: {kpi_txt}."
+        f"{label}: reparto de presupuesto en {len(channels)} canales. "
+        f"Sin objetivos numéricos de KPI: no hay datos reales de tu cuenta publicitaria.{track_txt}"
     )
 
 

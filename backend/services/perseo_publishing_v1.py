@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.user import User
+from services.perseo_platform_access_v1 import require_platform_credential_access
 from services.zeus_execution_controller_v1 import get_execution_status
 
 logger = logging.getLogger(__name__)
@@ -60,8 +61,10 @@ def publish_post(
         raise HTTPException(status_code=503, detail="execution_mode ERROR")
     if not execution["writes_enabled"]:
         raise HTTPException(status_code=403, detail="writes_enabled false")
-    _ = user
     plat = platform.lower()
+    if plat in ("instagram", "youtube", "tiktok"):
+        # Cuentas globales de plataforma (INSTAGRAM_*, YOUTUBE_*, TIKTOK_*): solo superusuario.
+        require_platform_credential_access(user, plat)
     if plat == "instagram":
         return {**publish_instagram_reel(video_url=video_url, caption=caption), "transaction_id": transaction_id}
     if plat == "youtube":

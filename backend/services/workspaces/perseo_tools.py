@@ -64,21 +64,22 @@ def enhance_perseo_video(payload: Dict[str, Any], user_email: Optional[str] = No
 
 def run_seo_audit(payload: Dict[str, Any], user_email: Optional[str] = None) -> Dict[str, Any]:
     from services.perseo_ai_service_v2 import seo_audit_ai
-    from services.workspaces.perseo_tools_heuristic import run_seo_audit_heuristic
 
-    result = _ai_or_heuristic(
-        seo_audit_ai,
-        run_seo_audit_heuristic,
-        payload,
-        "seo_audit_engine",
-        None,
-    )
+    # seo_audit_ai ya hace la auditoría determinista sobre la página real (422 si no hay
+    # página analizable) y solo añade texto IA si está configurada: no hay "fallback".
+    result = seo_audit_ai(payload)
+    logged_payload = {k: v for k, v in payload.items() if k != "html_snapshot"}
+    if payload.get("html_snapshot"):
+        logged_payload["html_snapshot_chars"] = len(str(payload["html_snapshot"]))
     log_tool_execution(
         agent="PERSEO",
         tool_name="seo_audit_engine",
-        description=f"Auditoría SEO ({'AI' if result.get('ai_powered') else 'heurístico'})",
-        details={"payload": payload, "result": result},
-        metrics={"score": result.get("seo_score") or result.get("score")},
+        description=(
+            f"Auditoría SEO determinista ({result.get('checks_passed')}/{result.get('checks_total')} "
+            f"comprobaciones){' + recomendaciones IA' if result.get('ai_powered') else ''}"
+        ),
+        details={"payload": logged_payload, "result": result},
+        metrics={"score": result.get("score")},
         user_email=user_email,
     )
     return result

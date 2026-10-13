@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
 from datetime import date, datetime, time
 from typing import Any, Dict, Optional, Tuple
 
@@ -133,6 +132,7 @@ def _find_or_create_customer(
     email: Optional[str] = None,
     tax_id: Optional[str] = None,
     phone: Optional[str] = None,
+    is_company: Optional[bool] = None,
 ) -> Tuple[Customer, bool]:
     name = (name or "").strip()
     if not name:
@@ -142,12 +142,17 @@ def _find_or_create_customer(
     if existing:
         return existing, False
 
-    safe_email = email or f"scan+{uuid.uuid4().hex[:10]}@example.com"
-    cust = crm_svc.create_customer(
-        db,
-        user,
-        CustomerCreate(name=name, email=safe_email, phone=phone, tax_id=tax_id),
-    )
+    # La ficha de cliente exige email (zeus_office_mode). Antes se inventaba scan+xxxx@example.com;
+    # ahora, sin email real, se pide al operario y no se crea nada.
+    if not email:
+        raise HTTPException(
+            status_code=422,
+            detail="Falta el email del cliente para crear su ficha. Indícalo; ZEUS no inventa emails.",
+        )
+    fields: Dict[str, Any] = {"name": name, "email": email, "phone": phone, "tax_id": tax_id}
+    if is_company is not None:
+        fields["is_company"] = is_company
+    cust = crm_svc.create_customer(db, user, CustomerCreate(**fields))
     return cust, True
 
 
@@ -612,7 +617,8 @@ def process_dni_scan(
     )
 
     full_name = identity.get("full_name") or identity.get("surname") or "Cliente DNI"
-    tax_id = identity.get("document_number")
+    # NIF = numero de DNI/NIE validado (datos opcionales del DNI espanol), nunca el numero de soporte.
+    tax_id = identity.get("personal_number")
     cust, created = _find_or_create_customer(
         db,
         user,
@@ -621,6 +627,7 @@ def process_dni_scan(
         email=normalized_email,
         tax_id=tax_id,
         phone=normalized_phone,
+        is_company=False,  # un DNI identifica a una persona fisica
     )
 
     scoring = score_customer(db, user=user, customer_id=cust.id)

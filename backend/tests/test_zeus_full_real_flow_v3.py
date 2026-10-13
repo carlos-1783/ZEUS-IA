@@ -123,7 +123,7 @@ def test_qr_to_invoice(db: Session):
 
 def test_dni_to_customer(db: Session):
     user, company, _ = _seed(db)
-    out = process_dni_scan(db, user, mrz=SAMPLE_MRZ, company_id=company.id)
+    out = process_dni_scan(db, user, mrz=SAMPLE_MRZ, company_id=company.id, email="anna@example.com")
     assert out["executed"] is True
     assert out["customer_id"]
     assert out["lead_score"] is not None

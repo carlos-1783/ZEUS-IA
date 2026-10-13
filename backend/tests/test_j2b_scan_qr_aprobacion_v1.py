@@ -201,7 +201,8 @@ def test_payload_malicioso_se_limpia_a_lista_blanca(db, client):
     r = client.post(
         f"{CORE}/agent/execute",
         json={"agent": "RAFAEL", "action": "register_qr_payment",
-              "payload": {"customer_name": "Cliente X", "amount": 700, "company_id": other_co.id, "user_id": other_user.id}},
+              "payload": {"customer_name": "Cliente X", "email": "x@example.com", "amount": 700,
+                          "company_id": other_co.id, "user_id": other_user.id}},
     )
     assert r.status_code == 200, r.text
     row = db.get(ZeusPendingApproval, r.json()["approval_id"])

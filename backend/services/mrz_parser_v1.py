@@ -51,6 +51,22 @@ def _coerce_lines(mrz: str) -> List[str]:
     return lines or [compact]
 
 
+_DNI_LETTERS = "TRWAGMYFPDXBNJZSQVHLCKE"
+
+
+def _looks_like_dni_nie(value: str) -> bool:
+    """DNI (8 digitos + letra) o NIE (X/Y/Z + 7 digitos + letra) con letra de control correcta."""
+    v = (value or "").upper()
+    if len(v) != 9 or not v[-1].isalpha():
+        return False
+    body = v[:-1]
+    if body[0] in "XYZ":
+        body = str("XYZ".index(body[0])) + body[1:]
+    if not body.isdigit():
+        return False
+    return _DNI_LETTERS[int(body) % 23] == v[-1]
+
+
 def _parse_td1(lines: List[str], *, validate_checksums: bool = True) -> Dict[str, Any]:
     if len(lines) < 3:
         raise ValueError("MRZ TD1 incompleto (se requieren 3 líneas)")
@@ -87,14 +103,24 @@ def _parse_td1(lines: List[str], *, validate_checksums: bool = True) -> Dict[str
     ):
         raise ValueError("Checksum compuesto inválido")
 
-    names_raw = l3.replace("<", " ").strip()
-    name_parts = [p for p in names_raw.split() if p]
-    surname = name_parts[0] if name_parts else ""
-    given_names = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
+    # ICAO 9303: APELLIDOS<<NOMBRE(S); dentro de cada parte '<' separa palabras. Antes se partia por
+    # el primer '<' y un DNI con dos apellidos (GARCIA<LOPEZ<<PABLO) quedaba con nombre "LOPEZ PABLO".
+    surname_raw, _, given_raw = l3.partition("<<")
+    surname = " ".join(p for p in surname_raw.split("<") if p)
+    given_names = " ".join(p for p in given_raw.split("<") if p)
+
+    # DNI espanol (TD1, pais emisor ESP): l1[5:14] es el numero de SOPORTE del documento; el numero
+    # de DNI (NIF de la persona) va en los datos opcionales l1[15:30]. Solo se expone como
+    # personal_number si tiene forma de DNI/NIE valida; nunca se usa el soporte como NIF.
+    issuing = l1[2:5].replace("<", "")
+    optional = l1[15:30].replace("<", "")
+    personal_number = optional if (issuing == "ESP" and _looks_like_dni_nie(optional)) else None
 
     out = {
         "format": "TD1",
         "document_number": doc_number,
+        "issuing_country": issuing,
+        "personal_number": personal_number,
         "birth_date": f"19{birth_raw[0:2]}-{birth_raw[2:4]}-{birth_raw[4:6]}" if int(birth_raw[0:2]) > 30 else f"20{birth_raw[0:2]}-{birth_raw[2:4]}-{birth_raw[4:6]}",
         "expiry_date": f"20{expiry_raw[0:2]}-{expiry_raw[2:4]}-{expiry_raw[4:6]}",
         "sex": sex,

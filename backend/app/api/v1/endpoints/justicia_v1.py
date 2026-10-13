@@ -36,7 +36,9 @@ def justicia_system_audit(
         "system_audit",
         data_origin="backend",
         real_execution=bool(body.get("real_execution")),
-        ui_badge="REAL" if body.get("real_execution") else "SIMULADO",
+        # Fase 2 (#26): con JUSTICE_REAL_AUDIT_ENABLED=false no se simula nada, no se ejecuta:
+        # el badge dice DESACTIVADO, no SIMULADO.
+        ui_badge="REAL" if body.get("real_execution") else "DESACTIVADO",
         audit_trace=body.get("audit_trace"),
     )
 

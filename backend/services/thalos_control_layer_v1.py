@@ -37,15 +37,20 @@ MODULE_CLASSIFICATION: Dict[str, str] = {
     "status": "REAL_SAFE",
 }
 
-MODULE_UI_BADGE: Dict[str, str] = {
-    "auditoria_real": "REAL",
-    "backup_system": "REAL",
-    "log_monitor": "REAL",
-    "text_analysis": "REAL",
-    "workspace": "REAL",
-    "events": "REAL",
-    "status": "REAL",
-}
+def compute_ui_badge(*, data_origin: str, real_execution: bool) -> str:
+    """Badge calculado (Fase 2 #11). Antes era una tabla fija con "REAL" para todos los modulos,
+    incluso con data_origin="mock" o real_execution=False.
+
+    - REAL: hubo ejecucion real y los datos no son mock.
+    - SIMULADO: datos mock (o ejecucion no real sobre datos mock).
+    - PARCIAL: no hubo ejecucion real pero los datos no son inventados (p. ej. analisis
+      heuristico del texto que mando el usuario, o el escaneo real fallo).
+    """
+    if data_origin == "mock":
+        return "SIMULADO"
+    if real_execution:
+        return "REAL"
+    return "PARCIAL"
 
 
 @dataclass
@@ -156,7 +161,7 @@ def build_metadata(
         data_origin=data_origin,
         real_execution=real_execution,
         module=module,
-        ui_badge=MODULE_UI_BADGE.get(module, "SIMULADO"),
+        ui_badge=compute_ui_badge(data_origin=data_origin, real_execution=bool(real_execution)),
         flags=current_flags(),
     )
 

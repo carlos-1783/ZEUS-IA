@@ -847,7 +847,10 @@ async def workspace_thalos_credentials(
         event_name="thalos_credentials_revoked",
         chain_steps=["trigger_security_followup"],
     )
-    return thalos_wrap(response, "text_analysis", data_origin="mock", real_execution=False)
+    # Solo se llega aqui con revocacion real (si no, 501 arriba): se etiqueta con el
+    # real_execution que declara la propia herramienta (antes: mock/False fijo).
+    real = bool(result["real_execution"])
+    return thalos_wrap(response, "text_analysis", data_origin="backend" if real else "mock", real_execution=real)
 
 
 # ---------------------------------------------------------------------------

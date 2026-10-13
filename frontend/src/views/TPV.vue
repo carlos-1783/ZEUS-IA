@@ -620,6 +620,60 @@
         </div>
       </div>
     </div>
+
+    <!-- Cierre de caja: importes contados (antes con window.prompt). Misma llamada real a
+         POST /tpv/close-register; el backend suma las ventas desde el último cierre. -->
+    <div v-if="showCloseRegisterModal" class="modal-overlay" @click.self="cancelCloseRegister">
+      <form
+        class="modal-content operator-switch-modal close-register-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="close-register-title"
+        novalidate
+        @submit.prevent="submitCloseRegister"
+      >
+        <div class="modal-header">
+          <h3 id="close-register-title">Cierre de caja</h3>
+          <button type="button" class="modal-close" @click="cancelCloseRegister" aria-label="Cerrar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <p class="modal-hint operator-switch-hint">
+          Indica el efectivo con el que abriste la caja y el que hay ahora. ZEUS lo compara con las ventas registradas desde el último cierre.
+        </p>
+        <label class="form-label" for="close-initial-cash">Efectivo inicial en caja (€)</label>
+        <input
+          id="close-initial-cash"
+          ref="closeInitialInput"
+          v-model="closeInitialCash"
+          type="text"
+          inputmode="decimal"
+          autocomplete="off"
+          class="form-input"
+          placeholder="0,00"
+          :aria-invalid="closeRegisterErrors.initial ? 'true' : 'false'"
+        />
+        <p v-if="closeRegisterErrors.initial" class="modal-hint operator-switch-warning" role="alert">{{ closeRegisterErrors.initial }}</p>
+        <label class="form-label" for="close-final-cash">Efectivo contado ahora (€)</label>
+        <input
+          id="close-final-cash"
+          v-model="closeFinalCash"
+          type="text"
+          inputmode="decimal"
+          autocomplete="off"
+          class="form-input"
+          placeholder="0,00"
+          :aria-invalid="closeRegisterErrors.final ? 'true' : 'false'"
+        />
+        <p v-if="closeRegisterErrors.final" class="modal-hint operator-switch-warning" role="alert">{{ closeRegisterErrors.final }}</p>
+        <div class="modal-footer operator-switch-footer">
+          <button type="button" class="btn-cancel" :disabled="closingRegister" @click="cancelCloseRegister">{{ $t('common.cancel') }}</button>
+          <button type="submit" class="btn-save" :disabled="closingRegister">
+            {{ closingRegister ? 'Cerrando caja…' : 'Cerrar caja' }}
+          </button>
+        </div>
+      </form>
+    </div>
   </div>
 </template>
 
@@ -2222,21 +2276,41 @@ const processPayment = async () => {
 // Cierre de caja: el backend suma las ventas reales de la empresa desde el último
 // cierre (tpv_sales) y persiste el arqueo; aquí solo se piden los importes contados.
 const closingRegister = ref(false)
+const showCloseRegisterModal = ref(false)
+const closeInitialCash = ref('0')
+const closeFinalCash = ref('')
+const closeRegisterErrors = ref({ initial: '', final: '' })
+const closeInitialInput = ref(null)
+// '' -> null (campo vacío); importe con coma o punto decimal, >= 0 y como mucho 2 decimales.
 const parseEuros = (raw) => {
-  if (raw === null) return null
-  const n = Number(String(raw).replace(',', '.').trim())
+  const s = String(raw ?? '').trim()
+  if (!s) return null
+  if (!/^\d+([.,]\d{1,2})?$/.test(s)) return NaN
+  const n = Number(s.replace(',', '.'))
   return Number.isFinite(n) && n >= 0 ? n : NaN
 }
-const closeRegister = async () => {
+const closeRegister = () => {
   if (closingRegister.value) return
-  const initialCash = parseEuros(window.prompt('Efectivo inicial en caja (EUR):', '0'))
-  if (initialCash === null) return
-  const finalCash = parseEuros(window.prompt('Efectivo contado ahora en caja (EUR):', ''))
-  if (finalCash === null) return
-  if (Number.isNaN(initialCash) || Number.isNaN(finalCash)) {
-    warning('Importe no válido: usa un número igual o mayor que 0')
-    return
-  }
+  closeInitialCash.value = '0'
+  closeFinalCash.value = ''
+  closeRegisterErrors.value = { initial: '', final: '' }
+  showCloseRegisterModal.value = true
+  nextTick(() => closeInitialInput.value?.focus?.())
+}
+const cancelCloseRegister = () => {
+  if (closingRegister.value) return
+  showCloseRegisterModal.value = false
+}
+const submitCloseRegister = async () => {
+  if (closingRegister.value) return
+  const initialCash = parseEuros(closeInitialCash.value)
+  const finalCash = parseEuros(closeFinalCash.value)
+  const msg = (v) =>
+    v === null ? 'Indica un importe (0 si no había efectivo).'
+      : Number.isNaN(v) ? 'Importe no válido: usa un número igual o mayor que 0, con 2 decimales como máximo.'
+        : ''
+  closeRegisterErrors.value = { initial: msg(initialCash), final: msg(finalCash) }
+  if (closeRegisterErrors.value.initial || closeRegisterErrors.value.final) return
   closingRegister.value = true
   try {
     const token = await getAuthToken()
@@ -2256,6 +2330,7 @@ const closeRegister = async () => {
       error('El backend no devolvió el cierre de caja')
       return
     }
+    showCloseRegisterModal.value = false
     const resumen = `Cierre #${c.id}: ${c.sales_count} ventas · efectivo EUR ${formatPrice(c.cash_sales_total)} · tarjeta EUR ${formatPrice(c.card_sales_total)} · otros EUR ${formatPrice(c.other_sales_total)}. Esperado en caja EUR ${formatPrice(c.expected_cash)}, contado EUR ${formatPrice(c.final_cash)}`
     if (c.status === 'ok') {
       success(`${resumen}. Caja cuadrada.`)

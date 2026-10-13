@@ -66,6 +66,10 @@
               <textarea v-model="form.notes" rows="2"
                 class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"></textarea>
             </div>
+            <label class="flex items-start gap-2 text-sm text-gray-700">
+              <input v-model="form.whatsapp_consent" type="checkbox" class="mt-1">
+              <span>Acepto que {{ siteName || 'el negocio' }} me envíe la confirmación de esta reserva por WhatsApp al teléfono indicado. (Opcional: si no lo marcas, no te escribiremos por WhatsApp.)</span>
+            </label>
             <button type="submit" :disabled="sending"
               class="w-full py-2 px-4 bg-indigo-600 text-white font-medium rounded-md hover:bg-indigo-700 disabled:opacity-50">
               {{ sending ? 'Enviando...' : 'Enviar reserva' }}
@@ -99,7 +103,8 @@ const form = reactive({
   reservation_date: '',
   reservation_time: '21:00',
   num_guests: 2,
-  notes: ''
+  notes: '',
+  whatsapp_consent: false
 })
 
 function setDefaultDate () {
@@ -150,7 +155,8 @@ async function submitReservation () {
         reservation_date: form.reservation_date,
         reservation_time: timeStr.slice(0, 5),
         num_guests: form.num_guests,
-        notes: form.notes?.trim() || null
+        notes: form.notes?.trim() || null,
+        whatsapp_consent: form.whatsapp_consent === true
       })
     })
     const data = await res.json().catch(() => ({}))
@@ -163,6 +169,7 @@ async function submitReservation () {
     form.guest_phone = ''
     form.guest_email = ''
     form.notes = ''
+    form.whatsapp_consent = false
   } catch {
     reservationError.value = 'Error de conexión. Inténtalo de nuevo.'
   } finally {

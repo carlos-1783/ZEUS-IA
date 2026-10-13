@@ -112,14 +112,52 @@
             </p>
           </div>
           <div v-if="selectedMethod === 'code'" class="employee-selector">
-            <label>PIN empleado</label>
+            <label for="ch-employee-pin">PIN del empleado</label>
             <input
+              id="ch-employee-pin"
               v-model="employeePin"
               type="password"
+              inputmode="numeric"
               class="employee-select"
-              placeholder="PIN TPV"
+              placeholder="PIN de 4 a 8 dígitos"
               autocomplete="off"
             />
+            <p
+              v-if="selectedEmployeeObj && selectedEmployeeObj.pin_configured === false"
+              class="pin-hint"
+              role="note"
+            >
+              {{ selectedEmployeeObj.name }} aún no tiene PIN: asígnale uno aquí debajo para que pueda fichar con código.
+            </p>
+
+            <!-- Asignar/cambiar PIN (dueño o encargado): PUT /control-horario/employees/{código}/pin.
+                 El servidor solo guarda el hash; aquí nunca se muestra un PIN guardado. -->
+            <div v-if="selectedEmployeeObj" class="pin-manage">
+              <label for="ch-new-pin">
+                {{ selectedEmployeeObj.pin_configured ? 'Cambiar el PIN de' : 'Asignar PIN a' }} {{ selectedEmployeeObj.name }}
+              </label>
+              <div class="pin-manage-row">
+                <input
+                  id="ch-new-pin"
+                  v-model="newPin"
+                  type="password"
+                  inputmode="numeric"
+                  maxlength="8"
+                  class="employee-select"
+                  placeholder="Nuevo PIN (4 a 8 dígitos)"
+                  autocomplete="new-password"
+                />
+                <button
+                  type="button"
+                  class="btn-pin-save"
+                  :disabled="savingPin || !newPin"
+                  @click="saveEmployeePin"
+                >
+                  {{ savingPin ? 'Guardando…' : 'Guardar PIN' }}
+                </button>
+              </div>
+              <p v-if="pinMsg" class="pin-msg" :class="{ 'is-error': pinMsgError }" role="status">{{ pinMsg }}</p>
+            </div>
           </div>
 
           <div v-if="selectedMethod === 'location'" class="location-info">
@@ -367,6 +405,10 @@ const smartTpv = ref(null)
 const todayHoursByEmployee = ref({})
 const costEngine = ref(null)
 const employeePin = ref('')
+const newPin = ref('')
+const savingPin = ref(false)
+const pinMsg = ref('')
+const pinMsgError = ref(false)
 const qrCode = ref('')
 const companyQr = ref('')
 let refreshTimer = null
@@ -515,7 +557,9 @@ const checkStatus = async () => {
           id: empId,
           name: emp.name || empId, // fallback de compatibilidad
           status: emp.status || 'outside',
-          check_in_time: emp.check_in_time
+          check_in_time: emp.check_in_time,
+          // undefined si el servidor no lo informa (roster en memoria): no se muestra el aviso.
+          pin_configured: typeof emp.pin_configured === 'boolean' ? emp.pin_configured : undefined
         }
       })
     }
@@ -592,6 +636,41 @@ const postCheckinV1 = async (type) => {
   }
   const api = (await import('@/services/api')).default
   return api.post('/api/v1/checkin', body, token)
+}
+
+const selectedEmployeeObj = computed(
+  () => employees.value.find((e) => e.id === selectedEmployee.value) || null
+)
+
+const saveEmployeePin = async () => {
+  const emp = selectedEmployeeObj.value
+  const pin = String(newPin.value || '').trim()
+  pinMsg.value = ''
+  pinMsgError.value = false
+  if (!emp) return
+  if (!/^\d{4,8}$/.test(pin)) {
+    pinMsgError.value = true
+    pinMsg.value = 'El PIN debe tener entre 4 y 8 dígitos (solo números).'
+    return
+  }
+  const token = authStore.getToken ? authStore.getToken() : authStore.token
+  savingPin.value = true
+  try {
+    const api = (await import('@/services/api')).default
+    const data = await api.put(
+      `/api/v1/control-horario/employees/${encodeURIComponent(emp.id)}/pin`,
+      { pin },
+      token
+    )
+    emp.pin_configured = true
+    newPin.value = ''
+    pinMsg.value = data?.message || `PIN guardado para ${emp.name}.`
+  } catch (err) {
+    pinMsgError.value = true
+    pinMsg.value = err?.message || 'No se pudo guardar el PIN.'
+  } finally {
+    savingPin.value = false
+  }
 }
 
 const loadCompanyQr = async () => {
@@ -1017,6 +1096,61 @@ onUnmounted(() => {
   color: var(--zeus-text-secondary, #374151);
   margin-bottom: 8px;
   display: block;
+}
+
+.pin-hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--zeus-warning-text, #92400e);
+}
+
+.pin-manage {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--zeus-border, #e5e7eb);
+}
+
+.pin-manage-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.pin-manage-row .employee-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.btn-pin-save {
+  flex-shrink: 0;
+  padding: 0 16px;
+  background: var(--zeus-surface, #fff);
+  border: 1px solid var(--zeus-border-strong, #cdd3db);
+  border-radius: var(--zeus-radius-sm, 8px);
+  color: var(--zeus-text, #0f172a);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.btn-pin-save:hover:not(:disabled) {
+  border-color: var(--zeus-text-muted, #8792a6);
+}
+
+.btn-pin-save:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.pin-msg {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--zeus-success-text, #047857);
+}
+
+.pin-msg.is-error {
+  color: var(--zeus-danger-text, #b91c1c);
 }
 
 .employee-select {

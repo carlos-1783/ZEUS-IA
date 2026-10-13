@@ -25,6 +25,7 @@ from services.control_horario_singleton import control_horario_service
 from services import smart_time_control_service as sm
 from services.event_bus import emit_time_control_event
 from services.checkin_biometric_block import BIOMETRIC_BLOCK_REASON, is_biometric_method, reject_biometric
+from services.thalos_request_guard_v1 import thalos_request_guard
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -143,6 +144,8 @@ def _employees_roster_from_db(db: Session, user: User) -> Optional[List[Dict[str
             "name": r.full_name,
             "role_title": r.role_title or "",
             "source": (r.source or "database"),
+            # Solo si hay PIN asignado (nunca el PIN ni su hash).
+            "pin_configured": bool(r.tpv_pin_hash),
         }
         for r in rows
     ]
@@ -783,6 +786,100 @@ async def break_end(
         pin=request.pin, qr_token=request.qr_token, latitude=request.latitude,
         longitude=request.longitude, location=request.location,
     )
+
+
+# ----------------------------------------------------------------------------------------------
+# PIN de fichaje ("Código manual"): el motor (time_cost_engine_v1._verify_pin) exige
+# company_employees.tpv_pin_hash, pero nada lo asignaba -> el método era inutilizable.
+# ----------------------------------------------------------------------------------------------
+PIN_MANAGER_ROLES = frozenset({"owner", "company_admin"})
+_PIN_RE = re.compile(r"^\d{4,8}$")
+
+
+class EmployeePinRequest(BaseModel):
+    pin: str = Field(..., min_length=4, max_length=8, description="PIN numérico de 4 a 8 dígitos")
+
+
+@router.put("/employees/{employee_code}/pin", dependencies=[Depends(thalos_request_guard)])
+async def set_employee_pin(
+    employee_code: str,
+    body: EmployeePinRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Fija o cambia el PIN de fichaje de un empleado de TU empresa (dueño o encargado).
+
+    El PIN se guarda solo como hash (`get_password_hash`, el mismo esquema que verifica
+    `verify_password` en el motor de fichajes). Empleado de otra empresa -> 404 (no se revela
+    que existe).
+    """
+    from app.core.security import get_password_hash
+    from services.thalos_request_guard_v1 import record_security_event
+
+    pin = str(body.pin or "").strip()
+    if not _PIN_RE.match(pin):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El PIN debe tener entre 4 y 8 dígitos (solo números).",
+        )
+    if str(getattr(current_user, "role", "") or "").lower() == "employee":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo el dueño o un encargado de la empresa puede asignar PIN de fichaje.",
+        )
+
+    links = db.query(UserCompany).filter(UserCompany.user_id == current_user.id).all()
+    roles = {int(l.company_id): str(l.role or "").lower() for l in links}
+    emp = None
+    if roles:
+        emp = (
+            db.query(CompanyEmployee)
+            .filter(
+                CompanyEmployee.company_id.in_(list(roles)),
+                CompanyEmployee.employee_code == str(employee_code),
+                CompanyEmployee.is_active.is_(True),
+            )
+            .first()
+        )
+    if emp is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Empleado no encontrado para esta empresa.")
+    if roles.get(int(emp.company_id)) not in PIN_MANAGER_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo el dueño o un encargado de la empresa puede asignar PIN de fichaje.",
+        )
+
+    had_pin = bool(emp.tpv_pin_hash)
+    emp.tpv_pin_hash = get_password_hash(pin)
+    db.commit()
+
+    record_security_event(
+        db,
+        event_type="employee_pin_set",
+        severity="info",
+        source="control_horario",
+        details={
+            "employee_code": emp.employee_code,
+            "employee_id": emp.id,
+            "changed": had_pin,
+        },
+        user=current_user,
+        company_id=int(emp.company_id),
+        action_taken="allow",
+        decision_rule="pin_set_by_company_manager",
+    )
+    logger.info(
+        "PIN de fichaje %s: empresa=%s empleado=%s por usuario=%s",
+        "cambiado" if had_pin else "asignado", emp.company_id, emp.employee_code, current_user.id,
+    )
+    return {
+        "success": True,
+        "employee_id": emp.employee_code,
+        "name": emp.full_name,
+        "pin_configured": True,
+        "changed": had_pin,
+        "message": f"PIN de fichaje {'cambiado' if had_pin else 'asignado'} para {emp.full_name}.",
+    }
 
 
 @router.get("/employees")

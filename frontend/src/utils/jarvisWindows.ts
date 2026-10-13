@@ -72,10 +72,135 @@ const LABELS: Record<string, string> = {
   created_at: 'Fecha',
   total: 'Total',
   amount: 'Importe',
+  // PERSEO · get_sales_performance
+  current: 'Periodo actual',
+  previous: 'Periodo anterior',
+  change_pct: 'Variación (%)',
+  tpv_count: 'Tickets del TPV',
+  tpv_total: 'Ventas del TPV',
+  invoice_count: 'Facturas',
+  invoice_total: 'Importe facturado',
+  top_products: 'Lo más vendido',
+  quantity: 'Cantidad',
+  revenue: 'Ingresos',
+  // RAFAEL · get_daily_close / get_pending_invoices
+  date: 'Fecha',
+  tickets: 'Tickets',
+  subtotal: 'Base imponible',
+  tax_total: 'IVA',
+  average_ticket: 'Ticket medio',
+  by_payment_method: 'Por forma de pago',
+  count: 'Número',
+  cash_closures: 'Cierres de caja',
+  cash_count_recorded: 'Arqueo de caja hecho',
+  counted_cash: 'Efectivo contado',
+  expected_cash: 'Efectivo esperado',
+  difference: 'Descuadre',
+  terminal: 'Caja',
+  note: 'Nota',
+  top: 'Destacados',
+  pending_count: 'Facturas pendientes de cobro',
+  pending_amount: 'Importe pendiente',
+  overdue: 'Vencida',
+  overdue_count: 'Facturas vencidas',
+  overdue_amount: 'Importe vencido',
+  drafts_count: 'Borradores sin emitir',
+  invoice_number: 'Nº de factura',
+  amount_due: 'Pendiente de cobro',
+  due_date: 'Vencimiento',
+  // THALOS · get_security_status
+  by_action: 'Por decisión',
+  by_severity: 'Por gravedad',
+  at: 'Fecha',
+  // AFRODITA · get_attendance_status / get_today_agenda
+  checkins_today: 'Entradas de hoy',
+  currently_in: 'Dentro ahora',
+  employees_today: 'Empleados que han fichado hoy',
+  late_today: 'Entradas con retraso',
+  with_irregularities_today: 'Fichajes con incidencias',
+  hours_closed_today: 'Horas cerradas hoy',
+  biometric_data_used: 'Usa datos biométricos',
+  reservations: 'Reservas',
+  meetings: 'Reuniones',
+  guests: 'Comensales',
+  items: 'Agenda de hoy',
+  kind: 'Tipo',
+  time: 'Hora',
+  // JUSTICIA · review_contracts
+  by_status: 'Por estado',
+  pending_review: 'Pendientes de revisión',
+  latest: 'Últimos documentos',
+  version: 'Versión',
+  integrity_sealed: 'Sellado de integridad',
+  updated_at: 'Actualizado',
+  // ZEUS · get_coordination_report
+  activities_total: 'Actividades',
+  activities_by_agent: 'Actividad por agente',
+  problems: 'Tareas fallidas o bloqueadas',
+  pending_approvals: 'Aprobaciones pendientes',
+  generated_at: 'Generado',
+  action_type: 'Acción',
+  description: 'Descripción',
+  error: 'Error',
+};
+
+// Valores (y claves dinámicas: decisiones THALOS, gravedades, formas de pago, estados) que el
+// backend devuelve como identificadores en inglés o internos. Solo se traducen coincidencias exactas.
+const VALUE_LABELS: Record<string, string> = {
+  allow: 'Permitido',
+  deny: 'Denegado',
+  block: 'Bloqueado',
+  blocked: 'Bloqueado',
+  audit_pass: 'Auditoría superada',
+  audit_fail: 'Auditoría fallida',
+  alert: 'Aviso',
+  marked_failed: 'Marcado como fallido',
+  status_corrected: 'Estado corregido',
+  info: 'Informativo',
+  low: 'Baja',
+  medium: 'Media',
+  warn: 'Aviso',
+  warning: 'Aviso',
+  high: 'Alta',
+  critical: 'Crítica',
+  efectivo: 'Efectivo',
+  tarjeta: 'Tarjeta',
+  bizum: 'Bizum',
+  transferencia: 'Transferencia',
+  cash: 'Efectivo',
+  card: 'Tarjeta',
+  credit_card: 'Tarjeta',
+  bank_transfer: 'Transferencia',
+  qr: 'Pago QR',
+  reservation: 'Reserva',
+  meeting: 'Reunión',
+  draft: 'Borrador',
+  signed: 'Firmado',
+  sent: 'Enviada',
+  partially_paid: 'Cobrada en parte',
+  paid: 'Cobrada',
+  completed: 'Completada',
+  failed: 'Fallida',
+  pending: 'Pendiente',
+  approved: 'Aprobada',
+  rejected: 'Rechazada',
+  checked_in: 'Dentro',
+  checked_out: 'Fuera',
+  not_available: 'No disponible',
+  blocked_module: 'Bloqueado: módulo no activo',
+  blocked_by_guard: 'Bloqueado por THALOS',
+  blocked_by_safeguard: 'Bloqueado por seguridad',
+  blocked_no_company: 'Bloqueado: sin empresa',
+  blocked_requires_approval: 'Pendiente de aprobación',
+  blocked_missing_handler: 'Bloqueado: acción no disponible',
+  blocked_client_origin: 'Bloqueado: origen no permitido',
 };
 
 // Identificadores internos que no aportan nada al usuario en una ventana.
-const HIDDEN_KEYS = new Set(['company_id', 'user_id', 'tenant_id', 'request_id', 'correlation_id']);
+const HIDDEN_KEYS = new Set([
+  'company_id', 'user_id', 'tenant_id', 'request_id', 'correlation_id',
+  'id', 'document_id', 'source', 'timezone',
+]);
 
 const MAX_FIGURES = 4;
 const MAX_TABLE_ROWS = 8;
@@ -83,6 +208,7 @@ const MAX_TABLE_COLS = 5;
 
 export function humanizeKey(key: string): string {
   if (LABELS[key]) return LABELS[key];
+  if (VALUE_LABELS[key]) return VALUE_LABELS[key];
   const s = String(key).replace(/[_-]+/g, ' ').trim();
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : key;
 }
@@ -101,9 +227,16 @@ export function formatScalar(v: unknown): string {
         return d.toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
       }
     }
-    return v;
+    return VALUE_LABELS[v] || v;
   }
   if (Array.isArray(v)) return v.map(formatScalar).join(', ');
+  if (isPlainObject(v)) {
+    // p. ej. una forma de pago {total, count} -> "Total: 12,5 · Número: 3", nunca JSON crudo.
+    return Object.entries(v)
+      .filter(([k]) => !HIDDEN_KEYS.has(k))
+      .map(([k, x]) => `${humanizeKey(k)}: ${formatScalar(x)}`)
+      .join(' · ');
+  }
   try {
     return JSON.stringify(v);
   } catch {
@@ -238,18 +371,39 @@ export function windowsForChatResponse(data: any, agentFallback: string): Jarvis
   const wins: JarvisWindow[] = [];
   const blockedReasons: string[] = [];
 
-  if (exec && isBlockedStatus(exec.status)) blockedReasons.push(String(exec.message || exec.status));
-  if (isBlockedStatus(data?.status)) blockedReasons.push(String(data?.message || data.status));
-
   const failed = data?.success === false;
-  const title = failed
-    ? 'No se pudo completar'
-    : data?.needs_confirmation
-      ? 'Pendiente de tu confirmación'
-      : data?.needs_clarification
-        ? 'Necesito un dato'
-        : 'Respuesta';
-  const main = emptyWindow(failed ? 'error' : 'answer', title, src, message || 'El agente no devolvió texto.');
+  // Bloqueo de TODA la petición: status blocked_* de primer nivel (o una ejecución bloqueada en una
+  // respuesta fallida). Sale UNA sola ventana ámbar con el motivo, no "error" + "bloqueo parcial".
+  const wholeBlocked = isBlockedStatus(data?.status) || (failed && !!exec && isBlockedStatus(exec.status));
+
+  if (!wholeBlocked && exec && isBlockedStatus(exec.status)) {
+    blockedReasons.push(String(exec.message || exec.status));
+  }
+
+  const title = wholeBlocked
+    ? /thalos|guard|safeguard/i.test(String(data?.status || exec?.status || ''))
+      ? 'Acción bloqueada · Thalos'
+      : 'Acción bloqueada'
+    : failed
+      ? 'No se pudo completar'
+      : data?.needs_confirmation
+        ? 'Pendiente de tu confirmación'
+        : data?.needs_clarification
+          ? 'Necesito un dato'
+          : 'Respuesta';
+  const kind: WinKind = wholeBlocked ? 'blocked' : failed ? 'error' : 'answer';
+  const blockedText = String(message || exec?.message || '').trim();
+  const main = emptyWindow(
+    kind,
+    title,
+    src,
+    wholeBlocked
+      ? blockedText || 'El servidor ha bloqueado la petición; no se ha ejecutado nada.'
+      : message || 'El agente no devolvió texto.',
+  );
+  if (wholeBlocked && exec?.message && String(exec.message).trim() !== blockedText) {
+    main.rows.push({ label: 'Motivo', value: String(exec.message).trim() });
+  }
 
   if (exec) {
     const shaped = { figures: main.figures, rows: main.rows, tables: main.tables };
@@ -281,7 +435,11 @@ export function windowsForChatResponse(data: any, agentFallback: string): Jarvis
   main.needsConfirmation = Boolean(data?.needs_confirmation && data?.approval_id);
   wins.push(main);
 
-  if (blockedReasons.length) {
+  if (wholeBlocked) {
+    // Los pasos bloqueados de un plan totalmente bloqueado van como motivos en la MISMA ventana.
+    blockedReasons.forEach((r, i) => main.rows.push({ label: `Paso bloqueado ${i + 1}`, value: r }));
+  } else if (blockedReasons.length) {
+    // Solo cuando de verdad fue parcial: la respuesta principal se ejecutó y una parte no.
     const b = emptyWindow('blocked', 'Acción bloqueada', src, 'El servidor ha bloqueado parte de la petición: esa parte no se ha ejecutado.');
     b.rows = blockedReasons.map((r, i) => ({ label: `Motivo ${i + 1}`, value: r }));
     wins.push(b);

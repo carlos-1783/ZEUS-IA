@@ -36,6 +36,9 @@ WORKFLOW_ONLY_ACTIONS = frozenset(
     }
 )
 
+# Dominios en los que una accion sin company_id se bloquea siempre (Fase 2 #18).
+COMPANY_REQUIRED_DOMAINS = frozenset({"payments", "invoices", "cashflow", "crm"})
+
 DESTRUCTIVE_USER_ACTIONS = frozenset(
     {
         "block_user",
@@ -218,8 +221,10 @@ def validate_critical_action(
                 human_message=_human_message(
                     domain_n, action_n, "usuario protegido o superusuario", False
                 ),
-                enforced=enforced,
+                # Fase 2 (#18): bloqueo DURO, con independencia de ZEUS_CORE_GUARD_ENFORCE.
+                enforced=True,
             )
+            logger.warning("[ZEUS_GUARD] bloqueo duro: %s", result.human_message)
             _persist_audit(
                 db,
                 layer=layer,
@@ -233,28 +238,31 @@ def validate_critical_action(
             )
             return result
 
-    if domain_n in ("payments", "invoices", "cashflow", "crm") and company_id is None:
-        if closure_active():
-            result = GuardResult(
-                allowed=False,
-                domain=domain_n,
-                action=action_n,
-                reason="company_id_required",
-                human_message=_human_message(domain_n, action_n, "company_id obligatorio", False),
-                enforced=enforced,
-            )
-            _persist_audit(
-                db,
-                layer=layer,
-                domain=domain_n,
-                action=action_n,
-                result=result,
-                actor_id=str(actor_id) if actor_id is not None else None,
-                actor_email=actor_email,
-                company_id=company_id,
-                details=payload,
-            )
-            return result
+    if domain_n in COMPANY_REQUIRED_DOMAINS and company_id is None:
+        # Fase 2 (#18): antes solo se rechazaba con ZEUS_TOTAL_SYSTEM_CLOSURE_ENABLED y, aun asi,
+        # sin ZEUS_CORE_GUARD_ENFORCE solo se registraba. Un pago/factura sin empresa no se
+        # puede atribuir a ningun tenant: se bloquea SIEMPRE.
+        result = GuardResult(
+            allowed=False,
+            domain=domain_n,
+            action=action_n,
+            reason="company_id_required",
+            human_message=_human_message(domain_n, action_n, "company_id obligatorio", False),
+            enforced=True,
+        )
+        logger.warning("[ZEUS_GUARD] bloqueo duro: %s", result.human_message)
+        _persist_audit(
+            db,
+            layer=layer,
+            domain=domain_n,
+            action=action_n,
+            result=result,
+            actor_id=str(actor_id) if actor_id is not None else None,
+            actor_email=actor_email,
+            company_id=company_id,
+            details=payload,
+        )
+        return result
 
     result = GuardResult(
         allowed=True,
@@ -283,7 +291,11 @@ def apply_guard(
     *,
     db: Optional[Session] = None,
 ) -> GuardResult:
-    """Si enforce activo y no permitido → excepción; si no, solo observa."""
+    """No permitido y enforced -> excepcion; si no, solo observa.
+
+    `enforced` es True si ZEUS_CORE_GUARD_ENFORCE esta activo o si es un bloqueo duro
+    (usuario protegido/superusuario en accion destructiva, o falta company_id en
+    pagos/facturas/cashflow/crm), que se aplica siempre."""
     if result.allowed or not result.enforced:
         if not result.allowed:
             logger.warning("[ZEUS_GUARD] observed violation: %s", result.human_message)

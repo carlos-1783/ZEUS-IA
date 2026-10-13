@@ -18,7 +18,6 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
@@ -65,8 +64,8 @@ def _payload(activity: AgentActivity) -> Dict[str, Any]:
 
 def handle_justicia_task(activity: AgentActivity) -> Dict[str, Any]:
     """Auditoría GDPR real + documentos pendientes reales, scopeados al usuario
-    real de la actividad. Si el payload trae un `document_id`, intenta también
-    aplicar firma real (mismo servicio que usa POST /api/v1/justice/sign)."""
+    real de la actividad. Si el payload trae un `document_id` NO se sella ni se aprueba
+    nada: se informa de que requiere accion humana explicita."""
     session = SessionLocal()
     try:
         user = _user_from_activity(session, activity)
@@ -91,24 +90,18 @@ def handle_justicia_task(activity: AgentActivity) -> Dict[str, Any]:
         pending = list_pending_documents_grouped(session, user)
         recent_docs = list_documents(session, user, limit=10)
 
-        signature_result: Optional[Dict[str, Any]] = None
-        signature_error: Optional[str] = None
+        # Fase 2 (riesgo legal): un workflow ya NO "firma" documentos. Antes, si el payload traia
+        # document_id, se aplicaba el hash como "firma" y el documento pasaba a approved sin que
+        # nadie lo decidiera. Sellar/aprobar exige accion humana explicita
+        # (POST /api/v1/justice/sign o la herramienta del workspace de JUSTICIA).
         payload = _payload(activity)
         document_id = payload.get("document_id")
-        if document_id:
-            try:
-                from services.signature_service import apply_signature
-
-                signature_result = apply_signature(
-                    session,
-                    user,
-                    document_id=document_id,
-                    document_name=payload.get("document_name") or "",
-                    file_hash=payload.get("file_hash") or "",
-                    signer_label=payload.get("signer") or "JUSTICIA",
-                )
-            except HTTPException as exc:
-                signature_error = str(exc.detail)
+        signature_blocked = bool(document_id)
+        if signature_blocked:
+            logger.info(
+                "handle_justicia_task: sello/firma de %s NO aplicado desde workflow (activity_id=%s)",
+                document_id, getattr(activity, "id", None),
+            )
 
         session.commit()
 
@@ -117,10 +110,11 @@ def handle_justicia_task(activity: AgentActivity) -> Dict[str, Any]:
             f"Revisión legal real: {len(issues)} hallazgo(s) GDPR, "
             f"{pending.get('total_pending', 0)} documento(s) pendiente(s) de aprobación."
         )
-        if signature_result:
-            summary += f" Documento {signature_result.get('document_id')} firmado."
-        elif signature_error:
-            summary += f" Firma solicitada no aplicada: {signature_error}."
+        if signature_blocked:
+            summary += (
+                f" Firma/sello del documento {document_id} NO aplicado: un flujo automático no "
+                "firma ni aprueba documentos; requiere acción humana explícita."
+            )
 
         return {
             "status": "completed",
@@ -129,8 +123,13 @@ def handle_justicia_task(activity: AgentActivity) -> Dict[str, Any]:
                     "gdpr_issues": issues,
                     "pending_documents": pending,
                     "recent_legal_documents": recent_docs,
-                    "signature": signature_result,
-                    "signature_error": signature_error,
+                    "signature": {
+                        "status": "no_real_logic",
+                        "document_id": document_id,
+                        "reason": "signature_requires_explicit_human_action",
+                    }
+                    if signature_blocked
+                    else None,
                     "summary": summary,
                 },
                 "real_execution": True,
@@ -139,7 +138,7 @@ def handle_justicia_task(activity: AgentActivity) -> Dict[str, Any]:
             "metrics_update": {
                 "gdpr_alerts_created": gdpr.get("alerts_created", 0),
                 "pending_documents_total": pending.get("total_pending", 0),
-                "documents_signed": 1 if signature_result else 0,
+                "documents_signed": 0,
             },
             "notes": summary,
             "executed_handler": "gdpr_engine.run_gdpr_check+justice_audit_service.list_pending_documents_grouped",

@@ -159,7 +159,6 @@ def thalos_audit(
     report = audit_from_db(db)
     report["worker"] = worker_status()
     report["strict_mode"] = True
-    report["simulation_allowed"] = False
     return wrap_response(report, "auditoria_real", data_origin="backend", real_execution=True)
 
 

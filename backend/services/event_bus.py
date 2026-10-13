@@ -86,7 +86,7 @@ def emit_payment_registered(
     Evento canónico de pago registrado.
     Mantiene compatibilidad con emit_payment_created y añade trazabilidad común multi-módulo.
     """
-    from services.zeus_core_guard_v1 import guard_enforce, validate_event_emit
+    from services.zeus_core_guard_v1 import validate_event_emit
 
     ev = validate_event_emit(
         "payment_registered",
@@ -96,7 +96,7 @@ def emit_payment_registered(
         db=db,
         payload={"amount": amount, "source": source},
     )
-    if not ev.allowed and guard_enforce():
+    if not ev.allowed and ev.enforced:
         logger.warning("emit_payment_registered blocked: %s", ev.human_message)
         return
 
@@ -272,7 +272,7 @@ def emit_cashflow_updated(
     db: Optional[Session] = None,
 ) -> None:
     """Persiste movimiento en cashflow_ledger y registra actividad."""
-    from services.zeus_core_guard_v1 import guard_enforce, validate_event_emit
+    from services.zeus_core_guard_v1 import validate_event_emit
 
     ev = validate_event_emit(
         "cashflow_updated",
@@ -282,7 +282,7 @@ def emit_cashflow_updated(
         db=db,
         payload={"amount": amount, "direction": direction, "source": source},
     )
-    if not ev.allowed and guard_enforce():
+    if not ev.allowed and ev.enforced:
         logger.warning("emit_cashflow_updated blocked: %s", ev.human_message)
         return
 

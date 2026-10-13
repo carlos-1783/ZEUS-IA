@@ -200,5 +200,4 @@ def audit_from_db(db: Session) -> Dict[str, Any]:
             for a in recent_alerts
         ],
         "data_origin": "database",
-        "simulation_detected": False,
     }

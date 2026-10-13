@@ -23,25 +23,18 @@ def sign_pdf_document(payload: Dict[str, Any], user_id: Optional[int] = None, db
                 signer_label=payload.get("signer", "JUSTICIA"),
             )
 
-    import hashlib
-    from datetime import datetime, timezone
-
+    # Fase 2: antes se devolvia un hash "de firma" sin guardar nada. Sin BD/usuario no hay
+    # sello de integridad que valga: se dice tal cual y no se calcula nada.
     from .base import log_tool_execution
 
-    document_name = payload.get("document_name", "documento.pdf")
-    digest = payload.get("file_hash", "")
-    signer = payload.get("signer", "JUSTICIA")
-    ts = datetime.now(timezone.utc).isoformat()
-    composite = f"{document_name}:{digest}:{signer}:{ts}"
-    signature = hashlib.sha256(composite.encode("utf-8")).hexdigest()
     result = {
-        "document": document_name,
-        "signature": signature,
-        "signed_at": ts,
-        "signer": signer,
+        "kind": "integrity_seal",
         "real_execution": False,
+        "stored_in_db": False,
+        "error": "integrity_seal_requires_user_and_db",
+        "message": "No se ha sellado nada: el sello de integridad necesita un usuario y la base de datos.",
     }
-    log_tool_execution("JUSTICIA", "pdf_signer", "Firma sin BD", {"payload": payload, "result": result})
+    log_tool_execution("JUSTICIA", "pdf_signer", "Sello no aplicado (sin BD)", {"payload": payload, "result": result})
     return result
 
 

@@ -83,6 +83,68 @@ def _safe_count(
         return 0, False
 
 
+WORKSPACE_ISOLATED_MODULES = ("facial_checkin", "qr_checkin", "employee_manager", "shift_generator", "contract")
+
+
+def _check_workspace_isolation(trace: List[AuditTraceItem]) -> Tuple[bool, str]:
+    """Ejecuta el guard real de /workspaces/afrodita/* para cada modulo: debe dar 403."""
+    from fastapi import HTTPException
+
+    from services.afrodita_finalization_v1 import assert_workspace_isolated
+
+    not_blocked: List[str] = []
+    for module in WORKSPACE_ISOLATED_MODULES:
+        try:
+            assert_workspace_isolated(module)
+            not_blocked.append(module)
+        except HTTPException as exc:
+            if exc.status_code != 403:
+                not_blocked.append(f"{module}:{exc.status_code}")
+    trace.append(
+        AuditTraceItem(
+            kind="query",
+            ref="afrodita_finalization_v1.assert_workspace_isolated",
+            detail=f"modulos={len(WORKSPACE_ISOLATED_MODULES)} sin_bloqueo={not_blocked}",
+        )
+    )
+    if not_blocked:
+        return False, f"Modulos sin bloqueo 403: {', '.join(not_blocked)}"
+    return True, f"assert_workspace_isolated devuelve 403 para {len(WORKSPACE_ISOLATED_MODULES)} modulos"
+
+
+def _check_face_checkin_disabled(db: Session, user: User, trace: List[AuditTraceItem]) -> Tuple[bool, str]:
+    """Llama al servicio real de fichaje facial con un payload vacio: debe responder disabled."""
+    from services.afrodita_workspace_service_v1 import execute_face_checkin
+
+    try:
+        out = execute_face_checkin(db, user, {})
+    except Exception as exc:  # error real -> FAIL con detalle, no PASS
+        trace.append(AuditTraceItem(kind="query", ref="execute_face_checkin", detail=f"error: {exc}"))
+        return False, f"execute_face_checkin fallo: {exc}"
+    disabled = bool(isinstance(out, dict) and out.get("disabled"))
+    trace.append(AuditTraceItem(kind="query", ref="execute_face_checkin", detail=f"disabled={disabled}"))
+    if disabled:
+        return True, "execute_face_checkin responde disabled=True"
+    return False, "execute_face_checkin NO esta deshabilitado"
+
+
+def _check_route_simulation_removed(trace: List[AuditTraceItem]) -> Tuple[bool, str]:
+    """Invoca el handler real de /afrodita/ops/v1/routes/simulate: debe responder 410."""
+    from fastapi import HTTPException
+
+    from app.api.v1.endpoints.afrodita_ops_v1 import afrodita_ops_route_simulate_removed
+
+    code: Optional[int] = None
+    try:
+        afrodita_ops_route_simulate_removed()
+    except HTTPException as exc:
+        code = exc.status_code
+    trace.append(AuditTraceItem(kind="endpoint", ref="/api/v1/afrodita/ops/v1/routes/simulate", detail=f"status={code}"))
+    if code == 410:
+        return True, "/api/v1/afrodita/ops/v1/routes/simulate responde 410 (retirado)"
+    return False, f"/routes/simulate no responde 410 (status={code})"
+
+
 def _conclusion(
     domain: str,
     check: str,
@@ -225,23 +287,27 @@ def run_system_audit(db: Session, user: User) -> Dict[str, Any]:
         )
     )
 
+    # Fase 2 (#9): antes estas comprobaciones eran ok=True fijo. Ahora se ejecuta de verdad el
+    # guard/servicio que cada una afirma comprobar.
+    iso_ok, iso_detail = _check_workspace_isolation(trace)
     conclusions.append(
         _conclusion(
             "rrhh",
             "workspace afrodita aislado (403)",
-            ok=True,
+            ok=iso_ok,
             evidence="API",
-            detail="assert_workspace_isolated en /workspaces/afrodita/*",
+            detail=iso_detail,
         )
     )
 
+    face_ok, face_detail = _check_face_checkin_disabled(db, user, trace)
     conclusions.append(
         _conclusion(
             "rrhh",
             "fichaje facial deshabilitado",
-            ok=True,
+            ok=face_ok,
             evidence="API",
-            detail="execute_face_checkin retorna disabled=True",
+            detail=face_detail,
         )
     )
 
@@ -279,24 +345,29 @@ def run_system_audit(db: Session, user: User) -> Dict[str, Any]:
         )
     )
 
+    sim_ok, sim_detail = _check_route_simulation_removed(trace)
     conclusions.append(
         _conclusion(
             "ops",
-            "rutas etiquetadas SIMULADO",
-            ok=True,
+            "simulacion de rutas retirada (410)",
+            ok=sim_ok,
             evidence="API",
-            detail="/api/v1/afrodita/ops/v1/routes/simulate — stub con ui_badge SIMULADO",
+            detail=sim_detail,
         )
     )
 
     # --- Workspace ---
+    from app.models.legal_document import LegalDocument
+
+    legal_count, legal_ok = _safe_count(db, LegalDocument, "legal_documents", trace, **scope_kw)
     conclusions.append(
         _conclusion(
             "workspace",
             "justicia legal_documents en BD",
-            ok=True,
+            ok=legal_ok,
             evidence="DB",
-            detail="legal_documents + compliance_events + document_approvals",
+            detail="Tabla legal_documents consultada" if legal_ok else "No se pudo consultar legal_documents",
+            value=legal_count,
         )
     )
 
@@ -304,9 +375,10 @@ def run_system_audit(db: Session, user: User) -> Dict[str, Any]:
         _conclusion(
             "workspace",
             "no usado como fuente de verdad RRHH/OPS",
-            ok=True,
-            evidence="API",
-            detail="Dominios RRHH/OPS usan /afrodita/rrhh/v1 y /afrodita/ops/v1",
+            ok=False,
+            gap=True,
+            evidence="NONE",
+            detail="No verificable automaticamente: no hay comprobacion real de esta afirmacion.",
         )
     )
 

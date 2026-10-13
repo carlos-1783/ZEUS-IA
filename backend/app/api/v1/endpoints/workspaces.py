@@ -4,6 +4,7 @@ API de herramientas para los workspaces de los agentes.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -37,6 +38,8 @@ from services.workspaces import (
     detect_threat_events,
     revoke_credentials,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 tools_router = APIRouter(prefix="/tools", tags=["tools"])
@@ -177,9 +180,19 @@ def _text_for_ads(result: Dict[str, Any]) -> str:
 
 
 def _text_generic(prefix: str, result: Dict[str, Any]) -> str:
-    keys = list(result.keys())[:4]
-    ktxt = ", ".join(keys) if keys else "sin detalles"
-    return f"{prefix} completado correctamente. Resultado validado ({ktxt})."
+    """Texto segun lo que paso de verdad (Fase 2 #10: antes decia siempre "completado
+    correctamente. Resultado validado", tambien con error o sin ejecucion real)."""
+    error = result.get("error")
+    if error:
+        msg = result.get("message") or error
+        return f"{prefix}: no completado. Error: {msg}."
+    if result.get("success") is False:
+        return f"{prefix}: no completado. {result.get('message') or 'Sin detalle del motivo.'}"
+    if result.get("real_execution") is True:
+        return f"{prefix}: ejecución real completada."
+    if result.get("real_execution") is False:
+        return f"{prefix}: resultado orientativo, sin ejecución real (no se ha consultado ni modificado ningún sistema)."
+    return f"{prefix}: terminado; la herramienta no indica si hubo ejecución real."
 
 
 def _text_scan_flow(flow: Dict[str, Any], *, label: str) -> str:
@@ -598,18 +611,29 @@ async def workspace_justicia_signer(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
+    # Fase 2: es un SELLO DE INTEGRIDAD (hash), no una firma electronica eIDAS, y no aprueba
+    # el documento. Sin sello real no se persiste entregable ni se emite evento.
     result = sign_pdf_document(request.model_dump(), user_id=current_user.id, db=db)
-    text = _text_generic("Firma digital", result)
+    if not result.get("real_execution"):
+        raise HTTPException(
+            status_code=503,
+            detail={"error": result.get("error"), "message": result.get("message")},
+        )
+    text = (
+        f"Sello de integridad (hash) guardado para «{result.get('document')}»: "
+        f"{str(result.get('integrity_hash', ''))[:16]}… (estado del documento: "
+        f"{result.get('document_status')}). {result.get('legal_notice', '')}"
+    )
     return _persist_agent_tool_response(
         db,
         current_user=current_user,
         agent_name="JUSTICIA",
         workspace_category="legal_document",
         content_type="legal_document",
-        title="Firma digital JUSTICIA",
+        title="Sello de integridad (hash) JUSTICIA",
         text=text,
         result=result,
-        event_name="justicia_pdf_signed",
+        event_name="justicia_integrity_sealed",
         chain_steps=["trigger_legal_archive"],
     )
 
@@ -699,9 +723,9 @@ async def workspace_thalos_logs(
         actor_id=current_user.id,
     )
     result = monitor_security_logs(request.model_dump())
-    text = _text_generic("Monitor de logs de seguridad", result)
     cid = primary_company_id_for_user(db, current_user)
     real_written = False
+    real_scan_error: Optional[str] = None
     try:
         from services.thalos_security_engine import scan_logs
         from services.thalos_workspace_writer_v1 import write_workspace_item
@@ -720,8 +744,22 @@ async def workspace_thalos_logs(
         )
         db.flush()
         real_written = True
-    except Exception:
-        pass
+    except Exception as exc:
+        # Fase 2 (#23): antes `except: pass` -> el fallo del escaneo real desaparecia en silencio.
+        logger.exception("THALOS log-monitor: fallo el escaneo real (user=%s company=%s)", current_user.id, cid)
+        # Transaccion abortada (Postgres): se deshace y se re-fija el contexto de tenant
+        # (este endpoint solo lo usa superusuario -> contexto sin empresa, igual que get_db_scoped).
+        db.rollback()
+        from app.db.tenant_context import set_tenant_context
+
+        set_tenant_context(db, None, user_id=current_user.id, user_email=current_user.email)
+        real_scan_error = f"{type(exc).__name__}: {exc}"[:300]
+        result = {**result, "real_scan_error": real_scan_error}
+    text = _text_generic("Monitor de logs de seguridad", result)
+    if real_written:
+        text += " Escaneo real de logs (24 h) guardado en el workspace de THALOS."
+    elif real_scan_error:
+        text += f" El escaneo real de logs falló: {real_scan_error}"
     response = _persist_agent_tool_response(
         db,
         current_user=current_user,
@@ -835,7 +873,10 @@ async def workspace_thalos_credentials(
         event_name="thalos_credentials_revoked",
         chain_steps=["trigger_security_followup"],
     )
-    return thalos_wrap(response, "text_analysis", data_origin="mock", real_execution=False)
+    # Solo se llega aqui con revocacion real (si no, 501 arriba): se etiqueta con el
+    # real_execution que declara la propia herramienta (antes: mock/False fijo).
+    real = bool(result["real_execution"])
+    return thalos_wrap(response, "text_analysis", data_origin="backend" if real else "mock", real_execution=real)
 
 
 # ---------------------------------------------------------------------------

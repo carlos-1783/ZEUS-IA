@@ -25,6 +25,14 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in ("true", "1", "yes", "on")
 
 
+def _openai_configured() -> bool:
+    """Misma fuente que usa PERSEO (config.settings.OPENAI_API_KEY via openai_service)."""
+    from config.settings import settings as agent_settings
+
+    key = (getattr(agent_settings, "OPENAI_API_KEY", "") or "").strip()
+    return bool(key) and key != "your-api-key-here"
+
+
 def _railway_flags() -> Dict[str, bool]:
     afrodita = get_afrodita_safety_flags()
     return {
@@ -42,6 +50,9 @@ def _railway_flags() -> Dict[str, bool]:
         "RAFAEL_EXECUTION_ENABLED": _env_bool("RAFAEL_EXECUTION_ENABLED", False),
         "ZEUS_EVENT_BUS_ENABLED": _env_bool("ZEUS_EVENT_BUS_ENABLED", True),
         "ZEUS_AUTOMATION_ENGINE_ENABLED": _env_bool("ZEUS_AUTOMATION_ENGINE_ENABLED", False),
+        # PERSEO depende del modelo (OpenAI), no de flags de AFRODITA (Fase 2 #25). Solo se
+        # expone si la clave esta configurada, nunca su valor.
+        "PERSEO_LLM_CONFIGURED": _openai_configured(),
     }
 
 
@@ -137,7 +148,10 @@ def _agent_catalog(flags: Dict[str, bool]) -> List[Dict[str, Any]]:
             "execution_mode": _thalos_execution_mode(flags),
             "execution_ready": False,
             "api_prefix": "/api/v1/thalos/v1",
-            "notes": "v1 monitor real; legacy log-monitor = SIMULADO",
+            "notes": (
+                "v1 monitor real; log-monitor/detector del workspace con escaneo real solo para "
+                "superusuario (las tablas de seguridad aun no tienen company_id)"
+            ),
         },
         {
             "name": "JUSTICIA",
@@ -145,15 +159,24 @@ def _agent_catalog(flags: Dict[str, bool]) -> List[Dict[str, Any]]:
             "execution_mode": _justicia_execution_mode(flags),
             "execution_ready": False,
             "api_prefix": "/api/v1/justicia/v1",
-            "notes": "system-audit read-only; toolkit legal = stub",
+            "notes": (
+                "system-audit read-only; contratos y RGPD persistidos en BD; sello de integridad "
+                "(hash) que no es firma eIDAS ni aprueba documentos"
+            ),
         },
         {
             "name": "PERSEO",
-            "status": "PARTIAL",
-            "execution_mode": "REAL" if flags.get("AFRODITA_EXECUTION_ENABLED") else "SIMULATED",
-            "execution_ready": bool(flags.get("AFRODITA_EXECUTION_ENABLED")),
+            # Antes: modo copiado de AFRODITA_EXECUTION_ENABLED (flag de otro agente).
+            "status": "PARTIAL" if flags.get("PERSEO_LLM_CONFIGURED") else "DISCONNECTED",
+            "execution_mode": "REAL" if flags.get("PERSEO_LLM_CONFIGURED") else "SIMULATED",
+            "execution_ready": bool(flags.get("PERSEO_LLM_CONFIGURED")),
             "api_prefix": "/api/v1/perseo",
-            "notes": "LLM chat REAL; tools heurísticos SIMULATED; video edit REAL con FFmpeg",
+            "notes": (
+                "chat LLM real si OPENAI_API_KEY esta configurada; herramientas heuristicas del "
+                "workspace sin ejecucion real; edicion de video con FFmpeg"
+                if flags.get("PERSEO_LLM_CONFIGURED")
+                else "Sin OPENAI_API_KEY: PERSEO no puede generar nada"
+            ),
         },
         _zeus_core_agent(flags),
     ]

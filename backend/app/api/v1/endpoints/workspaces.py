@@ -168,9 +168,19 @@ def _text_for_ads(result: Dict[str, Any]) -> str:
 
 
 def _text_generic(prefix: str, result: Dict[str, Any]) -> str:
-    keys = list(result.keys())[:4]
-    ktxt = ", ".join(keys) if keys else "sin detalles"
-    return f"{prefix} completado correctamente. Resultado validado ({ktxt})."
+    """Texto segun lo que paso de verdad (Fase 2 #10: antes decia siempre "completado
+    correctamente. Resultado validado", tambien con error o sin ejecucion real)."""
+    error = result.get("error")
+    if error:
+        msg = result.get("message") or error
+        return f"{prefix}: no completado. Error: {msg}."
+    if result.get("success") is False:
+        return f"{prefix}: no completado. {result.get('message') or 'Sin detalle del motivo.'}"
+    if result.get("real_execution") is True:
+        return f"{prefix}: ejecución real completada."
+    if result.get("real_execution") is False:
+        return f"{prefix}: resultado orientativo, sin ejecución real (no se ha consultado ni modificado ningún sistema)."
+    return f"{prefix}: terminado; la herramienta no indica si hubo ejecución real."
 
 
 def _text_scan_flow(flow: Dict[str, Any], *, label: str) -> str:

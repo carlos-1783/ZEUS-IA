@@ -22,10 +22,10 @@ logger = logging.getLogger(__name__)
 BIOMETRIC_METHODS = frozenset({"face", "facial", "biometric", "biometrico", "fingerprint", "huella"})
 
 BIOMETRIC_BLOCK_REASON = (
-    "Fichaje biometrico (reconocimiento facial/huella) bloqueado: es un tratamiento de datos "
-    "de categoria especial (art. 9 RGPD) que la AEPD no considera proporcional para el control "
+    "Fichaje biométrico (reconocimiento facial/huella) bloqueado: es un tratamiento de datos "
+    "de categoría especial (art. 9 RGPD) que la AEPD no considera proporcional para el control "
     "horario. ZEUS no procesa caras ni guarda plantillas. Usa PIN, QR del centro, "
-    "geolocalizacion o registro manual."
+    "geolocalización o registro manual."
 )
 
 

@@ -4,6 +4,7 @@ POST /api/v1/zeus/inbox                 multipart: file (imagen/PDF) + note (tex
 GET  /api/v1/zeus/inbox                 bandeja de la empresa del usuario
 GET  /api/v1/zeus/inbox/{item_id}       detalle de una entrada (solo de su empresa)
 POST /api/v1/zeus/inbox/{item_id}/classify  reintenta la clasificacion de una entrada pendiente
+POST /api/v1/zeus/inbox/{item_id}/review    cierra la revision humana: revisado | descartado
 
 Flujo: THALOS (guard por ruta) -> empresa del usuario resuelta en servidor -> validacion real
 del fichero (tamano, tipo por contenido) -> R2 (stored_files, categoria "inbox") -> modelo de
@@ -29,6 +30,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user
@@ -64,6 +66,10 @@ _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 REVIEW_NOTICE = (
     "Documento leido por IA y pendiente de revision humana. ZEUS no lo ha contabilizado, "
     "no lo ha registrado como factura y no lo ha enviado a nadie."
+)
+CLOSED_REVIEW_NOTICE = (
+    "Revision humana cerrada. ZEUS no lo ha contabilizado, no lo ha registrado como factura "
+    "y no lo ha enviado a nadie."
 )
 
 
@@ -138,7 +144,11 @@ def serialize_item(item: ZeusInboxItem, approval: Optional[DocumentApproval] = N
             if item.document_approval_id
             else None
         ),
-        "notice": REVIEW_NOTICE,
+        "notice": (
+            CLOSED_REVIEW_NOTICE
+            if approval is not None and approval.status in ("reviewed", "discarded")
+            else REVIEW_NOTICE
+        ),
         "created_at": item.created_at.isoformat() if item.created_at else None,
         "classified_at": item.classified_at.isoformat() if item.classified_at else None,
     }
@@ -459,3 +469,77 @@ def retry_classification(
     except (object_storage.StorageNotConfigured, object_storage.StorageError) as exc:
         raise storage_http_error(exc) from exc
     return _classify_and_route(db, current_user, item, data)
+
+
+# ------------------------------------------------------------------ cierre de la revision
+
+REVIEW_DECISIONS = {"revisado": "reviewed", "descartado": "discarded"}
+MAX_REVIEW_NOTE_CHARS = 1000
+
+
+class InboxReviewBody(BaseModel):
+    decision: str = Field(..., pattern=r"^(revisado|descartado)$")
+    note: Optional[str] = Field(None, max_length=MAX_REVIEW_NOTE_CHARS)
+
+
+@router.post("/{item_id}/review")
+def review_inbox_item(
+    item_id: int,
+    body: InboxReviewBody,
+    current_user: User = Depends(thalos_request_guard),
+    db: Session = Depends(get_db),
+):
+    """Cierra la revision humana de una entrada clasificada (cualquier miembro de la empresa).
+
+    Solo marca la revision (document_approvals.status = reviewed | discarded + audit_log) y deja
+    log real. NO contabiliza, NO registra factura, NO envia nada al asesor ni a terceros.
+    """
+    company_id = _company_id(db, current_user)
+    item = _get_item(db, company_id, item_id)
+    note = (body.note or "").strip() or None
+    if note is not None and _CONTROL_RE.search(note):
+        raise HTTPException(status_code=400, detail="La nota contiene caracteres de control no permitidos.")
+    approval = _approval_for(db, item)
+    if approval is None:
+        raise HTTPException(
+            status_code=409,
+            detail="El documento aun no esta clasificado: no hay revision pendiente que cerrar.",
+        )
+    if approval.status != "pending_review":
+        raise HTTPException(
+            status_code=409,
+            detail=f"La revision de este documento ya esta cerrada (estado: {approval.status}).",
+        )
+
+    new_status = REVIEW_DECISIONS[body.decision]
+    now = datetime.now(timezone.utc)
+    approval.status = new_status
+    approval.audit_log = approval.audit_log + [
+        {
+            "at": now.isoformat(),
+            "action": f"inbox_review_{new_status}",
+            "decision": body.decision,
+            "user_id": current_user.id,
+            "note": note,
+            "side_effects": "ninguno (no contabiliza ni envia)",
+        }
+    ]
+    _log(
+        db, company_id=company_id, user=current_user, agent=item.assigned_agent or "ZEUS",
+        action_type=f"inbox_review_{new_status}",
+        description=f"Documento #{item.id} marcado como {body.decision} por un miembro de la empresa.",
+        details={
+            "inbox_item_id": item.id,
+            "document_approval_id": approval.id,
+            "decision": body.decision,
+            "note": note,
+        },
+    )
+    db.commit()
+    db.refresh(item)
+    db.refresh(approval)
+    logger.info(
+        "ZEUS inbox review item=%s company=%s user=%s decision=%s",
+        item.id, company_id, current_user.id, body.decision,
+    )
+    return {"success": True, "item": serialize_item(item, approval), "decision": body.decision}

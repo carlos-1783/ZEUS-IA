@@ -408,7 +408,9 @@ def test_usuario_sin_empresa_rechazado_por_thalos(db, r2, vision, as_user):
 
 def test_rutas_cubiertas_por_thalos_y_evento_registrado(db, r2, vision, as_user):
     routes = [r for r in app.routes if isinstance(r, APIRoute) and r.path_format.startswith(P)]
-    assert {r.path_format for r in routes} == {P, f"{P}/{{item_id}}", f"{P}/{{item_id}}/classify"}
+    assert {r.path_format for r in routes} == {
+        P, f"{P}/{{item_id}}", f"{P}/{{item_id}}/classify", f"{P}/{{item_id}}/review"
+    }
     assert all(guard.route_is_thalos_covered(r) for r in routes)
 
     user, _ = _seed(db, "thalos")

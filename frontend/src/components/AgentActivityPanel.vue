@@ -62,10 +62,35 @@
 
     <!-- Workspace Tab -->
     <div v-if="activeTab === 'workspace'" class="tab-content workspace-content">
-      <component :is="currentWorkspace" v-if="currentWorkspace" />
-      <div v-else class="no-workspace">
-        <p>Workspace no disponible para este agente</p>
-      </div>
+      <!-- Fase 2 JARVIS: el workspace abre en el orbe de voz; las herramientas reales siguen debajo (⋮). -->
+      <AgentVoiceOrb
+        :key="agent.name"
+        :agent="agent"
+        :tools-open="workspaceToolsOpen"
+        @toggle-tools="toggleWorkspaceTools"
+      />
+      <section
+        v-show="workspaceToolsOpen"
+        :id="workspaceToolsId"
+        ref="workspaceToolsEl"
+        class="workspace-tools"
+        :aria-label="`Herramientas de ${agent.name}`"
+      >
+        <component :is="currentWorkspace" v-if="currentWorkspace" />
+        <div v-else class="no-workspace">
+          <p>Workspace no disponible para este agente</p>
+        </div>
+      </section>
+      <button
+        v-if="!workspaceToolsOpen"
+        type="button"
+        class="workspace-tools-toggle"
+        :aria-controls="workspaceToolsId"
+        aria-expanded="false"
+        @click="toggleWorkspaceTools"
+      >
+        Ver herramientas de {{ agent.name }}
+      </button>
     </div>
 
     <!-- Chat Tab -->
@@ -263,6 +288,7 @@ import AfroditaWorkspace from './agent-workspaces/AfroditaWorkspace.vue'
 import ThalosWorkspace from './agent-workspaces/ThalosWorkspace.vue'
 import JusticiaWorkspace from './agent-workspaces/JusticiaWorkspace.vue'
 import ZeusCoreWorkspace from './agent-workspaces/ZeusCoreWorkspace.vue'
+import AgentVoiceOrb from './agent-workspaces/AgentVoiceOrb.vue'
 import ImageUploader from '@/components/ImageUploader.jsx'
 import { isForbiddenAiFallback, sanitizeAgentChatForMediaFlow } from '@/utils/mediaUploadPolicy'
 import {
@@ -300,6 +326,18 @@ const currentWorkspace = computed(() => {
 const hasWorkspace = computed(() => {
   return currentWorkspace.value !== null
 })
+
+// Fase 2: herramientas del workspace (paneles reales) bajo el orbe, plegadas hasta que se piden (⋮)
+const workspaceToolsOpen = ref(false)
+const workspaceToolsEl = ref(null)
+const workspaceToolsId = `workspace-tools-${Math.random().toString(36).slice(2, 8)}`
+const toggleWorkspaceTools = () => {
+  workspaceToolsOpen.value = !workspaceToolsOpen.value
+  if (workspaceToolsOpen.value) {
+    const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    nextTick(() => workspaceToolsEl.value?.scrollIntoView?.({ block: 'start', behavior: reduce ? 'auto' : 'smooth' }))
+  }
+}
 
 // Communication mode
 const communicationMode = ref('text')
@@ -1619,6 +1657,24 @@ const formatMetricValue = (value) => {
   height: 400px;
   color: var(--zeus-text-muted, #8792a6);
   font-size: 16px;
+}
+
+/* Fase 2: acceso a las herramientas reales del workspace bajo el orbe */
+.workspace-tools-toggle {
+  display: block;
+  margin: 0 auto;
+  padding: 8px 16px;
+  border-radius: var(--zeus-radius-full, 999px);
+  border: 1px solid var(--line, var(--zeus-border, #e1e5eb));
+  background: var(--panel, var(--zeus-surface, #fff));
+  color: var(--fg, var(--zeus-text, #0f172a));
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.workspace-tools {
+  scroll-margin-top: 16px;
 }
 
 /* Responsive */

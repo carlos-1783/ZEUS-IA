@@ -193,27 +193,7 @@
       </div>
     </transition>
 
-    <!-- Métricas Flotantes -->
-    <div class="metrics-olympos" v-if="showMetrics">
-      <div 
-        v-for="(metric, index) in metrics" 
-        :key="metric.id"
-        class="metric-hologram"
-        :style="{ '--index': index }"
-      >
-        <div class="metric-hologram-border"></div>
-        <div class="metric-content">
-          <div class="metric-icon">{{ metric.icon }}</div>
-          <div class="metric-value">{{ metric.value }}</div>
-          <div class="metric-label">{{ metric.label }}</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Toggle Métricas -->
-    <button @click="showMetrics = !showMetrics" class="metrics-toggle">
-      {{ showMetrics ? '📊 OCULTAR' : '📊 MÉTRICAS' }}
-    </button>
+    <!-- Métricas fijas eliminadas (Fase 2): eran cifras inventadas; los KPIs reales están en el panel principal. -->
 
     <!-- Botón Admin Panel: solo superusuario (mismo criterio que DashboardProfesional.vue) -->
     <button v-if="authStore.isAdmin" @click="goToAdmin" class="admin-toggle">
@@ -309,7 +289,6 @@ const { isInstallable, isInstalled, promptInstall } = usePWA()
 // Estado
 const firstPersonMode = ref(true)  // MODO 3D POR DEFECTO
 const showAgents = ref(true)  // Mostrar agentes por defecto
-const showMetrics = ref(true)
 const activeAgent = ref(null)
 const notifications = ref([])
 
@@ -468,14 +447,6 @@ onUnmounted(() => {
     tpvTablesPollTimer = null
   }
 })
-
-// Métricas
-const metrics = ref([
-  { id: 1, icon: '💰', value: '1,245', label: 'Ventas Hoy' },
-  { id: 2, icon: '💵', value: '$12,548', label: 'Ingresos' },
-  { id: 3, icon: '👥', value: '24', label: 'Clientes' },
-  { id: 4, icon: '📦', value: '156', label: 'Órdenes' }
-])
 
 // Toggle panel de agentes
 const toggleAgentsPanel = () => {

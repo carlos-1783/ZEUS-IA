@@ -186,6 +186,8 @@ const VALUE_LABELS: Record<string, string> = {
   rejected: 'Rechazada',
   checked_in: 'Dentro',
   checked_out: 'Fuera',
+  ok: 'Cuadra',
+  discrepancy: 'Descuadre',
   not_available: 'No disponible',
   blocked_module: 'Bloqueado: módulo no activo',
   blocked_by_guard: 'Bloqueado por THALOS',

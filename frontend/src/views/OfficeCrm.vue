@@ -34,8 +34,8 @@
             <td><input v-model="c.phone" /></td>
             <td>
               <select v-model="c.status">
-                <option value="active">active</option>
-                <option value="inactive">inactive</option>
+                <option value="active">Activo</option>
+                <option value="inactive">Inactivo</option>
               </select>
             </td>
             <td class="actions">

@@ -204,18 +204,7 @@ async def get_agents_status(
         "scope": "company" if effective_user_email else "global_superuser",
     }
 
-@router.get("/stats")
-async def get_agents_stats(
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
-) -> Dict[str, Any]:
-    """
-    Estadísticas detalladas de agentes (requiere autenticación)
-    """
-    return {
-        "total_decisions": 0,
-        "total_hitl_requests": 0,
-        "avg_response_time": "0.3s",
-        "total_cost": "0.00 USD",
-        "period": "last_30_days"
-    }
+# Fase 2 (#13): GET /agents/stats devolvia valores fijos (0 decisiones, "0.3s", "0.00 USD")
+# y ningun cliente lo usaba (ni el frontend ni el backend). Se elimina: las metricas reales por
+# agente estan en GET /agents/status, calculadas desde agent_activities.
+

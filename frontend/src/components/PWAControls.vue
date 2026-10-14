@@ -109,9 +109,12 @@ const installApp = async () => {
   cursor: wait;
 }
 
-/* Instalar: única acción con el acento del rayo en esta barra. */
+/* Instalar: única acción con el acento del rayo en esta barra.
+   Stop claro del degradado oscurecido de #2a74d8 a #2567c4 (AA): el blanco sobre
+   #2a74d8 daba 4.58:1, justo en el límite de 4.5:1; con #2567c4 sube a 5.5:1 con
+   margen real, mismo tono de azul, mismo degradado/acento. */
 .pwa-btn--install {
-  background: linear-gradient(170deg, #2a74d8, #1559c6);
+  background: linear-gradient(170deg, #2567c4, #1559c6);
   border-color: rgba(255, 255, 255, 0.22);
   color: #fff;
   box-shadow: 0 4px 11px -3px var(--volt-glow, rgba(47, 130, 240, 0.5)), inset 0 1px 1px rgba(255, 255, 255, 0.25);
@@ -164,6 +167,15 @@ const installApp = async () => {
   color: var(--warn-ink, #ffa500);
   font-size: 10px;
   cursor: help;
+}
+
+/* Solo visible con !isProd (nunca en build de producción real). En tema platino, el
+   --warn-ink compartido (#683b00) da 3.77:1 contra el extremo mas oscuro del degradado
+   metalico de esta chapa (falla AA 4.5:1); en dark ya pasa (6.72:1+), no se toca. Override
+   local (no se cambia el token --warn-ink global, que se usa en más sitios) con mas
+   contraste: 5.18:1 contra ese mismo extremo. */
+:root:not([data-theme="dark"]) .pwa-debug {
+  color: #4a2900;
 }
 
 @media (prefers-reduced-motion: reduce) {

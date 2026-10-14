@@ -110,9 +110,11 @@ export function useWorkspaceMediaUrl(raw: Ref<string>, options: WorkspaceMediaOp
   function refreshLinkIfStale(): Promise<void> {
     if (!isProtected() || !linkHref.value || now() < linkExpiresAt) return Promise.resolve();
     if (linkRefresh) return linkRefresh; // hover + focus a la vez: una sola petición
+    const current = seq;
     linkRefresh = (async () => {
       try {
         const out = await resolveWorkspaceMediaUrlAsync(raw.value, getter);
+        if (current !== seq) return; // el entregable cambió mientras se firmaba
         linkHref.value = out.url;
         setLinkExpiry(out.expiresIn);
       } catch {

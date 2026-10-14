@@ -102,7 +102,7 @@ const onKpiClick = (item) => {
 <style scoped>
 .kpi-bar {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
   height: 100%;
   min-height: 0;
@@ -254,7 +254,7 @@ const onKpiClick = (item) => {
 
 @media (max-width: 768px) {
   .kpi-bar {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-rows: repeat(2, auto);
     gap: 8px;
     height: auto;

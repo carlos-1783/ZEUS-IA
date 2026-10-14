@@ -1686,6 +1686,7 @@ onUnmounted(() => {
 /* MAIN CONTENT */
 .main-content {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
   padding: 32px 40px;
@@ -3072,6 +3073,9 @@ onUnmounted(() => {
     overflow-y: auto;
     overflow-x: hidden;
     flex: none;
+    /* flex:none toma el ancho max-content del contenido: se fija al ancho
+       disponible para que nada se salga del viewport en móvil. */
+    width: 100%;
     min-height: 0;
   }
 
@@ -3107,7 +3111,9 @@ onUnmounted(() => {
   .agents-grid,
   .executive-agents-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    /* minmax(0, …): el texto de una tarjeta no puede ensanchar la rejilla
+       por encima del viewport (a 390px empujaba 11px fuera de pantalla). */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: auto;
     gap: 10px;
     height: auto;

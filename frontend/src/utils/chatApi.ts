@@ -1,4 +1,9 @@
 import { API_BASE_URL } from '@/config';
+import {
+  fetchSignedFileUrl,
+  protectedFileId,
+  resolveWorkspaceMediaUrlAsync,
+} from '@/utils/resolveWorkspaceMediaUrl';
 
 /**
  * Chat con cualquier agente (ZEUS CORE, PERSEO, RAFAEL, THALOS, JUSTICIA, AFRODITA).
@@ -94,8 +99,34 @@ export function resolveEvidenceUrl(url: string): string {
   return `${origin}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
-/** Abre el recurso enlazado con la sesión del usuario (un enlace directo no lleva el token). */
+/**
+ * Medio entregable de una evidencia (hoy: el vídeo generado por PERSEO, ya listo en R2).
+ * Devuelve la URL guardada (/api/v1/files/{id}) o null si la evidencia es un documento de datos.
+ */
+export function evidenceMediaUrl(body: any): string | null {
+  const content = body?.detail?.payload?.content;
+  if (!content || typeof content !== 'object') return null;
+  const status = String(content.generated_video_status || '').trim().toLowerCase();
+  const url = String(content.generated_video_url || '').trim();
+  return status === 'ready' && url ? url : null;
+}
+
+function openInNewTab(href: string): void {
+  window.open(href, '_blank', 'noopener');
+}
+
+/**
+ * Abre el recurso enlazado con la sesión del usuario (un enlace directo no lleva el token).
+ * - Fichero de R2 o documento con vídeo generado listo: se abre el medio con su URL firmada
+ *   (pedida con Authorization en cabecera), que el navegador reproduce/muestra.
+ * - Resto (documentos de texto/datos): se muestra el JSON del recurso.
+ */
 export async function openEvidence(item: ChatEvidence, token: string | null): Promise<void> {
+  const directFile = protectedFileId(item.url);
+  if (directFile) {
+    openInNewTab((await fetchSignedFileUrl(directFile)).url);
+    return;
+  }
   const res = await fetch(resolveEvidenceUrl(item.url), {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
@@ -103,8 +134,13 @@ export async function openEvidence(item: ChatEvidence, token: string | null): Pr
     throw new Error(res.status === 404 ? 'El recurso ya no está disponible.' : `Error ${res.status}`);
   }
   const body = await res.json();
+  const media = evidenceMediaUrl(body);
+  if (media) {
+    openInNewTab((await resolveWorkspaceMediaUrlAsync(media)).url);
+    return;
+  }
   const blob = new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' });
   const href = URL.createObjectURL(blob);
-  window.open(href, '_blank', 'noopener');
+  openInNewTab(href);
   setTimeout(() => URL.revokeObjectURL(href), 60000);
 }

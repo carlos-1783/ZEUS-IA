@@ -1702,6 +1702,18 @@ const formatMetricValue = (value) => {
   .workspace-content {
     max-height: none;
   }
+
+  /* Pestanas en movil: las cuatro caben enteras ("Metricas" se cortaba). */
+  .tabs {
+    gap: 2px;
+  }
+
+  .tabs button {
+    min-width: 0;
+    padding: 8px 4px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
 }
 </style>
 

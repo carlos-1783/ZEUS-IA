@@ -155,7 +155,8 @@ onMounted(loadDrafts)
   color: var(--zeus-text, #0f172a);
 }
 .subtitle {
-  color: var(--zeus-text-secondary, #52607a);
+  /* va directamente sobre el acero de la pagina, no sobre un panel */
+  color: var(--zeus-text-on-page, var(--zeus-text-secondary, #52607a));
   margin: 0;
 }
 .loading, .error, .empty {

@@ -77,7 +77,7 @@ function onError(msg: string) {
   padding: 1.5rem 1rem 3rem;
 }
 .header h1 { margin: 0 0 0.25rem; font-size: var(--zeus-text-xl, 1.5rem); color: var(--zeus-text, #0f172a); }
-.header p { margin: 0; color: var(--zeus-text-secondary, #52607a); font-size: 0.95rem; }
+.header p { margin: 0; color: var(--zeus-text-on-page, var(--zeus-text-secondary, #52607a)); font-size: 0.95rem; }
 .tabs { display: flex; gap: 0.5rem; margin: 1.25rem 0; flex-wrap: wrap; }
 .tabs button { border-radius: var(--zeus-radius-full, 999px); }
 .panel {

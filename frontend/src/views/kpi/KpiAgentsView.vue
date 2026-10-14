@@ -181,17 +181,32 @@ onMounted(async () => {
   gap: 16px;
   align-items: flex-start;
   padding: 20px;
-  background: var(--zeus-surface, #fff);
-  border: 1px solid var(--zeus-border, #e5e9f0);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  /* Lámina metálica (platino / grafito según tema), igual que el panel */
+  background: var(--metal-face, var(--zeus-surface, #fff));
+  border: 1px solid var(--metal-edge, var(--zeus-border, #e5e9f0));
+  border-bottom-color: var(--metal-edge-bottom, var(--zeus-border, #e5e9f0));
   border-radius: var(--zeus-radius, 12px);
-  box-shadow: var(--zeus-shadow-sm);
-  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  box-shadow: var(--metal-shadow, var(--zeus-shadow-sm));
+  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+}
+
+.agent-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--metal-sheen, none);
+  opacity: var(--metal-sheen-opacity, 0);
+  mix-blend-mode: screen;
+  pointer-events: none;
 }
 
 .agent-card:hover {
-  box-shadow: var(--zeus-shadow);
-  border-color: var(--zeus-border-strong, #d7dce5);
+  box-shadow: var(--metal-shadow-hover, var(--zeus-shadow));
 }
 
 .agent-card-body {
@@ -289,20 +304,20 @@ onMounted(async () => {
   width: 13px;
   height: 13px;
   border-radius: 50%;
-  border: 2px solid var(--zeus-surface, #fff);
-  background: #cbd5e1;
+  border: 2px solid var(--sheet, var(--zeus-surface, #fff));
+  background: var(--off, #cbd5e1);
 }
 
 .status-dot.online {
-  background: #10b981;
+  background: var(--ok, #10b981);
 }
 
 .status-dot.idle {
-  background: #f59e0b;
+  background: var(--warn, #f59e0b);
 }
 
 .status-dot.offline {
-  background: #94a3b8;
+  background: var(--off, #94a3b8);
 }
 
 .status-dot.online::after {
@@ -344,15 +359,15 @@ onMounted(async () => {
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--zeus-accent, #4f46e5);
-  background: var(--zeus-accent-soft, #eef1ff);
+  color: var(--volt-ink, var(--zeus-accent, #4f46e5));
+  background: var(--volt-soft, var(--zeus-accent-soft, #eef1ff));
   border-radius: var(--zeus-radius-full, 999px);
   line-height: 1.4;
 }
 
 .agent-role {
   margin: 0 0 10px;
-  color: var(--zeus-text-secondary, #52607a);
+  color: var(--ink-2, var(--zeus-text-secondary, #52607a));
   font-size: 13px;
 }
 
@@ -378,14 +393,13 @@ onMounted(async () => {
   background: var(--zeus-warning-soft, #fef3e2);
 }
 
-.pill.offline {
-  color: #b91c1c;
-  background: var(--zeus-danger-soft, #fde8e8);
-}
-
+/* Desconectado / cargando: grabado neutro en la chapa (mismo criterio que
+   el panel: el estado apagado no es un error). */
+.pill.offline,
 .pill.loading {
-  color: var(--zeus-text-secondary, #52607a);
-  background: var(--zeus-surface-muted, #f1f4f8);
+  color: var(--ink-2, var(--zeus-text-secondary, #52607a));
+  background: var(--metal-well, var(--zeus-surface-muted, #f1f4f8));
+  box-shadow: var(--metal-well-shadow, none);
 }
 
 .agent-metrics {
@@ -403,12 +417,12 @@ onMounted(async () => {
 }
 
 .metric-row dt {
-  color: var(--zeus-text-muted, #8a93a6);
+  color: var(--ink-3, var(--zeus-text-muted, #8a93a6));
 }
 
 .metric-row dd {
   margin: 0;
-  color: var(--zeus-text-secondary, #52607a);
+  color: var(--ink, var(--zeus-text-secondary, #52607a));
   font-weight: 600;
   text-align: right;
 }

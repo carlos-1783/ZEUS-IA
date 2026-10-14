@@ -3152,7 +3152,18 @@ onUnmounted(() => {
 
   .agent-card--executive .agent-stats {
     margin-bottom: 4px;
-    gap: 8px;
+    gap: 2px;
+    /* Una fila por dato ("Estado Desconectado" / "Actividades 24 h 0"):
+       en dos columnas no caben a 390px y la etiqueta se partía. */
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .agent-card--executive .stat {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 5px;
+    white-space: nowrap;
   }
 
   .agent-card--executive .btn-interact,

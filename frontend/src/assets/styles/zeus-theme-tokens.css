@@ -57,8 +57,8 @@
   /* Texto sobre lámina de platino: --ink-soft/--ink-faint aprobados no
      llegan a AA sobre la zona baja del gradiente (#9ba4b1); para TEXTO se
      usan estas variantes medidas (ver reporte de contraste). */
-  --ink-2: #353e4d;
-  --ink-3: #323a48;
+  --ink-2: #2a3240;
+  --ink-3: #2e3644;
   --ok-ink: #05603b;
   --warn-ink: #683b00;
   --volt-ink: #0c3d86;

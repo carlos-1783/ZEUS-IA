@@ -1,4 +1,10 @@
 import { API_BASE_URL } from '@/config';
+import {
+  fetchSignedFileUrl,
+  openPendingTab,
+  protectedFileId,
+  resolveWorkspaceMediaUrlAsync,
+} from '@/utils/resolveWorkspaceMediaUrl';
 
 /**
  * Chat con cualquier agente (ZEUS CORE, PERSEO, RAFAEL, THALOS, JUSTICIA, AFRODITA).
@@ -94,17 +100,59 @@ export function resolveEvidenceUrl(url: string): string {
   return `${origin}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
-/** Abre el recurso enlazado con la sesión del usuario (un enlace directo no lleva el token). */
-export async function openEvidence(item: ChatEvidence, token: string | null): Promise<void> {
-  const res = await fetch(resolveEvidenceUrl(item.url), {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!res.ok) {
-    throw new Error(res.status === 404 ? 'El recurso ya no está disponible.' : `Error ${res.status}`);
-  }
-  const body = await res.json();
-  const blob = new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' });
-  const href = URL.createObjectURL(blob);
-  window.open(href, '_blank', 'noopener');
-  setTimeout(() => URL.revokeObjectURL(href), 60000);
+/**
+ * Medio entregable de una evidencia (hoy: el vídeo generado por PERSEO, ya listo en R2).
+ * Devuelve la URL guardada (/api/v1/files/{id}) o null si la evidencia es un documento de datos.
+ */
+export function evidenceMediaUrl(body: any): string | null {
+  const content = body?.detail?.payload?.content;
+  if (!content || typeof content !== 'object') return null;
+  const status = String(content.generated_video_status || '').trim().toLowerCase();
+  const url = String(content.generated_video_url || '').trim();
+  return status === 'ready' && url ? url : null;
+}
+
+/**
+ * Abre el recurso enlazado con la sesión del usuario (un enlace directo no lleva el token).
+ * - Fichero de R2 o documento con vídeo generado listo: se abre el medio con su URL firmada
+ *   (pedida con Authorization en cabecera), que el navegador reproduce/muestra.
+ * - Resto (documentos de texto/datos): se muestra el JSON del recurso.
+ * La pestaña se abre de forma SÍNCRONA (dentro del clic, antes de cualquier await) para que el
+ * bloqueador de ventanas emergentes no la impida; se navega cuando llega la URL y se cierra si
+ * algo falla (el error se propaga con su motivo).
+ */
+export function openEvidence(
+  item: ChatEvidence,
+  token: string | null,
+  opener?: () => Window | null,
+): Promise<void> {
+  const tab = openPendingTab(opener);
+  return (async () => {
+    try {
+      const directFile = protectedFileId(item.url);
+      if (directFile) {
+        tab.navigate((await fetchSignedFileUrl(directFile)).url);
+        return;
+      }
+      const res = await fetch(resolveEvidenceUrl(item.url), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        throw new Error(res.status === 404 ? 'El recurso ya no está disponible.' : `Error ${res.status}`);
+      }
+      const body = await res.json();
+      const media = evidenceMediaUrl(body);
+      if (media) {
+        tab.navigate((await resolveWorkspaceMediaUrlAsync(media)).url);
+        return;
+      }
+      const blob = new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' });
+      const href = URL.createObjectURL(blob);
+      tab.navigate(href);
+      setTimeout(() => URL.revokeObjectURL(href), 60000);
+    } catch (err) {
+      tab.close();
+      throw err;
+    }
+  })();
 }

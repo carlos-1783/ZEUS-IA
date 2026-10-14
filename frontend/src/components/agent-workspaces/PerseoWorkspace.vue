@@ -153,11 +153,18 @@
             </div>
             <div v-if="workspaceImageUrl" class="media-block">
               <h6 class="media-block-title">Tu imagen (referencia)</h6>
+              <p v-if="workspaceImageResolving" class="pending-text">Cargando imagen…</p>
+              <p v-else-if="workspaceImageUrlError" class="failed-text">
+                No se puede mostrar la imagen: {{ workspaceImageUrlError }}
+              </p>
               <img
+                v-else-if="workspaceImageDisplayUrl"
+                :key="workspaceImageDisplayUrl"
                 :src="workspaceImageDisplayUrl"
                 loading="lazy"
                 class="media-image"
                 alt="Imagen de referencia enviada al chat"
+                @error="onWorkspaceImageMediaError"
               />
               <p class="media-ref-caption">
                 Es la misma foto que adjuntaste: sirve de contexto visual. No se convierte sola en un nuevo diseño
@@ -166,7 +173,12 @@
             </div>
             <div v-if="workspaceVideoUrl" class="media-block">
               <h6 class="media-block-title">Vídeo adjunto por ti</h6>
+              <p v-if="workspaceVideoResolving" class="pending-text">Preparando el vídeo…</p>
+              <p v-else-if="workspaceVideoUrlError" class="failed-text">
+                No se puede mostrar el vídeo: {{ workspaceVideoUrlError }}
+              </p>
               <video
+                v-else-if="workspaceVideoDisplayUrl"
                 v-show="!workspaceVideoLoadError"
                 :key="workspaceVideoDisplayUrl"
                 :src="workspaceVideoDisplayUrl"
@@ -190,7 +202,17 @@
             </div>
             <div v-if="workspacePdfUrl" class="media-block media-pdf">
               <h6 class="media-block-title">PDF</h6>
-              <a :href="workspacePdfDisplayUrl" target="_blank" rel="noopener noreferrer" class="btn ghost">
+              <p v-if="workspacePdfResolving" class="pending-text">Preparando el enlace…</p>
+              <p v-else-if="workspacePdfUrlError" class="failed-text">
+                No se puede abrir el PDF: {{ workspacePdfUrlError }}
+              </p>
+              <a
+                v-else-if="workspacePdfDisplayUrl"
+                :href="workspacePdfDisplayUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="btn ghost"
+              >
                 Abrir PDF
               </a>
             </div>
@@ -223,7 +245,12 @@
             </div>
             <div v-else-if="workspaceGeneratedVideoUrl" class="media-block">
               <h6 class="media-block-title">Vídeo generado (presentación)</h6>
+              <p v-if="generatedVideoResolving" class="pending-text">Preparando el vídeo…</p>
+              <p v-else-if="generatedVideoUrlError" class="failed-text">
+                No se puede mostrar el vídeo: {{ generatedVideoUrlError }}
+              </p>
               <video
+                v-else-if="workspaceGeneratedVideoDisplayUrl"
                 v-show="!generatedVideoLoadError"
                 :key="workspaceGeneratedVideoDisplayUrl"
                 :src="workspaceGeneratedVideoDisplayUrl"
@@ -233,7 +260,11 @@
                 class="media-video"
                 @error="onGeneratedVideoError"
               ></video>
-              <div v-if="generatedVideoLoadError" class="media-video-fallback">
+              <div
+                v-if="workspaceGeneratedVideoDisplayUrl && !generatedVideoResolving && !generatedVideoUrlError"
+                class="media-video-fallback"
+              >
+                <p v-if="generatedVideoLoadError">No se pudo reproducir en el navegador (formato o red).</p>
                 <a
                   :href="workspaceGeneratedVideoDisplayUrl"
                   target="_blank"
@@ -427,7 +458,7 @@ import { onMounted, ref, computed, watch } from 'vue';
 import type { AutomationOutput } from '@/api/automationService';
 import { useAutomationDeliverables } from '@/composables/useAutomationDeliverables';
 import api from '@/services/api';
-import { resolveWorkspaceMediaUrl } from '@/utils/resolveWorkspaceMediaUrl';
+import { useWorkspaceMediaUrl } from '@/composables/useWorkspaceMediaUrl';
 import PerseoToolsPanel from './PerseoToolsPanel.vue';
 import MarketingIntegrationsPanel from './MarketingIntegrationsPanel.vue';
 import CrossAgentWorkspaceFeed from './CrossAgentWorkspaceFeed.vue';
@@ -526,12 +557,33 @@ const workspaceMediaCardVisible = computed(() => {
   );
 });
 
-const workspaceImageDisplayUrl = computed(() => resolveWorkspaceMediaUrl(workspaceImageUrl.value));
-const workspaceVideoDisplayUrl = computed(() => resolveWorkspaceMediaUrl(workspaceVideoUrl.value));
-const workspacePdfDisplayUrl = computed(() => resolveWorkspaceMediaUrl(workspacePdfUrl.value));
-const workspaceGeneratedVideoDisplayUrl = computed(() =>
-  resolveWorkspaceMediaUrl(workspaceGeneratedVideoUrl.value)
-);
+// Ficheros en R2 (/api/v1/files/{id}) -> URL firmada pedida con Authorization en cabecera.
+const {
+  src: workspaceImageDisplayUrl,
+  loading: workspaceImageResolving,
+  error: workspaceImageUrlError,
+  onMediaError: resignWorkspaceImage,
+} = useWorkspaceMediaUrl(workspaceImageUrl);
+const {
+  src: workspaceVideoDisplayUrl,
+  loading: workspaceVideoResolving,
+  error: workspaceVideoUrlError,
+  onMediaError: resignWorkspaceVideo,
+} = useWorkspaceMediaUrl(workspaceVideoUrl);
+const {
+  src: workspacePdfDisplayUrl,
+  loading: workspacePdfResolving,
+  error: workspacePdfUrlError,
+} = useWorkspaceMediaUrl(workspacePdfUrl);
+const {
+  src: workspaceGeneratedVideoDisplayUrl,
+  loading: generatedVideoResolving,
+  error: generatedVideoUrlError,
+  onMediaError: resignGeneratedVideo,
+} = useWorkspaceMediaUrl(workspaceGeneratedVideoUrl);
+const onWorkspaceImageMediaError = () => {
+  resignWorkspaceImage();
+};
 
 const workspaceVideoLoadError = ref(false);
 const generatedVideoLoadError = ref(false);
@@ -541,10 +593,13 @@ watch(workspaceVideoDisplayUrl, () => {
 watch(workspaceGeneratedVideoDisplayUrl, () => {
   generatedVideoLoadError.value = false;
 });
+// La firma caduca: el primer error vuelve a pedir la URL firmada; el segundo ya es real.
 const onWorkspaceVideoError = () => {
+  if (resignWorkspaceVideo()) return;
   workspaceVideoLoadError.value = true;
 };
 const onGeneratedVideoError = () => {
+  if (resignGeneratedVideo()) return;
   generatedVideoLoadError.value = true;
 };
 const workspaceAdTitle = computed(() => {

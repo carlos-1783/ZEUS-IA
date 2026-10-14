@@ -80,3 +80,101 @@ export function resolveWorkspaceMediaUrl(raw: string): string {
 
   return work;
 }
+
+// ---------------------------------------------------------------------------
+// Ficheros en R2 (`/api/v1/files/{id}`): la ruta exige cabecera Authorization, así que no
+// puede ir tal cual en <video src>, <img src> ni en un enlace. Se pide la URL firmada (vida
+// corta) a GET /api/v1/files/{id}/url con el cliente API (token en cabecera, nunca en la URL).
+// ---------------------------------------------------------------------------
+
+const PROTECTED_FILE_RE = /^(?:\/api\/v1)?\/files\/([0-9a-f]{32})\/?$/i;
+
+/** id del fichero si `raw` apunta a /api/v1/files/{id} (relativa o absoluta); si no, null. */
+export function protectedFileId(raw: string): string | null {
+  const s = String(raw || '').trim();
+  if (!s || /^(blob:|data:)/i.test(s)) {
+    return null;
+  }
+  const m = pathnameOnly(s).match(PROTECTED_FILE_RE);
+  return m ? m[1].toLowerCase() : null;
+}
+
+export interface SignedFileUrl {
+  url: string;
+  expiresIn: number | null;
+  contentType: string | null;
+  filename: string | null;
+}
+
+/** Error al obtener la firma, con el status HTTP real y un motivo legible. */
+export class MediaUrlError extends Error {
+  status: number | null;
+
+  constructor(message: string, status: number | null) {
+    super(message);
+    this.name = 'MediaUrlError';
+    this.status = status;
+  }
+}
+
+/** Motivo honesto según la respuesta del backend (503 sin R2, 404 inexistente u otra empresa...). */
+export function describeMediaUrlError(status: number | null | undefined, detail?: string | null): string {
+  switch (status) {
+    case 401:
+      return 'Tu sesión ha caducado: vuelve a iniciar sesión para ver el fichero.';
+    case 403:
+    case 404:
+      return 'El fichero no existe o no pertenece a tu empresa.';
+    case 502:
+      return 'No se pudo acceder al almacenamiento de ficheros. Reintenta en unos minutos.';
+    case 503:
+      return 'El almacenamiento de ficheros no está configurado todavía; el fichero no se puede mostrar.';
+    default:
+      return detail ? String(detail) : `No se pudo obtener el enlace del fichero${status ? ` (error ${status})` : ''}.`;
+  }
+}
+
+type JsonGetter = (endpoint: string) => Promise<any>;
+
+async function defaultGetter(endpoint: string): Promise<any> {
+  // Import diferido: el cliente API arrastra el store de auth (y este módulo se usa en tests).
+  const { default: api } = await import('@/services/api');
+  return api.get(endpoint);
+}
+
+/** GET /api/v1/files/{id}/url con Authorization en cabecera -> URL firmada de R2. */
+export async function fetchSignedFileUrl(fileId: string, getter: JsonGetter = defaultGetter): Promise<SignedFileUrl> {
+  let body: any;
+  try {
+    body = await getter(`/api/v1/files/${encodeURIComponent(fileId)}/url`);
+  } catch (err: any) {
+    const status = typeof err?.status === 'number' ? err.status : null;
+    throw new MediaUrlError(describeMediaUrlError(status, err?.detail || null), status);
+  }
+  const url = typeof body?.url === 'string' ? body.url.trim() : '';
+  if (!url) {
+    throw new MediaUrlError('El servidor no devolvió el enlace del fichero.', null);
+  }
+  return {
+    url,
+    expiresIn: typeof body.expires_in === 'number' ? body.expires_in : null,
+    contentType: typeof body.content_type === 'string' ? body.content_type : null,
+    filename: typeof body.filename === 'string' ? body.filename : null,
+  };
+}
+
+/**
+ * URL utilizable directamente por el navegador: firmada si es un fichero de R2, o la de
+ * `resolveWorkspaceMediaUrl` para el resto (static/legacy, blob:, data:, externas).
+ */
+export async function resolveWorkspaceMediaUrlAsync(
+  raw: string,
+  getter: JsonGetter = defaultGetter,
+): Promise<{ url: string; contentType: string | null; signed: boolean }> {
+  const fileId = protectedFileId(raw);
+  if (fileId) {
+    const signed = await fetchSignedFileUrl(fileId, getter);
+    return { url: signed.url, contentType: signed.contentType, signed: true };
+  }
+  return { url: resolveWorkspaceMediaUrl(raw), contentType: null, signed: false };
+}

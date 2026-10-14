@@ -1710,9 +1710,12 @@ const formatMetricValue = (value) => {
 
   .tabs button {
     min-width: 0;
-    padding: 8px 4px;
+    padding: 6px 2px;
     font-size: 12px;
-    white-space: nowrap;
+    line-height: 1.25;
+    /* icono arriba y nombre debajo si no cabe en una linea */
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 }
 </style>

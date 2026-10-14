@@ -170,11 +170,93 @@ export async function fetchSignedFileUrl(fileId: string, getter: JsonGetter = de
 export async function resolveWorkspaceMediaUrlAsync(
   raw: string,
   getter: JsonGetter = defaultGetter,
-): Promise<{ url: string; contentType: string | null; signed: boolean }> {
+): Promise<{ url: string; contentType: string | null; signed: boolean; expiresIn: number | null }> {
   const fileId = protectedFileId(raw);
   if (fileId) {
     const signed = await fetchSignedFileUrl(fileId, getter);
-    return { url: signed.url, contentType: signed.contentType, signed: true };
+    return { url: signed.url, contentType: signed.contentType, signed: true, expiresIn: signed.expiresIn };
   }
-  return { url: resolveWorkspaceMediaUrl(raw), contentType: null, signed: false };
+  return { url: resolveWorkspaceMediaUrl(raw), contentType: null, signed: false, expiresIn: null };
+}
+
+// ---------------------------------------------------------------------------
+// Abrir en pestaña nueva con la firma pedida EN EL CLIC (las firmas caducan).
+// La ventana se abre de forma síncrona dentro del gesto del usuario (si se abriera tras un
+// await, el bloqueador de ventanas emergentes podría impedirlo) y se navega cuando llega la URL.
+// ---------------------------------------------------------------------------
+
+export interface PendingTab {
+  /** Navega la pestaña ya abierta a `url`. */
+  navigate(url: string): void;
+  /** Cierra la pestaña (la operación ha fallado). */
+  close(): void;
+  /** false si el navegador bloqueó la ventana. */
+  readonly opened: boolean;
+}
+
+type WindowOpener = () => Window | null;
+
+const defaultOpener: WindowOpener = () =>
+  typeof window !== 'undefined' ? window.open('', '_blank') : null;
+
+/** Abre YA (llamar de forma síncrona en el manejador del clic) una pestaña en blanco. */
+export function openPendingTab(opener: WindowOpener = defaultOpener): PendingTab {
+  const win = opener();
+  if (win) {
+    try {
+      win.opener = null; // equivalente a noopener: la pestaña no puede tocar esta página
+    } catch {
+      /* ignore */
+    }
+    try {
+      win.document.title = 'Preparando fichero…';
+      win.document.body.textContent = 'Preparando el fichero…';
+    } catch {
+      /* ignore */
+    }
+  }
+  return {
+    opened: Boolean(win),
+    navigate(url: string) {
+      if (!win) {
+        throw new MediaUrlError(
+          'El navegador bloqueó la ventana nueva: permite ventanas emergentes para este sitio.',
+          null,
+        );
+      }
+      win.location.href = url;
+    },
+    close() {
+      try {
+        win?.close();
+      } catch {
+        /* ignore */
+      }
+    },
+  };
+}
+
+/**
+ * Abre `raw` en una pestaña nueva pidiendo una firma fresca en este momento.
+ * Síncrono hasta abrir la pestaña; devuelve la promesa de la navegación. Si falla, cierra la
+ * pestaña y rechaza con MediaUrlError (motivo honesto: 503, 404/403, ventana bloqueada...).
+ */
+export function openMediaInNewTab(
+  raw: string,
+  getter: JsonGetter = defaultGetter,
+  opener: WindowOpener = defaultOpener,
+): Promise<void> {
+  const tab = openPendingTab(opener);
+  return (async () => {
+    try {
+      const { url } = await resolveWorkspaceMediaUrlAsync(raw, getter);
+      if (!url) throw new MediaUrlError('No hay fichero que abrir.', null);
+      tab.navigate(url);
+    } catch (err: unknown) {
+      tab.close();
+      throw err instanceof MediaUrlError
+        ? err
+        : new MediaUrlError('No se pudo abrir el fichero.', null);
+    }
+  })();
 }

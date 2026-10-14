@@ -164,6 +164,7 @@
                 loading="lazy"
                 class="media-image"
                 alt="Imagen de referencia enviada al chat"
+                @load="workspaceImageLoaded"
                 @error="onWorkspaceImageMediaError"
               />
               <p class="media-ref-caption">
@@ -186,18 +187,23 @@
                 playsinline
                 preload="metadata"
                 class="media-video"
+                @loadeddata="workspaceVideoLoaded"
                 @error="onWorkspaceVideoError"
               ></video>
               <div v-if="workspaceVideoLoadError" class="media-video-fallback">
                 <p>No se pudo reproducir en el navegador (URL o red).</p>
                 <a
-                  :href="workspaceVideoDisplayUrl"
+                  :href="workspaceVideoLinkHref"
                   target="_blank"
                   rel="noopener noreferrer"
                   class="btn ghost"
+                  @click.prevent="openWorkspaceVideoTab"
+                  @mouseenter="refreshWorkspaceVideoLink"
+                  @focus="refreshWorkspaceVideoLink"
                 >
                   Abrir vídeo en nueva pestaña
                 </a>
+                <p v-if="workspaceVideoLinkError" class="failed-text">{{ workspaceVideoLinkError }}</p>
               </div>
             </div>
             <div v-if="workspacePdfUrl" class="media-block media-pdf">
@@ -208,13 +214,17 @@
               </p>
               <a
                 v-else-if="workspacePdfDisplayUrl"
-                :href="workspacePdfDisplayUrl"
+                :href="workspacePdfLinkHref"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="btn ghost"
+                @click.prevent="openWorkspacePdfTab"
+                @mouseenter="refreshWorkspacePdfLink"
+                @focus="refreshWorkspacePdfLink"
               >
                 Abrir PDF
               </a>
+              <p v-if="workspacePdfLinkError" class="failed-text">{{ workspacePdfLinkError }}</p>
             </div>
             <div v-if="generatedVideoPending" class="media-block media-pending">
               <h6 class="media-block-title">Vídeo de presentación</h6>
@@ -258,6 +268,7 @@
                 playsinline
                 preload="metadata"
                 class="media-video"
+                @loadeddata="generatedVideoLoaded"
                 @error="onGeneratedVideoError"
               ></video>
               <div
@@ -266,13 +277,17 @@
               >
                 <p v-if="generatedVideoLoadError">No se pudo reproducir en el navegador (formato o red).</p>
                 <a
-                  :href="workspaceGeneratedVideoDisplayUrl"
+                  :href="generatedVideoLinkHref"
                   target="_blank"
                   rel="noopener noreferrer"
                   class="btn ghost"
+                  @click.prevent="openGeneratedVideoTab"
+                  @mouseenter="refreshGeneratedVideoLink"
+                  @focus="refreshGeneratedVideoLink"
                 >
                   Abrir vídeo en nueva pestaña
                 </a>
+                <p v-if="generatedVideoLinkError" class="failed-text">{{ generatedVideoLinkError }}</p>
               </div>
             </div>
             <div v-if="generatedVideoFailed" class="media-block media-failed">
@@ -563,23 +578,38 @@ const {
   loading: workspaceImageResolving,
   error: workspaceImageUrlError,
   onMediaError: resignWorkspaceImage,
+  onMediaLoaded: workspaceImageLoaded,
 } = useWorkspaceMediaUrl(workspaceImageUrl);
 const {
   src: workspaceVideoDisplayUrl,
   loading: workspaceVideoResolving,
   error: workspaceVideoUrlError,
   onMediaError: resignWorkspaceVideo,
+  onMediaLoaded: workspaceVideoLoaded,
+  linkHref: workspaceVideoLinkHref,
+  linkError: workspaceVideoLinkError,
+  openInNewTab: openWorkspaceVideoTab,
+  refreshLinkIfStale: refreshWorkspaceVideoLink,
 } = useWorkspaceMediaUrl(workspaceVideoUrl);
 const {
   src: workspacePdfDisplayUrl,
   loading: workspacePdfResolving,
   error: workspacePdfUrlError,
+  linkHref: workspacePdfLinkHref,
+  linkError: workspacePdfLinkError,
+  openInNewTab: openWorkspacePdfTab,
+  refreshLinkIfStale: refreshWorkspacePdfLink,
 } = useWorkspaceMediaUrl(workspacePdfUrl);
 const {
   src: workspaceGeneratedVideoDisplayUrl,
   loading: generatedVideoResolving,
   error: generatedVideoUrlError,
   onMediaError: resignGeneratedVideo,
+  onMediaLoaded: generatedVideoLoaded,
+  linkHref: generatedVideoLinkHref,
+  linkError: generatedVideoLinkError,
+  openInNewTab: openGeneratedVideoTab,
+  refreshLinkIfStale: refreshGeneratedVideoLink,
 } = useWorkspaceMediaUrl(workspaceGeneratedVideoUrl);
 const onWorkspaceImageMediaError = () => {
   resignWorkspaceImage();

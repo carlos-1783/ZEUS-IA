@@ -1166,6 +1166,8 @@ const goToDashboard = () => {
   overflow: hidden;
   min-height: 100vh;
   background-image: var(--zeus-bg);
+  /* fijo a la ventana, igual que <html>: sin costura al hacer scroll */
+  background-attachment: fixed;
   color: var(--zeus-text, #0f172a);
   font-family: var(--zeus-font-sans, 'Inter', sans-serif);
 }
@@ -1763,6 +1765,8 @@ td {
   position: relative;
   overflow: hidden;
   background-image: var(--zeus-bg);
+  /* fijo a la ventana, igual que <html>: sin costura al hacer scroll */
+  background-attachment: fixed;
   border-radius: var(--zeus-radius, 12px);
   padding: 24px;
   min-width: 320px;

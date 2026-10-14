@@ -488,6 +488,8 @@ const finishSetup = async () => {
   place-items: center;
   padding: 20px;
   background-image: var(--zeus-bg);
+  /* fijo a la ventana, igual que <html>: sin costura al hacer scroll */
+  background-attachment: fixed;
   font-family: var(--zeus-font-sans, 'Inter', sans-serif);
 }
 

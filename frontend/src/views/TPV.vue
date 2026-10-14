@@ -2904,6 +2904,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   background-image: var(--zeus-bg);
+  /* fijo a la ventana, igual que <html>: sin costura al hacer scroll */
+  background-attachment: fixed;
   color: var(--zeus-text, #0f172a);
   font-family: var(--zeus-font-sans, 'Inter', sans-serif);
   padding: 12px;

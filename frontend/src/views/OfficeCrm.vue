@@ -722,6 +722,8 @@ onMounted(bootstrapPage)
   min-height: 100vh;
   overflow: hidden;
   background-image: var(--zeus-bg);
+  /* fijo a la ventana, igual que <html>: sin costura al hacer scroll */
+  background-attachment: fixed;
   font-family: var(--zeus-font-sans, 'Inter', sans-serif);
   color: var(--zeus-text, #0f172a);
   box-sizing: border-box;

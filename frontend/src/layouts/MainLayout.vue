@@ -203,6 +203,8 @@ onUnmounted(() => {
 /* Tokens de tema (zeus-theme-tokens.css): platino por defecto, oscuro opcional */
 .main-layout {
   background-image: var(--zeus-bg);
+  /* fijo a la ventana, igual que <html>: sin costura al hacer scroll */
+  background-attachment: fixed;
   color: var(--zeus-text);
 }
 

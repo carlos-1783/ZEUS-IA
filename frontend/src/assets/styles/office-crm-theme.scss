@@ -28,6 +28,8 @@
   inset: 0;
   z-index: -1;
   background-image: var(--zeus-bg);
+  /* fijo a la ventana, igual que <html>: sin costura al hacer scroll */
+  background-attachment: fixed;
 }
 
 .office-crm::after {

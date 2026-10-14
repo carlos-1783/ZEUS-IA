@@ -860,6 +860,8 @@ onUnmounted(() => {
 .control-horario-container {
   min-height: 100vh;
   background-image: var(--zeus-bg);
+  /* fijo a la ventana, igual que <html>: sin costura al hacer scroll */
+  background-attachment: fixed;
   font-family: var(--zeus-font-sans, 'Inter', sans-serif);
   padding: 20px;
   position: relative;

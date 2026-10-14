@@ -557,6 +557,8 @@ onMounted(async () => {
   font-family: var(--zeus-font-sans, system-ui, -apple-system, sans-serif);
   color: var(--zeus-text, #0f172a);
   background-image: var(--zeus-bg);
+  /* fijo a la ventana, igual que <html>: sin costura al hacer scroll */
+  background-attachment: fixed;
   box-sizing: border-box;
 }
 .insurance-view::before {

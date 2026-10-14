@@ -155,6 +155,8 @@ onMounted(load)
   margin: 0;
   padding: 32px 24px 64px;
   background-image: var(--zeus-bg);
+  /* fijo a la ventana, igual que <html>: sin costura al hacer scroll */
+  background-attachment: fixed;
   font-family: var(--zeus-font-sans, 'Inter', sans-serif);
   color: var(--zeus-text, #0f172a);
   box-sizing: border-box;

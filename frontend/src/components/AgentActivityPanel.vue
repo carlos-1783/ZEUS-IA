@@ -39,25 +39,25 @@
         @click="activeTab = 'workspace'"
         v-if="hasWorkspace"
       >
-        🛠️ Workspace
+        <span class="tab-icon" aria-hidden="true">🛠️</span> <span class="tab-label">Workspace</span>
       </button>
       <button 
         :class="{ active: activeTab === 'chat' }"
         @click="activeTab = 'chat'"
       >
-        💬 Chat
+        <span class="tab-icon" aria-hidden="true">💬</span> <span class="tab-label">Chat</span>
       </button>
       <button 
         :class="{ active: activeTab === 'activity' }"
         @click="activeTab = 'activity'"
       >
-        📊 Actividad
+        <span class="tab-icon" aria-hidden="true">📊</span> <span class="tab-label">Actividad</span>
       </button>
       <button 
         :class="{ active: activeTab === 'metrics' }"
         @click="activeTab = 'metrics'"
       >
-        📈 Métricas
+        <span class="tab-icon" aria-hidden="true">📈</span> <span class="tab-label">Métricas</span>
       </button>
     </div>
 
@@ -1701,6 +1701,24 @@ const formatMetricValue = (value) => {
   .tab-content,
   .workspace-content {
     max-height: none;
+  }
+
+  /* Pestanas en movil: las cuatro caben enteras ("Metricas" se cortaba). */
+  .tabs {
+    gap: 2px;
+  }
+
+  /* Las cuatro iguales: icono arriba y nombre debajo, siempre. */
+  .tabs button {
+    min-width: 0;
+    padding: 6px 2px;
+    font-size: 12px;
+    line-height: 1.25;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    white-space: nowrap;
   }
 }
 </style>

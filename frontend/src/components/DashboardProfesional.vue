@@ -31,7 +31,7 @@
           :title="authStore.user?.name || authStore.user?.email || ''"
           @click="closeSidebarOnMobile(); goToUserSettings()"
         >
-          <span class="topbar-user-icon">👤</span>
+          <svg class="topbar-user-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12.2a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" /><path d="M4.5 20.2a7.5 7.5 0 0 1 15 0" /></svg>
           <span class="topbar-user-label">{{ authStore.user?.name || authStore.user?.email || t('dashboardPro.nav.settings') }}</span>
           <span class="topbar-chevron" aria-hidden="true">⌄</span>
         </button>
@@ -241,7 +241,7 @@
                   </span>
                 </div>
                 <button class="btn-interact zeus-core-interact" @click.stop="chatWith(zeusCoreAgent)">
-                  <span>💬</span>
+                  <svg class="btn-interact-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 11.6a8 8 0 0 1-11.7 7.1L3.5 20.5l1.8-5.1a8 8 0 1 1 15.2-3.8z" /></svg>
                   {{ t('dashboardPro.agentCard.interact') }}
                 </button>
               </div>
@@ -307,7 +307,7 @@
             </div>
 
             <button class="btn-interact" @click.stop="chatWith(agent)">
-              <span>💬</span>
+              <svg class="btn-interact-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 11.6a8 8 0 0 1-11.7 7.1L3.5 20.5l1.8-5.1a8 8 0 1 1 15.2-3.8z" /></svg>
               {{ t('dashboardPro.agentCard.interact') }}
             </button>
           </div>
@@ -1239,6 +1239,8 @@ const executiveKpis = computed(() => {
       key: 'efficiency',
       label: 'Eficiencia',
       value: kpiValue(ex.efficiency, '%'),
+      // Color solo en el dato: verde con eficiencia alta real.
+      tone: ex.efficiency != null && Number(ex.efficiency) >= 90 ? 'ok' : null,
       icon: '🕐',
       route: '/analytics/efficiency',
     },
@@ -1246,6 +1248,7 @@ const executiveKpis = computed(() => {
       key: 'alerts',
       label: 'Alertas',
       value: kpiValue(ex.alerts),
+      tone: Number(ex.alerts) > 0 ? 'warn' : null,
       icon: '🛡️',
       route: '/alerts',
     },
@@ -1260,6 +1263,7 @@ const executiveKpis = computed(() => {
       key: 'system_health',
       label: 'Sistema',
       value: ex.system === 'unknown' ? KPI_NO_DATA : (systemOk ? 'OK' : '!'),
+      tone: ex.system === 'unknown' ? null : (systemOk ? 'ok' : 'warn'),
       icon: '🗄️',
       route: '/system-health',
     },
@@ -1318,8 +1322,9 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 16px;
   padding: 10px 24px;
-  background: var(--zeus-surface);
-  border-bottom: 1px solid var(--zeus-border);
+  background: var(--metal-rail, var(--zeus-surface));
+  border-bottom: 1px solid var(--metal-edge-bottom, var(--zeus-border));
+  box-shadow: inset 0 1px 0 var(--metal-edge, transparent), 0 8px 18px -12px rgba(8, 14, 26, 0.6);
   position: relative;
   z-index: 20;
 }
@@ -1352,7 +1357,7 @@ onUnmounted(() => {
 .app-topbar-subtitle {
   margin: 1px 0 0;
   font-size: 11px;
-  color: var(--zeus-text-muted);
+  color: var(--ink-2, var(--zeus-text-muted));
 }
 
 .app-topbar-right {
@@ -1367,7 +1372,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: var(--zeus-text-secondary);
+  color: var(--ink-2, var(--zeus-text-secondary));
   white-space: nowrap;
   margin-right: 4px;
 }
@@ -1380,13 +1385,13 @@ onUnmounted(() => {
 }
 
 .version-dot.online {
-  background: #22c55e;
-  box-shadow: 0 0 6px rgba(34, 197, 94, 0.7);
+  background: var(--ok, #22c55e);
+  box-shadow: 0 0 6px rgba(23, 194, 121, 0.7);
 }
 
 .version-dot.degraded {
-  background: #f59e0b;
-  box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+  background: var(--warn, #f59e0b);
+  box-shadow: 0 0 6px rgba(239, 162, 29, 0.6);
 }
 
 .topbar-icon-btn {
@@ -1397,17 +1402,27 @@ onUnmounted(() => {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: var(--zeus-surface-2);
-  border: 1px solid var(--zeus-border);
+  background: var(--metal-face, var(--zeus-surface-2));
+  border: 1px solid var(--metal-edge, var(--zeus-border));
+  border-bottom-color: var(--metal-edge-bottom, var(--zeus-border));
+  box-shadow: var(--metal-shadow-sm, none);
   color: var(--zeus-text);
   font-size: 15px;
   cursor: pointer;
-  transition: background var(--zeus-transition), transform var(--zeus-transition);
+  transition: box-shadow var(--zeus-transition), transform var(--zeus-transition);
 }
 
 .topbar-icon-btn:hover {
-  background: var(--zeus-raised);
+  box-shadow: var(--metal-shadow, none);
   transform: translateY(-1px);
+}
+
+.topbar-icon-btn:focus-visible,
+.topbar-user-btn:focus-visible,
+.nav-item:focus-visible,
+.btn-interact:focus-visible {
+  outline: 2px solid var(--volt, #2f82f0);
+  outline-offset: 2px;
 }
 
 .topbar-alert-dot {
@@ -1417,8 +1432,8 @@ onUnmounted(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #ef4444;
-  border: 1.5px solid var(--zeus-surface);
+  background: var(--warn, #ef4444);
+  border: 1.5px solid var(--sheet, var(--zeus-surface));
 }
 
 .topbar-user-btn {
@@ -1427,22 +1442,25 @@ onUnmounted(() => {
   gap: 6px;
   padding: 6px 10px 6px 8px;
   border-radius: var(--zeus-radius-full);
-  background: var(--zeus-surface-2);
-  border: 1px solid var(--zeus-border);
+  background: var(--metal-face, var(--zeus-surface-2));
+  border: 1px solid var(--metal-edge, var(--zeus-border));
+  border-bottom-color: var(--metal-edge-bottom, var(--zeus-border));
+  box-shadow: var(--metal-shadow-sm, none);
   color: var(--zeus-text);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   max-width: 220px;
-  transition: background var(--zeus-transition);
+  transition: box-shadow var(--zeus-transition);
 }
 
 .topbar-user-btn:hover {
-  background: var(--zeus-raised);
+  box-shadow: var(--metal-shadow, none);
 }
 
 .topbar-user-icon {
-  font-size: 14px;
+  flex-shrink: 0;
+  color: var(--ink-2, currentColor);
 }
 
 .topbar-user-label {
@@ -1461,7 +1479,7 @@ onUnmounted(() => {
 }
 
 .topbar-logout:hover {
-  background: var(--zeus-danger-soft);
+  color: var(--zeus-danger-text);
 }
 
 /* ---- Fila sidebar + contenido, debajo de la barra superior ---- */
@@ -1483,6 +1501,12 @@ onUnmounted(() => {
   mix-blend-mode: overlay;
   pointer-events: none;
   z-index: 0;
+}
+
+/* Fondo de acero fijo a la ventana (no se estira con el scroll). */
+.dashboard-profesional {
+  background-color: var(--bg);
+  background-attachment: fixed;
 }
 
 .dashboard-profesional > * {
@@ -1513,8 +1537,9 @@ onUnmounted(() => {
 /* SIDEBAR */
 .sidebar-dark {
   width: 280px;
-  background: var(--zeus-surface);
-  border-right: 1px solid var(--zeus-border);
+  background: var(--metal-rail, var(--zeus-surface));
+  border-right: 1px solid var(--metal-edge-bottom, var(--zeus-border));
+  box-shadow: inset -1px 0 0 var(--metal-edge, transparent), 10px 0 22px -18px rgba(8, 14, 26, 0.7);
   padding: 24px 20px;
   display: flex;
   flex-direction: column;
@@ -1568,71 +1593,49 @@ onUnmounted(() => {
   border: none;
   border-left: 3px solid transparent;
   border-radius: 0 var(--zeus-radius-sm) var(--zeus-radius-sm) 0;
-  color: var(--zeus-text-secondary);
+  color: var(--ink-2, var(--zeus-text-secondary));
   cursor: pointer;
-  transition: background var(--zeus-transition), color var(--zeus-transition), border-color var(--zeus-transition);
+  transition: background var(--zeus-transition), color var(--zeus-transition), border-color var(--zeus-transition),
+    box-shadow var(--zeus-transition);
   font-size: 14px;
   font-weight: 500;
 }
 
+/* Navegación sobre metal: sin pastillas de color; el hover levanta un
+   brillo y el activo queda grabado en la chapa con el filo del rayo. */
 .nav-item:hover {
-  background: var(--zeus-surface-2);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.04));
   color: var(--zeus-text);
 }
 
 .nav-item.active {
-  background: var(--zeus-accent-soft);
-  border-left-color: var(--zeus-accent);
-  color: var(--zeus-accent);
+  background: var(--metal-well, var(--zeus-accent-soft));
+  box-shadow: var(--metal-well-shadow, none);
+  border-left-color: var(--volt, var(--zeus-accent));
+  color: var(--zeus-text);
   font-weight: 600;
 }
 
 .nav-item.admin-btn {
   margin-top: 8px;
-  background: var(--zeus-accent-2-soft);
-  border: 1px solid var(--zeus-border);
-  color: var(--zeus-accent);
-}
-
-.nav-item.admin-btn:hover {
-  background: var(--zeus-accent-soft);
-  color: var(--zeus-accent);
-  border-color: var(--zeus-border-strong);
-}
-
-.nav-item.tpv-nav-btn {
-  background: var(--zeus-success-soft);
-  border: 1px solid rgba(16, 185, 129, 0.25);
-  color: var(--zeus-success-text);
-}
-
-.nav-item.tpv-nav-btn:hover {
-  background: rgba(16, 185, 129, 0.16);
-  color: var(--zeus-success-text);
-  border-color: rgba(16, 185, 129, 0.4);
-}
-
-.nav-item.control-horario-nav-btn {
-  background: var(--zeus-info-soft);
-  border: 1px solid rgba(59, 130, 246, 0.25);
-  color: var(--zeus-info-text);
-}
-
-.nav-item.control-horario-nav-btn:hover {
-  background: rgba(59, 130, 246, 0.16);
-  color: var(--zeus-info-text);
-  border-color: rgba(59, 130, 246, 0.4);
 }
 
 .icon {
   font-size: 18px;
+  /* Iconos en plata, coherentes con los badges gunmetal del panel */
+  filter: grayscale(1) contrast(1.05);
+}
+
+.nav-item.active .icon {
+  filter: none;
 }
 
 .metrics-mini {
   display: flex;
   gap: 16px;
   padding-top: 24px;
-  border-top: 1px solid var(--zeus-border);
+  border-top: 1px solid var(--metal-edge-bottom, var(--zeus-border));
+  box-shadow: inset 0 1px 0 var(--metal-edge, transparent);
 }
 
 .metric-item {
@@ -1642,12 +1645,13 @@ onUnmounted(() => {
 .metric-value {
   font-size: 24px;
   font-weight: 700;
-  color: var(--zeus-accent);
+  color: var(--volt-ink, var(--zeus-accent));
+  font-variant-numeric: tabular-nums;
 }
 
 .metric-label {
   font-size: 11px;
-  color: var(--zeus-text-muted);
+  color: var(--ink-2, var(--zeus-text-muted));
   margin-top: 4px;
 }
 
@@ -1655,7 +1659,7 @@ onUnmounted(() => {
   margin: 16px 4px 0;
   font-size: 11px;
   line-height: 1.4;
-  color: var(--zeus-text-muted);
+  color: var(--ink-3, var(--zeus-text-muted));
   font-style: italic;
 }
 
@@ -1682,6 +1686,7 @@ onUnmounted(() => {
 /* MAIN CONTENT */
 .main-content {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
   padding: 32px 40px;
@@ -1774,19 +1779,34 @@ onUnmounted(() => {
   max-width: 900px;
   height: 100%;
   padding: 10px 20px;
-  background: var(--zeus-surface);
-  border: 1px solid var(--zeus-border);
+  background: var(--metal-face, var(--zeus-surface));
+  border: 1px solid var(--metal-edge, var(--zeus-border));
+  border-bottom-color: var(--metal-edge-bottom, var(--zeus-border));
   border-radius: var(--zeus-radius-lg);
-  box-shadow: var(--zeus-shadow-md);
+  box-shadow: var(--metal-shadow, var(--zeus-shadow-md));
   box-sizing: border-box;
   cursor: pointer;
   overflow: hidden;
+  isolation: isolate;
   transition: box-shadow var(--zeus-transition), border-color var(--zeus-transition);
 }
 
 .zeus-core-card:hover {
-  box-shadow: var(--zeus-shadow-lg);
-  border-color: var(--zeus-border-strong);
+  box-shadow: var(--metal-shadow-hover, var(--zeus-shadow-lg));
+}
+
+/* Especular diagonal sobre la chapa, bajo el contenido. */
+.zeus-core-card::after,
+.agent-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--metal-sheen, none);
+  opacity: var(--metal-sheen-opacity, 0);
+  mix-blend-mode: screen;
+  pointer-events: none;
 }
 
 .zeus-core-info {
@@ -1810,7 +1830,7 @@ onUnmounted(() => {
   justify-content: flex-end;
   /* Tokens del tema (platino base / oscuro): antes una banda casi negra fija con texto
      blanco, ajena al platino. */
-  background: linear-gradient(90deg, transparent 0%, var(--zeus-accent-soft) 38%, var(--violet-soft) 100%);
+  background: radial-gradient(120% 140% at 100% 50%, var(--volt-soft, var(--zeus-accent-soft)) 0%, transparent 70%);
 }
 
 .zeus-core-banner-img {
@@ -1838,7 +1858,7 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 600;
   line-height: 1.35;
-  color: var(--zeus-text-secondary);
+  color: var(--ink-2, var(--zeus-text-secondary));
   text-align: right;
 }
 
@@ -1856,7 +1876,8 @@ onUnmounted(() => {
   height: 64px;
   border-radius: 50%;
   object-fit: cover;
-  border: 2px solid rgba(59, 130, 246, 0.6);
+  border: 2px solid var(--volt, rgba(59, 130, 246, 0.6));
+  box-shadow: 0 0 0 3px var(--volt-soft, transparent), 0 6px 14px -6px rgba(8, 16, 32, 0.6);
   flex-shrink: 0;
 }
 
@@ -1883,7 +1904,7 @@ onUnmounted(() => {
 .zeus-core-role {
   margin: 2px 0 8px;
   font-size: 12px;
-  color: var(--zeus-text-secondary);
+  color: var(--ink-2, var(--zeus-text-secondary));
 }
 
 .zeus-core-metrics {
@@ -1906,7 +1927,7 @@ onUnmounted(() => {
 }
 
 .zeus-core-activity {
-  color: var(--zeus-text-muted);
+  color: var(--ink-3, var(--zeus-text-muted));
 }
 
 .executive-agents-grid {
@@ -2170,22 +2191,23 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  background: var(--zeus-surface);
-  border: 1px solid var(--zeus-border);
+  background: var(--metal-face, var(--zeus-surface));
+  border: 1px solid var(--metal-edge, var(--zeus-border));
+  border-bottom-color: var(--metal-edge-bottom, var(--zeus-border));
   border-radius: var(--zeus-radius);
   padding: 10px;
   padding-right: 26px;
   cursor: pointer;
   transition: transform var(--zeus-transition), border-color var(--zeus-transition), box-shadow var(--zeus-transition);
   overflow: hidden;
+  isolation: isolate;
   box-sizing: border-box;
-  box-shadow: var(--zeus-shadow-sm);
+  box-shadow: var(--metal-shadow, var(--zeus-shadow-sm));
 }
 
 .agent-card:hover {
   transform: translateY(-3px);
-  border-color: rgba(59, 130, 246, 0.35);
-  box-shadow: var(--zeus-shadow-md);
+  box-shadow: var(--metal-shadow-hover, var(--zeus-shadow-md));
 }
 
 .agent-card-arrow {
@@ -2195,13 +2217,13 @@ onUnmounted(() => {
   transform: translateY(-50%);
   font-size: 20px;
   line-height: 1;
-  color: var(--zeus-text-muted);
+  color: var(--ink-3, var(--zeus-text-muted));
   pointer-events: none;
   transition: color var(--zeus-transition), transform var(--zeus-transition);
 }
 
 .agent-card:hover .agent-card-arrow {
-  color: var(--zeus-text-secondary);
+  color: var(--volt-ink, var(--zeus-text-secondary));
   transform: translateY(-50%) translateX(2px);
 }
 
@@ -2415,20 +2437,20 @@ onUnmounted(() => {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 2px solid var(--zeus-surface);
-  background: #cbd5e1;
+  border: 2px solid var(--sheet, var(--zeus-surface));
+  background: var(--off, #cbd5e1);
 }
 
 .status-dot.online {
-  background: #10b981;
+  background: var(--ok, #10b981);
 }
 
 .status-dot.idle {
-  background: #f59e0b;
+  background: var(--warn, #f59e0b);
 }
 
 .status-dot.offline {
-  background: #94a3b8;
+  background: var(--off, #94a3b8);
 }
 
 .status-dot.loading {
@@ -2442,7 +2464,7 @@ onUnmounted(() => {
   position: absolute;
   inset: -4px;
   border-radius: 50%;
-  border: 2px solid #10b981;
+  border: 2px solid var(--ok, #10b981);
   opacity: 0.55;
   animation: status-dot-pulse 1.8s ease-out infinite;
 }
@@ -2468,8 +2490,9 @@ onUnmounted(() => {
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--zeus-accent);
-  background: var(--zeus-accent-soft);
+  color: var(--volt-ink, var(--zeus-accent));
+  background: var(--volt-soft, var(--zeus-accent-soft));
+  box-shadow: inset 0 0 0 1px var(--volt-soft, transparent);
   border-radius: var(--zeus-radius-full);
   line-height: 1.4;
 }
@@ -2499,7 +2522,7 @@ onUnmounted(() => {
 }
 
 .agent-role {
-  color: var(--zeus-text-secondary);
+  color: var(--ink-2, var(--zeus-text-secondary));
   font-size: 12px;
   margin: 0;
 }
@@ -2519,9 +2542,7 @@ onUnmounted(() => {
 
 .stat-label {
   font-size: 11px;
-  color: var(--zeus-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+  color: var(--ink-3, var(--zeus-text-muted));
 }
 
 .stat-value {
@@ -2546,11 +2567,11 @@ onUnmounted(() => {
 }
 
 .status-offline {
-  color: var(--zeus-text-muted);
+  color: var(--ink-2, var(--zeus-text-muted));
 }
 
 .status-loading {
-  color: var(--zeus-text-muted);
+  color: var(--ink-2, var(--zeus-text-muted));
 }
 
 /* Botón secundario: el Dashboard es una vista de selección entre 6
@@ -2562,14 +2583,16 @@ onUnmounted(() => {
    panel de agente ya abierto (ej. "Actualizar"). */
 .btn-interact {
   padding: 8px 16px;
-  background: var(--zeus-surface);
-  border: 1px solid var(--zeus-border-strong);
+  background: var(--gun-btn, var(--zeus-surface));
+  border: 1px solid var(--gun-btn-border, var(--zeus-border-strong));
   border-radius: var(--zeus-radius-sm);
-  color: var(--zeus-text);
+  color: var(--gun-btn-fg, var(--zeus-text));
   font-weight: 600;
+  letter-spacing: 0.01em;
   cursor: pointer;
-  box-shadow: none;
-  transition: border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  box-shadow: var(--gun-btn-shadow, none);
+  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    transform var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
   font-size: 12px;
   display: inline-flex;
   align-items: center;
@@ -2580,12 +2603,30 @@ onUnmounted(() => {
 }
 
 .btn-interact:hover {
-  border-color: var(--zeus-text-muted);
+  background: var(--gun-btn-hover, var(--zeus-surface));
+  box-shadow: var(--gun-btn-shadow-hover, none);
+  transform: translateY(-1px);
+}
+
+.btn-interact:active {
+  transform: translateY(0);
+  box-shadow: var(--gun-btn-shadow, none);
+}
+
+.btn-interact-icon {
+  color: var(--gun-icon, currentColor);
+  flex-shrink: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .btn-interact {
     transition-duration: 1ms;
+  }
+
+  .btn-interact:hover,
+  .agent-card:hover,
+  .topbar-icon-btn:hover {
+    transform: none;
   }
 }
 
@@ -3032,6 +3073,9 @@ onUnmounted(() => {
     overflow-y: auto;
     overflow-x: hidden;
     flex: none;
+    /* flex:none toma el ancho max-content del contenido: se fija al ancho
+       disponible para que nada se salga del viewport en móvil. */
+    width: 100%;
     min-height: 0;
   }
 
@@ -3067,7 +3111,9 @@ onUnmounted(() => {
   .agents-grid,
   .executive-agents-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    /* minmax(0, …): el texto de una tarjeta no puede ensanchar la rejilla
+       por encima del viewport (a 390px empujaba 11px fuera de pantalla). */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: auto;
     gap: 10px;
     height: auto;
@@ -3106,7 +3152,18 @@ onUnmounted(() => {
 
   .agent-card--executive .agent-stats {
     margin-bottom: 4px;
-    gap: 8px;
+    gap: 2px;
+    /* Una fila por dato ("Estado Desconectado" / "Actividades 24 h 0"):
+       en dos columnas no caben a 390px y la etiqueta se partía. */
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .agent-card--executive .stat {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 5px;
+    white-space: nowrap;
   }
 
   .agent-card--executive .btn-interact,

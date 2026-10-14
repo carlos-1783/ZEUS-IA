@@ -77,22 +77,24 @@ async function toggle() {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: var(--zeus-surface-2, var(--panel-2));
-  border: 1px solid var(--zeus-border, var(--line));
+  /* Pomo metálico, mismo acabado que los botones de la barra superior */
+  background: var(--metal-face, var(--zeus-surface-2, var(--panel-2)));
+  border: 1px solid var(--metal-edge, var(--zeus-border, var(--line)));
+  border-bottom-color: var(--metal-edge-bottom, var(--zeus-border, var(--line)));
+  box-shadow: var(--metal-shadow-sm, none);
   color: var(--zeus-text, var(--fg));
   cursor: pointer;
-  transition: background var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
-    border-color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
+  transition: box-shadow var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease),
+    color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
 }
 
 .theme-toggle:hover:not(:disabled) {
-  background: var(--zeus-accent-soft);
-  border-color: var(--zeus-border-strong);
-  color: var(--zeus-accent);
+  box-shadow: var(--metal-shadow, none);
+  color: var(--volt-ink, var(--zeus-accent));
 }
 
 .theme-toggle:focus-visible {
-  outline: 2px solid var(--zeus-accent);
+  outline: 2px solid var(--volt, var(--zeus-accent));
   outline-offset: 2px;
 }
 

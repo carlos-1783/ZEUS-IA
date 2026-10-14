@@ -105,6 +105,8 @@ onMounted(loadDrafts)
   margin-right: -50vw;
   min-height: 100vh;
   background-image: var(--zeus-bg);
+  /* fijo a la ventana, igual que <html>: sin costura al hacer scroll */
+  background-attachment: fixed;
   font-family: var(--zeus-font-sans, 'Inter', sans-serif);
   color: var(--zeus-text, #0f172a);
   box-sizing: border-box;
@@ -153,7 +155,8 @@ onMounted(loadDrafts)
   color: var(--zeus-text, #0f172a);
 }
 .subtitle {
-  color: var(--zeus-text-secondary, #52607a);
+  /* va directamente sobre el acero de la pagina, no sobre un panel */
+  color: var(--zeus-text-on-page, var(--zeus-text-secondary, #52607a));
   margin: 0;
 }
 .loading, .error, .empty {

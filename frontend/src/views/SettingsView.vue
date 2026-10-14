@@ -39,6 +39,8 @@ function goBack() {
   min-height: 100vh;
   padding: 24px 20px 48px;
   background-image: var(--zeus-bg);
+  /* fijo a la ventana, igual que <html>: sin costura al hacer scroll */
+  background-attachment: fixed;
   color: var(--zeus-text, #0f172a);
   box-sizing: border-box;
 }

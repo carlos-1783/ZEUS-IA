@@ -860,6 +860,8 @@ onUnmounted(() => {
 .control-horario-container {
   min-height: 100vh;
   background-image: var(--zeus-bg);
+  /* fijo a la ventana, igual que <html>: sin costura al hacer scroll */
+  background-attachment: fixed;
   font-family: var(--zeus-font-sans, 'Inter', sans-serif);
   padding: 20px;
   position: relative;
@@ -1568,6 +1570,23 @@ onUnmounted(() => {
   }
   .check-buttons > button {
     flex: 1 1 100%;
+  }
+
+  /* Cabecera en movil: titulo y acciones en varias lineas (a 390px la
+     fila unica media 450px y "Oficina" quedaba cortado). */
+  .control-horario-header {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .control-horario-title {
+    font-size: 24px;
+  }
+
+  .header-actions {
+    flex-wrap: wrap;
+    gap: 8px;
   }
 }
 

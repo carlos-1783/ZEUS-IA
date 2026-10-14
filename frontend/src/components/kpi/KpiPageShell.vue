@@ -25,7 +25,9 @@ defineProps({
   position: relative;
   min-height: 100vh;
   padding: 32px;
+  background-color: var(--bg);
   background-image: var(--zeus-bg);
+  background-attachment: fixed;
   color: var(--zeus-text, #0f172a);
   font-family: var(--zeus-font-sans, 'Inter', sans-serif);
   box-sizing: border-box;
@@ -50,7 +52,7 @@ defineProps({
 }
 
 .kpi-back {
-  color: var(--zeus-accent, #4f46e5);
+  color: var(--volt-ink, var(--zeus-accent, #4f46e5));
   text-decoration: none;
   font-size: 14px;
   font-weight: 500;
@@ -71,7 +73,7 @@ defineProps({
 
 .kpi-subtitle {
   margin: 0;
-  color: var(--zeus-text-secondary, #52607a);
+  color: var(--ink-2, var(--zeus-text-secondary, #52607a));
   font-size: 14px;
 }
 
@@ -79,8 +81,16 @@ defineProps({
 .kpi-error {
   padding: 16px;
   border-radius: var(--zeus-radius, 12px);
-  background: var(--zeus-surface, #fff);
-  border: 1px solid var(--zeus-border, #e5e9f0);
+  background: var(--metal-face, var(--zeus-surface, #fff));
+  border: 1px solid var(--metal-edge, var(--zeus-border, #e5e9f0));
+  border-bottom-color: var(--metal-edge-bottom, var(--zeus-border, #e5e9f0));
+  box-shadow: var(--metal-shadow, none);
+}
+
+.kpi-back:focus-visible {
+  outline: 2px solid var(--volt, #2f82f0);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 .kpi-error {

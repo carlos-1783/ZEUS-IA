@@ -27,55 +27,206 @@
   --green: #3ecf8e;
 }
 
-/* ---- PLATINO (default; también sin atributo) ---- */
+/* ---- PLATINO METÁLICO (default; también sin atributo) ----
+   Acabado aprobado: acero profundo de fondo, láminas de platino cepillado
+   (gradiente en capas + grano + bisel + especular) para paneles/tarjetas,
+   gunmetal para iconos y botones, y un único acento: el rayo (--volt). */
 :root:not([data-theme]),
 :root[data-theme='light'] {
   color-scheme: light;
-  --bg: #e6e8ef;
-  --bg-2: #dfe2ea;
-  --panel: #ffffff;
-  --panel-2: #f3f5f9;
-  --raised: #eceff5;
-  --line: rgba(20, 28, 56, 0.10);
-  --line-2: rgba(20, 28, 56, 0.16);
-  --fg: #141a2b;
-  --muted: #56607a;
-  --faint: #8891a6;
+
+  /* Metal (valores aprobados) */
+  --base: #aab2bd;
+  --base-2: #949daa;
+  --sheet-hi: #e9edf1;
+  --sheet: #c5ccd5;
+  --sheet-lo: #9ba4b1;
+  --edge-hi: rgba(255, 255, 255, 0.95);
+  --edge-lo: rgba(96, 106, 122, 0.6);
+  --ink: #1d2430;
+  --ink-soft: #5a6475;
+  --ink-faint: #8c95a4;
+  --volt: #2f82f0;
+  --volt-2: #1559c6;
+  --volt-glow: rgba(47, 130, 240, 0.5);
+  --gun-1: #333c4b;
+  --gun-2: #161c27;
+  --ok: #17c279;
+  --warn: #efa21d;
+  --off: #9aa3b1;
+  /* Texto sobre lámina de platino: --ink-soft/--ink-faint aprobados no
+     llegan a AA sobre la zona baja del gradiente (#9ba4b1); para TEXTO se
+     usan estas variantes medidas (ver reporte de contraste). */
+  --ink-2: #2a3240;
+  --ink-3: #2e3644;
+  --ok-ink: #05603b;
+  --warn-ink: #683b00;
+  --volt-ink: #0c3d86;
+  --volt-ink-hover: #082f6b;
+
+  /* Fondo de página: acero profundo + reflejo cenital + halo del rayo */
+  --metal-page: radial-gradient(1100px 520px at 88% -12%, rgba(255, 255, 255, 0.75), transparent 60%),
+    radial-gradient(900px 600px at 10% 110%, rgba(47, 130, 240, 0.07), transparent 55%),
+    linear-gradient(158deg, #b9c0ca 0%, #9ea7b3 50%, #858e9c 100%);
+  --metal-grain: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05) 0 1px, rgba(0, 0, 0, 0.04) 1px 2px);
+  --metal-grain-opacity: 0.75;
+
+  /* Lámina: brillo superior + cepillado + cuerpo de platino */
+  --metal-face: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0) 16%, rgba(0, 0, 0, 0.03) 100%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.06) 0 1px, rgba(0, 0, 0, 0.03) 1px 2px),
+    linear-gradient(176deg, var(--sheet-hi) 0%, var(--sheet) 38%, var(--sheet-lo) 100%);
+  /* Raíl (barras lateral y superior): mismo metal, cepillado en vertical y
+     sin oscurecer hacia abajo (su texto llega al pie de la ventana). */
+  --metal-rail: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 120px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.07) 0 1px, rgba(0, 0, 0, 0.025) 1px 3px),
+    linear-gradient(90deg, var(--sheet-hi) 0%, #d6dce3 55%, var(--sheet) 100%);
+  --metal-edge: var(--edge-hi);
+  --metal-edge-bottom: var(--edge-lo);
+  --metal-shadow: 0 12px 28px -8px rgba(18, 26, 44, 0.45), 0 2px 6px rgba(18, 26, 44, 0.2),
+    inset 0 1px 1px rgba(255, 255, 255, 0.85), inset 0 -3px 7px rgba(70, 80, 98, 0.30);
+  --metal-shadow-hover: 0 18px 34px -10px rgba(18, 26, 44, 0.55), 0 3px 8px rgba(18, 26, 44, 0.22),
+    inset 0 1px 1px rgba(255, 255, 255, 0.9), inset 0 -3px 7px rgba(70, 80, 98, 0.30);
+  --metal-shadow-sm: 0 3px 8px -3px rgba(18, 26, 44, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.85),
+    inset 0 -2px 4px rgba(70, 80, 98, 0.25);
+  --metal-sheen: linear-gradient(116deg, transparent 0 52%, rgba(255, 255, 255, 0.4) 66%, rgba(255, 255, 255, 0.08) 74%, transparent 84%);
+  --metal-sheen-opacity: 0.6;
+  /* Hueco grabado (estado activo de la barra lateral) */
+  --metal-well: linear-gradient(180deg, rgba(29, 36, 48, 0.10), rgba(29, 36, 48, 0.04));
+  --metal-well-shadow: inset 0 1px 2px rgba(18, 26, 44, 0.28), inset 0 -1px 0 rgba(255, 255, 255, 0.6);
+
+  /* Gunmetal: badges de icono y botones */
+  --gun-badge: linear-gradient(155deg, #454f61, #1a212e);
+  --gun-badge-shadow: 0 5px 12px -3px rgba(8, 16, 32, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --gun-icon: #cdd8e8;
+  --gun-btn: linear-gradient(170deg, var(--gun-1), var(--gun-2));
+  --gun-btn-hover: linear-gradient(170deg, #3d4759, #1b2230);
+  --gun-btn-fg: #eef4ff;
+  --gun-btn-border: rgba(255, 255, 255, 0.14);
+  --gun-btn-shadow: 0 4px 11px -2px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.14);
+  --gun-btn-shadow-hover: 0 7px 16px -4px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+
+  /* Nombres base del sistema, en metal */
+  --bg: #9ea7b3;
+  /* zonas secundarias (cabeceras de tabla, sidebars): chapa, no acero */
+  --bg-2: #cdd3db;
+  --panel: #dfe4ea;
+  --panel-2: #d3d9e0;
+  /* Relleno interior (opciones, filas, chips) dentro de un panel: chapa
+     clara, nunca el acero de la página. */
+  --fill: #eef1f4;
+  --raised: #c9d0d8;
+  --line: rgba(29, 36, 48, 0.14);
+  --line-2: rgba(29, 36, 48, 0.24);
+  --fg: var(--ink);
+  /* Gris secundario para superficies PLANAS claras (paneles, rellenos,
+     cabeceras): AA sobre #dfe4ea / #cdd3db / #c9d0d8. Sobre las láminas
+     metálicas, cuyo tramo bajo es más oscuro, los componentes usan
+     --ink-2 / --ink-3. */
+  --muted: #3f4858;
+  --faint: #4d5667;
   --violet: #6a5cff;
   --violet-2: #5243d6;
   --violet-soft: rgba(106, 92, 255, 0.12);
-  --btn: #141a2b;
+  --volt-soft: rgba(47, 130, 240, 0.14);
+  --btn: var(--gun-2);
   --btn-fg: #ffffff;
 
-  /* Estados (texto legible sobre panel claro) */
+  /* Estados (texto legible sobre platino) */
   --zeus-success-soft: #e9faf3;
   --zeus-warning-soft: #fef6e7;
   --zeus-danger-soft: #fdecec;
   --zeus-info-soft: #eaf2ff;
-  --zeus-success-text: #0d9668;
-  --zeus-warning-text: #b45309;
-  --zeus-danger-text: #b91c1c;
-  --zeus-info-text: #2563eb;
+  --zeus-success-text: var(--ok-ink);
+  --zeus-warning-text: var(--warn-ink);
+  --zeus-danger-text: #7a0d12;
+  --zeus-info-text: #1452b8;
 
   --zeus-overlay: rgba(20, 26, 43, 0.40);
 }
 
-/* ---- OSCURO (opción del cliente) ---- */
+/* ---- GRAFITO METÁLICO (opción del cliente) ----
+   Mismo acabado que el platino, en grafito. El especular se contiene: en
+   oscuro un brillo fuerte se lee como plástico, no como metal. */
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #0a0e1a;
-  --bg-2: #0c1120;
-  --panel: #131a2c;
-  --panel-2: #1a2238;
-  --raised: #202a44;
-  --line: rgba(140, 162, 214, 0.14);
-  --line-2: rgba(140, 162, 214, 0.24);
-  --fg: #eceef6;
-  --muted: #9aa3bd;
-  --faint: #6b7496;
+
+  --base: #141b27;
+  --base-2: #0e141f;
+  --sheet-hi: #2a3345;
+  --sheet: #1c2433;
+  --sheet-lo: #121823;
+  --edge-hi: rgba(255, 255, 255, 0.08);
+  --edge-lo: rgba(0, 0, 0, 0.5);
+  --ink: #e7ecf5;
+  --ink-soft: #9aa6bd;
+  --ink-faint: #6b7791;
+  --volt: #2f82f0;
+  --volt-2: #5a9cf5;
+  --volt-glow: rgba(47, 130, 240, 0.5);
+  --gun-1: #3a4457;
+  --gun-2: #1a2130;
+  --ok: #17c279;
+  --warn: #efa21d;
+  --off: #6b7791;
+  --ink-2: #aab5c9;
+  --ink-3: #9aa6bd;
+  --ok-ink: #2fd38c;
+  --warn-ink: #f2b13f;
+  --volt-ink: #8dbdfa;
+  --volt-ink-hover: #b0d2fc;
+
+  --metal-page: radial-gradient(1100px 520px at 88% -12%, rgba(120, 150, 200, 0.10), transparent 60%),
+    radial-gradient(900px 600px at 10% 110%, rgba(47, 130, 240, 0.08), transparent 55%),
+    linear-gradient(158deg, #141b27 0%, #0e141f 55%, #090d15 100%);
+  --metal-grain: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05) 0 1px, rgba(0, 0, 0, 0.04) 1px 2px);
+  --metal-grain-opacity: 0.5;
+
+  --metal-face: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 16%, rgba(0, 0, 0, 0.10) 100%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.022) 0 1px, rgba(0, 0, 0, 0.07) 1px 2px),
+    linear-gradient(176deg, var(--sheet-hi) 0%, var(--sheet) 38%, var(--sheet-lo) 100%);
+  --metal-rail: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 120px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.018) 0 1px, rgba(0, 0, 0, 0.06) 1px 3px),
+    linear-gradient(90deg, #202939 0%, var(--sheet) 60%, #171e2b 100%);
+  --metal-edge: var(--edge-hi);
+  --metal-edge-bottom: var(--edge-lo);
+  --metal-shadow: 0 12px 28px -8px rgba(0, 0, 0, 0.7), 0 2px 6px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10), inset 0 -3px 7px rgba(0, 0, 0, 0.35);
+  --metal-shadow-hover: 0 18px 34px -10px rgba(0, 0, 0, 0.8), 0 3px 8px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 -3px 7px rgba(0, 0, 0, 0.35);
+  --metal-shadow-sm: 0 3px 8px -3px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.35);
+  --metal-sheen: linear-gradient(116deg, transparent 0 52%, rgba(255, 255, 255, 0.10) 66%, rgba(255, 255, 255, 0.02) 74%, transparent 84%);
+  --metal-sheen-opacity: 0.55;
+  --metal-well: linear-gradient(180deg, rgba(0, 0, 0, 0.30), rgba(0, 0, 0, 0.14));
+  --metal-well-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+
+  --gun-badge: linear-gradient(155deg, #4a5468, #1a212e);
+  --gun-badge-shadow: 0 5px 12px -3px rgba(0, 0, 0, 0.7), inset 0 1px 1px rgba(255, 255, 255, 0.20),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --gun-icon: #cdd8e8;
+  --gun-btn: linear-gradient(170deg, var(--gun-1), var(--gun-2));
+  --gun-btn-hover: linear-gradient(170deg, #45506a, #1f2738);
+  --gun-btn-fg: #eef4ff;
+  --gun-btn-border: rgba(255, 255, 255, 0.14);
+  --gun-btn-shadow: 0 4px 11px -2px rgba(0, 0, 0, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.14);
+  --gun-btn-shadow-hover: 0 7px 16px -4px rgba(0, 0, 0, 0.65), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+
+  --bg: #0e141f;
+  --bg-2: #121823;
+  --panel: #1c2433;
+  --panel-2: #222b3c;
+  --fill: #242d3f;
+  --raised: #2a3345;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-2: rgba(255, 255, 255, 0.15);
+  --fg: var(--ink);
+  --muted: var(--ink-2);
+  --faint: var(--ink-3);
   --violet: #8b7bff;
   --violet-2: #b3a8ff;
   --violet-soft: rgba(139, 123, 255, 0.16);
+  --volt-soft: rgba(47, 130, 240, 0.18);
   --btn: #ffffff;
   --btn-fg: #0a0e1a;
 
@@ -87,8 +238,8 @@
   --zeus-warning-soft: rgba(245, 166, 35, 0.14);
   --zeus-danger-soft: rgba(255, 93, 108, 0.14);
   --zeus-info-soft: rgba(91, 140, 255, 0.14);
-  --zeus-success-text: var(--green);
-  --zeus-warning-text: var(--amber);
+  --zeus-success-text: var(--ok-ink);
+  --zeus-warning-text: var(--warn-ink);
   --zeus-danger-text: var(--red);
   --zeus-info-text: var(--blue);
 
@@ -107,12 +258,13 @@ html:root {
   /* Fondo de página: el de la spec. Se expresa solo con capas de imagen
      (linear-gradient plano para el color) porque muchos componentes lo
      consumen como background-image: var(--zeus-bg). */
-  --zeus-bg: radial-gradient(900px 500px at 80% -8%, var(--violet-soft), transparent 60%),
-    linear-gradient(var(--bg), var(--bg));
+  --zeus-bg: var(--metal-page);
   --zeus-bg-bands: linear-gradient(var(--bg), var(--bg));
   --zeus-bg-sheen: linear-gradient(transparent, transparent);
   --zeus-metal-bg: var(--zeus-bg);
-  --zeus-bg-flat: var(--bg);
+  /* --zeus-bg-flat se usa como RELLENO INTERIOR (botones de opción, filas,
+     chips), no como fondo de página: apunta a --fill, no al acero. */
+  --zeus-bg-flat: var(--fill);
   --zeus-bg-subtle: var(--bg-2);
 
   --zeus-surface: var(--panel);
@@ -125,13 +277,27 @@ html:root {
   --zeus-text: var(--fg);
   --zeus-text-secondary: var(--muted);
   --zeus-text-muted: var(--faint);
+  /* Texto secundario puesto directamente sobre el acero de la página
+     (subtítulos de cabecera fuera de panel): más oscuro que --muted. */
+  --zeus-text-on-page: var(--ink-2);
   --zeus-text-on-accent: #ffffff;
 
-  --zeus-accent: var(--violet);
-  --zeus-accent-hover: var(--violet-2);
-  --zeus-accent-soft: var(--violet-soft);
-  --zeus-accent-2: var(--violet);
-  --zeus-accent-2-soft: var(--violet-soft);
+  /* Acción principal de cada vista: el rayo (antes degradado turquesa→
+     violeta→rosa, que no llegaba a AA con texto blanco y competía con el
+     acento único). Tres paradas del mismo azul; blanco >= 4.5:1 en todo
+     el recorrido. Igual en ambos temas. */
+  --zeus-accent-gradient: linear-gradient(170deg, #2a74d8 0%, #1f66cf 50%, #1559c6 100%);
+  --zeus-accent-gradient-shadow: 0 4px 11px -3px rgba(47, 130, 240, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.22);
+  --zeus-accent-gradient-shadow-hover: 0 7px 16px -4px rgba(47, 130, 240, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.28);
+
+  /* Acento único: el rayo de Zeus. Como color de TEXTO/enlace se usa su
+     variante con contraste AA sobre metal (--volt-ink); el --volt puro
+     queda para brillos, filos y foco. */
+  --zeus-accent: var(--volt-ink);
+  --zeus-accent-hover: var(--volt-ink-hover);
+  --zeus-accent-soft: var(--volt-soft);
+  --zeus-accent-2: var(--volt-ink);
+  --zeus-accent-2-soft: var(--volt-soft);
 
   /* theme.css / css_system_enforcer_v1 */
   --bg-main: var(--bg);
@@ -145,9 +311,49 @@ html:root {
   --text-color: var(--fg);
 }
 
-/* Base del documento: gana a html,body{} de index.css y body{} de main.scss */
-html:root,
-html:root body {
+/* Sobre las láminas metálicas (tramo bajo más oscuro que un panel plano)
+   el gris secundario se oscurece. Se reasignan también los alias porque
+   las custom properties se resuelven en :root y se heredan ya resueltas. */
+:root:not([data-theme]) :is(.zeus-metal, .kpi-item, .agent-card, .zeus-core-card, .sidebar-dark, .app-topbar, .kpi-page-shell),
+:root[data-theme='light'] :is(.zeus-metal, .kpi-item, .agent-card, .zeus-core-card, .sidebar-dark, .app-topbar, .kpi-page-shell) {
+  --muted: var(--ink-2);
+  --faint: var(--ink-3);
+  --zeus-text-secondary: var(--ink-2);
+  --zeus-text-muted: var(--ink-3);
+  --text-secondary: var(--ink-2);
+}
+
+/* Base del documento: gana a html,body{} de index.css y body{} de main.scss.
+   El acero se pinta en <html> (fijo a la ventana) para que no haya costuras
+   cuando una vista no ocupa todo el ancho. */
+html:root {
   background-color: var(--bg);
+  background-image: var(--metal-page);
+  background-attachment: fixed;
   color: var(--fg);
+}
+
+html:root body {
+  background-color: transparent;
+  color: var(--fg);
+}
+
+/* Grano cepillado global: una sola capa fija sobre toda la app (no
+   intercepta clics). Da la textura de metal también a las pantallas que
+   aún pintan superficies planas. */
+html:root::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+  background-image: var(--metal-grain);
+  mix-blend-mode: soft-light;
+  opacity: var(--metal-grain-opacity);
+}
+
+@media print {
+  html:root::after {
+    display: none;
+  }
 }

@@ -180,20 +180,22 @@
 
 .tab-status.real,
 .flags-grid li.on {
-  background: #dcfce7 !important;
-  color: #15803d !important;
+  /* tokens del tema: antes fijos en claro y en oscuro quedaban como
+     bloques blancos con texto gris (4.3:1) */
+  background: var(--zeus-success-soft, #dcfce7) !important;
+  color: var(--zeus-success-text, #15803d) !important;
 }
 
 .tab-status.partial,
 .system-badge {
-  background: #fef3c7 !important;
-  color: #b45309 !important;
+  background: var(--zeus-warning-soft, #fef3c7) !important;
+  color: var(--zeus-warning-text, #b45309) !important;
 }
 
 .tab-status.sim,
 .flags-grid li.off {
-  background: #f1f5f9 !important;
-  color: #64748b !important;
+  background: var(--zeus-bg-subtle, #f1f5f9) !important;
+  color: var(--zeus-text-secondary, #64748b) !important;
 }
 
 /* ------------------------------------------------------------------ */

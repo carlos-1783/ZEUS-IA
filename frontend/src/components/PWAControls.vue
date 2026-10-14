@@ -109,25 +109,37 @@ const installApp = async () => {
   cursor: wait;
 }
 
+/* Instalar: única acción con el acento del rayo en esta barra. */
 .pwa-btn--install {
-  background: rgba(59, 130, 246, 0.9);
-  border-color: rgba(59, 130, 246, 0.4);
+  background: linear-gradient(170deg, #2a74d8, #1559c6);
+  border-color: rgba(255, 255, 255, 0.22);
   color: #fff;
+  box-shadow: 0 4px 11px -3px var(--volt-glow, rgba(47, 130, 240, 0.5)), inset 0 1px 1px rgba(255, 255, 255, 0.25);
 }
 
 .pwa-btn--install:hover:not(:disabled) {
-  background: rgba(59, 130, 246, 0.75);
-  transform: scale(1.03);
+  box-shadow: 0 6px 16px -4px var(--volt-glow, rgba(47, 130, 240, 0.5)), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
 }
 
-.pwa-btn--cache {
-  background: rgba(255, 165, 0, 0.12);
-  border-color: rgba(255, 165, 0, 0.35);
-  color: #ffa500;
+/* Resto: chapas metálicas pequeñas, texto en tinta (el color va al punto). */
+.pwa-btn--cache,
+.pwa-status,
+.pwa-debug {
+  background: var(--metal-face, var(--zeus-surface));
+  border: 1px solid var(--metal-edge, var(--zeus-border));
+  border-bottom-color: var(--metal-edge-bottom, var(--zeus-border));
+  box-shadow: var(--metal-shadow-sm, none);
+  color: var(--ink, var(--zeus-text));
 }
 
 .pwa-btn--cache:hover:not(:disabled) {
-  background: rgba(255, 165, 0, 0.22);
+  box-shadow: var(--metal-shadow, none);
+}
+
+.pwa-btn:focus-visible {
+  outline: 2px solid var(--volt, #2f82f0);
+  outline-offset: 2px;
 }
 
 .pwa-status {
@@ -138,25 +150,29 @@ const installApp = async () => {
   white-space: nowrap;
 }
 
-.pwa-status.online {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+.pwa-status.online::first-letter {
+  color: var(--ok, #10b981);
 }
 
-.pwa-status.degraded {
-  background: rgba(255, 165, 0, 0.15);
-  color: #ffa500;
-  border: 1px solid rgba(255, 165, 0, 0.3);
+.pwa-status.degraded::first-letter {
+  color: var(--warn, #ffa500);
 }
 
 .pwa-debug {
   padding: 4px 8px;
-  background: rgba(255, 165, 0, 0.15);
-  border: 1px solid rgba(255, 165, 0, 0.3);
   border-radius: 10px;
-  color: #ffa500;
+  color: var(--warn-ink, #ffa500);
   font-size: 10px;
   cursor: help;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pwa-btn {
+    transition: none;
+  }
+
+  .pwa-btn--install:hover:not(:disabled) {
+    transform: none;
+  }
 }
 </style>

@@ -581,7 +581,7 @@ onMounted(async () => {
 .back-link { color: var(--zeus-accent, #4f46e5); text-decoration: none; font-size: 14px; font-weight: 500; }
 .back-link:hover { text-decoration: underline; }
 .ins-header h1 { margin: 8px 0 4px; font-size: var(--zeus-text-xl, 24px); color: var(--zeus-text, #0f172a); }
-.subtitle { color: var(--zeus-text-secondary, #52607a); margin: 0; }
+.subtitle { color: var(--zeus-text-on-page, var(--zeus-text-secondary, #52607a)); margin: 0; }
 .global-error {
   background: var(--zeus-danger-soft, #fdecea);
   color: #b71c1c;

@@ -277,6 +277,9 @@ html:root {
   --zeus-text: var(--fg);
   --zeus-text-secondary: var(--muted);
   --zeus-text-muted: var(--faint);
+  /* Texto secundario puesto directamente sobre el acero de la página
+     (subtítulos de cabecera fuera de panel): más oscuro que --muted. */
+  --zeus-text-on-page: var(--ink-2);
   --zeus-text-on-accent: #ffffff;
 
   /* Acción principal de cada vista: el rayo (antes degradado turquesa→

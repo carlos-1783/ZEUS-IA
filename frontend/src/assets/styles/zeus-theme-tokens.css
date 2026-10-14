@@ -119,8 +119,12 @@
   --line: rgba(29, 36, 48, 0.14);
   --line-2: rgba(29, 36, 48, 0.24);
   --fg: var(--ink);
-  --muted: var(--ink-2);
-  --faint: var(--ink-3);
+  /* Gris secundario para superficies PLANAS claras (paneles, rellenos,
+     cabeceras): AA sobre #dfe4ea / #cdd3db / #c9d0d8. Sobre las láminas
+     metálicas, cuyo tramo bajo es más oscuro, los componentes usan
+     --ink-2 / --ink-3. */
+  --muted: #3f4858;
+  --faint: #4d5667;
   --violet: #6a5cff;
   --violet-2: #5243d6;
   --violet-soft: rgba(106, 92, 255, 0.12);
@@ -294,6 +298,18 @@ html:root {
   /* Crítico de index.html */
   --bg-color: var(--bg);
   --text-color: var(--fg);
+}
+
+/* Sobre las láminas metálicas (tramo bajo más oscuro que un panel plano)
+   el gris secundario se oscurece. Se reasignan también los alias porque
+   las custom properties se resuelven en :root y se heredan ya resueltas. */
+:root:not([data-theme]) :is(.zeus-metal, .kpi-item, .agent-card, .zeus-core-card, .sidebar-dark, .app-topbar, .kpi-page-shell),
+:root[data-theme='light'] :is(.zeus-metal, .kpi-item, .agent-card, .zeus-core-card, .sidebar-dark, .app-topbar, .kpi-page-shell) {
+  --muted: var(--ink-2);
+  --faint: var(--ink-3);
+  --zeus-text-secondary: var(--ink-2);
+  --zeus-text-muted: var(--ink-3);
+  --text-secondary: var(--ink-2);
 }
 
 /* Base del documento: gana a html,body{} de index.css y body{} de main.scss.

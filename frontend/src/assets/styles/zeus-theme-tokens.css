@@ -279,6 +279,14 @@ html:root {
   --zeus-text-muted: var(--faint);
   --zeus-text-on-accent: #ffffff;
 
+  /* Acción principal de cada vista: el rayo (antes degradado turquesa→
+     violeta→rosa, que no llegaba a AA con texto blanco y competía con el
+     acento único). Tres paradas del mismo azul; blanco >= 4.5:1 en todo
+     el recorrido. Igual en ambos temas. */
+  --zeus-accent-gradient: linear-gradient(170deg, #2a74d8 0%, #1f66cf 50%, #1559c6 100%);
+  --zeus-accent-gradient-shadow: 0 4px 11px -3px rgba(47, 130, 240, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.22);
+  --zeus-accent-gradient-shadow-hover: 0 7px 16px -4px rgba(47, 130, 240, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.28);
+
   /* Acento único: el rayo de Zeus. Como color de TEXTO/enlace se usa su
      variante con contraste AA sobre metal (--volt-ink); el --volt puro
      queda para brillos, filos y foco. */

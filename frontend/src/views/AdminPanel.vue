@@ -1602,15 +1602,21 @@ td {
   color: var(--zeus-text, #0f172a);
 }
 
+/* No configurado: anillo hueco en el gris secundario (>=3:1 sobre la
+   chapa); configurado: punto relleno en el verde de estado. Se
+   distinguen por forma y no solo por color. */
 .status-dot {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #d1d5db;
+  box-sizing: border-box;
+  background: transparent;
+  border: 2px solid var(--zeus-text-muted, #6b7280);
 }
 
 .status-dot.active {
-  background: #10b981;
+  background: var(--zeus-success-text, #10b981);
+  border-color: var(--zeus-success-text, #10b981);
   box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
 }
 

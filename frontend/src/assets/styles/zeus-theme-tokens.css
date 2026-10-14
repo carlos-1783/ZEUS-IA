@@ -112,6 +112,9 @@
   --bg-2: #cdd3db;
   --panel: #dfe4ea;
   --panel-2: #d3d9e0;
+  /* Relleno interior (opciones, filas, chips) dentro de un panel: chapa
+     clara, nunca el acero de la página. */
+  --fill: #eef1f4;
   --raised: #c9d0d8;
   --line: rgba(29, 36, 48, 0.14);
   --line-2: rgba(29, 36, 48, 0.24);
@@ -209,6 +212,7 @@
   --bg-2: #121823;
   --panel: #1c2433;
   --panel-2: #222b3c;
+  --fill: #242d3f;
   --raised: #2a3345;
   --line: rgba(255, 255, 255, 0.08);
   --line-2: rgba(255, 255, 255, 0.15);
@@ -254,7 +258,9 @@ html:root {
   --zeus-bg-bands: linear-gradient(var(--bg), var(--bg));
   --zeus-bg-sheen: linear-gradient(transparent, transparent);
   --zeus-metal-bg: var(--zeus-bg);
-  --zeus-bg-flat: var(--bg);
+  /* --zeus-bg-flat se usa como RELLENO INTERIOR (botones de opción, filas,
+     chips), no como fondo de página: apunta a --fill, no al acero. */
+  --zeus-bg-flat: var(--fill);
   --zeus-bg-subtle: var(--bg-2);
 
   --zeus-surface: var(--panel);

@@ -31,7 +31,7 @@
           :title="authStore.user?.name || authStore.user?.email || ''"
           @click="closeSidebarOnMobile(); goToUserSettings()"
         >
-          <span class="topbar-user-icon">👤</span>
+          <svg class="topbar-user-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12.2a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" /><path d="M4.5 20.2a7.5 7.5 0 0 1 15 0" /></svg>
           <span class="topbar-user-label">{{ authStore.user?.name || authStore.user?.email || t('dashboardPro.nav.settings') }}</span>
           <span class="topbar-chevron" aria-hidden="true">⌄</span>
         </button>
@@ -1459,8 +1459,8 @@ onUnmounted(() => {
 }
 
 .topbar-user-icon {
-  font-size: 14px;
-  filter: grayscale(1) contrast(1.1);
+  flex-shrink: 0;
+  color: var(--ink-2, currentColor);
 }
 
 .topbar-user-label {

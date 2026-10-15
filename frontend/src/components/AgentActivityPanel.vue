@@ -1,8 +1,8 @@
 <template>
   <div class="activity-panel">
-    <!-- Header: identidad del agente. Sin toggle Texto/Voz aquí — el orbe lleva el suyo propio
-         (micro/teclado) y es ahora la única superficie de chat, así que un segundo control
-         redundante arriba solo confundía. -->
+    <!-- Header: identidad del agente + único punto de entrada a Herramientas/Actividad/Métricas
+         (menú ⋮). Sin toggle Texto/Voz aquí — el orbe lleva el suyo propio (micro/teclado). El
+         orbe ya no tiene cabecera propia: esta es la única, para no duplicar marco ni identidad. -->
     <div class="panel-header">
       <div class="agent-info">
         <span class="agent-avatar-ring">
@@ -13,12 +13,31 @@
           <p class="agent-role">{{ agent.role }}</p>
         </div>
       </div>
+      <div class="header-menu-wrap">
+        <button
+          type="button"
+          class="header-menu-btn"
+          :aria-expanded="menuOpen ? 'true' : 'false'"
+          aria-haspopup="menu"
+          aria-label="Más paneles"
+          title="Más paneles"
+          @click="menuOpen = !menuOpen"
+        >
+          ⋮
+        </button>
+        <div v-if="menuOpen" class="header-menu" role="menu">
+          <button type="button" role="menuitem" @click="selectPanel('tools')">🛠️ Herramientas</button>
+          <button type="button" role="menuitem" @click="selectPanel('activity')">📊 Actividad</button>
+          <button type="button" role="menuitem" @click="selectPanel('metrics')">📈 Métricas</button>
+        </div>
+      </div>
     </div>
 
     <!-- El orbe ES la pantalla principal: sin pestañas. "Herramientas / Actividad / Métricas"
          siguen existiendo tal cual (no se rehacen), solo cambia cómo se llega — desde el menú ⋮
-         del propio orbe, que las despliega como un panel más junto a él. -->
+         de arriba, que las despliega como un panel más junto al orbe. -->
     <AgentVoiceOrb
+      ref="orbRef"
       :key="agent.name"
       :agent="agent"
       :panel-titles="panelTitles"
@@ -161,6 +180,16 @@ const currentWorkspace = computed(() => {
 const panelTitles = { tools: 'Herramientas', activity: 'Actividad', metrics: 'Métricas' }
 const daysSelectId = `days-${Math.random().toString(36).slice(2, 8)}`
 
+// Menú ⋮ de la cabecera: controla el orbe por referencia (único punto de entrada a los paneles).
+const orbRef = ref(null)
+const menuOpen = ref(false)
+
+function selectPanel(key) {
+  menuOpen.value = false
+  orbRef.value?.choosePanel(key)
+}
+
+
 // Activities
 const activities = ref([])
 const activityDays = ref(7)
@@ -201,6 +230,7 @@ onUnmounted(() => {
 watch(() => props.agent.name, () => {
   activities.value = []
   metrics.value = {}
+  menuOpen.value = false
 })
 
 const loadActivities = async () => {
@@ -408,6 +438,58 @@ const formatMetricValue = (value) => {
   margin: 4px 0 0;
   font-size: 12px;
   color: var(--zeus-text-muted, #8792a6);
+}
+
+.header-menu-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.header-menu-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--zeus-border, #e5e9f0);
+  background: var(--zeus-surface, #fff);
+  color: var(--zeus-text, #0f172a);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.header-menu-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--zeus-shadow-focus, 0 0 0 3px rgba(106, 92, 255, 0.3));
+}
+
+.header-menu {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 6px;
+  border-radius: var(--zeus-radius, 12px);
+  border: 1px solid var(--zeus-border, #e5e9f0);
+  background: var(--zeus-surface, #fff);
+  box-shadow: var(--zeus-shadow-lg, 0 12px 32px rgba(15, 23, 42, 0.18));
+}
+
+.header-menu button {
+  text-align: left;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--zeus-text, #0f172a);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.header-menu button:hover {
+  background: var(--zeus-bg-subtle, #eef1f6);
 }
 
 /* Actividad (dentro del deck del orbe) */

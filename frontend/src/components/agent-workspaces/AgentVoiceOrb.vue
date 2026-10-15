@@ -4,30 +4,9 @@
     :class="[`is-${stage}`, { 'is-deployed': deployed }]"
     :aria-label="`Asistente de voz de ${agentLabel}`"
   >
-    <header class="orb-head">
-      <div class="orb-head-id">
-        <strong>{{ agentLabel }}</strong>
-        <span v-if="agent.role" class="orb-head-role">· {{ agent.role }}</span>
-      </div>
-      <div class="orb-head-actions">
-        <button
-          type="button"
-          class="orb-icon-btn"
-          :aria-expanded="menuOpen ? 'true' : 'false'"
-          aria-haspopup="menu"
-          aria-label="Más paneles"
-          title="Más paneles"
-          @click="menuOpen = !menuOpen"
-        >
-          ⋮
-        </button>
-        <div v-if="menuOpen" class="orb-menu" role="menu">
-          <button type="button" role="menuitem" @click="choosePanel('tools')">🛠️ Herramientas</button>
-          <button type="button" role="menuitem" @click="choosePanel('activity')">📊 Actividad</button>
-          <button type="button" role="menuitem" @click="choosePanel('metrics')">📈 Métricas</button>
-        </div>
-      </div>
-    </header>
+    <!-- Sin cabecera propia: el encuadre y la identidad del agente (avatar/nombre/rol) son los de
+         AgentActivityPanel.vue — un solo marco, una sola cabecera. El menú ⋮ de paneles vive ahí
+         también y controla este componente por referencia (choosePanel/closePanel expuestos). -->
 
     <!-- El orbe es la pantalla de inicio: grande y centrado en reposo; se encoge y sube
          cuando hay algo que enseñar (respuesta del chat, panel elegido en el menú ⋮). -->
@@ -280,13 +259,11 @@ const stage = computed<'idle' | 'listening' | 'busy'>(() => {
 
 const voiceError = computed(() => localError.value || voice.error.value);
 
-// --------------------------------------------------------------------- menú ⋮ y panel desplegado
+// --------------------------------------------------------------------- panel desplegado (menú ⋮ en AgentActivityPanel.vue)
 
-const menuOpen = ref(false);
 const activePanel = ref<'tools' | 'activity' | 'metrics' | null>(null);
 
 function choosePanel(key: 'tools' | 'activity' | 'metrics'): void {
-  menuOpen.value = false;
   if (activePanel.value === key) {
     activePanel.value = null;
     emit('panel-closed', key);
@@ -520,7 +497,7 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   }
 }
 
-defineExpose({ closePanel });
+defineExpose({ closePanel, choosePanel, activePanel });
 </script>
 
 <style scoped>
@@ -539,22 +516,17 @@ defineExpose({ closePanel });
   --orb-size: 340px;
   --orb-stage-min-h: 420px;
 
+  /* Sin tarjeta propia: este componente vive DENTRO del único encuadre platino de
+     AgentActivityPanel.vue (.activity-panel) — sin borde/fondo/sombra/radio propios,
+     para no duplicar esa tarjeta ("doble marco"). */
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  padding: 14px 20px 20px;
-  margin-bottom: 20px;
-  border-radius: var(--zeus-radius-lg, 16px);
-  border: 1px solid var(--orb-line);
-  background:
-    radial-gradient(640px 420px at 50% 0%, color-mix(in srgb, var(--orb-a) 10%, transparent), transparent 70%),
-    var(--orb-panel);
+  padding: 4px 4px 8px;
   color: var(--orb-fg);
-  box-shadow: var(--zeus-shadow-md, 0 4px 16px rgba(15, 23, 42, 0.06));
   font-family: var(--zeus-font-sans, inherit);
-  overflow: hidden;
 }
 
 /* Rejilla HUD sutil de fondo, solo mientras el orbe está en reposo grande (pantalla principal). */
@@ -577,72 +549,6 @@ defineExpose({ closePanel });
   opacity: 0.15;
 }
 
-.orb-head {
-  position: relative;
-  z-index: 2;
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.orb-head-id strong {
-  font-size: var(--zeus-text-md, 17px);
-}
-
-.orb-head-role {
-  margin-left: 6px;
-  color: var(--orb-muted);
-  font-size: var(--zeus-text-sm, 13px);
-}
-
-.orb-head-actions {
-  position: relative;
-}
-
-.orb-icon-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--zeus-radius-full, 999px);
-  border: 1px solid var(--orb-line);
-  background: var(--orb-panel);
-  color: var(--orb-fg);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.orb-menu {
-  position: absolute;
-  top: 44px;
-  right: 0;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  min-width: 180px;
-  padding: 6px;
-  border-radius: var(--zeus-radius, 12px);
-  border: 1px solid var(--orb-line);
-  background: var(--orb-panel);
-  box-shadow: var(--zeus-shadow-lg, 0 12px 32px rgba(15, 23, 42, 0.18));
-}
-
-.orb-menu button {
-  text-align: left;
-  padding: 9px 10px;
-  border: none;
-  border-radius: var(--zeus-radius-sm, 8px);
-  background: transparent;
-  color: var(--orb-fg);
-  font-size: var(--zeus-text-sm, 13px);
-  cursor: pointer;
-}
-
-.orb-menu button:hover {
-  background: var(--orb-panel-2);
-}
-
-.orb-icon-btn:focus-visible,
 .orb-side-btn:focus-visible,
 .orb-mic:focus-visible,
 .win-close:focus-visible {

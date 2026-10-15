@@ -25,6 +25,34 @@ export interface JarvisVoiceOptions {
   rate?: number;
   /** Se invoca solo con transcripciones FINALES, nunca mientras el agente habla. */
   onFinal?: (transcript: string) => void;
+  /**
+   * Genero de la voz sintetizada para este agente (cada agente tiene una personalidad y voz
+   * propias). La Web Speech API no expone el genero de una voz: se infiere por nombres conocidos
+   * de voces es-ES/es-* de los motores TTS mas comunes (Windows/SAPI, macOS, Chrome/Android). Si
+   * no hay ninguna voz reconocible de ese genero, se usa la primera voz en espanol disponible.
+   */
+  voiceGender?: 'male' | 'female';
+}
+
+const MALE_VOICE_HINTS = [
+  'jorge', 'pablo', 'diego', 'juan', 'miguel', 'carlos', 'enrique', 'raul', 'raúl', 'alvaro',
+  'álvaro', 'fernando', 'antonio', 'male', 'hombre',
+];
+const FEMALE_VOICE_HINTS = [
+  'monica', 'mónica', 'helena', 'laura', 'elvira', 'paulina', 'lucia', 'lucía', 'sabina',
+  'conchita', 'marisol', 'esperanza', 'camila', 'female', 'mujer',
+];
+
+function pickVoiceByGender(voices: SpeechSynthesisVoice[], gender?: 'male' | 'female'): SpeechSynthesisVoice | undefined {
+  const esVoices = voices.filter((v) => v.lang && v.lang.toLowerCase().startsWith('es'));
+  if (!esVoices.length) return undefined;
+  if (!gender) return esVoices[0];
+  const hints = gender === 'male' ? MALE_VOICE_HINTS : FEMALE_VOICE_HINTS;
+  const byName = esVoices.find((v) => {
+    const name = v.name.toLowerCase();
+    return hints.some((h) => name.includes(h));
+  });
+  return byName || esVoices[0];
 }
 
 /** Quita URLs y enlaces del texto antes de leerlo en voz alta (la evidencia no se lee). */
@@ -180,7 +208,7 @@ export function useJarvisVoice(options: JarvisVoiceOptions = {}) {
     u.rate = options.rate ?? 1.0;
     u.pitch = 1.0;
     try {
-      const es = s.getVoices().find((v) => v.lang && v.lang.toLowerCase().startsWith('es'));
+      const es = pickVoiceByGender(s.getVoices(), options.voiceGender);
       if (es) u.voice = es;
     } catch {
       /* voz por defecto */

@@ -260,6 +260,10 @@
             </button>
           </div>
 
+          <!-- Zona con scroll propio: lista + teclado contextual. El total y el botón de cobrar
+               quedan FUERA (cart-footer, fijo abajo) para que nunca se puedan tapar ni cortar. -->
+          <div class="cart-scroll-area">
+
           <!-- Feedback visual del carrito -->
           <transition name="fade-slide">
             <div v-if="cartFeedback" class="cart-feedback" :class="cartFeedback.type">
@@ -330,7 +334,38 @@
           </div>
           </div>
 
-          <!-- Bloque 2: Resumen -->
+          <!-- Teclado numérico: pequeño y CONTEXTUAL — solo para ajustar la cantidad de una línea
+               del ticket, y solo mientras se está montando el carrito. No ocupa espacio permanente:
+               en PRE_PAGO/PAGO/CERRADO, o con el carrito vacío, no hay nada que teclear aquí. -->
+          <div v-if="tpvState === TPV_STATES.CART && cart.length > 0" class="numeric-keyboard">
+            <p class="numeric-keyboard-hint">
+              {{ activeCartIndex >= 0 && cart[activeCartIndex]
+                ? `Cantidad de «${cart[activeCartIndex].name || cart[activeCartIndex].product?.name || 'producto'}»`
+                : 'Toca una línea del ticket para ajustar su cantidad' }}
+            </p>
+            <div class="keyboard-row" v-for="(row, rowIndex) in keyboardLayout" :key="rowIndex">
+              <button
+                v-for="key in row"
+                :key="key"
+                @click="handleKeyPress(key)"
+                class="keyboard-key"
+                :class="{
+                  'key-action': ['C', '⌫'].includes(key),
+                  'key-zero': key === '0',
+                  'key-enter': key === '✓'
+                }"
+              >
+                {{ key }}
+              </button>
+            </div>
+          </div>
+
+          </div>
+          <!-- /cart-scroll-area -->
+
+          <!-- Pie fijo: total + acción de cobro. NUNCA se desplaza con el scroll de la lista ni se
+               tapa con el teclado — siempre visible y pulsable (patrón TPV real). -->
+          <div class="cart-footer">
           <div class="cart-block cart-block-summary">
           <div class="cart-totals" v-if="cart.length > 0">
             <div class="total-line">
@@ -346,25 +381,6 @@
               <span>€{{ formatPrice(total) }}</span>
             </div>
           </div>
-          </div>
-
-          <!-- Teclado Numérico -->
-          <div class="numeric-keyboard">
-            <div class="keyboard-row" v-for="(row, rowIndex) in keyboardLayout" :key="rowIndex">
-              <button 
-                v-for="key in row" 
-                :key="key"
-                @click="handleKeyPress(key)"
-                class="keyboard-key"
-                :class="{ 
-                  'key-action': ['C', '⌫'].includes(key),
-                  'key-zero': key === '0',
-                  'key-enter': key === '✓'
-                }"
-              >
-                {{ key }}
-              </button>
-            </div>
           </div>
 
           <!-- Bloque 3: Acciones -->
@@ -461,18 +477,20 @@
             </template>
           </div>
           </div>
-          
+
           <!-- Nota de pago (visible en PRE_PAYMENT) -->
           <div v-if="tpvState === TPV_STATES.PRE_PAYMENT" class="payment-note-section">
             <label for="payment-note">Nota adicional (opcional):</label>
-            <textarea 
+            <textarea
               id="payment-note"
-              v-model="paymentNote" 
+              v-model="paymentNote"
               class="payment-note-input"
               placeholder="Añade una nota para esta venta..."
               rows="2"
             ></textarea>
           </div>
+          </div>
+          <!-- /cart-footer -->
 
         </div>
       </div>
@@ -3326,20 +3344,34 @@ onUnmounted(() => {
 .cart-block + .cart-block {
   margin-top: 6px;
 }
+
+/* Patrón TPV real (Revo/Glop): el panel se parte en header fijo (arriba) / zona con scroll
+   propio (lista + teclado contextual) / pie fijo (total + Cobrar), para que el total y el botón
+   de pago NUNCA se corten ni queden tapados, pase lo que pase con el tamaño de la lista. */
+.cart-scroll-area {
+  flex: 1 1 auto;
+  min-height: 60px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+}
+
+.cart-footer {
+  flex: 0 0 auto;
+}
+
 .cart-block-list {
-  /* Listado siempre visible: prioridad de espacio y scroll solo aquí */
+  /* Listado siempre visible: prioridad de espacio dentro de la zona con scroll */
   flex: 1 1 0;
-  min-height: 120px;
-  overflow: hidden;
+  min-height: 72px;
+  overflow: visible;
   display: flex;
   flex-direction: column;
 }
 .cart-block-summary,
 .cart-block-actions {
-  flex: 0 0 auto;
-}
-/* Teclado no crece: altura fija para que no robe espacio a la lista */
-.cart-panel .numeric-keyboard {
   flex: 0 0 auto;
 }
 
@@ -3609,23 +3641,32 @@ onUnmounted(() => {
   margin-bottom: 0;
 }
 
-/* Botonera/teclado numérico: altura fija para que no se rompa el layout */
+/* Teclado numérico CONTEXTUAL (solo para ajustar cantidad, solo mientras se monta el carrito):
+   compacto y de altura propia pequeña, nunca un bloque gigante permanente. */
 .numeric-keyboard {
   flex: 0 0 auto;
-  display: grid;
-  grid-template-rows: repeat(4, 32px);
+  display: flex;
+  flex-direction: column;
   gap: 4px;
-  margin-bottom: 0;
-  height: calc(4 * 32px + 3 * 4px); /* 4 filas + 3 gaps */
-  min-height: 140px;
-  max-height: 140px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--zeus-border, #e1e5eb);
+}
+
+.numeric-keyboard-hint {
+  margin: 0 0 2px;
+  font-size: 11px;
+  color: var(--zeus-text-muted, #8792a6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .keyboard-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 4px;
-  min-height: 32px;
+  min-height: 26px;
 }
 
 .keyboard-key {
@@ -4189,21 +4230,19 @@ onUnmounted(() => {
 
   .tpv-right-panel {
     order: -1;
-    min-height: 0;
+    /* Altura acotada (no "auto"): el ticket es SIEMPRE visible al entrar, con su propio scroll
+       interno y el total/Cobrar fijos abajo — sin esto, el teclado+acciones empujaban el botón
+       de pago fuera de la pantalla y solo se alcanzaba haciendo scroll de TODA la página. */
+    height: min(56vh, 460px);
+    min-height: 320px;
+    flex: none;
   }
 }
 
-/* Pantalla baja: teclado mantiene altura fija, botones de pago más compactos */
+/* Pantalla baja: teclado (ya contextual) más compacto aún, botones de pago más compactos */
 @media (max-height: 800px) {
-  .numeric-keyboard {
-    grid-template-rows: repeat(4, 28px);
-    height: calc(4 * 28px + 3 * 4px);
-    min-height: 124px;
-    max-height: 124px;
-  }
-
   .keyboard-row {
-    min-height: 28px;
+    min-height: 24px;
   }
 
   .keyboard-key {

@@ -61,8 +61,7 @@
               :title="blockedMethods[method.id] || undefined"
             >
               <span class="method-icon" aria-hidden="true">
-                <svg v-if="method.id === 'face'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z"/><circle cx="12" cy="13" r="3.5"/></svg>
-                <svg v-else-if="method.id === 'qr'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="6" height="6" rx="1"/><rect x="14.5" y="3.5" width="6" height="6" rx="1"/><rect x="3.5" y="14.5" width="6" height="6" rx="1"/><path d="M14.5 14.5h2.5v2.5h-2.5zM19.5 19.5h1v1h-1zM14.5 19.5v2M19.5 14.5h2"/></svg>
+                <svg v-if="method.id === 'qr'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="6" height="6" rx="1"/><rect x="14.5" y="3.5" width="6" height="6" rx="1"/><rect x="3.5" y="14.5" width="6" height="6" rx="1"/><path d="M14.5 14.5h2.5v2.5h-2.5zM19.5 19.5h1v1h-1zM14.5 19.5v2M19.5 14.5h2"/></svg>
                 <svg v-else-if="method.id === 'code'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 7 20M17 4l-2 16M4 9h16M3 15h16"/></svg>
                 <svg v-else-if="method.id === 'location'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.5 7-11.5A7 7 0 0 0 5 9.5C5 14.5 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
                 <svg v-else-if="method.id === 'remote'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="11" rx="1.5"/><path d="M2 19h20M9 19l1-3h4l1 3"/></svg>
@@ -70,9 +69,6 @@
               <span class="method-label">{{ method.label }}</span>
             </button>
           </div>
-          <p v-if="blockedMethods.face" class="method-blocked-note" role="note">
-            {{ blockedMethods.face }}
-          </p>
         </div>
 
         <!-- Formulario de Fichaje -->
@@ -435,9 +431,8 @@ function alertKindLabel(kind) {
   return ALERT_KIND_LABELS[key] || key.replace(/_/g, ' ')
 }
 
-// Métodos disponibles
+// Métodos disponibles (sin 'face': fichaje biométrico oculto en la UI, ver FACE_BLOCKED_FALLBACK)
 const availableMethods = computed(() => [
-  { id: 'face', icon: '📷', label: t('controlHorario.methods.face') },
   { id: 'qr', icon: '📱', label: t('controlHorario.methods.qr') },
   { id: 'code', icon: '🔢', label: t('controlHorario.methods.code') },
   { id: 'location', icon: '📍', label: t('controlHorario.methods.location') },

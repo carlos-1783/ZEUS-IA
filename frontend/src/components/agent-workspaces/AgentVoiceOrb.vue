@@ -240,9 +240,17 @@ let lastSentAt = 0;
 
 const inputId = `orb-input-${Math.random().toString(36).slice(2, 8)}`;
 
+// Voz por agente: masculina (ZEUS, PERSEO, RAFAEL, THALOS) o femenina (JUSTICIA, AFRODITA),
+// coherente con la personalidad de cada uno definida en su system prompt (config/prompts.json).
+const FEMALE_VOICE_AGENTS = new Set(['JUSTICIA', 'AFRODITA']);
+const voiceGender = computed<'male' | 'female'>(() =>
+  FEMALE_VOICE_AGENTS.has((props.agent?.name || '').toUpperCase().split(' ')[0]) ? 'female' : 'male',
+);
+
 const voice = useJarvisVoice({
   continuous: false,
   rate: 0.95,
+  voiceGender: voiceGender.value,
   onFinal: (text) => send(text, 'voice'),
 });
 

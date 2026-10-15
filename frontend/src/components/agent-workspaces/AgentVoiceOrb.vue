@@ -1,7 +1,7 @@
 <template>
   <section
     class="voice-orb"
-    :class="[`is-${stage}`, { 'has-windows': windows.length > 0 }]"
+    :class="[`is-${stage}`, { 'is-deployed': deployed }]"
     :aria-label="`Asistente de voz de ${agentLabel}`"
   >
     <header class="orb-head">
@@ -9,33 +9,48 @@
         <strong>{{ agentLabel }}</strong>
         <span v-if="agent.role" class="orb-head-role">· {{ agent.role }}</span>
       </div>
-      <button
-        type="button"
-        class="orb-icon-btn"
-        :aria-expanded="toolsOpen ? 'true' : 'false'"
-        :aria-label="toolsOpen ? 'Ocultar herramientas del workspace' : 'Mostrar herramientas del workspace'"
-        :title="toolsOpen ? 'Ocultar herramientas' : 'Herramientas del workspace'"
-        @click="$emit('toggle-tools')"
-      >
-        ⋮
-      </button>
+      <div class="orb-head-actions">
+        <button
+          type="button"
+          class="orb-icon-btn"
+          :aria-expanded="menuOpen ? 'true' : 'false'"
+          aria-haspopup="menu"
+          aria-label="Más paneles"
+          title="Más paneles"
+          @click="menuOpen = !menuOpen"
+        >
+          ⋮
+        </button>
+        <div v-if="menuOpen" class="orb-menu" role="menu">
+          <button type="button" role="menuitem" @click="choosePanel('tools')">🛠️ Herramientas</button>
+          <button type="button" role="menuitem" @click="choosePanel('activity')">📊 Actividad</button>
+          <button type="button" role="menuitem" @click="choosePanel('metrics')">📈 Métricas</button>
+        </div>
+      </div>
     </header>
 
+    <!-- El orbe es la pantalla de inicio: grande y centrado en reposo; se encoge y sube
+         cuando hay algo que enseñar (respuesta del chat, panel elegido en el menú ⋮). -->
     <div class="orb-stage">
-      <div class="orb" aria-hidden="true">
+      <div class="orb" :aria-hidden="true">
+        <span class="orb-ring r-outer-dash"></span>
         <span class="orb-ring r1"></span>
         <span class="orb-ring r2"></span>
         <span class="orb-ring r3"></span>
-        <span class="orb-pulse"></span>
+        <span class="orb-pulse p1"></span>
+        <span class="orb-pulse p2"></span>
         <span class="orb-core">
-          <img v-if="agent.image" :src="agent.image" alt="" />
+          <img v-if="agent.image" :src="agent.image" :alt="agent.name" />
+          <span class="orb-scan"></span>
         </span>
       </div>
 
-      <div class="orb-wave" :class="{ live: stage === 'listening' || voice.speaking.value }" aria-hidden="true">
-        <span v-for="n in 7" :key="n"></span>
+      <div class="orb-eq" :class="{ live: stage === 'listening' || voice.speaking.value }" aria-hidden="true">
+        <span v-for="n in 6" :key="n"></span>
       </div>
 
+      <!-- Sin rótulo de saludo: si hay algo que decir (escuchando/trabajando/hablando) se dice ahí;
+           en reposo, solo una pista breve de cómo empezar, nunca "Hola <nombre>". -->
       <div class="orb-copy" aria-live="polite">
         <template v-if="stage === 'listening'">
           <p class="orb-title">Escuchando…</p>
@@ -45,8 +60,7 @@
           <p class="orb-title">{{ agentLabel }} está trabajando…</p>
           <p class="orb-sub">«{{ lastAsked }}»</p>
         </template>
-        <template v-else-if="!windows.length">
-          <p class="orb-title">{{ greeting }}</p>
+        <template v-else-if="!deployed">
           <p class="orb-sub">{{ voice.supported ? 'Pulsa el micro para hablar' : 'Tu navegador no reconoce voz: usa ⌨️ para escribir' }}</p>
         </template>
         <p v-if="voice.speaking.value" class="orb-sub">Respondiendo en voz alta…</p>
@@ -55,68 +69,95 @@
 
     <p v-if="voiceError" class="orb-alert" role="alert">{{ voiceError }}</p>
 
-    <TransitionGroup name="orb-win" tag="div" class="orb-windows">
-      <article
-        v-for="w in windows"
-        :key="w.id"
-        class="orb-win"
-        :class="`kind-${w.kind}`"
-        :role="w.kind === 'blocked' || w.kind === 'error' ? 'alert' : 'region'"
-        :aria-label="w.title"
-      >
-        <header class="win-head">
-          <div>
-            <h4 class="win-title">{{ w.title }}</h4>
-            <p class="win-source">{{ w.source }}</p>
+    <!-- Deck: aquí se despliega TODO lo que el orbe abre — respuestas del chat (windows) y los
+         paneles elegidos en el menú ⋮ (herramientas / actividad / métricas), con el mismo
+         tratamiento visual de panel HUD. -->
+    <div v-if="deployed" class="orb-deck">
+      <TransitionGroup name="orb-win" tag="div" class="orb-windows">
+        <article
+          v-for="w in windows"
+          :key="w.id"
+          class="orb-win"
+          :class="`kind-${w.kind}`"
+          :role="w.kind === 'blocked' || w.kind === 'error' ? 'alert' : 'region'"
+          :aria-label="w.title"
+        >
+          <header class="win-head">
+            <div>
+              <h4 class="win-title">{{ w.title }}</h4>
+              <p class="win-source">{{ w.source }}</p>
+            </div>
+            <button type="button" class="win-close" @click="closeWindow(w.id)">OK, cerrar</button>
+          </header>
+
+          <p class="win-text">{{ w.text }}</p>
+
+          <div v-if="w.figures.length" class="win-figures">
+            <div v-for="f in w.figures" :key="f.label" class="win-figure">
+              <span class="fig-value">{{ f.value }}</span>
+              <span class="fig-label">{{ f.label }}</span>
+            </div>
           </div>
-          <button type="button" class="win-close" @click="closeWindow(w.id)">OK, cerrar</button>
+
+          <dl v-if="w.rows.length" class="win-kv">
+            <div v-for="(r, i) in w.rows" :key="`${r.label}-${i}`" class="kv-row">
+              <dt>{{ r.label }}</dt>
+              <dd>{{ r.value }}</dd>
+            </div>
+          </dl>
+
+          <div v-for="t in w.tables" :key="t.title" class="win-table-wrap">
+            <p class="win-table-title">{{ t.title }}</p>
+            <table class="win-table">
+              <thead>
+                <tr><th v-for="c in t.columnLabels" :key="c" scope="col">{{ c }}</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, ri) in t.rows" :key="ri">
+                  <td v-for="(cell, ci) in row" :key="ci">{{ cell }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <p v-if="t.more" class="win-more">y {{ t.more }} más</p>
+          </div>
+
+          <ul v-if="w.evidence.length" class="win-evidence">
+            <li v-for="ev in w.evidence" :key="`${ev.kind}-${ev.id}`">
+              <a :href="ev.url" :title="`${ev.agent} · ${ev.status}`" @click.prevent="openEvidenceLink(ev, w)">{{ ev.title }}</a>
+            </li>
+          </ul>
+
+          <p v-if="w.nextStep" class="win-next">{{ w.nextStep }}</p>
+
+          <div v-if="w.needsConfirmation" class="win-confirm">
+            <button type="button" class="win-btn-confirm" :disabled="stage === 'busy'" @click="answerConfirmation(w, 'confirmar')">Confirmar</button>
+            <button type="button" class="win-btn-cancel" :disabled="stage === 'busy'" @click="answerConfirmation(w, 'cancelar')">Cancelar</button>
+          </div>
+        </article>
+      </TransitionGroup>
+
+      <section v-if="activePanel" class="orb-panel">
+        <header class="panel-head">
+          <h4>{{ panelTitle }}</h4>
+          <button type="button" class="win-close" @click="closePanel">OK, cerrar</button>
         </header>
-
-        <p class="win-text">{{ w.text }}</p>
-
-        <div v-if="w.figures.length" class="win-figures">
-          <div v-for="f in w.figures" :key="f.label" class="win-figure">
-            <span class="fig-value">{{ f.value }}</span>
-            <span class="fig-label">{{ f.label }}</span>
-          </div>
+        <div class="panel-body">
+          <slot :name="`panel-${activePanel}`" />
         </div>
+      </section>
+    </div>
 
-        <dl v-if="w.rows.length" class="win-kv">
-          <div v-for="(r, i) in w.rows" :key="`${r.label}-${i}`" class="kv-row">
-            <dt>{{ r.label }}</dt>
-            <dd>{{ r.value }}</dd>
-          </div>
-        </dl>
-
-        <div v-for="t in w.tables" :key="t.title" class="win-table-wrap">
-          <p class="win-table-title">{{ t.title }}</p>
-          <table class="win-table">
-            <thead>
-              <tr><th v-for="c in t.columnLabels" :key="c" scope="col">{{ c }}</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, ri) in t.rows" :key="ri">
-                <td v-for="(cell, ci) in row" :key="ci">{{ cell }}</td>
-              </tr>
-            </tbody>
-          </table>
-          <p v-if="t.more" class="win-more">y {{ t.more }} más</p>
-        </div>
-
-        <ul v-if="w.evidence.length" class="win-evidence">
-          <li v-for="ev in w.evidence" :key="`${ev.kind}-${ev.id}`">
-            <a :href="ev.url" :title="`${ev.agent} · ${ev.status}`" @click.prevent="openEvidenceLink(ev, w)">{{ ev.title }}</a>
-          </li>
-        </ul>
-
-        <p v-if="w.nextStep" class="win-next">{{ w.nextStep }}</p>
-
-        <div v-if="w.needsConfirmation" class="win-confirm">
-          <button type="button" class="win-btn-confirm" :disabled="stage === 'busy'" @click="answerConfirmation(w, 'confirmar')">Confirmar</button>
-          <button type="button" class="win-btn-cancel" :disabled="stage === 'busy'" @click="answerConfirmation(w, 'cancelar')">Cancelar</button>
-        </div>
-      </article>
-    </TransitionGroup>
+    <!-- Adjuntar imagen/factura/vídeo al siguiente mensaje (hoy: PERSEO la usa para generar el
+         vídeo de presentación real). Mismo mecanismo verificado que antes vivía en la pestaña de
+         Chat; se mueve aquí porque el orbe es ahora la única superficie de chat. -->
+    <div v-if="supportsMediaAttachment" class="orb-attach-wrapper">
+      <ImageUploader @uploaded="handleMediaUploaded" />
+      <div v-if="mediaReferenceUrl" class="orb-attach-chip">
+        <span>Medio adjunto (imagen / vídeo / PDF)</span>
+        <a :href="mediaReferenceUrl" target="_blank" rel="noopener">Ver</a>
+        <button type="button" class="chip-remove" @click="clearMediaReference">Quitar</button>
+      </div>
+    </div>
 
     <form v-if="typing" class="orb-type" @submit.prevent="sendTyped">
       <label class="sr-only" :for="inputId">Escribe a {{ agentLabel }}</label>
@@ -132,6 +173,7 @@
       <button type="submit" class="orb-type-send" :disabled="stage === 'busy' || !typed.trim()">Enviar</button>
     </form>
 
+    <!-- Texto/Voz: voz por defecto (micro), el teclado siempre disponible sin perder nada. -->
     <footer class="orb-bar">
       <button
         type="button"
@@ -189,18 +231,24 @@ import {
   type JarvisWindow,
 } from '@/utils/jarvisWindows';
 import { API_BASE_URL } from '@/config';
+import ImageUploader from '@/components/ImageUploader.jsx';
 
 const props = defineProps<{
   agent: { name: string; role?: string; image?: string };
-  toolsOpen?: boolean;
+  /** Título del panel abierto desde el menú ⋮ (herramientas/actividad/métricas), si hay uno. */
+  panelTitles?: Record<string, string>;
 }>();
-defineEmits<{ (e: 'toggle-tools'): void }>();
+
+const emit = defineEmits<{
+  (e: 'panel-opened', key: 'tools' | 'activity' | 'metrics'): void;
+  (e: 'panel-closed', key: 'tools' | 'activity' | 'metrics'): void;
+}>();
 
 const authStore = useAuthStore();
 
-// Mismo hilo que la pestaña Chat: una confirmación pendiente abierta por voz se puede cerrar desde allí.
+// Mismo hilo que el resto del workspace: una confirmación pendiente se puede cerrar desde aquí.
 const THREAD_ID = 'main';
-const MIN_INTERVAL_MS = 3000; // mismo límite anti-429 que AgentActivityPanel
+const MIN_INTERVAL_MS = 3000; // límite anti-429
 
 const windows = ref<JarvisWindow[]>([]);
 const busy = ref(false);
@@ -224,12 +272,6 @@ const agentLabel = computed(() => {
   return n.split(' ')[0].charAt(0).toUpperCase() + n.split(' ')[0].slice(1).toLowerCase();
 });
 
-const greeting = computed(() => {
-  const full = String((authStore.user as any)?.name || '').trim();
-  const first = full && !full.includes('@') ? full.split(/\s+/)[0] : '';
-  return first ? `Hola ${first}, ¿en qué te ayudo?` : 'Hola, ¿en qué te ayudo?';
-});
-
 const stage = computed<'idle' | 'listening' | 'busy'>(() => {
   if (busy.value) return 'busy';
   if (voice.listening.value) return 'listening';
@@ -237,6 +279,39 @@ const stage = computed<'idle' | 'listening' | 'busy'>(() => {
 });
 
 const voiceError = computed(() => localError.value || voice.error.value);
+
+// --------------------------------------------------------------------- menú ⋮ y panel desplegado
+
+const menuOpen = ref(false);
+const activePanel = ref<'tools' | 'activity' | 'metrics' | null>(null);
+
+function choosePanel(key: 'tools' | 'activity' | 'metrics'): void {
+  menuOpen.value = false;
+  if (activePanel.value === key) {
+    activePanel.value = null;
+    emit('panel-closed', key);
+    return;
+  }
+  const previous = activePanel.value;
+  activePanel.value = key;
+  if (previous) emit('panel-closed', previous);
+  emit('panel-opened', key);
+}
+
+function closePanel(): void {
+  const key = activePanel.value;
+  activePanel.value = null;
+  if (key) emit('panel-closed', key);
+}
+
+const panelTitle = computed(() => {
+  const k = activePanel.value;
+  if (!k) return '';
+  return props.panelTitles?.[k] || { tools: 'Herramientas', activity: 'Actividad', metrics: 'Métricas' }[k];
+});
+
+/** El orbe se encoge y aparece el deck si hay respuesta de chat, un panel del menú abierto, o está ocupado. */
+const deployed = computed(() => windows.value.length > 0 || activePanel.value !== null || stage.value === 'busy');
 
 function token(): string | null {
   return (authStore as any).getToken?.() ?? (authStore as any).token ?? null;
@@ -264,10 +339,14 @@ async function send(raw: string, channel: 'voice' | 'text'): Promise<void> {
     const t = token();
     if (t) headers.Authorization = `Bearer ${t}`;
     // El servidor resuelve empresa y usuario desde la sesión: no se envía company_id.
+    const context: Record<string, string> = { channel };
+    if (supportsMediaAttachment.value && mediaReferenceUrl.value) {
+      context[mediaContextKey.value] = mediaReferenceUrl.value;
+    }
     const res = await fetch(getAgentChatUrl(props.agent.name), {
       method: 'POST',
       headers,
-      body: JSON.stringify({ message, thread_id: THREAD_ID, context: { channel } }),
+      body: JSON.stringify({ message, thread_id: THREAD_ID, context }),
       signal: controller.signal,
     });
     const body = await res.json().catch(() => ({}));
@@ -352,6 +431,34 @@ async function sendTyped(): Promise<void> {
 }
 
 /**
+ * Adjuntar imagen/vídeo/PDF al SIGUIENTE mensaje del chat. Hoy solo PERSEO lo usa: con imagen +
+ * mensaje en el mismo hilo, el backend genera en segundo plano un vídeo de presentación real
+ * (ver services/perseo_chat_video_job.py). Mismo contrato (`context.image_url/video_url/pdf_url`)
+ * que ya estaba verificado end-to-end antes de mover esto aquí desde la antigua pestaña de Chat.
+ */
+const isPerseoAgent = computed(() => (props.agent?.name || '').toUpperCase().includes('PERSEO'));
+const supportsMediaAttachment = isPerseoAgent;
+const mediaReferenceUrl = ref<string | null>(null);
+const mediaUploadedAwaitingPrompt = ref(false);
+
+const mediaContextKey = computed<'pdf_url' | 'video_url' | 'image_url'>(() => {
+  const u = mediaReferenceUrl.value || '';
+  if (/\.pdf($|\?)/i.test(u) || u.includes('/documents/')) return 'pdf_url';
+  if (/\.(mp4|webm|mov|m4v)($|\?)/i.test(u) || u.includes('/videos/')) return 'video_url';
+  return 'image_url';
+});
+
+function handleMediaUploaded(payload: { url?: string } | undefined): void {
+  mediaReferenceUrl.value = payload?.url || null;
+  mediaUploadedAwaitingPrompt.value = Boolean(payload?.url);
+}
+
+function clearMediaReference(): void {
+  mediaReferenceUrl.value = null;
+  mediaUploadedAwaitingPrompt.value = false;
+}
+
+/**
  * 📷 Foto / factura estilo WhatsApp: la recibe ZEUS (POST /api/v1/zeus/inbox), la guarda en R2, la
  * clasifica con visión y la reparte para revisión humana (factura/ticket -> RAFAEL, nómina/albarán/
  * pedido -> AFRODITA, contrato -> JUSTICIA). La ventana muestra solo lo que el servidor leyó; si falta
@@ -412,6 +519,8 @@ async function onPhotoChosen(ev: Event): Promise<void> {
     busy.value = false;
   }
 }
+
+defineExpose({ closePanel });
 </script>
 
 <style scoped>
@@ -427,26 +536,50 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   --orb-faint: var(--faint, var(--zeus-text-muted, #8891a6));
   --orb-amber: var(--amber, var(--zeus-warning, #f5a623));
   --orb-red: var(--red, var(--zeus-danger, #ff5d6c));
-  --orb-size: 220px;
+  --orb-size: 340px;
+  --orb-stage-min-h: 420px;
 
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 16px 20px 20px;
+  gap: 10px;
+  padding: 14px 20px 20px;
   margin-bottom: 20px;
   border-radius: var(--zeus-radius-lg, 16px);
   border: 1px solid var(--orb-line);
   background:
-    radial-gradient(420px 260px at 50% 0%, var(--violet-soft, rgba(106, 92, 255, 0.12)), transparent 70%),
+    radial-gradient(640px 420px at 50% 0%, color-mix(in srgb, var(--orb-a) 10%, transparent), transparent 70%),
     var(--orb-panel);
   color: var(--orb-fg);
   box-shadow: var(--zeus-shadow-md, 0 4px 16px rgba(15, 23, 42, 0.06));
   font-family: var(--zeus-font-sans, inherit);
+  overflow: hidden;
+}
+
+/* Rejilla HUD sutil de fondo, solo mientras el orbe está en reposo grande (pantalla principal). */
+.voice-orb::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.45;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--orb-a) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--orb-a) 7%, transparent) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask: radial-gradient(circle at 50% 30%, #000 0%, transparent 72%);
+  -webkit-mask: radial-gradient(circle at 50% 30%, #000 0%, transparent 72%);
+  transition: opacity 400ms ease;
+}
+
+.voice-orb.is-deployed::before {
+  opacity: 0.15;
 }
 
 .orb-head {
+  position: relative;
+  z-index: 2;
   width: 100%;
   display: flex;
   justify-content: space-between;
@@ -463,6 +596,10 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   font-size: var(--zeus-text-sm, 13px);
 }
 
+.orb-head-actions {
+  position: relative;
+}
+
 .orb-icon-btn {
   width: 36px;
   height: 36px;
@@ -475,6 +612,36 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   cursor: pointer;
 }
 
+.orb-menu {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 6px;
+  border-radius: var(--zeus-radius, 12px);
+  border: 1px solid var(--orb-line);
+  background: var(--orb-panel);
+  box-shadow: var(--zeus-shadow-lg, 0 12px 32px rgba(15, 23, 42, 0.18));
+}
+
+.orb-menu button {
+  text-align: left;
+  padding: 9px 10px;
+  border: none;
+  border-radius: var(--zeus-radius-sm, 8px);
+  background: transparent;
+  color: var(--orb-fg);
+  font-size: var(--zeus-text-sm, 13px);
+  cursor: pointer;
+}
+
+.orb-menu button:hover {
+  background: var(--orb-panel-2);
+}
+
 .orb-icon-btn:focus-visible,
 .orb-side-btn:focus-visible,
 .orb-mic:focus-visible,
@@ -483,25 +650,37 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   box-shadow: var(--zeus-shadow-focus, 0 0 0 3px rgba(106, 92, 255, 0.3));
 }
 
-/* Escenario */
+/* ------------------------------------------------------------------ escenario del orbe */
 .orb-stage {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding-top: 8px;
+  gap: 14px;
+  width: 100%;
+  min-height: var(--orb-stage-min-h);
+  justify-content: center;
+  padding-top: 4px;
+  transition: min-height 420ms cubic-bezier(0.3, 0.1, 0.2, 1);
+}
+
+.voice-orb.is-deployed .orb-stage {
+  --orb-stage-min-h: 0px;
+  min-height: 0;
+  padding-top: 6px;
+  gap: 6px;
 }
 
 .orb {
   position: relative;
   width: var(--orb-size);
   height: var(--orb-size);
-  transition: width 240ms var(--zeus-ease-enter, ease), height 240ms var(--zeus-ease-enter, ease);
+  transition: width 420ms cubic-bezier(0.3, 0.1, 0.2, 1), height 420ms cubic-bezier(0.3, 0.1, 0.2, 1);
 }
 
-.voice-orb.has-windows .orb,
-.voice-orb.is-busy .orb {
-  --orb-size: 120px;
+.voice-orb.is-deployed .orb {
+  --orb-size: 92px;
 }
 
 .orb-ring {
@@ -510,6 +689,16 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   border-radius: 50%;
   border: 1.5px solid color-mix(in srgb, var(--orb-a) 35%, transparent);
   animation: orb-breathe 4.8s ease-in-out infinite;
+}
+
+.orb-ring.r-outer-dash {
+  inset: -4%;
+  border: 1.5px dashed color-mix(in srgb, var(--orb-a) 28%, transparent);
+  animation: orb-spin 48s linear infinite;
+}
+
+.orb-ring.r1 {
+  animation: orb-spin 24s linear infinite reverse, orb-breathe 4.8s ease-in-out infinite;
 }
 
 .orb-ring.r2 {
@@ -533,8 +722,13 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   position: absolute;
   inset: 22%;
   border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--orb-a) 30%, transparent), transparent 70%);
-  animation: orb-breathe 4.8s ease-in-out infinite;
+  border: 1.5px solid color-mix(in srgb, var(--orb-a) 55%, transparent);
+  opacity: 0;
+  animation: orb-pulse-ring 3.2s ease-out infinite;
+}
+
+.orb-pulse.p2 {
+  animation-delay: -1.6s;
 }
 
 .orb-core {
@@ -544,6 +738,7 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   overflow: hidden;
   background: var(--orb-panel-2);
   box-shadow: 0 0 0 3px var(--orb-panel), 0 8px 28px color-mix(in srgb, var(--orb-a) 35%, transparent);
+  animation: orb-glow 6.5s ease-in-out infinite;
 }
 
 .orb-core img {
@@ -551,6 +746,26 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   height: 100%;
   object-fit: cover;
   display: block;
+  animation: orb-breathe-img 6.5s ease-in-out infinite;
+}
+
+/* Barrido de escaneo sobre el avatar, como un sensor pasando — motivo de la referencia aprobada. */
+.orb-scan {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  height: 40%;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    color-mix(in srgb, var(--orb-b) 55%, transparent) 48%,
+    color-mix(in srgb, var(--orb-c) 70%, white 10%) 50%,
+    color-mix(in srgb, var(--orb-b) 55%, transparent) 52%,
+    transparent
+  );
+  animation: orb-scan 4.6s cubic-bezier(0.5, 0, 0.5, 1) infinite;
 }
 
 .voice-orb.is-listening .orb-ring,
@@ -562,32 +777,48 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   animation-duration: 2.4s;
 }
 
-.orb-wave {
+.orb-eq {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  height: 26px;
+  align-items: flex-end;
+  gap: 5px;
+  height: 28px;
+  opacity: 0.85;
+  transition: height 300ms ease, opacity 300ms ease;
 }
 
-.orb-wave span {
+.voice-orb.is-deployed .orb-eq {
+  height: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.orb-eq span {
   width: 4px;
-  height: 6px;
   border-radius: 2px;
   background: linear-gradient(var(--orb-a), var(--orb-b));
-  opacity: 0.45;
+  opacity: 0.5;
+  height: 8px;
 }
 
-.orb-wave.live span {
+.orb-eq span:nth-child(1) { height: 8px; }
+.orb-eq span:nth-child(2) { height: 16px; }
+.orb-eq span:nth-child(3) { height: 22px; }
+.orb-eq span:nth-child(4) { height: 13px; }
+.orb-eq span:nth-child(5) { height: 19px; }
+.orb-eq span:nth-child(6) { height: 10px; }
+
+.orb-eq.live span {
   opacity: 1;
-  animation: orb-wave 0.9s ease-in-out infinite;
+  animation: orb-eq-beat 1s ease-in-out infinite;
 }
 
-.orb-wave.live span:nth-child(2n) { animation-delay: -0.3s; }
-.orb-wave.live span:nth-child(3n) { animation-delay: -0.55s; }
+.orb-eq.live span:nth-child(2n) { animation-delay: -0.3s; }
+.orb-eq.live span:nth-child(3n) { animation-delay: -0.55s; }
 
 .orb-copy {
   text-align: center;
   max-width: 460px;
+  min-height: 1px;
 }
 
 .orb-title {
@@ -604,6 +835,8 @@ async function onPhotoChosen(ev: Event): Promise<void> {
 }
 
 .orb-alert {
+  position: relative;
+  z-index: 2;
   margin: 0;
   padding: 8px 12px;
   border-radius: var(--zeus-radius-sm, 8px);
@@ -612,20 +845,64 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   font-size: var(--zeus-text-sm, 13px);
 }
 
-/* Ventanas */
-.orb-windows {
+/* ------------------------------------------------------------------ deck: todo lo que se despliega */
+.orb-deck {
+  position: relative;
+  z-index: 2;
   width: 100%;
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: orb-deploy 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.orb-windows {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.orb-win {
+.orb-win,
+.orb-panel {
+  position: relative;
   border: 1px solid var(--orb-line);
   border-radius: var(--zeus-radius, 12px);
   background: var(--orb-panel);
   padding: 14px 16px;
   box-shadow: var(--zeus-shadow, 0 1px 3px rgba(15, 23, 42, 0.06));
+}
+
+/* Corchetes HUD en las esquinas de cada panel desplegado, eco discreto de la referencia. */
+.orb-win::before,
+.orb-win::after,
+.orb-panel::before,
+.orb-panel::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid color-mix(in srgb, var(--orb-a) 55%, transparent);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.orb-win::before,
+.orb-panel::before {
+  top: 6px;
+  left: 6px;
+  border-right: none;
+  border-bottom: none;
+  border-radius: 4px 0 0 0;
+}
+
+.orb-win::after,
+.orb-panel::after {
+  bottom: 6px;
+  right: 6px;
+  border-left: none;
+  border-top: none;
+  border-radius: 0 0 4px 0;
 }
 
 .orb-win.kind-blocked {
@@ -637,13 +914,15 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   border-color: color-mix(in srgb, var(--orb-red) 55%, transparent);
 }
 
-.win-head {
+.win-head,
+.panel-head {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
 }
 
+.panel-head h4,
 .win-title {
   margin: 0;
   font-size: var(--zeus-text-base, 15px);
@@ -665,6 +944,12 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   color: var(--orb-fg);
   font-size: var(--zeus-text-sm, 13px);
   cursor: pointer;
+}
+
+.panel-body {
+  margin-top: 10px;
+  max-height: min(60vh, 560px);
+  overflow: auto;
 }
 
 .win-text {
@@ -816,8 +1101,44 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   color: var(--orb-fg);
 }
 
+/* ------------------------------------------------------------------ adjuntar medio (PERSEO) */
+.orb-attach-wrapper {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 420px;
+}
+
+.orb-attach-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-radius: var(--zeus-radius-full, 999px);
+  border: 1px solid var(--orb-line);
+  background: var(--orb-panel-2);
+  font-size: var(--zeus-text-xs, 12px);
+  color: var(--orb-muted);
+}
+
+.orb-attach-chip a {
+  color: var(--orb-a);
+}
+
+.chip-remove {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--orb-faint);
+  cursor: pointer;
+  font-size: var(--zeus-text-xs, 12px);
+}
+
 /* Texto (solo si se pide) */
 .orb-type {
+  position: relative;
+  z-index: 2;
   width: 100%;
   display: flex;
   gap: 8px;
@@ -846,6 +1167,8 @@ async function onPhotoChosen(ev: Event): Promise<void> {
 
 /* Barra inferior: el micro es la única acción con el gradiente de acento */
 .orb-bar {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 20px;
@@ -892,6 +1215,8 @@ async function onPhotoChosen(ev: Event): Promise<void> {
 }
 
 .orb-bar-hint {
+  position: relative;
+  z-index: 2;
   margin: 0;
   font-size: var(--zeus-text-xs, 12px);
   color: var(--orb-faint);
@@ -908,7 +1233,7 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   border: 0;
 }
 
-/* Entrada/salida de ventanas */
+/* Entrada/salida de ventanas y paneles del deck */
 .orb-win-enter-active {
   transition: opacity 240ms var(--zeus-ease-enter, ease), transform 240ms var(--zeus-ease-enter, ease);
 }
@@ -923,18 +1248,43 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   opacity: 0;
 }
 
+@keyframes orb-deploy {
+  from { opacity: 0; transform: translateY(18px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
 @keyframes orb-breathe {
   0%, 100% { transform: scale(1); opacity: 0.85; }
   50% { transform: scale(1.04); opacity: 1; }
+}
+
+@keyframes orb-breathe-img {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.055); }
+}
+
+@keyframes orb-glow {
+  0%, 100% { box-shadow: 0 0 0 3px var(--orb-panel), 0 8px 24px color-mix(in srgb, var(--orb-a) 30%, transparent); }
+  50% { box-shadow: 0 0 0 4px var(--orb-panel), 0 10px 40px color-mix(in srgb, var(--orb-a) 48%, transparent); }
+}
+
+@keyframes orb-scan {
+  0% { transform: translateY(-130%); }
+  100% { transform: translateY(250%); }
 }
 
 @keyframes orb-spin {
   to { transform: rotate(360deg); }
 }
 
-@keyframes orb-wave {
-  0%, 100% { height: 6px; }
-  50% { height: 24px; }
+@keyframes orb-pulse-ring {
+  0% { transform: scale(0.75); opacity: 0.5; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+@keyframes orb-eq-beat {
+  0%, 100% { transform: scaleY(0.45); }
+  50% { transform: scaleY(1); }
 }
 
 @keyframes orb-mic-pulse {
@@ -946,21 +1296,24 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   .orb,
   .orb-ring,
   .orb-pulse,
-  .orb-wave span,
+  .orb-scan,
+  .orb-eq span,
   .orb-mic,
+  .orb-deck,
   .orb-win-enter-active,
   .orb-win-leave-active {
     animation: none !important;
     transition: none !important;
   }
-  .orb-wave.live span {
+  .orb-eq.live span {
     height: 14px;
   }
 }
 
 @media (max-width: 768px) {
   .voice-orb {
-    --orb-size: 180px;
+    --orb-size: 220px;
+    --orb-stage-min-h: 300px;
     padding: 12px 16px 16px;
   }
   .orb-bar {

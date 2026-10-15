@@ -1,6 +1,8 @@
 <template>
   <div class="activity-panel">
-    <!-- Header con toggle Texto/Voz -->
+    <!-- Header: identidad del agente. Sin toggle Texto/Voz aquí — el orbe lleva el suyo propio
+         (micro/teclado) y es ahora la única superficie de chat, así que un segundo control
+         redundante arriba solo confundía. -->
     <div class="panel-header">
       <div class="agent-info">
         <span class="agent-avatar-ring">
@@ -11,278 +13,119 @@
           <p class="agent-role">{{ agent.role }}</p>
         </div>
       </div>
-
-      <!-- Toggle Texto/Voz: solo gobierna la pestaña Chat. En el Workspace el orbe arranca en voz
-           y tiene su propio micro/teclado; mostrar aquí "Texto" activo contradecía lo que se ve. -->
-      <div v-if="activeTab === 'chat'" class="communication-toggle">
-        <button 
-          :class="{ active: communicationMode === 'text' }"
-          @click="communicationMode = 'text'"
-          class="mode-btn"
-        >
-          💬 Texto
-        </button>
-        <button 
-          :class="{ active: communicationMode === 'voice' }"
-          @click="communicationMode = 'voice'"
-          class="mode-btn"
-        >
-          🎤 Voz
-        </button>
-      </div>
     </div>
 
-    <!-- Tabs: Workspace / Chat / Actividad / Métricas -->
-    <div class="tabs">
-      <button 
-        :class="{ active: activeTab === 'workspace' }"
-        @click="activeTab = 'workspace'"
-        v-if="hasWorkspace"
-      >
-        <span class="tab-icon" aria-hidden="true">🛠️</span> <span class="tab-label">Workspace</span>
-      </button>
-      <button 
-        :class="{ active: activeTab === 'chat' }"
-        @click="activeTab = 'chat'"
-      >
-        <span class="tab-icon" aria-hidden="true">💬</span> <span class="tab-label">Chat</span>
-      </button>
-      <button 
-        :class="{ active: activeTab === 'activity' }"
-        @click="activeTab = 'activity'"
-      >
-        <span class="tab-icon" aria-hidden="true">📊</span> <span class="tab-label">Actividad</span>
-      </button>
-      <button 
-        :class="{ active: activeTab === 'metrics' }"
-        @click="activeTab = 'metrics'"
-      >
-        <span class="tab-icon" aria-hidden="true">📈</span> <span class="tab-label">Métricas</span>
-      </button>
-    </div>
-
-    <!-- Workspace Tab -->
-    <div v-if="activeTab === 'workspace'" class="tab-content workspace-content">
-      <!-- Fase 2 JARVIS: el workspace abre en el orbe de voz; las herramientas reales siguen debajo (⋮). -->
-      <AgentVoiceOrb
-        :key="agent.name"
-        :agent="agent"
-        :tools-open="workspaceToolsOpen"
-        @toggle-tools="toggleWorkspaceTools"
-      />
-      <section
-        v-show="workspaceToolsOpen"
-        :id="workspaceToolsId"
-        ref="workspaceToolsEl"
-        class="workspace-tools"
-        :aria-label="`Herramientas de ${agent.name}`"
-      >
+    <!-- El orbe ES la pantalla principal: sin pestañas. "Herramientas / Actividad / Métricas"
+         siguen existiendo tal cual (no se rehacen), solo cambia cómo se llega — desde el menú ⋮
+         del propio orbe, que las despliega como un panel más junto a él. -->
+    <AgentVoiceOrb
+      :key="agent.name"
+      :agent="agent"
+      :panel-titles="panelTitles"
+      @panel-opened="onPanelOpened"
+      @panel-closed="onPanelClosed"
+    >
+      <template #panel-tools>
         <component :is="currentWorkspace" v-if="currentWorkspace" />
         <div v-else class="no-workspace">
           <p>Workspace no disponible para este agente</p>
         </div>
-      </section>
-      <button
-        v-if="!workspaceToolsOpen"
-        type="button"
-        class="workspace-tools-toggle"
-        :aria-controls="workspaceToolsId"
-        aria-expanded="false"
-        @click="toggleWorkspaceTools"
-      >
-        Ver herramientas de {{ agent.name }}
-      </button>
-    </div>
+      </template>
 
-    <!-- Chat Tab -->
-    <div v-if="activeTab === 'chat'" class="tab-content">
-      <!-- Modo Texto -->
-      <div v-if="communicationMode === 'text'" class="text-chat">
-        <div class="chat-messages" ref="messagesContainer">
-          <p v-if="loadingChatHistory" class="chat-history-loading">Cargando historial…</p>
-          <div 
-            v-for="message in messages" 
-            :key="message.id"
-            class="message"
-            :class="{ user: message.sender === 'user', agent: message.sender === 'agent' }"
-          >
-            <div class="message-content">{{ message.content }}</div>
-            <ul v-if="message.evidence && message.evidence.length" class="message-evidence">
-              <li v-for="ev in message.evidence" :key="`${ev.kind}-${ev.id}`">
-                <a
-                  :href="ev.url"
-                  class="evidence-link"
-                  :title="`${ev.agent} · ${ev.status}`"
-                  @click.prevent="openEvidenceLink(ev)"
-                >{{ ev.title }}</a>
-              </li>
-            </ul>
-            <p v-if="message.nextStep" class="message-next-step">{{ message.nextStep }}</p>
-            <div v-if="message.needsConfirmation" class="message-confirm">
-              <button type="button" class="confirm-btn" @click="answerConfirmation(message, 'confirmar')">Confirmar</button>
-              <button type="button" class="cancel-btn" @click="answerConfirmation(message, 'cancelar')">Cancelar</button>
+      <template #panel-activity>
+        <div class="activity-content">
+          <div class="activity-header">
+            <label class="days-label" :for="daysSelectId">Periodo</label>
+            <select :id="daysSelectId" v-model="activityDays" @change="loadActivities" class="days-selector">
+              <option value="1">Últimas 24h</option>
+              <option value="7">Última semana</option>
+              <option value="30">Último mes</option>
+            </select>
+          </div>
+
+          <div class="activity-timeline">
+            <div
+              v-for="activity in activities"
+              :key="activity.id"
+              class="activity-item"
+              :class="activity.priority"
+            >
+              <div class="activity-icon" :class="activity.status">
+                {{ getActivityIcon(activity.action_type) }}
+              </div>
+              <div class="activity-details">
+                <p class="activity-description">{{ activity.description }}</p>
+                <div class="activity-meta">
+                  <span class="activity-time">{{ formatDateTime(activity.created_at) }}</span>
+                  <span class="activity-status" :class="activity.status">
+                    {{ getStatusText(activity.status) }}
+                  </span>
+                </div>
+                <div v-if="activity.metrics" class="activity-metrics">
+                  <span v-for="(value, key) in activity.metrics" :key="key" class="metric-badge">
+                    {{ key }}: {{ value }}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div class="message-time">{{ formatTime(message.timestamp) }}</div>
+
+            <div v-if="activities.length === 0" class="empty-state">
+              <p>No hay actividades registradas en este período</p>
+            </div>
           </div>
         </div>
+      </template>
 
-        <div v-if="isPerseoAgent" class="image-uploader-wrapper">
-          <ImageUploader @uploaded="handleImageUploaded" />
-          <div v-if="imageReferenceUrl" class="image-reference-chip">
-            <span>Medio adjunto (imagen / vídeo / PDF)</span>
-            <a :href="imageReferenceUrl" target="_blank" rel="noopener">Ver</a>
-            <button type="button" class="chip-remove" @click="clearImageReference">Quitar</button>
+      <template #panel-metrics>
+        <div class="metrics-content">
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-label">Total de acciones</div>
+              <div class="metric-value">{{ metrics.total_actions || 0 }}</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-label">Tasa de éxito</div>
+              <div class="metric-value">{{ (metrics.success_rate || 0).toFixed(1) }}%</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-label">Completadas</div>
+              <div class="metric-value success">{{ metrics.completed || 0 }}</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-label">Fallidas</div>
+              <div class="metric-value error">{{ metrics.failed || 0 }}</div>
+            </div>
           </div>
-        </div>
 
-        <div class="chat-input-container">
-          <input 
-            v-model="textInput"
-            @keyup.enter="sendTextMessage"
-            placeholder="Escribe tu mensaje..."
-            class="chat-input"
-          />
-          <button @click="sendTextMessage" class="send-btn">
-            ➤
+          <div v-if="metrics.specific_metrics" class="specific-metrics">
+            <h5>Métricas Específicas</h5>
+            <div class="specific-metrics-grid">
+              <div
+                v-for="(value, key) in metrics.specific_metrics"
+                :key="key"
+                class="specific-metric-item"
+              >
+                <span class="metric-key">{{ formatMetricKey(key) }}</span>
+                <span class="metric-val">{{ formatMetricValue(value) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <button @click="loadMetrics" class="btn-refresh-metrics">
+            🔄 Actualizar Métricas
           </button>
         </div>
-      </div>
-
-      <!-- Modo Voz -->
-      <div v-else class="voice-chat">
-        <div class="voice-visualizer">
-          <div class="voice-wave" :class="{ active: isListening || isSpeaking }">
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-          </div>
-        </div>
-
-        <p class="voice-status">
-          {{ voiceStatus }}
-        </p>
-        <p v-if="voiceError" class="voice-error" role="alert">{{ voiceError }} Puedes usar el modo 💬 Texto.</p>
-
-        <button 
-          @click="toggleVoiceChat"
-          class="voice-btn"
-          :class="{ active: isListening }"
-        >
-          {{ isListening ? '⏸️ Detener' : '🎤 Hablar' }}
-        </button>
-
-        <div class="voice-transcript" v-if="currentTranscript">
-          <p><strong>Tú:</strong> {{ currentTranscript }}</p>
-        </div>
-
-        <div class="voice-response" v-if="agentVoiceResponse">
-          <p><strong>{{ agent.name }}:</strong> {{ agentVoiceResponse }}</p>
-          <p v-if="voiceNextStep" class="message-next-step">{{ voiceNextStep }}</p>
-          <div v-if="voiceNeedsConfirmation" class="message-confirm">
-            <button type="button" class="confirm-btn" @click="answerVoiceConfirmation('confirmar')">Confirmar</button>
-            <button type="button" class="cancel-btn" @click="answerVoiceConfirmation('cancelar')">Cancelar</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Activity Tab -->
-    <div v-if="activeTab === 'activity'" class="tab-content activity-content">
-      <div class="activity-header">
-        <h4>Actividad Reciente</h4>
-        <select v-model="activityDays" @change="loadActivities" class="days-selector">
-          <option value="1">Últimas 24h</option>
-          <option value="7">Última semana</option>
-          <option value="30">Último mes</option>
-        </select>
-      </div>
-
-      <div class="activity-timeline">
-        <div 
-          v-for="activity in activities" 
-          :key="activity.id"
-          class="activity-item"
-          :class="activity.priority"
-        >
-          <div class="activity-icon" :class="activity.status">
-            {{ getActivityIcon(activity.action_type) }}
-          </div>
-          <div class="activity-details">
-            <p class="activity-description">{{ activity.description }}</p>
-            <div class="activity-meta">
-              <span class="activity-time">{{ formatDateTime(activity.created_at) }}</span>
-              <span class="activity-status" :class="activity.status">
-                {{ getStatusText(activity.status) }}
-              </span>
-            </div>
-            <div v-if="activity.metrics" class="activity-metrics">
-              <span v-for="(value, key) in activity.metrics" :key="key" class="metric-badge">
-                {{ key }}: {{ value }}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="activities.length === 0" class="empty-state">
-          <p>No hay actividades registradas en este período</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Metrics Tab -->
-    <div v-if="activeTab === 'metrics'" class="tab-content metrics-content">
-      <h4>Métricas de {{ agent.name }}</h4>
-
-      <div class="metrics-grid">
-        <div class="metric-card">
-          <div class="metric-label">Total de acciones</div>
-          <div class="metric-value">{{ metrics.total_actions || 0 }}</div>
-        </div>
-
-        <div class="metric-card">
-          <div class="metric-label">Tasa de éxito</div>
-          <div class="metric-value">{{ (metrics.success_rate || 0).toFixed(1) }}%</div>
-        </div>
-
-        <div class="metric-card">
-          <div class="metric-label">Completadas</div>
-          <div class="metric-value success">{{ metrics.completed || 0 }}</div>
-        </div>
-
-        <div class="metric-card">
-          <div class="metric-label">Fallidas</div>
-          <div class="metric-value error">{{ metrics.failed || 0 }}</div>
-        </div>
-      </div>
-
-      <!-- Métricas específicas del agente -->
-      <div v-if="metrics.specific_metrics" class="specific-metrics">
-        <h5>Métricas Específicas</h5>
-        <div class="specific-metrics-grid">
-          <div 
-            v-for="(value, key) in metrics.specific_metrics" 
-            :key="key"
-            class="specific-metric-item"
-          >
-            <span class="metric-key">{{ formatMetricKey(key) }}</span>
-            <span class="metric-val">{{ formatMetricValue(value) }}</span>
-          </div>
-        </div>
-      </div>
-
-      <button @click="loadMetrics" class="btn-refresh-metrics">
-        🔄 Actualizar Métricas
-      </button>
-    </div>
+      </template>
+    </AgentVoiceOrb>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onUnmounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { useJarvisVoice } from '@/composables/useJarvisVoice'
 import PerseoWorkspace from './agent-workspaces/PerseoWorkspace.vue'
 import RafaelWorkspace from './agent-workspaces/RafaelWorkspace.vue'
 import AfroditaWorkspace from './agent-workspaces/AfroditaWorkspace.vue'
@@ -290,15 +133,6 @@ import ThalosWorkspace from './agent-workspaces/ThalosWorkspace.vue'
 import JusticiaWorkspace from './agent-workspaces/JusticiaWorkspace.vue'
 import ZeusCoreWorkspace from './agent-workspaces/ZeusCoreWorkspace.vue'
 import AgentVoiceOrb from './agent-workspaces/AgentVoiceOrb.vue'
-import ImageUploader from '@/components/ImageUploader.jsx'
-import { isForbiddenAiFallback, sanitizeAgentChatForMediaFlow } from '@/utils/mediaUploadPolicy'
-import {
-  getAgentChatUrl,
-  getChatMessagesUrl,
-  AGENT_CHAT_TIMEOUT_MS,
-  extractChatExtras,
-  openEvidence,
-} from '@/utils/chatApi'
 
 const props = defineProps({
   agent: {
@@ -309,7 +143,7 @@ const props = defineProps({
 
 const authStore = useAuthStore()
 
-// Workspaces mapping
+// Workspaces mapping — SIN rehacer: son los paneles reales que ya existían bajo "Herramientas".
 const workspaces = {
   'ZEUS': ZeusCoreWorkspace,
   'PERSEO': PerseoWorkspace,
@@ -324,134 +158,8 @@ const currentWorkspace = computed(() => {
   return workspaces[agentKey] || null
 })
 
-const hasWorkspace = computed(() => {
-  return currentWorkspace.value !== null
-})
-
-// Fase 2: herramientas del workspace (paneles reales) bajo el orbe, plegadas hasta que se piden (⋮)
-const workspaceToolsOpen = ref(false)
-const workspaceToolsEl = ref(null)
-const workspaceToolsId = `workspace-tools-${Math.random().toString(36).slice(2, 8)}`
-const toggleWorkspaceTools = () => {
-  workspaceToolsOpen.value = !workspaceToolsOpen.value
-  if (workspaceToolsOpen.value) {
-    const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    nextTick(() => workspaceToolsEl.value?.scrollIntoView?.({ block: 'start', behavior: reduce ? 'auto' : 'smooth' }))
-  }
-}
-
-// Communication mode
-const communicationMode = ref('text')
-const activeTab = ref(hasWorkspace.value ? 'workspace' : 'chat')
-
-// Text chat
-const messages = ref([])
-const chatThreadId = ref('main')
-const loadingChatHistory = ref(false)
-const textInput = ref('')
-const messagesContainer = ref(null)
-const isPerseoAgent = computed(() => (props.agent?.name || '').toUpperCase().includes('PERSEO'))
-const imageReferenceUrl = ref(null)
-const mediaUploadedAwaitingPrompt = ref(false)
-
-const CHAT_MIN_INTERVAL_MS = 3000
-const lastTextChatSentAt = ref(0)
-const lastVoiceChatSentAt = ref(0)
-
-const handleImageUploaded = (payload) => {
-  imageReferenceUrl.value = payload?.url || null
-  mediaUploadedAwaitingPrompt.value = Boolean(payload?.url)
-}
-
-const formatAgentChatContent = (text, { hadPendingMedia = false } = {}) => {
-  const cleaned = sanitizeAgentChatForMediaFlow(text, { hadMediaOnly: hadPendingMedia })
-  if (isForbiddenAiFallback(text) && cleaned !== text) {
-    return cleaned
-  }
-  return cleaned || '⚠️ El agente no devolvió contenido útil. Escribe un mensaje concreto.'
-}
-
-const clearImageReference = () => {
-  imageReferenceUrl.value = null
-  mediaUploadedAwaitingPrompt.value = false
-}
-
-// Voice chat
-// J11: capa de voz unica (Web Speech API) compartida con OlymposDashboard
-const voice = useJarvisVoice({
-  continuous: false,
-  rate: 0.9,
-  onFinal: (text) => sendVoiceToAgent(text),
-})
-const isListening = voice.listening
-const isSpeaking = voice.speaking
-const currentTranscript = voice.transcript
-const agentVoiceResponse = ref('')
-const voiceNextStep = ref('')
-const voiceNeedsConfirmation = ref(false)
-const voiceError = computed(() => voice.error.value || (voice.supported ? '' : voice.unsupportedMessage.value))
-
-const voiceStatus = computed(() => {
-  if (isListening.value) return '🎤 Escuchando...'
-  if (isSpeaking.value) return '🗣️ Respondiendo...'
-  return `🤖 ${props.agent.name} está listo para escucharte`
-})
-
-// Enviar mensaje de voz al agente
-const sendVoiceToAgent = async (transcript, channel = 'voice') => {
-  if (!transcript.trim()) return
-
-  const now = Date.now()
-  if (now - lastVoiceChatSentAt.value < CHAT_MIN_INTERVAL_MS) {
-    agentVoiceResponse.value = '⏳ Espera unos segundos entre mensajes (límite anti-429).'
-    return
-  }
-  lastVoiceChatSentAt.value = now
-  
-  voice.stop()
-  voiceNextStep.value = ''
-  voiceNeedsConfirmation.value = false
-  agentVoiceResponse.value = '⏳ Procesando...'
-  
-  try {
-    const vctx = { channel }
-    if (isPerseoAgent.value && imageReferenceUrl.value) {
-      const u = imageReferenceUrl.value
-      if (/\.pdf($|\?)/i.test(u) || u.includes('/documents/')) vctx.pdf_url = u
-      else if (/\.(mp4|webm|mov|m4v)($|\?)/i.test(u) || u.includes('/videos/')) vctx.video_url = u
-      else vctx.image_url = u
-    }
-    const response = await postAgentChat({
-      message: transcript,
-      thread_id: chatThreadId.value,
-      context: vctx,
-    })
-    const data = await response.json().catch(() => ({}))
-    if (!response.ok) {
-      const detail = data?.detail || data?.message || `HTTP ${response.status}`
-      throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
-    }
-    if (data.success === false) {
-      throw new Error(data.error || data.message || 'El agente no pudo responder.')
-    }
-    const responseText = formatAgentChatContent(data.message, {
-      hadPendingMedia: mediaUploadedAwaitingPrompt.value,
-    })
-    
-    agentVoiceResponse.value = responseText
-    
-    const extras = extractChatExtras(data)  // J10: siguiente paso y confirmación visibles también en voz
-    voiceNextStep.value = extras.nextStep || ''
-    voiceNeedsConfirmation.value = extras.needsConfirmation
-
-    // Text-to-Speech: solo el texto breve de respuesta (sin evidencia ni URLs)
-    voice.speak(responseText)
-
-  } catch (error) {
-    console.error('Error en voz:', error)
-    agentVoiceResponse.value = `❌ ${formatChatFetchError(error)}`
-  }
-}
+const panelTitles = { tools: 'Herramientas', activity: 'Actividad', metrics: 'Métricas' }
+const daysSelectId = `days-${Math.random().toString(36).slice(2, 8)}`
 
 // Activities
 const activities = ref([])
@@ -459,82 +167,40 @@ const activityDays = ref(7)
 
 // Metrics
 const metrics = ref({})
+
 let activityPollTimer = null
+let metricsPollTimer = null
 
-function mapDbMessageToUi(row) {
-  const role = (row.role || '').toLowerCase()
-  const sender = role === 'user' ? 'user' : 'agent'
-  const ts = row.created_at ? new Date(row.created_at) : new Date()
-  return {
-    id: row.id ?? `${sender}-${ts.getTime()}`,
-    sender,
-    content: row.message || '',
-    timestamp: ts,
+function onPanelOpened(key) {
+  if (key === 'activity') {
+    loadActivities()
+    activityPollTimer = setInterval(loadActivities, 15000)
+  } else if (key === 'metrics') {
+    loadMetrics()
+    metricsPollTimer = setInterval(loadMetrics, 15000)
   }
 }
 
-async function loadChatHistory() {
-  loadingChatHistory.value = true
-  try {
-    const token = authStore.getToken?.() ?? authStore.token ?? null
-    if (!token) {
-      messages.value = []
-      return
-    }
-    const api = (await import('@/services/api')).default
-    const data = await api.get(
-      getChatMessagesUrl(props.agent.name, chatThreadId.value),
-      token,
-    )
-    const rows = Array.isArray(data?.messages) ? data.messages : []
-    messages.value = rows.map(mapDbMessageToUi)
-    await nextTick(() => {
-      if (messagesContainer.value) {
-        messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-      }
-    })
-  } catch (err) {
-    console.warn('No se pudo cargar historial de chat:', err)
-    messages.value = []
-  } finally {
-    loadingChatHistory.value = false
-  }
-}
-
-onMounted(() => {
-  loadActivities()
-  loadMetrics()
-  if (activeTab.value === 'chat' || !hasWorkspace.value) {
-    loadChatHistory()
-  }
-  activityPollTimer = setInterval(() => {
-    if (activeTab.value === 'activity') {
-      loadActivities()
-    } else if (activeTab.value === 'metrics') {
-      loadMetrics()
-    }
-  }, 15000)
-})
-
-onUnmounted(() => {
-  if (activityPollTimer) {
+function onPanelClosed(key) {
+  if (key === 'activity' && activityPollTimer) {
     clearInterval(activityPollTimer)
     activityPollTimer = null
+  } else if (key === 'metrics' && metricsPollTimer) {
+    clearInterval(metricsPollTimer)
+    metricsPollTimer = null
   }
+}
+
+onUnmounted(() => {
+  if (activityPollTimer) clearInterval(activityPollTimer)
+  if (metricsPollTimer) clearInterval(metricsPollTimer)
 })
 
-// Watch para recargar cuando cambie de agente
+// Al cambiar de agente, los datos cargados quedan obsoletos; se recargan si el panel sigue abierto
+// (el propio AgentVoiceOrb se remonta por el :key="agent.name", así que el panel vuelve a cerrarse).
 watch(() => props.agent.name, () => {
-  loadActivities()
-  loadMetrics()
-  imageReferenceUrl.value = null
-  loadChatHistory()
-})
-
-watch(activeTab, (tab) => {
-  if (tab === 'chat') {
-    loadChatHistory()
-  }
+  activities.value = []
+  metrics.value = {}
 })
 
 const loadActivities = async () => {
@@ -553,9 +219,8 @@ const loadActivities = async () => {
     )
     if (data.success) {
       activities.value = data.activities
-      console.log(`✅ Actividades de ${agentName} cargadas:`, data.total_activities)
       // Fallback operacional: si aún no hay filas en agent_activities,
-      // mostrar entregables recientes para no dejar el workspace vacío.
+      // mostrar entregables recientes para no dejar el panel vacío.
       if ((activities.value?.length || 0) === 0) {
         try {
           const outputs = await api.get(`/api/v1/automation/outputs?agent=${encodeURIComponent(agentName)}`, token)
@@ -596,217 +261,10 @@ const loadMetrics = async () => {
     )
     if (data.success) {
       metrics.value = data
-      console.log(`✅ Métricas de ${agentName} cargadas`)
     }
   } catch (error) {
     console.error('Error loading metrics:', error)
     metrics.value = {}
-  }
-}
-
-const getAuthHeaders = () => {
-  const token = authStore.getToken?.() ?? authStore.token ?? null
-  const headers = { 'Content-Type': 'application/json' }
-  if (token) headers.Authorization = `Bearer ${token}`
-  return headers
-}
-
-async function postAgentChat(payload) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), AGENT_CHAT_TIMEOUT_MS)
-  try {
-    return await fetch(getAgentChatUrl(props.agent.name), {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    })
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-function formatChatFetchError(error) {
-  if (!error) return 'Error desconocido.'
-  if (error.name === 'AbortError') {
-    return 'Tiempo de espera agotado. Si el mensaje era largo o hay imagen adjunta, reintenta en unos segundos.'
-  }
-  const m = String(error.message || error)
-  if (/application failed to respond|failed to respond/i.test(m)) {
-    return (
-      'El servidor tardó demasiado o estaba ocupado (límite del hosting ~60s). ' +
-      'Reintenta en unos segundos o acorta el mensaje.'
-    )
-  }
-  if (/failed to fetch|networkerror|load failed/i.test(m)) {
-    return 'No se pudo contactar con el API. Comprueba la red y que la URL del backend (VITE_API_BASE_URL / proxy) sea correcta.'
-  }
-  return m
-}
-
-const sendTextMessage = async () => {
-  if (!textInput.value.trim()) return
-
-  const now = Date.now()
-  if (now - lastTextChatSentAt.value < CHAT_MIN_INTERVAL_MS) {
-    return
-  }
-  lastTextChatSentAt.value = now
-  
-  const userMessage = textInput.value.trim()
-  if (!userMessage) return
-
-  const hadPendingMedia = mediaUploadedAwaitingPrompt.value
-  mediaUploadedAwaitingPrompt.value = false
-  textInput.value = ''
-  
-  // Añadir mensaje del usuario
-  messages.value.push({
-    id: Date.now(),
-    sender: 'user',
-    content: userMessage,
-    timestamp: new Date()
-  })
-  
-  // Añadir mensaje de "procesando"
-  const processingId = Date.now() + 1
-  messages.value.push({
-    id: processingId,
-    sender: 'agent',
-    content: '⏳ Procesando...',
-    timestamp: new Date()
-  })
-  
-  try {
-    const doChatCall = async () => {
-      const contextPayload = {}
-      if (isPerseoAgent.value && imageReferenceUrl.value) {
-        const u = imageReferenceUrl.value
-        if (/\.pdf($|\?)/i.test(u) || u.includes('/documents/')) contextPayload.pdf_url = u
-        else if (/\.(mp4|webm|mov|m4v)($|\?)/i.test(u) || u.includes('/videos/')) contextPayload.video_url = u
-        else contextPayload.image_url = u
-      }
-
-      const response = await postAgentChat({
-        message: userMessage,
-        thread_id: chatThreadId.value,
-        context: contextPayload,
-      })
-      const data = await response.json().catch(() => ({}))
-      return { response, data }
-    }
-    let { response, data } = await doChatCall()
-    const msg = String(data?.message || '').trim()
-    const shouldRetryEmpty =
-      response.ok &&
-      (!msg || msg.toLowerCase() === 'sin respuesta') &&
-      !imageReferenceUrl.value &&
-      !isForbiddenAiFallback(msg)
-    if (shouldRetryEmpty) {
-      await new Promise(resolve => setTimeout(resolve, 450))
-      const second = await doChatCall()
-      response = second.response
-      data = second.data
-    }
-
-    if (!response.ok) {
-      lastTextChatSentAt.value = 0
-      throw new Error(data?.detail || data?.message || `Error ${response.status}`)
-    }
-
-    // Remover mensaje de "procesando"
-    messages.value = messages.value.filter(m => m.id !== processingId)
-
-    // El API puede devolver 200 con success: false (p. ej. rate limit / sin contenido)
-    if (data.success === false) {
-      const errText =
-        (data.error && String(data.error).trim()) ||
-        (data.message && String(data.message).trim()) ||
-        'No se pudo obtener respuesta del agente. Reintenta en unos segundos.'
-      messages.value.push({
-        id: Date.now() + 2,
-        sender: 'agent',
-        content: errText.startsWith('⚠️') || errText.startsWith('❌') ? errText : `⚠️ ${errText}`,
-        timestamp: new Date()
-      })
-    } else {
-      const text =
-        (data.message && String(data.message).trim()) ||
-        (data.error && String(data.error).trim()) ||
-        ''
-      messages.value.push({
-        id: Date.now() + 2,
-        sender: 'agent',
-        content: formatAgentChatContent(text, { hadPendingMedia }),
-        timestamp: new Date()
-      })
-    }
-    
-    await loadChatHistory()
-    // J10: el historial persistido trae solo texto; la evidencia y el siguiente paso de ESTA respuesta
-    // se vuelven a colgar del último mensaje del agente.
-    if (data.success !== false) attachChatExtras(data)
-
-  } catch (error) {
-    console.error('Error al comunicarse con el agente:', error)
-    lastTextChatSentAt.value = 0
-
-    // Remover mensaje de "procesando"
-    messages.value = messages.value.filter(m => m.id !== processingId)
-
-    messages.value.push({
-      id: Date.now() + 2,
-      sender: 'agent',
-      content: `❌ Error: ${formatChatFetchError(error)}`,
-      timestamp: new Date()
-    })
-  }
-}
-
-function attachChatExtras(data) {
-  const extras = extractChatExtras(data)
-  if (!extras.evidence.length && !extras.nextStep && !extras.needsConfirmation) return
-  const last = [...messages.value].reverse().find((m) => m.sender === 'agent')
-  if (last) Object.assign(last, extras)
-}
-
-async function openEvidenceLink(ev) {
-  try {
-    const token = authStore.getToken?.() ?? authStore.token ?? null
-    await openEvidence(ev, token)
-  } catch (error) {
-    messages.value.push({
-      id: Date.now(),
-      sender: 'agent',
-      content: `No se pudo abrir «${ev.title}»: ${formatChatFetchError(error)}`,
-      timestamp: new Date(),
-    })
-  }
-}
-
-// Confirmar/Cancelar una acción pendiente: se responde en el MISMO hilo con «confirmar»/«cancelar».
-async function answerConfirmation(message, word) {
-  message.needsConfirmation = false
-  lastTextChatSentAt.value = 0
-  textInput.value = word
-  await sendTextMessage()
-}
-
-// Confirmar/Cancelar desde el botón visible: mismo hilo, canal texto (no es voz)
-async function answerVoiceConfirmation(word) {
-  voiceNeedsConfirmation.value = false
-  lastVoiceChatSentAt.value = 0
-  await sendVoiceToAgent(word, 'text')
-}
-
-const toggleVoiceChat = () => {
-  if (isListening.value) {
-    voice.stop()
-  } else {
-    agentVoiceResponse.value = ''
-    voiceNextStep.value = ''
-    voiceNeedsConfirmation.value = false
-    voice.start()
   }
 }
 
@@ -843,16 +301,12 @@ const getStatusText = (status) => {
   return texts[status] || status
 }
 
-const formatTime = (date) => {
-  return new Date(date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-}
-
 const formatDateTime = (date) => {
-  return new Date(date).toLocaleString('es-ES', { 
-    day: '2-digit', 
-    month: 'short', 
-    hour: '2-digit', 
-    minute: '2-digit' 
+  return new Date(date).toLocaleString('es-ES', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit'
   })
 }
 
@@ -956,469 +410,18 @@ const formatMetricValue = (value) => {
   color: var(--zeus-text-muted, #8792a6);
 }
 
-/* Communication Toggle */
-.communication-toggle {
-  display: flex;
-  gap: 4px;
-  background: var(--zeus-surface, #fff);
-  border: 1px solid var(--zeus-border, #e1e5eb);
-  padding: 4px;
-  border-radius: var(--zeus-radius, 12px);
-  box-shadow: var(--zeus-shadow-sm);
-}
-
-/* Toggle Texto/Voz — botón secundario (blanco, sin sombra). El
-   gradiente vibrante queda reservado para el único botón de mayor
-   jerarquía de esta vista (la acción primaria del workspace, ej.
-   "Actualizar") — la selección aquí se comunica solo con peso
-   tipográfico, igual que en preview-rafael.html. */
-.mode-btn {
-  padding: 8px 16px;
-  background: transparent;
-  border: none;
-  color: var(--zeus-text-secondary, #52607a);
-  cursor: pointer;
-  border-radius: 6px;
-  transition: color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.mode-btn.active {
-  color: var(--zeus-text, #0f172a);
-  font-weight: 700;
-}
-
-/* Tabs */
-.tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 16px;
-  background: var(--zeus-surface, #fff);
-  border: 1px solid var(--zeus-border, #e1e5eb);
-  border-radius: var(--zeus-radius, 12px);
-  padding: 4px;
-  box-shadow: var(--zeus-shadow-sm);
-}
-
-.tabs button {
-  flex: 1;
-  padding: 9px 10px;
-  background: transparent;
-  border: none;
-  color: var(--zeus-text-secondary, #52607a);
-  cursor: pointer;
-  border-radius: var(--zeus-radius-sm, 8px);
-  transition: color var(--zeus-dur-hover, 180ms) var(--zeus-ease-micro, ease);
-  font-weight: 500;
-}
-
-.tabs button.active {
-  color: var(--zeus-text, #0f172a);
-  font-weight: 700;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mode-btn,
-  .mode-btn.active,
-  .tabs button,
-  .tabs button.active {
-    transition-duration: 1ms;
-  }
-}
-
-/* Tab Content */
-.tab-content {
-  flex: 1;
-  overflow-y: auto;
-}
-
-/* Text Chat */
-.text-chat {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.chat-history-loading {
-  margin: 0;
-  font-size: 0.85rem;
-  color: var(--zeus-text-muted, #8792a6);
-  text-align: center;
-}
-
-.message {
-  display: flex;
-  flex-direction: column;
-  max-width: 80%;
-}
-
-.message.user {
-  align-self: flex-end;
-}
-
-.message.agent {
-  align-self: flex-start;
-}
-
-.message-content {
-  padding: 12px 16px;
-  border-radius: 12px;
-  background: var(--zeus-accent-soft, #eef1ff);
-  color: var(--zeus-text, #0f172a);
-}
-
-.message.agent .message-content {
-  background: var(--zeus-accent-2-soft, #f3ecfd);
-}
-
-.message-evidence {
-  list-style: none;
-  margin: 6px 0 0;
-  padding: 0 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 12px;
-}
-
-.evidence-link {
-  color: var(--zeus-accent, #4f46e5);
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.message-next-step {
-  margin: 6px 0 0;
-  padding: 0 8px;
-  font-size: 12px;
-  color: var(--zeus-text-secondary, #52607a);
-}
-
-.message-confirm {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-  padding: 0 8px;
-}
-
-.confirm-btn,
-.cancel-btn {
-  padding: 6px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--zeus-border-strong, #d7dce5);
-  background: var(--zeus-bg-subtle, #eef1f6);
-  color: var(--zeus-text, #0f172a);
-  cursor: pointer;
-}
-
-.confirm-btn {
-  background: var(--zeus-accent, #4f46e5);
-  border-color: var(--zeus-accent, #4f46e5);
-  color: var(--zeus-on-accent, #ffffff);
-}
-
-.message-time {
-  font-size: 11px;
-  color: var(--zeus-text-muted, #8792a6);
-  margin-top: 4px;
-  padding: 0 8px;
-}
-
-.image-uploader-wrapper {
-  margin: 12px 16px 0;
-  padding: 12px;
-  border: 1px dashed var(--zeus-border-strong, #d7dce5);
-  border-radius: 12px;
-  background: var(--zeus-bg-subtle, #eef1f6);
-}
-
-.perseo-image-uploader {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.perseo-image-uploader input[type="file"] {
-  color: var(--zeus-text-secondary, #52607a);
-}
-
-:deep(.uploader-dropzone) {
-  border: 1px dashed var(--zeus-border-strong, #d7dce5);
-  border-radius: 10px;
-  padding: 8px;
-}
-
-:deep(.uploader-dnd-hint) {
-  font-size: 11px;
-  color: var(--zeus-text-muted, #8792a6);
-  margin: 6px 0 0 16px;
-}
-
-:deep(.uploader-preview-video) {
-  width: 120px;
-  height: 72px;
-}
-
-:deep(.uploader-video) {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 10px;
-}
-
-:deep(.uploader-preview-pdf) {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(239, 68, 68, 0.15);
-}
-
-:deep(.pdf-label) {
-  font-size: 11px;
-  font-weight: 700;
-  color: #fecaca;
-}
-
-.uploader-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 14px;
-  color: var(--zeus-text, #0f172a);
-}
-
-.uploader-link {
-  font-size: 12px;
-  color: var(--zeus-accent, #3b82f6);
-}
-
-.uploader-body {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.uploader-btn {
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  border: none;
-  border-radius: 8px;
-  padding: 8px 16px;
-  color: #fff;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.uploader-preview {
-  position: relative;
-  width: 72px;
-  height: 72px;
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid var(--zeus-border, #e5e9f0);
-}
-
-.uploader-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.uploader-reset {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  border: none;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  cursor: pointer;
-}
-
-.uploader-error,
-.uploader-hint {
-  font-size: 12px;
-  color: #f87171;
-}
-
-.uploader-neutral {
-  font-size: 13px;
-  margin: 8px 0 0;
-  color: #64748b;
-}
-
-.uploader-success {
-  font-size: 13px;
-  margin: 8px 0 0;
-  color: #15803d;
-}
-
-.uploader-btn-secondary {
-  margin-top: 10px;
-  background: #e2e8f0;
-  color: #334155;
-}
-
-.image-reference-chip {
-  margin-top: 8px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: var(--zeus-accent-soft, #eef1ff);
-  color: var(--zeus-accent-hover, #2c46e0);
-  font-size: 13px;
-}
-
-.image-reference-chip a {
-  color: var(--zeus-accent-hover, #2c46e0);
-  text-decoration: underline;
-}
-
-.chip-remove {
-  border: none;
-  background: transparent;
-  color: var(--zeus-text-secondary, #52607a);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.chat-input-container {
-  display: flex;
-  gap: 8px;
-  padding: 16px;
-  border-top: 1px solid var(--zeus-border, #e5e9f0);
-}
-
-.chat-input {
-  flex: 1;
-  padding: 12px;
-  background: var(--zeus-bg-subtle, #eef1f6);
-  border: 1px solid var(--zeus-border, #e5e9f0);
-  border-radius: 8px;
-  color: var(--zeus-text, #0f172a);
-}
-
-.send-btn {
-  padding: 12px 20px;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  border: none;
-  color: white;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 18px;
-}
-
-/* Voice Chat */
-.voice-chat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  gap: 24px;
-}
-
-.voice-visualizer {
-  width: 200px;
-  height: 200px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.voice-wave {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-
-.voice-wave span {
-  width: 4px;
-  height: 20px;
-  background: #3b82f6;
-  border-radius: 2px;
-  transition: all 0.2s;
-}
-
-.voice-wave.active span {
-  animation: wave 0.6s ease-in-out infinite;
-}
-
-.voice-wave span:nth-child(2) { animation-delay: 0.1s; }
-.voice-wave span:nth-child(3) { animation-delay: 0.2s; }
-.voice-wave span:nth-child(4) { animation-delay: 0.3s; }
-.voice-wave span:nth-child(5) { animation-delay: 0.4s; }
-
-@keyframes wave {
-  0%, 100% { height: 20px; }
-  50% { height: 60px; }
-}
-
-.voice-error {
-  color: #ff8a8a;
-  font-size: 0.9rem;
-  margin: 0 0 12px;
-  text-align: center;
-}
-
-.voice-status {
-  color: var(--zeus-text-secondary, #52607a);
-  font-size: 16px;
-  text-align: center;
-}
-
-.voice-btn {
-  padding: 16px 32px;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  border: none;
-  color: white;
-  border-radius: 12px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.voice-btn.active {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  animation: pulse 1.5s infinite;
-}
-
-.voice-transcript, .voice-response {
-  padding: 16px;
-  background: var(--zeus-bg-subtle, #eef1f6);
-  border-radius: 8px;
-  text-align: center;
-  max-width: 400px;
-  color: var(--zeus-text, #0f172a);
-}
-
-/* Activity Timeline */
+/* Actividad (dentro del deck del orbe) */
 .activity-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
-  margin-bottom: 20px;
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
-.activity-header h4 {
-  margin: 0;
-  font-size: 18px;
-  color: var(--zeus-text, #0f172a);
+.days-label {
+  font-size: 12px;
+  color: var(--zeus-text-muted, #8792a6);
 }
 
 .days-selector {
@@ -1504,11 +507,6 @@ const formatMetricValue = (value) => {
   font-weight: 600;
 }
 
-.activity-status.failed {
-  background: var(--zeus-danger-soft, #fdecec);
-  color: #dc2626;
-}
-
 .activity-status.failed,
 .activity-status.audit_failed {
   background: var(--zeus-danger-soft, #fdecec);
@@ -1542,7 +540,7 @@ const formatMetricValue = (value) => {
   font-weight: 600;
 }
 
-/* Metrics */
+/* Métricas (dentro del deck del orbe) */
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1644,38 +642,13 @@ const formatMetricValue = (value) => {
   color: var(--zeus-text-muted, #8792a6);
 }
 
-/* Workspace Tab */
-.workspace-content {
-  padding: 0;
-  overflow: visible;
-  max-height: none;
-}
-
 .no-workspace {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 400px;
+  height: 200px;
   color: var(--zeus-text-muted, #8792a6);
   font-size: 16px;
-}
-
-/* Fase 2: acceso a las herramientas reales del workspace bajo el orbe */
-.workspace-tools-toggle {
-  display: block;
-  margin: 0 auto;
-  padding: 8px 16px;
-  border-radius: var(--zeus-radius-full, 999px);
-  border: 1px solid var(--line, var(--zeus-border, #e1e5eb));
-  background: var(--panel, var(--zeus-surface, #fff));
-  color: var(--fg, var(--zeus-text, #0f172a));
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.workspace-tools {
-  scroll-margin-top: 16px;
 }
 
 /* Responsive */
@@ -1697,29 +670,5 @@ const formatMetricValue = (value) => {
     flex-direction: column;
     gap: 16px;
   }
-
-  .tab-content,
-  .workspace-content {
-    max-height: none;
-  }
-
-  /* Pestanas en movil: las cuatro caben enteras ("Metricas" se cortaba). */
-  .tabs {
-    gap: 2px;
-  }
-
-  /* Las cuatro iguales: icono arriba y nombre debajo, siempre. */
-  .tabs button {
-    min-width: 0;
-    padding: 6px 2px;
-    font-size: 12px;
-    line-height: 1.25;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    white-space: nowrap;
-  }
 }
 </style>
-

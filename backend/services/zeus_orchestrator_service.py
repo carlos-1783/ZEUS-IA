@@ -33,6 +33,12 @@ from services.intent_parser_service import (
     parse_message,
 )
 from services.intent_parser import clarification_for_unknown, has_negation, is_conversational_request
+from services.jarvis_conversation_gate import (
+    has_clear_action_intent,
+    is_stop_order,
+    is_terse_operational,
+    wants_action_path,
+)
 from services import jarvis_clarification as clarif
 from services import jarvis_model_comprehension as model_comp
 from services import jarvis_plan as plan_mod
@@ -640,6 +646,14 @@ async def try_handle_zeus_chat(
             early = _module_block(_map_intent_to_action_type(task.intent, task.action))
             if early:
                 return early
+        # ZEUS conversa por defecto: sin accion reconocida por las reglas ni orden clara («envía»,
+        # «dame», «quiero crear…»), el mensaje es charla o algo que ZEUS no hace -> responde el modelo
+        # conversacional HABLANDO (ni plan multiagente, ni aclaracion de plantilla). Las negaciones, dudas
+        # y ordenes de PARADA sin «no» («detén/para/frena/suspende/aborta/aplaza/pospón/cancela…») siguen
+        # SIEMPRE su camino J8/J8c (se contestan sin hacer nada); nunca las decide el modelo conversacional.
+        if task.intent == "unknown" and not wants_action_path(message):
+            _step("COMPRENDER", "conversation_default", "success", intent="unknown")
+            return None
         # J8b: si el mensaje PUEDE pedir una accion con consecuencias, la comprension la hace el
         # modelo (salida validada; ante cualquier fallo se conserva `task`). Nunca ejecuta: solo
         # produce una tarea o una respuesta; la aprobacion humana sigue siendo obligatoria.
@@ -653,7 +667,8 @@ async def try_handle_zeus_chat(
         notice = comp.notice
         # J9b: plan multiagente (modelo J8b; en fallback sin modelo, un paso por dominio por reglas).
         plan = comp.plan
-        if plan is None and not comp.used_model and task.intent == "unknown" and not has_negation(message):
+        if (plan is None and not comp.used_model and task.intent == "unknown" and not has_negation(message)
+                and not is_stop_order(message)):
             plan = plan_mod.plan_from_rules(message, is_superuser=bool(getattr(user, "is_superuser", False)))
         if plan is not None:
             return await _run_plan(
@@ -689,14 +704,16 @@ async def try_handle_zeus_chat(
             "intent": task.intent, "message": question,
         }
     if not understood:
-        if looks_like_operational(message) and has_negation(message):
-            # «nunca envíes», «no mandes…» sin objeto reconocible: se entiende como NO hacer nada.
+        if (looks_like_operational(message) and has_negation(message)) or is_stop_order(message):
+            # «nunca envíes», «no mandes…» sin objeto reconocible, o una orden de PARADA («detén el
+            # envío», «pospón eso»…) aunque no nombre el modulo: se entiende como NO hacer nada.
             return {
                 "handled": True, "success": True, "executed": False, "needs_clarification": True,
                 "intent": "unknown",
                 "message": "Entendido, no hago nada. Si quieres que haga algo, dímelo de forma explícita.",
             }
-        if looks_like_operational(message) and not is_conversational_request(message):
+        if (looks_like_operational(message) and not is_conversational_request(message)
+                and (has_clear_action_intent(message) or is_terse_operational(message))):
             return {
                 "handled": True, "success": True, "executed": False, "needs_clarification": True,
                 "intent": "unknown", "message": clarification_for_unknown(message),

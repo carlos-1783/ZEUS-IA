@@ -7,7 +7,7 @@
     </button>
 
     <!-- Header del TPV -->
-    <div class="tpv-header">
+    <div class="tpv-header zeus-metal">
       <div class="tpv-title-section">
         <h1 class="tpv-title">
           <span class="tpv-title-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg></span>
@@ -71,7 +71,7 @@
     <!-- Interfaz Principal del TPV -->
     <div class="tpv-main-interface" v-if="!loading && !errorMessage">
       <!-- Panel Izquierdo: Productos o Mesas -->
-      <div class="tpv-left-panel">
+      <div class="tpv-left-panel zeus-metal">
         <!-- Con mesa seleccionada: barra "Mesa X" + volver a mesas -->
         <div v-if="tablesMode && tpvConfig.tables_enabled && selectedTable" class="tables-selected-bar">
           <button type="button" @click="backToTablesList" class="back-to-tables-btn" title="Volver a mesas">
@@ -252,9 +252,14 @@
       <!-- Panel Derecho: Carrito y Teclado -->
       <div class="tpv-right-panel">
         <!-- Resumen del Carrito -->
-        <div class="cart-panel">
+        <div class="cart-panel zeus-metal">
           <div class="cart-header">
-            <h2><span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="17" cy="20" r="1"/><path d="M2 4h2l2.6 12.4a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.6L21 8H6"/></svg></span> Carrito <span v-if="cart.length > 0" class="cart-count-badge">({{ cart.length }})</span></h2>
+            <h2>
+              <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg></span>
+              Ticket
+              <span v-if="cart.length > 0" class="cart-count-badge">{{ cart.length }} {{ cart.length === 1 ? 'línea' : 'líneas' }}</span>
+              <span v-if="selectedTable" class="cart-table-chip">Mesa {{ selectedTable.number }}</span>
+            </h2>
             <button @click="clearCart" class="clear-cart-btn" v-if="cart.length > 0">
               <span class="tpv-icon tpv-icon-ui" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M9.5 7l.7 12a1 1 0 0 0 1 1h5.6a1 1 0 0 0 1-1l.7-12"/></svg></span> Limpiar
             </button>
@@ -285,7 +290,8 @@
               :key="`cart-item-${item.id || item.product?.id || index}-${index}`"
               class="cart-item"
               :class="{ 'cart-item--active': index === activeCartIndex }"
-              @click="setActiveCartIndex(index)"
+              :aria-pressed="index === activeCartIndex ? 'true' : 'false'"
+              @click="setActiveCartIndex(index === activeCartIndex ? -1 : index)"
             >
               <div class="cart-item-info">
                 <span class="cart-item-name">{{ item.name || item.product?.name || 'Producto' }}</span>
@@ -334,15 +340,19 @@
           </div>
           </div>
 
-          <!-- Teclado numérico: pequeño y CONTEXTUAL — solo para ajustar la cantidad de una línea
-               del ticket, y solo mientras se está montando el carrito. No ocupa espacio permanente:
-               en PRE_PAGO/PAGO/CERRADO, o con el carrito vacío, no hay nada que teclear aquí. -->
-          <div v-if="tpvState === TPV_STATES.CART && cart.length > 0" class="numeric-keyboard">
-            <p class="numeric-keyboard-hint">
-              {{ activeCartIndex >= 0 && cart[activeCartIndex]
-                ? `Cantidad de «${cart[activeCartIndex].name || cart[activeCartIndex].product?.name || 'producto'}»`
-                : 'Toca una línea del ticket para ajustar su cantidad' }}
-            </p>
+          <!-- Teclado numérico: pequeño y CONTEXTUAL — aparece solo al tocar una línea del ticket
+               (para teclear su cantidad) y se cierra con «Listo» o tocando otra vez la línea. Sin
+               línea elegida no ocupa espacio: el ticket se queda con toda la altura. -->
+          <p v-if="tpvState === TPV_STATES.CART && cart.length > 0 && !(activeCartIndex >= 0 && cart[activeCartIndex])" class="numeric-keyboard-tip">
+            Toca una línea para teclear su cantidad
+          </p>
+          <div v-if="tpvState === TPV_STATES.CART && activeCartIndex >= 0 && cart[activeCartIndex]" class="numeric-keyboard">
+            <div class="numeric-keyboard-head">
+              <p class="numeric-keyboard-hint">
+                Cantidad de «{{ cart[activeCartIndex].name || cart[activeCartIndex].product?.name || 'producto' }}»
+              </p>
+              <button type="button" class="numeric-keyboard-done" @click="setActiveCartIndex(-1)">Listo</button>
+            </div>
             <div class="keyboard-row" v-for="(row, rowIndex) in keyboardLayout" :key="rowIndex">
               <button
                 v-for="key in row"
@@ -367,18 +377,15 @@
                tapa con el teclado — siempre visible y pulsable (patrón TPV real). -->
           <div class="cart-footer">
           <div class="cart-block cart-block-summary">
-          <div class="cart-totals" v-if="cart.length > 0">
-            <div class="total-line">
-              <span>Subtotal:</span>
-              <span>€{{ formatPrice(subtotal) }}</span>
+          <!-- Total SIEMPRE visible (también con el ticket vacío: 0,00 € real, no una cifra de ejemplo). -->
+          <div class="cart-totals">
+            <div class="total-line total-breakdown">
+              <span>Base €{{ formatPrice(subtotal) }}</span>
+              <span>IVA €{{ formatPrice(ivaTotal) }}</span>
             </div>
-            <div class="total-line">
-              <span>IVA:</span>
-              <span>€{{ formatPrice(ivaTotal) }}</span>
-            </div>
-            <div class="total-line total-final">
-              <span>TOTAL:</span>
-              <span>€{{ formatPrice(total) }}</span>
+            <div class="total-line total-final" aria-live="polite">
+              <span>Total</span>
+              <span class="total-final-amount">€{{ formatPrice(total) }}</span>
             </div>
           </div>
           </div>
@@ -402,7 +409,7 @@
                 :disabled="!Array.isArray(cart) || cart.length === 0"
                 :title="(!Array.isArray(cart) || cart.length === 0) ? 'Añade productos al carrito para continuar' : 'Revisar y proceder al pago'"
               >
-                <span class="tpv-icon tpv-icon-primary" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg></span> REVISAR Y PAGAR €{{ formatPrice(total) }}
+                <span class="tpv-icon tpv-icon-primary" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg></span> COBRAR €{{ formatPrice(total) }}
               </button>
               <button
                 @click="openDiscount"
@@ -4765,5 +4772,486 @@ onUnmounted(() => {
   margin: 6px 0 0;
   font-size: 12px;
   color: var(--zeus-warning-text, var(--amber, #b45309));
+}
+/* =====================================================================
+   REDISEÑO TICKET-FIRST (cierre JARVIS) — misma lámina platino/grafito que el panel aprobado
+   (--metal-face/--metal-edge/--metal-shadow), gunmetal para acciones secundarias de cabecera y
+   el rayo (--zeus-accent-gradient) SOLO en Cobrar. Todo con tokens: cambia de tema solo.
+   Jerarquía: ticket (líneas grandes, scroll propio) → total + COBRAR fijos → teclado contextual.
+   ===================================================================== */
+.tpv-container {
+  background-image: var(--metal-page, var(--zeus-bg));
+  color: var(--fg, var(--zeus-text));
+  gap: 10px;
+}
+
+.tpv-container .tpv-header,
+.tpv-container .tpv-left-panel,
+.tpv-container .cart-panel {
+  background: var(--metal-face, var(--zeus-surface));
+  border: 1px solid var(--metal-edge, var(--zeus-border));
+  border-bottom-color: var(--metal-edge-bottom, var(--zeus-border));
+  border-radius: 14px;
+  box-shadow: var(--metal-shadow, var(--zeus-shadow-md));
+}
+
+/* ---- Cabecera compacta: título + aviso legal a la izquierda, herramientas a la derecha ---- */
+.tpv-container .tpv-header {
+  padding: 10px 14px 10px 150px;
+  gap: 12px;
+  margin: 0;
+}
+.tpv-container .tpv-title {
+  font-size: 1.15rem;
+  margin: 0;
+  color: var(--fg, var(--zeus-text));
+}
+.tpv-container .tpv-subtitle {
+  display: none;
+}
+.tpv-container .tpv-legal-notice {
+  display: inline-block;
+  margin: 6px 0 0;
+  padding: 4px 10px;
+  max-width: 62ch;
+  font-size: 11.5px;
+  line-height: 1.35;
+  border-radius: 8px;
+  background: var(--zeus-warning-soft);
+  color: var(--zeus-warning-text);
+  border: 1px solid color-mix(in srgb, var(--warn, #efa21d) 45%, transparent);
+}
+.tpv-container .header-actions {
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.tpv-container .header-btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--gun-btn, var(--zeus-surface));
+  color: var(--gun-btn-fg, var(--zeus-text));
+  border: 1px solid var(--gun-btn-border, var(--zeus-border));
+  box-shadow: var(--gun-btn-shadow, none);
+}
+.tpv-container .header-btn:hover:not(:disabled) {
+  background: var(--gun-btn-hover, var(--zeus-surface));
+  box-shadow: var(--gun-btn-shadow-hover, none);
+}
+.tpv-container .header-btn.active {
+  outline: 2px solid var(--volt, #2f82f0);
+  outline-offset: 1px;
+}
+.tpv-container .back-to-dashboard-btn.fixed-top-left {
+  top: 22px;
+  left: 22px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 10px;
+  background: var(--gun-btn, var(--zeus-surface));
+  color: var(--gun-btn-fg, var(--zeus-text));
+  border: 1px solid var(--gun-btn-border, var(--zeus-border));
+  box-shadow: var(--gun-btn-shadow, none);
+}
+
+/* ---- Parrilla equilibrada: productos ~60 % / ticket ~40 % (con mínimo cómodo) ---- */
+.tpv-container .tpv-main-interface {
+  grid-template-columns: minmax(0, 1fr) clamp(360px, 38vw, 540px);
+  gap: 10px;
+}
+.tpv-container .tpv-left-panel {
+  padding: 0 14px 14px;
+}
+.tpv-container .categories-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0 -14px 12px;
+  padding: 12px 14px 10px;
+  gap: 6px;
+  background: var(--metal-face, var(--zeus-surface));
+  border-bottom: 1px solid var(--line, var(--zeus-border));
+}
+.tpv-container .category-btn {
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  background: var(--fill, var(--zeus-bg-subtle));
+  border: 1px solid var(--line, var(--zeus-border));
+  color: var(--fg, var(--zeus-text));
+}
+.tpv-container .category-btn:hover {
+  border-color: var(--volt, #2f82f0);
+  color: var(--fg, var(--zeus-text));
+  background: var(--fill, var(--zeus-bg-subtle));
+}
+.tpv-container .category-btn.active {
+  background: var(--gun-btn, var(--zeus-text));
+  color: var(--gun-btn-fg, #fff);
+  border-color: var(--gun-btn-border, transparent);
+  box-shadow: var(--gun-btn-shadow, none);
+}
+.tpv-container .products-grid {
+  grid-template-columns: repeat(auto-fill, minmax(138px, 1fr));
+  gap: 10px;
+}
+.tpv-container .product-card,
+.tpv-container .add-product-card {
+  background: var(--fill, var(--zeus-surface));
+  border: 1px solid var(--line, var(--zeus-border));
+  border-radius: 12px;
+  padding: 10px;
+  box-shadow: var(--metal-shadow-sm, var(--zeus-shadow-sm));
+}
+.tpv-container .product-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--volt, #2f82f0);
+  box-shadow: 0 0 0 3px var(--volt-soft, transparent), var(--metal-shadow-sm, none);
+}
+.tpv-container .add-product-card {
+  border-style: dashed;
+  border-color: var(--line-2, var(--zeus-border-strong));
+  color: var(--muted, var(--zeus-text-secondary));
+}
+.tpv-container .product-name {
+  color: var(--fg, var(--zeus-text));
+}
+.tpv-container .product-category,
+.tpv-container .product-stock {
+  color: var(--muted, var(--zeus-text-secondary));
+}
+.tpv-container .product-price,
+.tpv-container .product-price .price-value,
+.tpv-container .product-price .price-label {
+  color: var(--volt-ink, var(--zeus-accent));
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Ticket: líneas grandes, scroll propio ---- */
+.tpv-container .cart-panel {
+  padding: 12px;
+  gap: 8px;
+}
+.tpv-container .cart-header {
+  padding-bottom: 8px;
+  margin: 0;
+  border-bottom: 1px solid var(--line, var(--zeus-border));
+}
+.tpv-container .cart-header h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  gap: 8px;
+  color: var(--fg, var(--zeus-text));
+}
+.tpv-container .cart-count-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted, var(--zeus-text-secondary));
+}
+.tpv-container .cart-table-chip {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--volt-soft, var(--zeus-accent-soft));
+  color: var(--volt-ink, var(--zeus-accent));
+}
+.tpv-container .cart-item {
+  align-items: center;
+  gap: 10px;
+  min-height: 60px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: var(--fill, var(--zeus-bg-subtle));
+  border: 1px solid var(--line, transparent);
+  cursor: pointer;
+}
+.tpv-container .cart-item--active {
+  padding-left: 12px;
+  background: var(--fill, var(--zeus-surface));
+  border-color: var(--volt, #2f82f0);
+  box-shadow: 0 0 0 3px var(--volt-soft, transparent);
+}
+.tpv-container .cart-item-name {
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--fg, var(--zeus-text));
+  overflow-wrap: anywhere;
+}
+.tpv-container .cart-item-price {
+  font-size: 1.08rem;
+  font-weight: 750;
+  color: var(--fg, var(--zeus-text));
+  font-variant-numeric: tabular-nums;
+}
+.tpv-container .cart-item-unit-price {
+  font-size: 12px;
+  color: var(--muted, var(--zeus-text-secondary));
+}
+.tpv-container .cart-item-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.tpv-container .qty-btn,
+.tpv-container .remove-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--raised, var(--zeus-surface));
+  border: 1px solid var(--line-2, var(--zeus-border));
+  color: var(--fg, var(--zeus-text));
+}
+.tpv-container .qty-btn svg,
+.tpv-container .remove-btn svg {
+  width: 16px;
+  height: 16px;
+}
+.tpv-container .remove-btn {
+  color: var(--zeus-danger-text, var(--red));
+}
+.tpv-container .cart-item-qty {
+  min-width: 28px;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg, var(--zeus-text));
+}
+.tpv-container .clear-cart-btn {
+  height: 30px;
+  border-radius: 8px;
+  background: transparent;
+  border-color: var(--line-2, var(--zeus-border));
+  color: var(--zeus-danger-text, var(--red));
+}
+.tpv-container .empty-cart-message,
+.tpv-container .empty-cart-hint {
+  color: var(--muted, var(--zeus-text-secondary));
+}
+
+/* ---- Teclado numérico pequeño y contextual ---- */
+.tpv-container .numeric-keyboard-tip {
+  margin: 2px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted, var(--zeus-text-secondary));
+}
+.tpv-container .numeric-keyboard {
+  align-self: center;
+  width: min(100%, 280px);
+  margin-top: 4px;
+  padding: 8px;
+  gap: 5px;
+  border: 1px solid var(--line, var(--zeus-border));
+  border-radius: 12px;
+  background: var(--fill, var(--zeus-bg-subtle));
+}
+.tpv-container .numeric-keyboard-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tpv-container .numeric-keyboard-hint {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg, var(--zeus-text));
+}
+.tpv-container .numeric-keyboard-done {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  background: var(--gun-btn, var(--zeus-text));
+  color: var(--gun-btn-fg, #fff);
+  border: 1px solid var(--gun-btn-border, transparent);
+}
+.tpv-container .keyboard-row {
+  min-height: 34px;
+  gap: 5px;
+}
+.tpv-container .keyboard-key {
+  min-height: 34px;
+  border-radius: 9px;
+  font-size: 15px;
+  background: var(--panel, var(--zeus-surface));
+  border: 1px solid var(--line-2, var(--zeus-border));
+  color: var(--fg, var(--zeus-text));
+  font-variant-numeric: tabular-nums;
+}
+.tpv-container .keyboard-key:hover {
+  border-color: var(--volt, #2f82f0);
+  background: var(--panel, var(--zeus-surface));
+}
+.tpv-container .key-action {
+  color: var(--muted, var(--zeus-text-secondary));
+}
+
+/* ---- Pie fijo: total grande + COBRAR (siempre visibles) ---- */
+.tpv-container .cart-footer {
+  border-top: 1px solid var(--line-2, var(--zeus-border));
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tpv-container .cart-block + .cart-block {
+  margin-top: 0;
+}
+.tpv-container .cart-totals {
+  border-top: 0;
+  padding-top: 0;
+}
+.tpv-container .total-breakdown {
+  justify-content: flex-start;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--muted, var(--zeus-text-secondary));
+  font-variant-numeric: tabular-nums;
+}
+.tpv-container .total-final {
+  align-items: baseline;
+  border-top: 0;
+  margin-top: 2px;
+  padding-top: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted, var(--zeus-text-secondary));
+}
+.tpv-container .total-final-amount {
+  font-size: clamp(1.7rem, 2.6vw, 2.2rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--fg, var(--zeus-text));
+  font-variant-numeric: tabular-nums;
+}
+.tpv-container .action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tpv-container .action-btn.pay-btn {
+  order: -1;
+  flex: 1 0 100%;
+  height: 60px;
+  border-radius: 12px;
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.tpv-container .action-btn.pay-btn .tpv-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.tpv-container .action-btn.secondary-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 40px;
+  border-radius: 10px;
+  font-size: 13px;
+  background: var(--fill, var(--zeus-surface));
+  border: 1px solid var(--line-2, var(--zeus-border));
+  color: var(--fg, var(--zeus-text));
+}
+.tpv-container .action-btn.secondary-btn:hover:not(:disabled) {
+  border-color: var(--volt, #2f82f0);
+  background: var(--fill, var(--zeus-surface));
+  color: var(--fg, var(--zeus-text));
+}
+.tpv-container .payment-note-section label {
+  color: var(--muted, var(--zeus-text-secondary));
+}
+.tpv-container .payment-note-input {
+  background: var(--fill, var(--zeus-surface));
+  border: 1px solid var(--line-2, var(--zeus-border));
+  color: var(--fg, var(--zeus-text));
+  border-radius: 10px;
+}
+
+/* ---- Tablet / móvil: ticket primero y FIJO arriba (total + Cobrar siempre a la vista) ---- */
+@media (max-width: 1024px) {
+  .tpv-container .tpv-header {
+    padding: 10px 14px;
+    margin: 52px 0 0;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .tpv-container .header-actions {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: flex-start;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
+  }
+  .tpv-container .header-btn {
+    flex: 0 0 auto;
+    min-width: auto;
+  }
+  .tpv-container .back-to-dashboard-btn.fixed-top-left {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+  }
+  .tpv-container .tpv-main-interface {
+    grid-template-columns: 1fr;
+    overflow: visible;
+    margin: 0;
+  }
+  .tpv-container .tpv-right-panel {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    height: min(60vh, 520px);
+    min-height: 300px;
+    padding: 0;
+  }
+  .tpv-container .tpv-left-panel {
+    overflow: visible;
+    padding: 0 12px 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .tpv-container .tpv-right-panel {
+    height: min(58vh, 460px);
+  }
+  .tpv-container .cart-item {
+    min-height: 54px;
+    padding: 8px 10px;
+  }
+  .tpv-container .qty-btn,
+  .tpv-container .remove-btn {
+    width: 34px;
+    height: 34px;
+  }
+  .tpv-container .action-btn.pay-btn {
+    height: 54px;
+    font-size: 1.08rem;
+  }
+  .tpv-container .action-btn.secondary-btn {
+    height: 38px;
+    font-size: 12px;
+  }
+  .tpv-container .products-grid {
+    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+    gap: 8px;
+  }
 }
 </style>

@@ -276,7 +276,7 @@ const voiceGender = computed<'male' | 'female'>(() =>
   FEMALE_VOICE_AGENTS.has((props.agent?.name || '').toUpperCase().split(' ')[0]) ? 'female' : 'male',
 );
 
-// Manos libres: Porcupine escucha la palabra en el dispositivo; al oírla capta UNA frase y la envía.
+// Manos libres: openWakeWord escucha la palabra en el dispositivo; al oírla capta UNA frase y la envía.
 const voice = useJarvisVoice({
   continuous: false,
   rate: 0.95,

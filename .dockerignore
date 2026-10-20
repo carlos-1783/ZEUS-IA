@@ -38,6 +38,8 @@ backend/logs/
 *.env
 
 # Frontend (allow Docker build to include frontend)
+# Modelos de openWakeWord para pruebas internas (CC BY-NC-SA 4.0, no comerciales): nunca en una imagen.
+frontend/public/openwakeword/local/
 electron/
 zeus_app/
 

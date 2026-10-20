@@ -33,9 +33,9 @@ export interface JarvisVoiceOptions {
    */
   voiceGender?: 'male' | 'female';
   /**
-   * Palabra de activacion (manos libres) con Picovoice Porcupine, motor LOCAL en el dispositivo: el
-   * audio de la escucha en espera nunca sale del navegador. Al oir la palabra se llama a `onWake` y se
-   * arranca el reconocimiento de UNA frase (la orden), que llega por `onFinal` como siempre.
+   * Palabra de activacion (manos libres) con openWakeWord (onnxruntime-web), motor LOCAL en el
+   * dispositivo: el audio de la escucha en espera nunca sale del navegador. Al oir la palabra se llama
+   * a `onWake` y se arranca el reconocimiento de UNA frase (la orden), que llega por `onFinal`.
    */
   wakeWord?: boolean;
   onWake?: (label: string) => void;
@@ -44,45 +44,52 @@ export interface JarvisVoiceOptions {
 }
 
 /**
- * Configuracion de Porcupine (solo variables de entorno de Vite; nada en el codigo):
- * - VITE_PICOVOICE_ACCESS_KEY: AccessKey de console.picovoice.ai. Sin ella, la escucha en espera no
- *   arranca y el orbe se queda en estado limpio con el texto como respaldo.
- * - VITE_PICOVOICE_KEYWORD_PATH (opcional): ruta publica de un .ppn propio (p. ej. «Zeus»). Sin ella se
- *   usa la palabra incluida gratis «Jarvis».
- * - VITE_PICOVOICE_KEYWORD_LABEL (opcional): nombre que se muestra para ese .ppn (por defecto «Zeus»).
- * - VITE_PICOVOICE_MODEL_PATH (opcional): modelo .pv del idioma del .ppn (por defecto el ingles,
- *   /porcupine/porcupine_params.pv, que es el de «Jarvis»).
+ * Configuracion de openWakeWord (solo variables de entorno de Vite; ningun modelo en el codigo):
+ * - VITE_WAKEWORD_MODEL_PATH: ruta publica del modelo .onnx de la palabra. Sin ella, la escucha en
+ *   espera no arranca y el orbe se queda en estado limpio (tocar el orbe / escribir siguen igual).
+ *   Los modelos preentrenados de openWakeWord («hey jarvis») son CC BY-NC-SA 4.0 (NO comerciales):
+ *   solo para pruebas internas (scripts/fetch-wakeword-dev.ps1). Produccion necesita un modelo propio.
+ * - VITE_WAKEWORD_LABEL (opcional): la palabra que se le pide decir al usuario (por defecto «Hey Jarvis»).
+ * - VITE_WAKEWORD_THRESHOLD (opcional): puntuacion minima 0..1 (por defecto 0.5).
+ * - VITE_WAKEWORD_MELSPECTROGRAM_PATH / VITE_WAKEWORD_EMBEDDING_PATH (opcionales): modelos comunes de
+ *   openWakeWord; por defecto melspectrogram.onnx y embedding_model.onnx en la carpeta del modelo.
  */
 export type WakeState = 'off' | 'loading' | 'armed' | 'unavailable';
 
-const DEFAULT_MODEL_PATH = '/porcupine/porcupine_params.pv';
+const DEFAULT_WAKE_LABEL = 'Hey Jarvis';
+const DEFAULT_WAKE_THRESHOLD = 0.5;
 
 function wakeConfig() {
   const env = (import.meta as any).env || {};
-  const accessKey = String(env.VITE_PICOVOICE_ACCESS_KEY || '').trim();
-  const keywordPath = String(env.VITE_PICOVOICE_KEYWORD_PATH || '').trim();
+  const modelPath = String(env.VITE_WAKEWORD_MODEL_PATH || '').trim();
+  const dir = modelPath.includes('/') ? modelPath.slice(0, modelPath.lastIndexOf('/') + 1) : '';
+  const t = Number.parseFloat(String(env.VITE_WAKEWORD_THRESHOLD ?? ''));
   return {
-    accessKey,
-    keywordPath,
-    keywordLabel: String(env.VITE_PICOVOICE_KEYWORD_LABEL || 'Zeus').trim() || 'Zeus',
-    modelPath: String(env.VITE_PICOVOICE_MODEL_PATH || '').trim() || DEFAULT_MODEL_PATH,
+    modelPath,
+    label: String(env.VITE_WAKEWORD_LABEL || '').trim() || DEFAULT_WAKE_LABEL,
+    threshold: Number.isFinite(t) && t > 0 && t < 1 ? t : DEFAULT_WAKE_THRESHOLD,
+    melspectrogramPath: String(env.VITE_WAKEWORD_MELSPECTROGRAM_PATH || '').trim() || `${dir}melspectrogram.onnx`,
+    embeddingPath: String(env.VITE_WAKEWORD_EMBEDDING_PATH || '').trim() || `${dir}embedding_model.onnx`,
   };
 }
 
 /** Nombre de la palabra que esta configurada (para decirle al usuario que palabra decir). */
 export function configuredWakeLabel(): string {
-  const c = wakeConfig();
-  return c.keywordPath ? c.keywordLabel : 'Jarvis';
+  return wakeConfig().label;
 }
 
 function wakeErrorMessage(err: any): string {
   const name = String(err?.name || '');
   const msg = String(err?.message || err || '');
+  const code = String(err?.code || '');
   if (/NotAllowed|Permission|SecurityError/i.test(name + msg)) {
     return 'Sin permiso de micrófono: la palabra de activación no puede escuchar. Actívalo en el navegador.';
   }
-  if (/Activation|AccessKey|10008|10009|10010|10011/i.test(name + msg)) {
-    return 'La clave de Picovoice no es válida o ha superado su límite: la palabra de activación está desactivada.';
+  if (code === 'model-missing') {
+    return 'No se encontró el modelo de la palabra de activación: la escucha en espera está desactivada.';
+  }
+  if (code === 'runtime') {
+    return 'El motor de la palabra de activación no pudo cargar en este navegador.';
   }
   if (/NotFound|audio-capture|device/i.test(name + msg)) {
     return 'No se encontró ningún micrófono para la palabra de activación.';
@@ -306,28 +313,28 @@ export function useJarvisVoice(options: JarvisVoiceOptions = {}) {
     return true;
   }
 
-  // ------------------------------------------------------------------ palabra de activacion (Porcupine)
+  // ------------------------------------------------------------------ palabra de activacion (openWakeWord)
   const wakeState = ref<WakeState>('off');
   const wakeReason = ref('');
   const wakeLabel = ref(configuredWakeLabel());
-  let porcupine: any = null;
-  let wvp: any = null;
+  let wakeEngine: import('@/utils/openWakeWord').OpenWakeWordEngine | null = null;
   let wakeSubscribed = false;
   let disposed = false;
   let gestureHooked = false;
 
   async function subscribeWake(): Promise<void> {
-    if (!porcupine || !wvp || disposed) return;
-    // subscribe() es idempotente y reanuda el AudioContext si el navegador lo dejo suspendido.
-    await wvp.subscribe(porcupine);
+    if (!wakeEngine || disposed) return;
+    // start() es idempotente y reanuda el AudioContext si el navegador lo dejo suspendido.
+    await wakeEngine.start();
     wakeSubscribed = true;
   }
 
   async function unsubscribeWake(): Promise<void> {
-    if (!porcupine || !wvp || !wakeSubscribed) return;
+    if (!wakeEngine || !wakeSubscribed) return;
     wakeSubscribed = false;
     try {
-      await wvp.unsubscribe(porcupine);
+      // Suelta el micro por completo: Web Speech lo necesita para captar la orden.
+      await wakeEngine.stop();
     } catch {
       /* ya fuera */
     }
@@ -346,71 +353,81 @@ export function useJarvisVoice(options: JarvisVoiceOptions = {}) {
     document.addEventListener('keydown', resume, { once: true });
   }
 
-  function onDetection(detection: { label: string }): void {
+  function onDetection(): void {
     // Nunca reacciona mientras el agente habla (no se oye a si mismo) ni si ya esta captando la orden.
     if (speaking.value || listening.value || disposed) return;
     if (options.canWake && !options.canWake()) return;
-    options.onWake?.(detection?.label || wakeLabel.value);
+    options.onWake?.(wakeLabel.value);
     // Se suelta el micro de la escucha en espera mientras se capta la orden; se recupera al terminar.
     unsubscribeWake().finally(() => {
       if (!start()) resumeWake();
     });
   }
 
-  /** Arranca la escucha en espera. Sin clave o sin motor no rompe nada: queda `unavailable` con el motivo. */
+  /** Arranca la escucha en espera. Sin modelo o sin motor no rompe nada: queda `unavailable` con el motivo. */
   async function armWake(): Promise<boolean> {
     if (wakeState.value === 'armed' || wakeState.value === 'loading') return wakeState.value === 'armed';
     const cfg = wakeConfig();
     wakeLabel.value = configuredWakeLabel();
-    if (!cfg.accessKey) {
+    if (!cfg.modelPath) {
       wakeState.value = 'unavailable';
-      wakeReason.value = 'Palabra de activación sin configurar (falta la clave de Picovoice).';
+      // Texto para el operario; el detalle tecnico solo en consola.
+      wakeReason.value = 'Activación por voz no disponible: toca el orbe para hablar.';
+      console.info('[voz] Palabra de activación sin modelo configurado (VITE_WAKEWORD_MODEL_PATH vacío).');
       return false;
     }
-    if (typeof window === 'undefined' || !navigator?.mediaDevices?.getUserMedia || typeof Worker === 'undefined') {
+    if (
+      typeof window === 'undefined' ||
+      !navigator?.mediaDevices?.getUserMedia ||
+      typeof WebAssembly === 'undefined' ||
+      !((window as any).AudioContext || (window as any).webkitAudioContext)
+    ) {
       wakeState.value = 'unavailable';
       wakeReason.value = 'Este navegador no permite la escucha en espera.';
       return false;
     }
     wakeState.value = 'loading';
     wakeReason.value = '';
+    let engine: import('@/utils/openWakeWord').OpenWakeWordEngine | null = null;
     try {
-      // Carga diferida: el motor (WASM) solo se descarga si hay clave y se va a usar.
-      const [pv, vp] = await Promise.all([
-        import('@picovoice/porcupine-web'),
-        import('@picovoice/web-voice-processor'),
-      ]);
+      // Carga diferida: el motor (onnxruntime + WASM + modelos) solo se descarga si hay modelo configurado.
+      let oww: typeof import('@/utils/openWakeWord');
+      try {
+        oww = await import('@/utils/openWakeWord');
+      } catch (err) {
+        // No se pudo cargar el modulo del motor (chunk/onnxruntime/wasm): es un fallo del motor.
+        throw Object.assign(new Error(String((err as any)?.message || err)), { code: 'runtime' });
+      }
       if (disposed) return false;
-      const keyword = cfg.keywordPath
-        ? { publicPath: cfg.keywordPath, label: cfg.keywordLabel, sensitivity: 0.6 }
-        : { builtin: pv.BuiltInKeyword.Jarvis, sensitivity: 0.6 };
-      porcupine = await pv.PorcupineWorker.create(cfg.accessKey, keyword, onDetection, {
-        publicPath: cfg.modelPath,
-        version: 1,
-      }, {
-        processErrorCallback: (e: any) => {
+      engine = await oww.createOpenWakeWord({
+        modelPath: cfg.modelPath,
+        melspectrogramPath: cfg.melspectrogramPath,
+        embeddingPath: cfg.embeddingPath,
+        threshold: cfg.threshold,
+        onDetection,
+        onError: (e) => {
+          // El motor fallo a mitad de escucha: se apaga sin romper el orbe (tocar / escribir siguen).
           wakeReason.value = wakeErrorMessage(e);
+          wakeState.value = 'unavailable';
+          disposeWake();
         },
       });
-      wvp = vp.WebVoiceProcessor;
       if (disposed) {
-        porcupine.terminate?.();
-        porcupine = null;
+        await engine.dispose();
         return false;
       }
+      wakeEngine = engine;
       await subscribeWake();
       wakeState.value = 'armed';
       hookGestureResume();
       return true;
     } catch (e: any) {
+      wakeEngine = null;
+      wakeSubscribed = false;
+      engine?.dispose().catch(() => {});
+      if (disposed) return false; // desmontado mientras arrancaba: no hay nada que mostrar
       wakeState.value = 'unavailable';
       wakeReason.value = wakeErrorMessage(e);
-      try {
-        porcupine?.terminate?.();
-      } catch {
-        /* nada */
-      }
-      porcupine = null;
       return false;
     }
   }
@@ -419,18 +436,20 @@ export function useJarvisVoice(options: JarvisVoiceOptions = {}) {
   function resumeWake(): void {
     if (wakeState.value !== 'armed' || listening.value || speaking.value || disposed) return;
     subscribeWake().catch((e) => {
+      if (e?.code === 'cancelled') return; // se solto el micro mientras arrancaba: no es un error
       wakeReason.value = wakeErrorMessage(e);
     });
   }
 
   async function disposeWake(): Promise<void> {
-    await unsubscribeWake();
+    const engine = wakeEngine;
+    wakeEngine = null;
+    wakeSubscribed = false;
     try {
-      porcupine?.terminate?.();
+      await engine?.dispose();
     } catch {
       /* nada */
     }
-    porcupine = null;
     if (wakeState.value !== 'unavailable') wakeState.value = 'off';
   }
 

@@ -5,6 +5,28 @@ import { fileURLToPath } from 'node:url';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { compression } from 'vite-plugin-compression2';
 import type { PluginOption } from 'vite';
+import { rmSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+/**
+ * Los modelos de openWakeWord que descarga scripts/fetch-wakeword-dev.* (public/openwakeword/local/)
+ * son CC BY-NC-SA 4.0 (NO comerciales) y solo sirven para pruebas en el servidor de desarrollo.
+ * Ningun build los publica: se borran de dist/ al terminar (vite dev los sigue sirviendo desde public/).
+ */
+function excludeLocalWakewordModels(): PluginOption {
+  let outDir = 'dist';
+  return {
+    name: 'zeus-exclude-local-wakeword-models',
+    apply: 'build',
+    enforce: 'post',
+    configResolved(config) {
+      outDir = resolve(config.root, config.build.outDir);
+    },
+    closeBundle() {
+      rmSync(resolve(outDir, 'openwakeword/local'), { recursive: true, force: true });
+    },
+  };
+}
 
 export default defineConfig(({ command, mode }: ConfigEnv): UserConfig => {
   const isDev = mode === 'development';
@@ -35,6 +57,7 @@ export default defineConfig(({ command, mode }: ConfigEnv): UserConfig => {
 
   // Plugins configuration
   const plugins: PluginOption[] = [
+    excludeLocalWakewordModels(),
     vue({
       script: {
         defineModel: true,
@@ -158,10 +181,11 @@ export default defineConfig(({ command, mode }: ConfigEnv): UserConfig => {
             if (id.includes('vue3-toastify')) {
               return 'toastify';
             }
-            // Motor de palabra de activación (~3,7 MB de WASM): chunk propio, solo se descarga si hay
-            // clave de Picovoice y se abre el orbe (import() diferido en useJarvisVoice.ts).
-            if (id.includes('@picovoice/')) {
-              return 'picovoice';
+            // Motor de palabra de activación (onnxruntime-web; su .wasm va aparte como asset): chunk
+            // propio, solo se descarga si hay modelo configurado y se abre el orbe (import() diferido
+            // en useJarvisVoice.ts -> src/utils/openWakeWord.ts).
+            if (id.includes('onnxruntime-web') || id.includes('onnxruntime-common')) {
+              return 'wakeword';
             }
             return 'vendor';
           }

@@ -1,8 +1,9 @@
 <template>
   <div class="activity-panel">
     <!-- Header: identidad del agente + único punto de entrada a Herramientas/Actividad/Métricas
-         (menú ⋮). Sin toggle Texto/Voz aquí — el orbe lleva el suyo propio (micro/teclado). El
-         orbe ya no tiene cabecera propia: esta es la única, para no duplicar marco ni identidad. -->
+         (menú ⋮). Sin toggle Texto/Voz aquí — el orbe tiene su propio respaldo de texto discreto. El
+         orbe ya no tiene cabecera propia: esta es la única, para no duplicar marco ni identidad.
+         El orbe no lleva botones: se le habla con la palabra de activación (o tocándolo). -->
     <div class="panel-header">
       <div class="agent-info">
         <span class="agent-avatar-ring">

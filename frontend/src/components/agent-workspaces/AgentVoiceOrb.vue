@@ -1,62 +1,113 @@
 <template>
   <section
     class="voice-orb"
-    :class="[`is-${stage}`, { 'is-deployed': deployed }]"
+    :class="[`is-${stage}`, { 'is-deployed': deployed, 'has-holo': holoPanels.length > 0, 'wake-armed': voice.wakeState.value === 'armed' }]"
     :aria-label="`Asistente de voz de ${agentLabel}`"
   >
     <!-- Sin cabecera propia: el encuadre y la identidad del agente (avatar/nombre/rol) son los de
-         AgentActivityPanel.vue — un solo marco, una sola cabecera. El menú ⋮ de paneles vive ahí
-         también y controla este componente por referencia (choosePanel/closePanel expuestos). -->
+         AgentActivityPanel.vue — un solo marco, una sola cabecera. El fondo es el metal/platino de la
+         app (no se pinta otro): el orbe solo IRRADIA su luz azul de marca encima. -->
 
-    <!-- El orbe es la pantalla de inicio: grande y centrado en reposo; se encoge y sube
-         cuando hay algo que enseñar (respuesta del chat, panel elegido en el menú ⋮). -->
-    <div class="orb-stage">
-      <div class="orb" :aria-hidden="true">
-        <span class="orb-ring r-outer-dash"></span>
-        <span class="orb-ring r1"></span>
-        <span class="orb-ring r2"></span>
-        <span class="orb-ring r3"></span>
-        <span class="orb-pulse p1"></span>
-        <span class="orb-pulse p2"></span>
-        <span class="orb-core">
-          <img v-if="agent.image" :src="agent.image" :alt="agent.name" />
-          <span class="orb-scan"></span>
-        </span>
+    <!-- Escena: orbe en el centro; los paneles holograma se despliegan a su alrededor. -->
+    <div class="orb-scene">
+      <TransitionGroup name="holo" tag="div" class="holo-side holo-left">
+        <HoloPanelCard v-for="p in holoLeft" :key="p.key" :panel="p" side="left" @close="closeHolo(p.key)" />
+      </TransitionGroup>
+
+      <div class="orb-stage">
+        <!-- Toque en el orbe = hablar ahora (respaldo de la palabra de activación); no es un botón visible. -->
+        <div
+          class="orb"
+          role="button"
+          tabindex="0"
+          :aria-label="stage === 'listening' ? 'Dejar de escuchar' : `Hablar con ${agentLabel}`"
+          @click="tapOrb"
+          @keydown.enter.prevent="tapOrb"
+          @keydown.space.prevent="tapOrb"
+        >
+          <span class="orb-aura" aria-hidden="true"></span>
+          <span class="orb-bloom" aria-hidden="true"></span>
+
+          <svg class="hud hud-ticks" viewBox="0 0 400 400" fill="none" aria-hidden="true">
+            <line
+              v-for="t in 60"
+              :key="t"
+              x1="200"
+              y1="14"
+              x2="200"
+              :y2="t % 5 === 1 ? 38 : 26"
+              :class="t % 5 === 1 ? 'tick-major' : 'tick-minor'"
+              :transform="`rotate(${(t - 1) * 6} 200 200)`"
+            />
+          </svg>
+          <svg class="hud hud-arc" viewBox="0 0 400 400" fill="none" aria-hidden="true">
+            <defs>
+              <linearGradient :id="`arc-${uid}`" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" class="stop-hi" />
+                <stop offset="1" class="stop-fade" />
+              </linearGradient>
+            </defs>
+            <circle cx="200" cy="200" r="158" class="ring-dots" />
+            <circle cx="200" cy="200" r="158" class="ring-arc" :stroke="`url(#arc-${uid})`" />
+            <circle cx="200" cy="200" r="158" class="ring-arc ring-arc-2" :stroke="`url(#arc-${uid})`" />
+          </svg>
+          <svg class="hud hud-fast" viewBox="0 0 400 400" fill="none" aria-hidden="true">
+            <circle cx="200" cy="200" r="128" class="ring-dash" />
+            <path class="ring-marks" d="M200 58 v18 M200 342 v-18 M58 200 h18 M342 200 h-18" />
+          </svg>
+          <svg class="hud hud-inner" viewBox="0 0 400 400" fill="none" aria-hidden="true">
+            <circle cx="200" cy="200" r="108" class="ring-thin" />
+            <circle cx="200" cy="200" r="108" class="ring-seg" />
+          </svg>
+
+          <span class="orb-pulse p1" aria-hidden="true"></span>
+          <span class="orb-pulse p2" aria-hidden="true"></span>
+
+          <span class="orb-core" aria-hidden="true">
+            <img v-if="agent.image" :src="agent.image" :alt="agent.name" />
+            <span class="orb-scan"></span>
+          </span>
+          <span class="orb-flare" aria-hidden="true"></span>
+
+          <div class="orb-eq" :class="{ live: stage === 'listening' || voice.speaking.value }" aria-hidden="true">
+            <span v-for="n in 7" :key="n"></span>
+          </div>
+        </div>
+
+        <div class="orb-copy" aria-live="polite">
+          <template v-if="stage === 'listening'">
+            <p class="orb-title">Escuchando…</p>
+            <p class="orb-sub">{{ voice.transcript.value || 'Habla con normalidad; paro al terminar la frase.' }}</p>
+          </template>
+          <template v-else-if="stage === 'busy'">
+            <p class="orb-title">{{ agentLabel }} está trabajando…</p>
+            <p class="orb-sub">«{{ lastAsked }}»</p>
+          </template>
+          <p v-else-if="voice.speaking.value" class="orb-sub">Respondiendo…</p>
+          <template v-else-if="!deployed">
+            <p v-if="voice.wakeState.value === 'armed'" class="orb-hint">
+              Di <strong>«{{ voice.wakeLabel.value }}»</strong> y pide lo que necesites
+            </p>
+            <p v-else-if="voice.wakeState.value === 'loading'" class="orb-hint">Preparando la escucha…</p>
+          </template>
+        </div>
       </div>
 
-      <div class="orb-eq" :class="{ live: stage === 'listening' || voice.speaking.value }" aria-hidden="true">
-        <span v-for="n in 6" :key="n"></span>
-      </div>
-
-      <!-- Sin rótulo de saludo: si hay algo que decir (escuchando/trabajando/hablando) se dice ahí;
-           en reposo, solo una pista breve de cómo empezar, nunca "Hola <nombre>". -->
-      <div class="orb-copy" aria-live="polite">
-        <template v-if="stage === 'listening'">
-          <p class="orb-title">Escuchando…</p>
-          <p class="orb-sub">{{ voice.transcript.value || 'Habla con normalidad; paro al terminar la frase.' }}</p>
-        </template>
-        <template v-else-if="stage === 'busy'">
-          <p class="orb-title">{{ agentLabel }} está trabajando…</p>
-          <p class="orb-sub">«{{ lastAsked }}»</p>
-        </template>
-        <template v-else-if="!deployed">
-          <p class="orb-sub">{{ voice.supported ? 'Pulsa el micro para hablar' : 'Tu navegador no reconoce voz: usa ⌨️ para escribir' }}</p>
-        </template>
-        <p v-if="voice.speaking.value" class="orb-sub">Respondiendo en voz alta…</p>
-      </div>
+      <TransitionGroup name="holo" tag="div" class="holo-side holo-right">
+        <HoloPanelCard v-for="p in holoRight" :key="p.key" :panel="p" side="right" @close="closeHolo(p.key)" />
+      </TransitionGroup>
     </div>
 
     <p v-if="voiceError" class="orb-alert" role="alert">{{ voiceError }}</p>
 
-    <!-- Deck: aquí se despliega TODO lo que el orbe abre — respuestas del chat (windows) y los
-         paneles elegidos en el menú ⋮ (herramientas / actividad / métricas), con el mismo
-         tratamiento visual de panel HUD. -->
-    <div v-if="deployed" class="orb-deck">
+    <!-- Deck: respuestas del chat (windows) y los paneles del menú ⋮ (herramientas / actividad /
+         métricas), con el mismo tratamiento holograma. -->
+    <div v-if="windows.length || activePanel" class="orb-deck">
       <TransitionGroup name="orb-win" tag="div" class="orb-windows">
         <article
           v-for="w in windows"
           :key="w.id"
-          class="orb-win"
+          class="orb-win holo-surface"
           :class="`kind-${w.kind}`"
           :role="w.kind === 'blocked' || w.kind === 'error' ? 'alert' : 'region'"
           :aria-label="w.title"
@@ -115,7 +166,7 @@
         </article>
       </TransitionGroup>
 
-      <section v-if="activePanel" class="orb-panel">
+      <section v-if="activePanel" class="orb-panel holo-surface">
         <header class="panel-head">
           <h4>{{ panelTitle }}</h4>
           <button type="button" class="win-close" @click="closePanel">OK, cerrar</button>
@@ -126,20 +177,22 @@
       </section>
     </div>
 
-    <!-- Adjuntar imagen/factura/vídeo al siguiente mensaje (hoy: PERSEO la usa para generar el
-         vídeo de presentación real). Mismo mecanismo verificado que antes vivía en la pestaña de
-         Chat; se mueve aquí porque el orbe es ahora la única superficie de chat. -->
-    <div v-if="supportsMediaAttachment" class="orb-attach-wrapper">
-      <ImageUploader @uploaded="handleMediaUploaded" />
-      <div v-if="mediaReferenceUrl" class="orb-attach-chip">
-        <span>Medio adjunto (imagen / vídeo / PDF)</span>
-        <a :href="mediaReferenceUrl" target="_blank" rel="noopener">Ver</a>
-        <button type="button" class="chip-remove" @click="clearMediaReference">Quitar</button>
-      </div>
-    </div>
-
+    <!-- Respaldo de texto, discreto: un enlace, no un botón. Dentro, adjuntar estilo WhatsApp
+         (foto/factura -> bandeja de ZEUS; PERSEO: medio para su vídeo). -->
     <form v-if="typing" class="orb-type" @submit.prevent="sendTyped">
       <label class="sr-only" :for="inputId">Escribe a {{ agentLabel }}</label>
+      <button type="button" class="orb-type-attach" title="Adjuntar foto o factura" aria-label="Adjuntar foto o factura" @click="onPhoto">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9" />
+        </svg>
+      </button>
+      <input
+        ref="photoInput"
+        type="file"
+        accept="image/jpeg,image/png,image/webp,application/pdf"
+        hidden
+        @change="onPhotoChosen"
+      />
       <input
         :id="inputId"
         ref="typeInput"
@@ -152,52 +205,26 @@
       <button type="submit" class="orb-type-send" :disabled="stage === 'busy' || !typed.trim()">Enviar</button>
     </form>
 
-    <!-- Texto/Voz: voz por defecto (micro), el teclado siempre disponible sin perder nada. -->
-    <footer class="orb-bar">
-      <button
-        type="button"
-        class="orb-side-btn"
-        aria-label="Enviar foto o factura a ZEUS"
-        title="Foto / factura"
-        @click="onPhoto"
-      >
-        📷
-      </button>
-      <input
-        ref="photoInput"
-        type="file"
-        accept="image/jpeg,image/png,image/webp,application/pdf"
-        hidden
-        @change="onPhotoChosen"
-      />
-      <button
-        type="button"
-        class="orb-mic"
-        :class="{ live: stage === 'listening' }"
-        :aria-pressed="stage === 'listening' ? 'true' : 'false'"
-        :aria-label="stage === 'listening' ? 'Dejar de escuchar' : `Hablar con ${agentLabel}`"
-        :disabled="stage === 'busy'"
-        @click="toggleMic"
-      >
-        <span aria-hidden="true">🎙️</span>
-      </button>
-      <button
-        type="button"
-        class="orb-side-btn"
-        :aria-pressed="typing ? 'true' : 'false'"
-        aria-label="Escribir en lugar de hablar"
-        title="Escribir"
-        @click="toggleTyping"
-      >
-        ⌨️
-      </button>
-    </footer>
-    <p class="orb-bar-hint">{{ typing ? 'Texto · escribe y pulsa Enviar' : 'Voz · pulsa el micro y habla' }}</p>
+    <div v-if="typing && supportsMediaAttachment" class="orb-attach-wrapper">
+      <ImageUploader @uploaded="handleMediaUploaded" />
+      <div v-if="mediaReferenceUrl" class="orb-attach-chip">
+        <span>Medio adjunto (imagen / vídeo / PDF)</span>
+        <a :href="mediaReferenceUrl" target="_blank" rel="noopener">Ver</a>
+        <button type="button" class="chip-remove" @click="clearMediaReference">Quitar</button>
+      </div>
+    </div>
+
+    <p class="orb-foot">
+      <a href="#" class="orb-text-link" @click.prevent="toggleTyping">{{ typing ? 'Ocultar texto' : 'Prefiero escribir' }}</a>
+      <span v-if="voice.wakeState.value === 'unavailable' && voice.wakeReason.value" class="orb-wake-note">
+        · {{ voice.wakeReason.value }}
+      </span>
+    </p>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue';
+import { computed, defineComponent, h, nextTick, onMounted, ref, type PropType } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useJarvisVoice } from '@/composables/useJarvisVoice';
 import { getAgentChatUrl, AGENT_CHAT_TIMEOUT_MS, openEvidence, type ChatEvidence } from '@/utils/chatApi';
@@ -209,6 +236,7 @@ import {
   windowForInboxItem,
   type JarvisWindow,
 } from '@/utils/jarvisWindows';
+import { detectHoloRequest, loadHoloPanel, HOLO_TITLES, type HoloKey, type HoloPanel } from '@/utils/jarvisHoloPanels';
 import { API_BASE_URL } from '@/config';
 import ImageUploader from '@/components/ImageUploader.jsx';
 
@@ -238,7 +266,8 @@ const typeInput = ref<HTMLInputElement | null>(null);
 const localError = ref('');
 let lastSentAt = 0;
 
-const inputId = `orb-input-${Math.random().toString(36).slice(2, 8)}`;
+const uid = Math.random().toString(36).slice(2, 8);
+const inputId = `orb-input-${uid}`;
 
 // Voz por agente: masculina (ZEUS, PERSEO, RAFAEL, THALOS) o femenina (JUSTICIA, AFRODITA),
 // coherente con la personalidad de cada uno definida en su system prompt (config/prompts.json).
@@ -247,11 +276,27 @@ const voiceGender = computed<'male' | 'female'>(() =>
   FEMALE_VOICE_AGENTS.has((props.agent?.name || '').toUpperCase().split(' ')[0]) ? 'female' : 'male',
 );
 
+// Manos libres: Porcupine escucha la palabra en el dispositivo; al oírla capta UNA frase y la envía.
 const voice = useJarvisVoice({
   continuous: false,
   rate: 0.95,
   voiceGender: voiceGender.value,
+  wakeWord: true,
+  canWake: () => !busy.value,
+  onWake: () => {
+    localError.value = '';
+    voice.cancel();
+    // Oída la palabra pero el navegador no transcribe la orden: se abre el texto, sin romper nada.
+    if (!voice.supported) {
+      typing.value = true;
+      nextTick(() => typeInput.value?.focus());
+    }
+  },
   onFinal: (text) => send(text, 'voice'),
+});
+
+onMounted(() => {
+  voice.armWake();
 });
 
 const agentLabel = computed(() => {
@@ -295,8 +340,65 @@ const panelTitle = computed(() => {
   return props.panelTitles?.[k] || { tools: 'Herramientas', activity: 'Actividad', metrics: 'Métricas' }[k];
 });
 
-/** El orbe se encoge y aparece el deck si hay respuesta de chat, un panel del menú abierto, o está ocupado. */
-const deployed = computed(() => windows.value.length > 0 || activePanel.value !== null || stage.value === 'busy');
+// --------------------------------------------------------------------- paneles holograma (por voz)
+
+type HoloView = HoloPanel & { loading: boolean };
+const MAX_HOLO = 2; // uno a cada lado del orbe
+const holoPanels = ref<HoloView[]>([]);
+// El más reciente a la derecha; el anterior pasa a la izquierda.
+const holoRight = computed(() => holoPanels.value.slice(0, 1));
+const holoLeft = computed(() => holoPanels.value.slice(1, 2));
+
+async function openHolo(key: HoloKey): Promise<HoloView> {
+  const placeholder: HoloView = {
+    key,
+    title: HOLO_TITLES[key],
+    source: 'Cargando datos reales…',
+    state: 'ok',
+    message: '',
+    figures: [],
+    columns: [],
+    rows: [],
+    loading: true,
+  };
+  holoPanels.value = [placeholder, ...holoPanels.value.filter((p) => p.key !== key)].slice(0, MAX_HOLO);
+  const api = (await import('@/services/api')).default;
+  const panel = await loadHoloPanel(key, (endpoint) => api.get(endpoint, token()), props.agent.name);
+  const view: HoloView = { ...panel, loading: false };
+  // Solo si sigue abierto (el usuario pudo cerrarlo mientras cargaba).
+  if (holoPanels.value.some((p) => p.key === key)) {
+    holoPanels.value = holoPanels.value.map((p) => (p.key === key ? view : p));
+  }
+  return view;
+}
+
+function closeHolo(key: HoloKey): void {
+  holoPanels.value = holoPanels.value.filter((p) => p.key !== key);
+}
+
+const CLOSE_RE = /^(?:ok[, ]*)?(?:cierra|cerrar|cierralo|cierralos|cierra todo|cierra (?:el|los) panel(?:es)?|quita(?:lo)?|vale,? cierra)$/;
+
+function isCloseCommand(message: string): boolean {
+  const m = message
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[.,!¡?¿]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return CLOSE_RE.test(m);
+}
+
+function closeEverything(): void {
+  holoPanels.value = [];
+  windows.value = [];
+  closePanel();
+}
+
+/** El orbe se encoge si hay algo desplegado (respuesta, panel ⋮, holograma) o está ocupado. */
+const deployed = computed(
+  () => windows.value.length > 0 || activePanel.value !== null || holoPanels.value.length > 0 || stage.value === 'busy',
+);
 
 function token(): string | null {
   return (authStore as any).getToken?.() ?? (authStore as any).token ?? null;
@@ -305,6 +407,24 @@ function token(): string | null {
 async function send(raw: string, channel: 'voice' | 'text'): Promise<void> {
   const message = String(raw || '').trim();
   if (!message || busy.value) return;
+
+  // Órdenes de pantalla que resuelve el propio orbe (sin pasar por el agente): cerrar y mostrar.
+  if (isCloseCommand(message)) {
+    closeEverything();
+    voice.cancel();
+    return;
+  }
+  const holoKey = detectHoloRequest(message);
+  if (holoKey) {
+    localError.value = '';
+    lastAsked.value = message;
+    const view = await openHolo(holoKey);
+    if (channel === 'voice') {
+      voice.speak(view.state === 'ok' ? `Aquí tienes: ${view.title.split(' ·')[0].toLowerCase()}.` : view.message);
+    }
+    return;
+  }
+
   const now = Date.now();
   if (now - lastSentAt < MIN_INTERVAL_MS) {
     localError.value = 'Espera unos segundos entre mensajes.';
@@ -385,18 +505,20 @@ async function openEvidenceLink(ev: ChatEvidence, w: JarvisWindow): Promise<void
   }
 }
 
-function toggleMic(): void {
+/** Tocar el orbe = hablar ya (sin esperar a la palabra). Sin reconocimiento de voz, abre el texto. */
+function tapOrb(): void {
   localError.value = '';
+  if (busy.value) return;
   if (voice.listening.value) {
     voice.stop();
     return;
   }
   if (!voice.supported) {
-    localError.value = voice.unsupportedMessage.value;
     typing.value = true;
     nextTick(() => typeInput.value?.focus());
     return;
   }
+  voice.cancel();
   voice.start();
 }
 
@@ -444,7 +566,7 @@ function clearMediaReference(): void {
 }
 
 /**
- * 📷 Foto / factura estilo WhatsApp: la recibe ZEUS (POST /api/v1/zeus/inbox), la guarda en R2, la
+ * Foto / factura estilo WhatsApp: la recibe ZEUS (POST /api/v1/zeus/inbox), la guarda en R2, la
  * clasifica con visión y la reparte para revisión humana (factura/ticket -> RAFAEL, nómina/albarán/
  * pedido -> AFRODITA, contrato -> JUSTICIA). La ventana muestra solo lo que el servidor leyó; si falta
  * R2 u OPENAI_API_KEY el servidor responde 503 y se enseña el bloqueo tal cual. Empresa: la de la sesión.
@@ -505,14 +627,69 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   }
 }
 
+/** Tarjeta holograma: solo pinta lo que trae `panel` (datos reales, «Sin datos» o el error). */
+const HoloPanelCard = defineComponent({
+  name: 'HoloPanelCard',
+  props: {
+    panel: { type: Object as PropType<HoloView>, required: true },
+    side: { type: String as PropType<'left' | 'right'>, default: 'right' },
+  },
+  emits: ['close'],
+  setup(p, { emit: emitCard }) {
+    return () => {
+      const panel = p.panel;
+      const body: any[] = [];
+      if (panel.loading) {
+        body.push(h('p', { class: 'holo-msg' }, 'Cargando datos reales…'));
+      } else if (panel.state !== 'ok') {
+        body.push(h('p', { class: ['holo-msg', `is-${panel.state}`], role: panel.state === 'error' ? 'alert' : undefined }, panel.message));
+      }
+      if (panel.figures.length) {
+        body.push(
+          h(
+            'div',
+            { class: 'holo-figures' },
+            panel.figures.map((f) =>
+              h('div', { class: 'holo-figure', key: f.label }, [h('span', { class: 'holo-fig-value' }, f.value), h('span', { class: 'holo-fig-label' }, f.label)]),
+            ),
+          ),
+        );
+      }
+      if (panel.rows.length) {
+        body.push(
+          h('div', { class: 'holo-table-wrap' }, [
+            h('table', { class: 'holo-table' }, [
+              h('thead', [h('tr', panel.columns.map((c) => h('th', { scope: 'col', key: c }, c)))]),
+              h('tbody', panel.rows.map((r, ri) => h('tr', { key: ri }, r.map((cell, ci) => h('td', { key: ci }, cell))))),
+            ]),
+          ]),
+        );
+      }
+      return h('article', { class: ['holo-panel', 'holo-surface', `from-${p.side}`], role: 'region', 'aria-label': panel.title }, [
+        h('header', { class: 'win-head' }, [
+          h('div', [h('h4', { class: 'win-title' }, panel.title), h('p', { class: 'win-source' }, panel.source)]),
+          h('button', { type: 'button', class: 'win-close', onClick: () => emitCard('close') }, 'OK, cerrar'),
+        ]),
+        ...body,
+      ]);
+    };
+  },
+});
+
 defineExpose({ closePanel, choosePanel, activePanel });
 </script>
 
 <style scoped>
+/* ======================================================================
+   Tokens: todo sale del sistema de diseño de la app (zeus-theme-tokens.css), en claro y oscuro.
+   --volt es el azul de marca; el "azul eléctrico" es ese mismo volt aclarado hacia cian, y la
+   luz del orbe es --volt-glow. El fondo NO se pinta aquí: es el metal/platino de .activity-panel.
+   ====================================================================== */
 .voice-orb {
-  --orb-a: var(--violet, var(--zeus-accent, #6a5cff));
-  --orb-b: var(--blue, var(--zeus-info, #5b8cff));
-  --orb-c: var(--teal, #36c6c6);
+  --orb-volt: var(--volt, #2f82f0);
+  --orb-volt-hi: color-mix(in srgb, var(--orb-volt) 55%, #8fe3ff);
+  --orb-volt-deep: color-mix(in srgb, var(--orb-volt) 70%, #0a1a3a);
+  --orb-glow: var(--volt-glow, rgba(47, 130, 240, 0.5));
   --orb-panel: var(--panel, var(--zeus-surface, #ffffff));
   --orb-panel-2: var(--panel-2, #f3f5f9);
   --orb-line: var(--line, var(--zeus-border, rgba(20, 28, 56, 0.1)));
@@ -521,12 +698,11 @@ defineExpose({ closePanel, choosePanel, activePanel });
   --orb-faint: var(--faint, var(--zeus-text-muted, #8891a6));
   --orb-amber: var(--amber, var(--zeus-warning, #f5a623));
   --orb-red: var(--red, var(--zeus-danger, #ff5d6c));
-  --orb-size: 340px;
-  --orb-stage-min-h: 420px;
+  /* Intensidad de la luz: algo menor sobre platino (claro) para que no lave el metal. */
+  --orb-light: 0.95;
+  --orb-size: 380px;
+  --orb-stage-min-h: 470px;
 
-  /* Sin tarjeta propia: este componente vive DENTRO del único encuadre platino de
-     AgentActivityPanel.vue (.activity-panel) — sin borde/fondo/sombra/radio propios,
-     para no duplicar esa tarjeta ("doble marco"). */
   position: relative;
   display: flex;
   flex-direction: column;
@@ -537,107 +713,222 @@ defineExpose({ closePanel, choosePanel, activePanel });
   font-family: var(--zeus-font-sans, inherit);
 }
 
-/* Rejilla HUD sutil de fondo, solo mientras el orbe está en reposo grande (pantalla principal). */
+:global(:root[data-theme='dark']) .voice-orb {
+  --orb-light: 1.15;
+}
+
+/* Rejilla HUD con el azul de marca, desvanecida hacia los bordes: se apoya en el metal, no lo tapa. */
 .voice-orb::before {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.45;
+  opacity: 0.55;
   background-image:
-    linear-gradient(color-mix(in srgb, var(--orb-a) 7%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--orb-a) 7%, transparent) 1px, transparent 1px);
-  background-size: 34px 34px;
-  mask: radial-gradient(circle at 50% 30%, #000 0%, transparent 72%);
-  -webkit-mask: radial-gradient(circle at 50% 30%, #000 0%, transparent 72%);
+    linear-gradient(color-mix(in srgb, var(--orb-volt) 9%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--orb-volt) 9%, transparent) 1px, transparent 1px);
+  background-size: 38px 38px;
+  mask: radial-gradient(circle at 50% 36%, #000 0%, transparent 70%);
+  -webkit-mask: radial-gradient(circle at 50% 36%, #000 0%, transparent 70%);
   transition: opacity 400ms ease;
 }
 
 .voice-orb.is-deployed::before {
-  opacity: 0.15;
+  opacity: 0.2;
 }
 
-.orb-side-btn:focus-visible,
-.orb-mic:focus-visible,
-.win-close:focus-visible {
+.orb:focus-visible,
+.win-close:focus-visible,
+.orb-text-link:focus-visible {
   outline: none;
-  box-shadow: var(--zeus-shadow-focus, 0 0 0 3px rgba(106, 92, 255, 0.3));
+  box-shadow: var(--zeus-shadow-focus, 0 0 0 3px rgba(47, 130, 240, 0.35));
 }
 
-/* ------------------------------------------------------------------ escenario del orbe */
-.orb-stage {
+/* ------------------------------------------------------------------ escena: orbe + hologramas */
+.orb-scene {
   position: relative;
   z-index: 2;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+}
+
+.holo-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.holo-left {
+  align-items: flex-end;
+}
+
+.holo-right {
+  align-items: flex-start;
+}
+
+.orb-stage {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
-  width: 100%;
-  min-height: var(--orb-stage-min-h);
   justify-content: center;
-  padding-top: 4px;
+  gap: 14px;
+  min-height: var(--orb-stage-min-h);
   transition: min-height 420ms cubic-bezier(0.3, 0.1, 0.2, 1);
 }
 
 .voice-orb.is-deployed .orb-stage {
-  --orb-stage-min-h: 0px;
   min-height: 0;
-  padding-top: 6px;
   gap: 6px;
 }
 
+/* Con hologramas abiertos el orbe se queda a tamaño medio, en el centro, emitiéndolos. */
+.voice-orb.is-deployed {
+  --orb-size: 120px;
+}
+
+.voice-orb.has-holo {
+  --orb-size: 210px;
+}
+
+/* ------------------------------------------------------------------ orbe */
 .orb {
   position: relative;
   width: var(--orb-size);
   height: var(--orb-size);
-  transition: width 420ms cubic-bezier(0.3, 0.1, 0.2, 1), height 420ms cubic-bezier(0.3, 0.1, 0.2, 1);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: width 480ms cubic-bezier(0.3, 0.1, 0.2, 1), height 480ms cubic-bezier(0.3, 0.1, 0.2, 1);
 }
 
-.voice-orb.is-deployed .orb {
-  --orb-size: 92px;
+/* Charco de luz que el orbe proyecta sobre el metal (más grande que el propio orbe). */
+.orb-aura {
+  position: absolute;
+  inset: -45%;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--orb-volt-hi) calc(55% * var(--orb-light)), transparent) 0%,
+    color-mix(in srgb, var(--orb-volt) calc(30% * var(--orb-light)), transparent) 30%,
+    color-mix(in srgb, var(--orb-volt) calc(10% * var(--orb-light)), transparent) 52%,
+    transparent 70%
+  );
 }
 
-.orb-ring {
+/* Bloom: halo brillante y difuminado detrás del núcleo. */
+.orb-bloom {
+  position: absolute;
+  inset: 6%;
+  border-radius: 50%;
+  pointer-events: none;
+  /* Degradado ya difuso: sin filter:blur, que es caro de repintar en equipos sin GPU. */
+  background: radial-gradient(
+    circle,
+    #ffffff 0%,
+    var(--orb-volt-hi) 18%,
+    color-mix(in srgb, var(--orb-volt) 80%, transparent) 38%,
+    color-mix(in srgb, var(--orb-volt) 30%, transparent) 56%,
+    transparent 72%
+  );
+  opacity: calc(0.7 * var(--orb-light));
+  animation: orb-bloom 6.5s ease-in-out infinite;
+}
+
+.hud {
   position: absolute;
   inset: 0;
-  border-radius: 50%;
-  border: 1.5px solid color-mix(in srgb, var(--orb-a) 35%, transparent);
-  animation: orb-breathe 4.8s ease-in-out infinite;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
 }
 
-.orb-ring.r-outer-dash {
-  inset: -4%;
-  border: 1.5px dashed color-mix(in srgb, var(--orb-a) 28%, transparent);
-  animation: orb-spin 48s linear infinite;
+.hud-ticks {
+  animation: orb-spin 60s linear infinite;
 }
 
-.orb-ring.r1 {
-  animation: orb-spin 24s linear infinite reverse, orb-breathe 4.8s ease-in-out infinite;
+.tick-major {
+  stroke: var(--orb-volt-hi);
+  stroke-width: 2.4;
 }
 
-.orb-ring.r2 {
-  inset: 9%;
-  border-color: color-mix(in srgb, var(--orb-b) 45%, transparent);
-  animation-delay: -1.6s;
+.tick-minor {
+  stroke: color-mix(in srgb, var(--orb-volt) 65%, transparent);
+  stroke-width: 1.4;
 }
 
-.orb-ring.r3 {
-  inset: 18%;
-  border: 2px solid transparent;
-  background:
-    conic-gradient(from 0deg, var(--orb-a), var(--orb-b), var(--orb-c), var(--orb-a)) border-box;
-  -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  animation: orb-spin 14s linear infinite;
+.hud-arc {
+  animation: orb-spin 22s linear infinite;
+}
+
+.ring-dots {
+  stroke: color-mix(in srgb, var(--orb-volt) 40%, transparent);
+  stroke-width: 1.6;
+  stroke-dasharray: 3 9;
+}
+
+.ring-arc {
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 150 843;
+}
+
+.ring-arc-2 {
+  stroke-dasharray: 60 933;
+  stroke-dashoffset: -480;
+}
+
+.stop-hi {
+  stop-color: var(--orb-volt-hi);
+}
+
+.stop-fade {
+  stop-color: var(--orb-volt);
+  stop-opacity: 0;
+}
+
+.hud-fast {
+  animation: orb-spin 12s linear infinite reverse;
+}
+
+.ring-dash {
+  stroke: color-mix(in srgb, var(--orb-volt) 60%, transparent);
+  stroke-width: 2;
+  stroke-dasharray: 44 22;
+}
+
+.ring-marks {
+  stroke: var(--orb-volt-hi);
+  stroke-width: 3;
+}
+
+.ring-thin {
+  stroke: color-mix(in srgb, var(--orb-volt) 35%, transparent);
+  stroke-width: 1;
+}
+
+.ring-seg {
+  stroke: var(--orb-volt-hi);
+  stroke-width: 2.5;
+  stroke-dasharray: 8 30;
+  opacity: 0.8;
 }
 
 .orb-pulse {
   position: absolute;
-  inset: 22%;
+  inset: 25%;
   border-radius: 50%;
-  border: 1.5px solid color-mix(in srgb, var(--orb-a) 55%, transparent);
+  border: 2px solid var(--orb-volt-hi);
+  box-shadow: 0 0 14px var(--orb-glow);
   opacity: 0;
+  pointer-events: none;
   animation: orb-pulse-ring 3.2s ease-out infinite;
 }
 
@@ -647,12 +938,16 @@ defineExpose({ closePanel, choosePanel, activePanel });
 
 .orb-core {
   position: absolute;
-  inset: 27%;
+  inset: 28%;
   border-radius: 50%;
   overflow: hidden;
-  background: var(--orb-panel-2);
-  box-shadow: 0 0 0 3px var(--orb-panel), 0 8px 28px color-mix(in srgb, var(--orb-a) 35%, transparent);
-  animation: orb-glow 6.5s ease-in-out infinite;
+  background: var(--orb-volt-deep);
+  border: 3px solid color-mix(in srgb, var(--orb-volt-hi) 85%, white);
+  box-shadow:
+    0 0 0 5px color-mix(in srgb, var(--orb-volt) 30%, transparent),
+    0 0 50px var(--orb-glow),
+    0 0 110px color-mix(in srgb, var(--orb-volt) calc(45% * var(--orb-light)), transparent),
+    inset 0 0 30px rgba(6, 18, 44, 0.55);
 }
 
 .orb-core img {
@@ -660,69 +955,104 @@ defineExpose({ closePanel, choosePanel, activePanel });
   height: 100%;
   object-fit: cover;
   display: block;
+  filter: saturate(1.08) contrast(1.04);
   animation: orb-breathe-img 6.5s ease-in-out infinite;
 }
 
-/* Barrido de escaneo sobre el avatar, como un sensor pasando — motivo de la referencia aprobada. */
+/* Viñeta azul sobre el avatar: el dios queda "dentro" de la luz. */
+.orb-core::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 32%, transparent 42%, color-mix(in srgb, var(--orb-volt-deep) 60%, transparent));
+  pointer-events: none;
+}
+
 .orb-scan {
   position: absolute;
   left: -10%;
   right: -10%;
-  height: 40%;
+  height: 42%;
+  z-index: 2;
   pointer-events: none;
   mix-blend-mode: screen;
   background: linear-gradient(
     180deg,
     transparent,
-    color-mix(in srgb, var(--orb-b) 55%, transparent) 48%,
-    color-mix(in srgb, var(--orb-c) 70%, white 10%) 50%,
-    color-mix(in srgb, var(--orb-b) 55%, transparent) 52%,
+    color-mix(in srgb, var(--orb-volt-hi) 32%, transparent) 48%,
+    color-mix(in srgb, var(--orb-volt-hi) 60%, white) 50%,
+    color-mix(in srgb, var(--orb-volt-hi) 32%, transparent) 52%,
     transparent
   );
   animation: orb-scan 4.6s cubic-bezier(0.5, 0, 0.5, 1) infinite;
 }
 
-.voice-orb.is-listening .orb-ring,
+/* Destello especular arriba-izquierda: da volumen de esfera de luz. */
+.orb-flare {
+  position: absolute;
+  inset: 30%;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.55), transparent 28%);
+  mix-blend-mode: screen;
+}
+
+/* Escuchando: todo se acelera y la luz sube. Trabajando: el arco gira rápido. */
 .voice-orb.is-listening .orb-pulse {
   animation-duration: 1.1s;
 }
 
-.voice-orb.is-busy .orb-ring.r3 {
-  animation-duration: 2.4s;
+.voice-orb.is-listening .orb-bloom {
+  animation-duration: 1.4s;
+}
+
+.voice-orb.is-listening .hud-arc {
+  animation-duration: 5s;
+}
+
+.voice-orb.is-busy .hud-arc,
+.voice-orb.is-busy .hud-fast {
+  animation-duration: 2.6s;
 }
 
 .orb-eq {
+  position: absolute;
+  bottom: 2%;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: flex-end;
   gap: 5px;
-  height: 28px;
-  opacity: 0.85;
-  transition: height 300ms ease, opacity 300ms ease;
+  height: 26px;
+  opacity: 0.45;
+  pointer-events: none;
+  transition: opacity 300ms ease;
 }
 
 .voice-orb.is-deployed .orb-eq {
-  height: 0;
-  opacity: 0;
-  overflow: hidden;
+  display: none;
 }
 
 .orb-eq span {
   width: 4px;
+  height: 10px;
   border-radius: 2px;
-  background: linear-gradient(var(--orb-a), var(--orb-b));
-  opacity: 0.5;
-  height: 8px;
+  background: linear-gradient(var(--orb-volt-hi), var(--orb-volt));
+  box-shadow: 0 0 6px var(--orb-glow);
 }
 
-.orb-eq span:nth-child(1) { height: 8px; }
-.orb-eq span:nth-child(2) { height: 16px; }
-.orb-eq span:nth-child(3) { height: 22px; }
-.orb-eq span:nth-child(4) { height: 13px; }
-.orb-eq span:nth-child(5) { height: 19px; }
-.orb-eq span:nth-child(6) { height: 10px; }
+.orb-eq span:nth-child(2) { height: 18px; }
+.orb-eq span:nth-child(3) { height: 24px; }
+.orb-eq span:nth-child(4) { height: 14px; }
+.orb-eq span:nth-child(5) { height: 22px; }
+.orb-eq span:nth-child(6) { height: 16px; }
+.orb-eq span:nth-child(7) { height: 9px; }
+
+.orb-eq.live {
+  opacity: 1;
+}
 
 .orb-eq.live span {
-  opacity: 1;
   animation: orb-eq-beat 1s ease-in-out infinite;
 }
 
@@ -739,13 +1069,23 @@ defineExpose({ closePanel, choosePanel, activePanel });
   margin: 0;
   font-size: var(--zeus-text-lg, 20px);
   font-weight: var(--zeus-weight-semibold, 600);
+  color: var(--orb-fg);
 }
 
-.orb-sub {
+.orb-sub,
+.orb-hint {
   margin: 4px 0 0;
   color: var(--orb-muted);
   font-size: var(--zeus-text-sm, 13px);
   overflow-wrap: anywhere;
+}
+
+.orb-hint {
+  letter-spacing: 0.02em;
+}
+
+.orb-hint strong {
+  color: var(--volt-ink, var(--orb-volt));
 }
 
 .orb-alert {
@@ -759,7 +1099,65 @@ defineExpose({ closePanel, choosePanel, activePanel });
   font-size: var(--zeus-text-sm, 13px);
 }
 
-/* ------------------------------------------------------------------ deck: todo lo que se despliega */
+/* ------------------------------------------------------------------ superficie holograma */
+.holo-surface {
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--orb-volt) 45%, transparent);
+  border-radius: var(--zeus-radius, 12px);
+  background:
+    repeating-linear-gradient(0deg, color-mix(in srgb, var(--orb-volt) 5%, transparent) 0 1px, transparent 1px 4px),
+    linear-gradient(160deg, color-mix(in srgb, var(--orb-panel) 72%, transparent), color-mix(in srgb, var(--orb-panel) 52%, color-mix(in srgb, var(--orb-volt) 12%, transparent)));
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--orb-volt-hi) 12%, transparent) inset,
+    0 0 26px color-mix(in srgb, var(--orb-volt) calc(28% * var(--orb-light)), transparent),
+    0 18px 40px -18px rgba(5, 15, 40, 0.45);
+  padding: 14px 16px;
+}
+
+/* Corchetes HUD luminosos en las esquinas. */
+.holo-surface::before,
+.holo-surface::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--orb-volt-hi);
+  filter: drop-shadow(0 0 4px var(--orb-glow));
+  pointer-events: none;
+}
+
+.holo-surface::before {
+  top: 6px;
+  left: 6px;
+  border-right: none;
+  border-bottom: none;
+  border-radius: 4px 0 0 0;
+}
+
+.holo-surface::after {
+  bottom: 6px;
+  right: 6px;
+  border-left: none;
+  border-top: none;
+  border-radius: 0 0 4px 0;
+}
+
+.holo-panel {
+  width: min(380px, 100%);
+}
+
+.orb-win.kind-blocked {
+  border: 1.5px solid var(--orb-amber);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--orb-amber) 30%, transparent);
+}
+
+.orb-win.kind-error {
+  border-color: color-mix(in srgb, var(--orb-red) 60%, transparent);
+}
+
+/* ------------------------------------------------------------------ deck */
 .orb-deck {
   position: relative;
   z-index: 2;
@@ -768,7 +1166,8 @@ defineExpose({ closePanel, choosePanel, activePanel });
   display: flex;
   flex-direction: column;
   gap: 12px;
-  animation: orb-deploy 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: orb-deploy 460ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: 50% 0;
 }
 
 .orb-windows {
@@ -777,59 +1176,9 @@ defineExpose({ closePanel, choosePanel, activePanel });
   gap: 12px;
 }
 
-.orb-win,
-.orb-panel {
-  position: relative;
-  border: 1px solid var(--orb-line);
-  border-radius: var(--zeus-radius, 12px);
-  background: var(--orb-panel);
-  padding: 14px 16px;
-  box-shadow: var(--zeus-shadow, 0 1px 3px rgba(15, 23, 42, 0.06));
-}
-
-/* Corchetes HUD en las esquinas de cada panel desplegado, eco discreto de la referencia. */
-.orb-win::before,
-.orb-win::after,
-.orb-panel::before,
-.orb-panel::after {
-  content: '';
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  border: 1.5px solid color-mix(in srgb, var(--orb-a) 55%, transparent);
-  opacity: 0.6;
-  pointer-events: none;
-}
-
-.orb-win::before,
-.orb-panel::before {
-  top: 6px;
-  left: 6px;
-  border-right: none;
-  border-bottom: none;
-  border-radius: 4px 0 0 0;
-}
-
-.orb-win::after,
-.orb-panel::after {
-  bottom: 6px;
-  right: 6px;
-  border-left: none;
-  border-top: none;
-  border-radius: 0 0 4px 0;
-}
-
-.orb-win.kind-blocked {
-  border: 1.5px solid var(--orb-amber);
-  background: color-mix(in srgb, var(--orb-amber) 8%, var(--orb-panel));
-}
-
-.orb-win.kind-error {
-  border-color: color-mix(in srgb, var(--orb-red) 55%, transparent);
-}
-
 .win-head,
-.panel-head {
+.panel-head,
+:deep(.win-head) {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -837,24 +1186,28 @@ defineExpose({ closePanel, choosePanel, activePanel });
 }
 
 .panel-head h4,
-.win-title {
+.win-title,
+:deep(.win-title) {
   margin: 0;
   font-size: var(--zeus-text-base, 15px);
   font-weight: var(--zeus-weight-semibold, 600);
 }
 
-.win-source {
+.win-source,
+:deep(.win-source) {
   margin: 2px 0 0;
   font-size: var(--zeus-text-xs, 12px);
   color: var(--orb-faint);
+  letter-spacing: 0.04em;
 }
 
-.win-close {
+.win-close,
+:deep(.win-close) {
   flex-shrink: 0;
   padding: 6px 12px;
   border-radius: var(--zeus-radius-full, 999px);
-  border: 1px solid var(--orb-line);
-  background: var(--orb-panel);
+  border: 1px solid color-mix(in srgb, var(--orb-volt) 40%, transparent);
+  background: color-mix(in srgb, var(--orb-panel) 70%, transparent);
   color: var(--orb-fg);
   font-size: var(--zeus-text-sm, 13px);
   cursor: pointer;
@@ -874,32 +1227,51 @@ defineExpose({ closePanel, choosePanel, activePanel });
   overflow-wrap: anywhere;
 }
 
-.win-figures {
+.win-figures,
+:deep(.holo-figures) {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
   gap: 10px;
   margin-top: 12px;
 }
 
-.win-figure {
+.win-figure,
+:deep(.holo-figure) {
   display: flex;
   flex-direction: column;
   padding: 10px 12px;
   border-radius: var(--zeus-radius-sm, 8px);
-  background: var(--orb-panel-2);
+  border: 1px solid color-mix(in srgb, var(--orb-volt) 22%, transparent);
+  background: color-mix(in srgb, var(--orb-volt) 7%, transparent);
 }
 
-.fig-value {
-  font-size: var(--zeus-text-2xl, 32px);
+.fig-value,
+:deep(.holo-fig-value) {
+  font-size: var(--zeus-text-2xl, 28px);
   font-weight: var(--zeus-weight-bold, 700);
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
+  color: var(--volt-ink, var(--orb-fg));
 }
 
-.fig-label {
+.fig-label,
+:deep(.holo-fig-label) {
   margin-top: 2px;
   font-size: var(--zeus-text-xs, 12px);
   color: var(--orb-muted);
+}
+
+:deep(.holo-msg) {
+  margin: 12px 0 0;
+  font-size: var(--zeus-text-sm, 13px);
+  color: var(--orb-muted);
+}
+
+:deep(.holo-msg.is-error) {
+  color: var(--orb-fg);
+  padding: 8px 10px;
+  border-radius: var(--zeus-radius-sm, 8px);
+  background: color-mix(in srgb, var(--orb-red) 12%, transparent);
 }
 
 .win-kv {
@@ -911,7 +1283,7 @@ defineExpose({ closePanel, choosePanel, activePanel });
   justify-content: space-between;
   gap: 12px;
   padding: 6px 0;
-  border-top: 1px solid var(--orb-line);
+  border-top: 1px solid color-mix(in srgb, var(--orb-volt) 18%, transparent);
   font-size: var(--zeus-text-sm, 13px);
 }
 
@@ -926,7 +1298,8 @@ defineExpose({ closePanel, choosePanel, activePanel });
   overflow-wrap: anywhere;
 }
 
-.win-table-wrap {
+.win-table-wrap,
+:deep(.holo-table-wrap) {
   margin-top: 12px;
   overflow-x: auto;
 }
@@ -939,22 +1312,29 @@ defineExpose({ closePanel, choosePanel, activePanel });
   letter-spacing: 0.04em;
 }
 
-.win-table {
+.win-table,
+:deep(.holo-table) {
   width: 100%;
   border-collapse: collapse;
   font-size: var(--zeus-text-sm, 13px);
 }
 
 .win-table th,
-.win-table td {
+.win-table td,
+:deep(.holo-table th),
+:deep(.holo-table td) {
   text-align: left;
   padding: 6px 8px;
-  border-bottom: 1px solid var(--orb-line);
+  border-bottom: 1px solid color-mix(in srgb, var(--orb-volt) 16%, transparent);
 }
 
-.win-table th {
+.win-table th,
+:deep(.holo-table th) {
   color: var(--orb-muted);
   font-weight: var(--zeus-weight-medium, 500);
+  font-size: var(--zeus-text-xs, 12px);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .win-more {
@@ -976,8 +1356,8 @@ defineExpose({ closePanel, choosePanel, activePanel });
   display: inline-block;
   padding: 4px 10px;
   border-radius: var(--zeus-radius-full, 999px);
-  background: var(--orb-panel-2);
-  color: var(--orb-a);
+  border: 1px solid color-mix(in srgb, var(--orb-volt) 30%, transparent);
+  color: var(--volt-ink, var(--orb-volt));
   font-size: var(--zeus-text-sm, 13px);
   text-decoration: none;
 }
@@ -1005,17 +1385,69 @@ defineExpose({ closePanel, choosePanel, activePanel });
 
 .win-btn-confirm {
   border: none;
-  background: var(--btn, var(--orb-fg));
+  background: var(--zeus-accent-gradient, var(--orb-volt));
   color: var(--btn-fg, #ffffff);
 }
 
 .win-btn-cancel {
   border: 1px solid var(--orb-line);
-  background: var(--orb-panel);
+  background: color-mix(in srgb, var(--orb-panel) 70%, transparent);
   color: var(--orb-fg);
 }
 
-/* ------------------------------------------------------------------ adjuntar medio (PERSEO) */
+/* ------------------------------------------------------------------ texto de respaldo (discreto) */
+.orb-type {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 620px;
+  display: flex;
+  gap: 8px;
+}
+
+.orb-type input[type='text'] {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px;
+  border-radius: var(--zeus-radius, 12px);
+  border: 1px solid color-mix(in srgb, var(--orb-volt) 35%, transparent);
+  background: color-mix(in srgb, var(--orb-panel) 80%, transparent);
+  color: var(--orb-fg);
+  font-size: 16px; /* evita el zoom automático en iOS */
+}
+
+.orb-type-attach {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  flex-shrink: 0;
+  border-radius: var(--zeus-radius, 12px);
+  border: 1px solid color-mix(in srgb, var(--orb-volt) 35%, transparent);
+  background: color-mix(in srgb, var(--orb-panel) 80%, transparent);
+  color: var(--orb-muted);
+  cursor: pointer;
+}
+
+.orb-type-attach svg {
+  width: 20px;
+  height: 20px;
+}
+
+.orb-type-send {
+  padding: 10px 16px;
+  border-radius: var(--zeus-radius, 12px);
+  border: none;
+  background: var(--zeus-accent-gradient, var(--orb-volt));
+  color: #ffffff;
+  font-weight: var(--zeus-weight-semibold, 600);
+  cursor: pointer;
+}
+
+.orb-type-send:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .orb-attach-wrapper {
   position: relative;
   z-index: 2;
@@ -1037,7 +1469,7 @@ defineExpose({ closePanel, choosePanel, activePanel });
 }
 
 .orb-attach-chip a {
-  color: var(--orb-a);
+  color: var(--volt-ink, var(--orb-volt));
 }
 
 .chip-remove {
@@ -1049,91 +1481,25 @@ defineExpose({ closePanel, choosePanel, activePanel });
   font-size: var(--zeus-text-xs, 12px);
 }
 
-/* Texto (solo si se pide) */
-.orb-type {
+.orb-foot {
   position: relative;
   z-index: 2;
-  width: 100%;
-  display: flex;
-  gap: 8px;
-}
-
-.orb-type input {
-  flex: 1;
-  min-width: 0;
-  padding: 10px 14px;
-  border-radius: var(--zeus-radius, 12px);
-  border: 1px solid var(--orb-line);
-  background: var(--orb-panel);
-  color: var(--orb-fg);
-  font-size: 16px; /* evita el zoom automático en iOS */
-}
-
-.orb-type-send {
-  padding: 10px 16px;
-  border-radius: var(--zeus-radius, 12px);
-  border: 1px solid var(--orb-line);
-  background: var(--orb-panel);
-  color: var(--orb-fg);
-  font-weight: var(--zeus-weight-semibold, 600);
-  cursor: pointer;
-}
-
-/* Barra inferior: el micro es la única acción con el gradiente de acento */
-.orb-bar {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  margin-top: 4px;
-}
-
-.orb-side-btn {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  border: 1px solid var(--orb-line);
-  background: var(--orb-panel);
-  font-size: 20px;
-  cursor: pointer;
-}
-
-.orb-side-btn[aria-pressed='true'] {
-  border-color: var(--orb-a);
-}
-
-.orb-mic {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  border: none;
-  background: var(--zeus-accent-gradient, linear-gradient(135deg, #14b8a6 0%, #8b5cf6 50%, #ec4899 100%));
-  box-shadow: var(--zeus-accent-gradient-shadow, 0 2px 8px rgba(0, 0, 0, 0.15));
-  font-size: 28px;
-  cursor: pointer;
-  transition: transform var(--zeus-dur-press, 100ms) var(--zeus-ease-micro, ease);
-}
-
-.orb-mic:active {
-  transform: scale(0.96);
-}
-
-.orb-mic.live {
-  animation: orb-mic-pulse 1.1s ease-in-out infinite;
-}
-
-.orb-mic:disabled {
-  opacity: 0.55;
-  cursor: progress;
-}
-
-.orb-bar-hint {
-  position: relative;
-  z-index: 2;
-  margin: 0;
+  margin: 2px 0 0;
   font-size: var(--zeus-text-xs, 12px);
   color: var(--orb-faint);
+  text-align: center;
+}
+
+.orb-text-link {
+  color: var(--orb-muted);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--orb-volt) 40%, transparent);
+  text-underline-offset: 3px;
+  border-radius: 4px;
+}
+
+.orb-wake-note {
+  opacity: 0.85;
 }
 
 .sr-only {
@@ -1147,39 +1513,76 @@ defineExpose({ closePanel, choosePanel, activePanel });
   border: 0;
 }
 
-/* Entrada/salida de ventanas y paneles del deck */
+/* ------------------------------------------------------------------ animaciones */
+/* El holograma nace desde el orbe: entra encogido, desplazado hacia el centro y con destello. */
+.holo-enter-active {
+  transition:
+    opacity 520ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 520ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 520ms ease;
+}
+.holo-right .holo-enter-active {
+  transform-origin: 0% 50%;
+}
+.holo-left .holo-enter-active {
+  transform-origin: 100% 50%;
+}
+.holo-leave-active {
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+.holo-right .holo-enter-from {
+  opacity: 0;
+  transform: translateX(-90px) scale(0.25);
+  filter: brightness(2.2) blur(6px);
+}
+.holo-left .holo-enter-from {
+  opacity: 0;
+  transform: translateX(90px) scale(0.25);
+  filter: brightness(2.2) blur(6px);
+}
+.holo-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
+.holo-enter-active {
+  animation: holo-flicker 520ms steps(6, end) 1;
+}
+
 .orb-win-enter-active {
-  transition: opacity 240ms var(--zeus-ease-enter, ease), transform 240ms var(--zeus-ease-enter, ease);
+  transition: opacity 280ms var(--zeus-ease-enter, ease), transform 280ms var(--zeus-ease-enter, ease), filter 280ms ease;
 }
 .orb-win-leave-active {
   transition: opacity 180ms var(--zeus-ease-exit, ease);
 }
 .orb-win-enter-from {
   opacity: 0;
-  transform: translateY(8px);
+  transform: translateY(-24px) scale(0.92);
+  filter: brightness(1.8) blur(3px);
 }
 .orb-win-leave-to {
   opacity: 0;
 }
 
 @keyframes orb-deploy {
-  from { opacity: 0; transform: translateY(18px) scale(0.98); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0; transform: translateY(-20px) scale(0.94); filter: brightness(1.6) blur(3px); }
+  to { opacity: 1; transform: none; filter: none; }
 }
 
-@keyframes orb-breathe {
-  0%, 100% { transform: scale(1); opacity: 0.85; }
-  50% { transform: scale(1.04); opacity: 1; }
+@keyframes holo-flicker {
+  0% { opacity: 0.2; }
+  40% { opacity: 0.9; }
+  55% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+
+@keyframes orb-bloom {
+  0%, 100% { transform: scale(0.92); opacity: calc(0.6 * var(--orb-light)); }
+  50% { transform: scale(1.15); opacity: calc(0.95 * var(--orb-light)); }
 }
 
 @keyframes orb-breathe-img {
   0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.055); }
-}
-
-@keyframes orb-glow {
-  0%, 100% { box-shadow: 0 0 0 3px var(--orb-panel), 0 8px 24px color-mix(in srgb, var(--orb-a) 30%, transparent); }
-  50% { box-shadow: 0 0 0 4px var(--orb-panel), 0 10px 40px color-mix(in srgb, var(--orb-a) 48%, transparent); }
+  50% { transform: scale(1.06); }
 }
 
 @keyframes orb-scan {
@@ -1192,46 +1595,72 @@ defineExpose({ closePanel, choosePanel, activePanel });
 }
 
 @keyframes orb-pulse-ring {
-  0% { transform: scale(0.75); opacity: 0.5; }
-  100% { transform: scale(1.5); opacity: 0; }
+  0% { transform: scale(0.75); opacity: 0.6; }
+  100% { transform: scale(1.55); opacity: 0; }
 }
 
 @keyframes orb-eq-beat {
-  0%, 100% { transform: scaleY(0.45); }
+  0%, 100% { transform: scaleY(0.4); }
   50% { transform: scaleY(1); }
-}
-
-@keyframes orb-mic-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--orb-a) 45%, transparent); }
-  50% { box-shadow: 0 0 0 12px color-mix(in srgb, var(--orb-a) 0%, transparent); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .orb,
-  .orb-ring,
+  .hud,
+  .orb-aura,
+  .orb-bloom,
+  .orb-core img,
   .orb-pulse,
   .orb-scan,
   .orb-eq span,
-  .orb-mic,
   .orb-deck,
+  .holo-enter-active,
+  .holo-leave-active,
   .orb-win-enter-active,
   .orb-win-leave-active {
     animation: none !important;
     transition: none !important;
   }
-  .orb-eq.live span {
-    height: 14px;
+}
+
+/* Pantallas medianas/pequeñas: los hologramas bajan debajo del orbe (no caben a los lados). */
+@media (max-width: 1100px) {
+  .orb-scene {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .orb-stage {
+    order: 1;
+  }
+  .holo-right {
+    order: 2;
+  }
+  .holo-left {
+    order: 3;
+  }
+  .holo-left,
+  .holo-right {
+    align-items: center;
+  }
+  .holo-panel {
+    width: min(620px, 100%);
+  }
+  .voice-orb.has-holo {
+    --orb-size: 150px;
+  }
+  .holo-right .holo-enter-from,
+  .holo-left .holo-enter-from {
+    transform: translateY(-60px) scale(0.3);
   }
 }
 
 @media (max-width: 768px) {
   .voice-orb {
-    --orb-size: 220px;
-    --orb-stage-min-h: 300px;
+    --orb-size: 250px;
+    --orb-stage-min-h: 330px;
     padding: 12px 16px 16px;
   }
-  .orb-bar {
-    gap: 16px;
+  .voice-orb.is-deployed {
+    --orb-size: 100px;
   }
   .kv-row {
     flex-direction: column;

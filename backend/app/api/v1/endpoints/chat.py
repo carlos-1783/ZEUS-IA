@@ -1004,3 +1004,23 @@ async def executions_panel(current_user: User = Depends(get_current_active_user)
         "panel": zeus.get_execution_panel(),
     }
 
+
+
+@router.get("/diagnostics/llm")
+async def llm_diagnostics(
+    live: bool = Query(False, description="true = hace una llamada real minima a OpenAI (gasta ~10 tokens)"),
+    current_user: User = Depends(thalos_request_guard),
+):
+    """Diagnostico en runtime del modelo conversacional: si config.settings.OPENAI_API_KEY llega al
+    proceso (sin exponerla), si OPENAI_MODEL es accesible y, con `live=true`, si una llamada real por
+    el mismo camino que los agentes funciona. Solo superusuario (revela configuracion y gasta tokens)."""
+    if not getattr(current_user, "is_superuser", False):
+        raise HTTPException(status_code=403, detail="Solo un superusuario puede ejecutar el diagnóstico del modelo.")
+    from services.llm_diagnostics import run_llm_diagnostics
+
+    report = await asyncio.to_thread(run_llm_diagnostics, live=live)
+    logger.info(
+        "llm_diagnostics: user=%s ok=%s live=%s model=%s problems=%s",
+        current_user.id, report.get("ok"), live, report.get("model"), report.get("problems"),
+    )
+    return report

@@ -158,6 +158,11 @@ export default defineConfig(({ command, mode }: ConfigEnv): UserConfig => {
             if (id.includes('vue3-toastify')) {
               return 'toastify';
             }
+            // Motor de palabra de activación (~3,7 MB de WASM): chunk propio, solo se descarga si hay
+            // clave de Picovoice y se abre el orbe (import() diferido en useJarvisVoice.ts).
+            if (id.includes('@picovoice/')) {
+              return 'picovoice';
+            }
             return 'vendor';
           }
         },

@@ -32,6 +32,62 @@ export interface JarvisVoiceOptions {
    * no hay ninguna voz reconocible de ese genero, se usa la primera voz en espanol disponible.
    */
   voiceGender?: 'male' | 'female';
+  /**
+   * Palabra de activacion (manos libres) con Picovoice Porcupine, motor LOCAL en el dispositivo: el
+   * audio de la escucha en espera nunca sale del navegador. Al oir la palabra se llama a `onWake` y se
+   * arranca el reconocimiento de UNA frase (la orden), que llega por `onFinal` como siempre.
+   */
+  wakeWord?: boolean;
+  onWake?: (label: string) => void;
+  /** Si devuelve false, la palabra se ignora (p. ej. mientras el agente esta trabajando). */
+  canWake?: () => boolean;
+}
+
+/**
+ * Configuracion de Porcupine (solo variables de entorno de Vite; nada en el codigo):
+ * - VITE_PICOVOICE_ACCESS_KEY: AccessKey de console.picovoice.ai. Sin ella, la escucha en espera no
+ *   arranca y el orbe se queda en estado limpio con el texto como respaldo.
+ * - VITE_PICOVOICE_KEYWORD_PATH (opcional): ruta publica de un .ppn propio (p. ej. «Zeus»). Sin ella se
+ *   usa la palabra incluida gratis «Jarvis».
+ * - VITE_PICOVOICE_KEYWORD_LABEL (opcional): nombre que se muestra para ese .ppn (por defecto «Zeus»).
+ * - VITE_PICOVOICE_MODEL_PATH (opcional): modelo .pv del idioma del .ppn (por defecto el ingles,
+ *   /porcupine/porcupine_params.pv, que es el de «Jarvis»).
+ */
+export type WakeState = 'off' | 'loading' | 'armed' | 'unavailable';
+
+const DEFAULT_MODEL_PATH = '/porcupine/porcupine_params.pv';
+
+function wakeConfig() {
+  const env = (import.meta as any).env || {};
+  const accessKey = String(env.VITE_PICOVOICE_ACCESS_KEY || '').trim();
+  const keywordPath = String(env.VITE_PICOVOICE_KEYWORD_PATH || '').trim();
+  return {
+    accessKey,
+    keywordPath,
+    keywordLabel: String(env.VITE_PICOVOICE_KEYWORD_LABEL || 'Zeus').trim() || 'Zeus',
+    modelPath: String(env.VITE_PICOVOICE_MODEL_PATH || '').trim() || DEFAULT_MODEL_PATH,
+  };
+}
+
+/** Nombre de la palabra que esta configurada (para decirle al usuario que palabra decir). */
+export function configuredWakeLabel(): string {
+  const c = wakeConfig();
+  return c.keywordPath ? c.keywordLabel : 'Jarvis';
+}
+
+function wakeErrorMessage(err: any): string {
+  const name = String(err?.name || '');
+  const msg = String(err?.message || err || '');
+  if (/NotAllowed|Permission|SecurityError/i.test(name + msg)) {
+    return 'Sin permiso de micrófono: la palabra de activación no puede escuchar. Actívalo en el navegador.';
+  }
+  if (/Activation|AccessKey|10008|10009|10010|10011/i.test(name + msg)) {
+    return 'La clave de Picovoice no es válida o ha superado su límite: la palabra de activación está desactivada.';
+  }
+  if (/NotFound|audio-capture|device/i.test(name + msg)) {
+    return 'No se encontró ningún micrófono para la palabra de activación.';
+  }
+  return 'La palabra de activación no pudo arrancar en este navegador.';
 }
 
 const MALE_VOICE_HINTS = [
@@ -81,7 +137,7 @@ function errorMessage(code: string): string {
     case 'service-not-allowed':
       return 'Permiso de micrófono denegado. Actívalo en el navegador o sigue escribiendo.';
     case 'no-speech':
-      return 'No se oyó nada. Pulsa de nuevo y habla.';
+      return 'No se oyó nada. Vuelve a llamarme o toca el orbe y habla.';
     case 'audio-capture':
       return 'No se encontró ningún micrófono.';
     case 'network':
@@ -136,6 +192,8 @@ export function useJarvisVoice(options: JarvisVoiceOptions = {}) {
     };
     r.onend = () => {
       listening.value = false;
+      // Captada (o no) la orden, se vuelve a la escucha en espera de la palabra de activacion.
+      if (options.wakeWord) resumeWake();
     };
     recognition = r;
     return r;
@@ -248,7 +306,137 @@ export function useJarvisVoice(options: JarvisVoiceOptions = {}) {
     return true;
   }
 
+  // ------------------------------------------------------------------ palabra de activacion (Porcupine)
+  const wakeState = ref<WakeState>('off');
+  const wakeReason = ref('');
+  const wakeLabel = ref(configuredWakeLabel());
+  let porcupine: any = null;
+  let wvp: any = null;
+  let wakeSubscribed = false;
+  let disposed = false;
+  let gestureHooked = false;
+
+  async function subscribeWake(): Promise<void> {
+    if (!porcupine || !wvp || disposed) return;
+    // subscribe() es idempotente y reanuda el AudioContext si el navegador lo dejo suspendido.
+    await wvp.subscribe(porcupine);
+    wakeSubscribed = true;
+  }
+
+  async function unsubscribeWake(): Promise<void> {
+    if (!porcupine || !wvp || !wakeSubscribed) return;
+    wakeSubscribed = false;
+    try {
+      await wvp.unsubscribe(porcupine);
+    } catch {
+      /* ya fuera */
+    }
+  }
+
+  /** Algunos navegadores no dan audio hasta que hay un gesto: el primer toque/tecla reanuda la escucha. */
+  function hookGestureResume(): void {
+    if (gestureHooked || typeof document === 'undefined') return;
+    gestureHooked = true;
+    const resume = () => {
+      document.removeEventListener('pointerdown', resume);
+      document.removeEventListener('keydown', resume);
+      if (wakeState.value === 'armed' && !listening.value && !speaking.value) subscribeWake().catch(() => {});
+    };
+    document.addEventListener('pointerdown', resume, { once: true });
+    document.addEventListener('keydown', resume, { once: true });
+  }
+
+  function onDetection(detection: { label: string }): void {
+    // Nunca reacciona mientras el agente habla (no se oye a si mismo) ni si ya esta captando la orden.
+    if (speaking.value || listening.value || disposed) return;
+    if (options.canWake && !options.canWake()) return;
+    options.onWake?.(detection?.label || wakeLabel.value);
+    // Se suelta el micro de la escucha en espera mientras se capta la orden; se recupera al terminar.
+    unsubscribeWake().finally(() => {
+      if (!start()) resumeWake();
+    });
+  }
+
+  /** Arranca la escucha en espera. Sin clave o sin motor no rompe nada: queda `unavailable` con el motivo. */
+  async function armWake(): Promise<boolean> {
+    if (wakeState.value === 'armed' || wakeState.value === 'loading') return wakeState.value === 'armed';
+    const cfg = wakeConfig();
+    wakeLabel.value = configuredWakeLabel();
+    if (!cfg.accessKey) {
+      wakeState.value = 'unavailable';
+      wakeReason.value = 'Palabra de activación sin configurar (falta la clave de Picovoice).';
+      return false;
+    }
+    if (typeof window === 'undefined' || !navigator?.mediaDevices?.getUserMedia || typeof Worker === 'undefined') {
+      wakeState.value = 'unavailable';
+      wakeReason.value = 'Este navegador no permite la escucha en espera.';
+      return false;
+    }
+    wakeState.value = 'loading';
+    wakeReason.value = '';
+    try {
+      // Carga diferida: el motor (WASM) solo se descarga si hay clave y se va a usar.
+      const [pv, vp] = await Promise.all([
+        import('@picovoice/porcupine-web'),
+        import('@picovoice/web-voice-processor'),
+      ]);
+      if (disposed) return false;
+      const keyword = cfg.keywordPath
+        ? { publicPath: cfg.keywordPath, label: cfg.keywordLabel, sensitivity: 0.6 }
+        : { builtin: pv.BuiltInKeyword.Jarvis, sensitivity: 0.6 };
+      porcupine = await pv.PorcupineWorker.create(cfg.accessKey, keyword, onDetection, {
+        publicPath: cfg.modelPath,
+        version: 1,
+      }, {
+        processErrorCallback: (e: any) => {
+          wakeReason.value = wakeErrorMessage(e);
+        },
+      });
+      wvp = vp.WebVoiceProcessor;
+      if (disposed) {
+        porcupine.terminate?.();
+        porcupine = null;
+        return false;
+      }
+      await subscribeWake();
+      wakeState.value = 'armed';
+      hookGestureResume();
+      return true;
+    } catch (e: any) {
+      wakeState.value = 'unavailable';
+      wakeReason.value = wakeErrorMessage(e);
+      try {
+        porcupine?.terminate?.();
+      } catch {
+        /* nada */
+      }
+      porcupine = null;
+      return false;
+    }
+  }
+
+  /** Vuelve a la escucha en espera (tras captar la orden o terminar de hablar). */
+  function resumeWake(): void {
+    if (wakeState.value !== 'armed' || listening.value || speaking.value || disposed) return;
+    subscribeWake().catch((e) => {
+      wakeReason.value = wakeErrorMessage(e);
+    });
+  }
+
+  async function disposeWake(): Promise<void> {
+    await unsubscribeWake();
+    try {
+      porcupine?.terminate?.();
+    } catch {
+      /* nada */
+    }
+    porcupine = null;
+    if (wakeState.value !== 'unavailable') wakeState.value = 'off';
+  }
+
   function dispose(): void {
+    disposed = true;
+    disposeWake();
     cancel();
     if (recognition) {
       recognition.onresult = null;
@@ -279,5 +467,10 @@ export function useJarvisVoice(options: JarvisVoiceOptions = {}) {
     speak,
     cancel,
     dispose,
+    wakeState,
+    wakeReason,
+    wakeLabel,
+    armWake,
+    resumeWake,
   };
 }

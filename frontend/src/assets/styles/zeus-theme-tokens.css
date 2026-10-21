@@ -31,8 +31,13 @@
    Acabado aprobado: acero profundo de fondo, láminas de platino cepillado
    (gradiente en capas + grano + bisel + especular) para paneles/tarjetas,
    gunmetal para iconos y botones, y un único acento: el rayo (--volt). */
+/* `.zeus-theme-app` (solo dentro de un ámbito .zeus-theme-dark) devuelve
+   su contenido al tema elegido por el cliente: lo usan los paneles del
+   menú ⋮ del workspace de voz (Herramientas/Actividad/Métricas), que son
+   pantallas de la app con estilos propios pensados para platino. */
 :root:not([data-theme]),
-:root[data-theme='light'] {
+:root[data-theme='light'],
+:root:not([data-theme='dark']) .zeus-theme-dark .zeus-theme-app {
   color-scheme: light;
 
   /* Metal (valores aprobados) */
@@ -147,8 +152,12 @@
 
 /* ---- GRAFITO METÁLICO (opción del cliente) ----
    Mismo acabado que el platino, en grafito. El especular se contiene: en
-   oscuro un brillo fuerte se lee como plástico, no como metal. */
-:root[data-theme='dark'] {
+   oscuro un brillo fuerte se lee como plástico, no como metal.
+   `.zeus-theme-dark` aplica ESTE MISMO set a un solo ámbito con
+   independencia del tema elegido: el workspace de voz (orbe) es siempre
+   grafito para que la luz del orbe irradie también en tema platino. */
+:root[data-theme='dark'],
+.zeus-theme-dark {
   color-scheme: dark;
 
   --base: #141b27;
@@ -253,8 +262,14 @@
   --zeus-shadow-btn-ghost-hover: 0 3px 8px rgba(0, 0, 0, 0.40);
 }
 
-/* ---- Mapeo de nombres antiguos → tokens nuevos (ambos temas) ---- */
-html:root {
+/* ---- Mapeo de nombres antiguos → tokens nuevos (ambos temas) ----
+   Se repite en `.zeus-theme-dark` porque las custom properties se
+   resuelven donde se declaran y se heredan ya resueltas: sin esto, los
+   alias (--zeus-surface, --zeus-text…) seguirían valiendo el platino
+   calculado en :root dentro del ámbito grafito. */
+html:root,
+.zeus-theme-dark,
+.zeus-theme-dark .zeus-theme-app {
   /* Fondo de página: el de la spec. Se expresa solo con capas de imagen
      (linear-gradient plano para el color) porque muchos componentes lo
      consumen como background-image: var(--zeus-bg). */

@@ -5,8 +5,8 @@
     :aria-label="`Asistente de voz de ${agentLabel}`"
   >
     <!-- Sin cabecera propia: el encuadre y la identidad del agente (avatar/nombre/rol) son los de
-         AgentActivityPanel.vue — un solo marco, una sola cabecera. El fondo es el metal/platino de la
-         app (no se pinta otro): el orbe solo IRRADIA su luz azul de marca encima. -->
+         AgentActivityPanel.vue — un solo marco, una sola cabecera. El fondo es el acero grafito de esa
+         tarjeta (siempre oscura, .zeus-theme-dark): el orbe solo IRRADIA su luz azul de marca encima. -->
 
     <!-- Escena: orbe en el centro; los paneles holograma se despliegan a su alrededor. -->
     <div class="orb-scene">
@@ -171,17 +171,28 @@
           <h4>{{ panelTitle }}</h4>
           <button type="button" class="win-close" @click="closePanel">OK, cerrar</button>
         </header>
-        <div class="panel-body">
+        <!-- zeus-theme-app: el contenido (pantallas de la app con estilos propios) vuelve al tema
+             elegido por el cliente; el marco holograma sigue siendo el del orbe, sobre grafito. -->
+        <div class="panel-body zeus-theme-app">
           <slot :name="`panel-${activePanel}`" />
         </div>
       </section>
     </div>
 
-    <!-- Respaldo de texto, discreto: un enlace, no un botón. Dentro, adjuntar estilo WhatsApp
-         (foto/factura -> bandeja de ZEUS; PERSEO: medio para su vídeo). -->
+    <!-- Respaldo de texto, discreto: un enlace, no un botón. Dentro, el ÚNICO adjunto (clip estilo
+         WhatsApp). En el resto de agentes la foto/factura va directa a la bandeja de ZEUS; en PERSEO,
+         tras elegir el archivo se pregunta qué hacer con él: usarlo en su vídeo (viaja solo con el
+         siguiente mensaje) o enviarlo a ZEUS como documento. -->
     <form v-if="typing" class="orb-type" @submit.prevent="sendTyped">
       <label class="sr-only" :for="inputId">Escribe a {{ agentLabel }}</label>
-      <button type="button" class="orb-type-attach" title="Adjuntar foto o factura" aria-label="Adjuntar foto o factura" @click="onPhoto">
+      <button
+        type="button"
+        class="orb-type-attach"
+        :title="attachLabel"
+        :aria-label="attachLabel"
+        :disabled="stage === 'busy' || mediaUploading || pendingFile !== null"
+        @click="onPhoto"
+      >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
           <path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9" />
         </svg>
@@ -189,7 +200,7 @@
       <input
         ref="photoInput"
         type="file"
-        accept="image/jpeg,image/png,image/webp,application/pdf"
+        :accept="attachAccept"
         hidden
         @change="onPhotoChosen"
       />
@@ -205,13 +216,44 @@
       <button type="submit" class="orb-type-send" :disabled="stage === 'busy' || !typed.trim()">Enviar</button>
     </form>
 
-    <div v-if="typing && supportsMediaAttachment" class="orb-attach-wrapper">
-      <ImageUploader @uploaded="handleMediaUploaded" />
-      <div v-if="mediaReferenceUrl" class="orb-attach-chip">
-        <span>Medio adjunto (imagen / vídeo / PDF)</span>
-        <a :href="mediaReferenceUrl" target="_blank" rel="noopener">Ver</a>
-        <button type="button" class="chip-remove" @click="clearMediaReference">Quitar</button>
+    <!-- PERSEO: elección breve tras elegir archivo. Solo se ofrecen los destinos que admiten ese
+         tipo/tamaño; si alguno no está disponible, se dice por qué. -->
+    <div
+      v-if="pendingFile"
+      ref="choiceBox"
+      class="orb-attach-choice holo-surface"
+      role="group"
+      :aria-label="`Qué hacer con ${pendingFile.name}`"
+    >
+      <p class="choice-title">¿Qué hago con «{{ pendingFile.name }}»?</p>
+      <div class="choice-actions">
+        <button v-if="pendingChoice.video" type="button" class="choice-btn" @click="choosePendingVideo">
+          Usar en el vídeo de {{ agentLabel }}
+        </button>
+        <button v-if="pendingChoice.inbox" type="button" class="choice-btn" @click="choosePendingInbox">
+          Enviar a ZEUS como documento (factura, ticket…)
+        </button>
+        <button type="button" class="choice-cancel" @click="cancelPendingFile">Cancelar</button>
       </div>
+      <p v-for="n in pendingChoice.notes" :key="n" class="choice-note">{{ n }}</p>
+    </div>
+
+    <!-- Visible también con el texto oculto: el medio irá con el próximo mensaje, sea de voz o texto. -->
+    <div
+      v-if="supportsMediaAttachment && (mediaUploading || mediaReferenceUrl)"
+      class="orb-attach-chip"
+      role="status"
+    >
+      <template v-if="mediaUploading">
+        <span>Subiendo {{ mediaFileName || 'archivo' }}…</span>
+      </template>
+      <template v-else>
+        <span class="chip-text">
+          Medio adjunto ({{ mediaKindLabel }}){{ mediaFileName ? ` · ${mediaFileName}` : '' }} — se enviará solo con tu próximo mensaje
+        </span>
+        <a :href="mediaReferenceUrl || '#'" @click.prevent="openMediaReference">Ver</a>
+        <button type="button" class="chip-remove" @click="clearMediaReference">Quitar</button>
+      </template>
     </div>
 
     <p class="orb-foot">
@@ -224,7 +266,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, nextTick, onMounted, ref, type PropType } from 'vue';
+import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useJarvisVoice } from '@/composables/useJarvisVoice';
 import { getAgentChatUrl, AGENT_CHAT_TIMEOUT_MS, openEvidence, type ChatEvidence } from '@/utils/chatApi';
@@ -237,8 +279,8 @@ import {
   type JarvisWindow,
 } from '@/utils/jarvisWindows';
 import { detectHoloRequest, loadHoloPanel, HOLO_TITLES, type HoloKey, type HoloPanel } from '@/utils/jarvisHoloPanels';
-import { API_BASE_URL } from '@/config';
-import ImageUploader from '@/components/ImageUploader.jsx';
+import { API_BASE_URL, PERSEO_IMAGES_ENABLED } from '@/config';
+import { MEDIA_ACCEPT_ATTR, MEDIA_MAX_BYTES, isAllowedMediaType, mediaContextKeyFor, uploadMediaFile } from '@/utils/mediaUpload';
 
 const props = defineProps<{
   agent: { name: string; role?: string; image?: string };
@@ -445,8 +487,11 @@ async function send(raw: string, channel: 'voice' | 'text'): Promise<void> {
     if (t) headers.Authorization = `Bearer ${t}`;
     // El servidor resuelve empresa y usuario desde la sesión: no se envía company_id.
     const context: Record<string, string> = { channel };
-    if (supportsMediaAttachment.value && mediaReferenceUrl.value) {
-      context[mediaContextKey.value] = mediaReferenceUrl.value;
+    // El medio adjunto viaja SOLO en este mensaje (como WhatsApp): se quita si el envío sale bien y
+    // se conserva si falla, para poder reintentar.
+    const sentMediaUrl = supportsMediaAttachment.value ? mediaReferenceUrl.value : null;
+    if (sentMediaUrl) {
+      context[mediaContextKey.value] = sentMediaUrl;
     }
     const res = await fetch(getAgentChatUrl(props.agent.name), {
       method: 'POST',
@@ -460,6 +505,7 @@ async function send(raw: string, channel: 'voice' | 'text'): Promise<void> {
       showWindows([windowForHttpError(res.status, body, props.agent.name)]);
       return;
     }
+    if (sentMediaUrl && mediaReferenceUrl.value === sentMediaUrl) clearMediaReference();
     const wins = windowsForChatResponse(body, props.agent.name);
     showWindows(wins);
     // Solo se lee en voz alta si se preguntó por voz; nunca las URLs de la evidencia.
@@ -545,24 +591,66 @@ async function sendTyped(): Promise<void> {
  */
 const isPerseoAgent = computed(() => (props.agent?.name || '').toUpperCase().includes('PERSEO'));
 const supportsMediaAttachment = isPerseoAgent;
+/** VITE_PERSEO_IMAGES_ENABLED=false desactiva la subida para el vídeo (la bandeja de ZEUS sigue). */
+const mediaUploadEnabled = computed(() => supportsMediaAttachment.value && PERSEO_IMAGES_ENABLED);
 const mediaReferenceUrl = ref<string | null>(null);
-const mediaUploadedAwaitingPrompt = ref(false);
+const mediaContentType = ref<string | null>(null);
+const mediaFileName = ref('');
+const mediaUploading = ref(false);
 
-const mediaContextKey = computed<'pdf_url' | 'video_url' | 'image_url'>(() => {
-  const u = mediaReferenceUrl.value || '';
-  if (/\.pdf($|\?)/i.test(u) || u.includes('/documents/')) return 'pdf_url';
-  if (/\.(mp4|webm|mov|m4v)($|\?)/i.test(u) || u.includes('/videos/')) return 'video_url';
-  return 'image_url';
-});
+const mediaContextKey = computed<'pdf_url' | 'video_url' | 'image_url'>(() =>
+  mediaContextKeyFor(mediaReferenceUrl.value || '', mediaContentType.value),
+);
 
-function handleMediaUploaded(payload: { url?: string } | undefined): void {
-  mediaReferenceUrl.value = payload?.url || null;
-  mediaUploadedAwaitingPrompt.value = Boolean(payload?.url);
-}
+const mediaKindLabel = computed(() => ({ pdf_url: 'PDF', video_url: 'vídeo', image_url: 'imagen' })[mediaContextKey.value]);
 
 function clearMediaReference(): void {
   mediaReferenceUrl.value = null;
-  mediaUploadedAwaitingPrompt.value = false;
+  mediaContentType.value = null;
+  mediaFileName.value = '';
+}
+
+async function openMediaReference(): Promise<void> {
+  const url = mediaReferenceUrl.value;
+  if (!url) return;
+  const ev: ChatEvidence = { kind: 'document', id: url, agent: props.agent.name, title: mediaFileName.value || 'Medio adjunto', url, status: 'uploaded' };
+  try {
+    await openEvidence(ev, token());
+  } catch (err: any) {
+    showWindows([errorWindow('No se pudo abrir el medio adjunto', sourceLabel(props.agent.name), String(err?.message || err))]);
+  }
+}
+
+/**
+ * PERSEO: el clip sube el medio por el camino real de ImageUploader (POST /api/v1/upload, R2 de la
+ * empresa) y lo deja preparado para el siguiente mensaje; no envía nada al agente por sí solo.
+ */
+async function uploadMediaForNextMessage(file: File): Promise<void> {
+  if (!mediaUploadEnabled.value) {
+    showWindows([errorWindow('Subida no disponible', sourceLabel(props.agent.name), 'Las cargas para el vídeo están deshabilitadas en esta instancia.')]);
+    return;
+  }
+  if (!isAllowedMediaType(file)) {
+    showWindows([errorWindow('Tipo de archivo no admitido', sourceLabel(props.agent.name), 'Adjunta una imagen (JPG, PNG, WebP, GIF), un vídeo (MP4, WebM, MOV) o un PDF.')]);
+    return;
+  }
+  if (file.size > MEDIA_MAX_BYTES) {
+    showWindows([errorWindow('Archivo demasiado grande', sourceLabel(props.agent.name), 'El máximo son 100 MB.')]);
+    return;
+  }
+  clearMediaReference();
+  mediaFileName.value = file.name;
+  mediaUploading.value = true;
+  try {
+    const data = await uploadMediaFile(file);
+    mediaReferenceUrl.value = data.url;
+    mediaContentType.value = data.content_type || file.type || null;
+  } catch (err: any) {
+    mediaFileName.value = '';
+    showWindows([errorWindow('No se pudo subir el archivo', sourceLabel(props.agent.name), String(err?.message || 'Error al subir archivo'))]);
+  } finally {
+    mediaUploading.value = false;
+  }
 }
 
 /**
@@ -573,9 +661,47 @@ function clearMediaReference(): void {
  */
 const photoInput = ref<HTMLInputElement | null>(null);
 const MAX_PHOTO_BYTES = 15 * 1024 * 1024;
+const INBOX_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const INBOX_ACCEPT = INBOX_TYPES.join(',');
+
+const attachAccept = computed(() => (mediaUploadEnabled.value ? MEDIA_ACCEPT_ATTR : INBOX_ACCEPT));
+const attachLabel = computed(() =>
+  mediaUploadEnabled.value ? `Adjuntar archivo (vídeo de ${agentLabel.value} o documento para ZEUS)` : 'Adjuntar foto o factura',
+);
+
+// PERSEO: archivo elegido a la espera de que el operario diga qué hacer con él.
+const pendingFile = ref<File | null>(null);
+const choiceBox = ref<HTMLElement | null>(null);
+
+function inboxAccepts(file: File): boolean {
+  return INBOX_TYPES.includes(file.type) && file.size <= MAX_PHOTO_BYTES;
+}
+
+function videoAccepts(file: File): boolean {
+  return mediaUploadEnabled.value && isAllowedMediaType(file) && file.size <= MEDIA_MAX_BYTES;
+}
+
+function choiceFor(file: File): { video: boolean; inbox: boolean; notes: string[] } {
+  const video = videoAccepts(file);
+  const inbox = inboxAccepts(file);
+  const notes: string[] = [];
+  if (!video) {
+    notes.push(
+      !mediaUploadEnabled.value
+        ? 'Las cargas para el vídeo están deshabilitadas en esta instancia.'
+        : `Para el vídeo de ${agentLabel.value}: imagen, vídeo o PDF de hasta 100 MB.`,
+    );
+  }
+  if (!inbox) notes.push('La bandeja de ZEUS solo admite JPG, PNG, WebP o PDF de hasta 15 MB.');
+  return { video, inbox, notes };
+}
+
+const pendingChoice = computed(() =>
+  pendingFile.value ? choiceFor(pendingFile.value) : { video: false, inbox: false, notes: [] as string[] },
+);
 
 function onPhoto(): void {
-  if (busy.value) return;
+  if (busy.value || mediaUploading.value) return;
   photoInput.value?.click();
 }
 
@@ -584,6 +710,59 @@ async function onPhotoChosen(ev: Event): Promise<void> {
   const file = input.files?.[0];
   input.value = '';
   if (!file || busy.value) return;
+  if (!supportsMediaAttachment.value) {
+    await sendToInbox(file);
+    return;
+  }
+  const choice = choiceFor(file);
+  if (!choice.video && !choice.inbox) {
+    showWindows([errorWindow('No se puede adjuntar este archivo', sourceLabel(props.agent.name), choice.notes.join(' '))]);
+    return;
+  }
+  pendingFile.value = file;
+  await nextTick();
+  choiceBox.value?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  choiceBox.value?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
+}
+
+function cancelPendingFile(): void {
+  pendingFile.value = null;
+  nextTick(() => typeInput.value?.focus());
+}
+
+/**
+ * Esc con la caja de elección abierta solo cierra la caja. Se escucha en `window` en fase de captura
+ * (antes que cualquier otro listener, esté donde esté el foco) y se corta la propagación: si no, el
+ * Esc llegaría también al listener de `window` del dashboard, que cierra el workspace entero.
+ */
+function onEscWhileChoosing(ev: KeyboardEvent): void {
+  if (ev.key !== 'Escape' || !pendingFile.value) return;
+  ev.preventDefault();
+  ev.stopImmediatePropagation();
+  cancelPendingFile();
+}
+
+watch(pendingFile, (file, prev) => {
+  if (file && !prev) window.addEventListener('keydown', onEscWhileChoosing, true);
+  else if (!file && prev) window.removeEventListener('keydown', onEscWhileChoosing, true);
+});
+
+onBeforeUnmount(() => window.removeEventListener('keydown', onEscWhileChoosing, true));
+
+async function choosePendingVideo(): Promise<void> {
+  const file = pendingFile.value;
+  pendingFile.value = null;
+  if (file) await uploadMediaForNextMessage(file);
+}
+
+async function choosePendingInbox(): Promise<void> {
+  const file = pendingFile.value;
+  pendingFile.value = null;
+  if (file) await sendToInbox(file);
+}
+
+async function sendToInbox(file: File): Promise<void> {
+  if (busy.value) return;
   if (file.size > MAX_PHOTO_BYTES) {
     showWindows([errorWindow('Archivo demasiado grande', sourceLabel('ZEUS'), 'El máximo son 15 MB.')]);
     return;
@@ -681,9 +860,10 @@ defineExpose({ closePanel, choosePanel, activePanel });
 
 <style scoped>
 /* ======================================================================
-   Tokens: todo sale del sistema de diseño de la app (zeus-theme-tokens.css), en claro y oscuro.
-   --volt es el azul de marca; el "azul eléctrico" es ese mismo volt aclarado hacia cian, y la
-   luz del orbe es --volt-glow. El fondo NO se pinta aquí: es el metal/platino de .activity-panel.
+   Tokens: todo sale del sistema de diseño de la app (zeus-theme-tokens.css). El orbe vive dentro de
+   .activity-panel.zeus-theme-dark, así que --panel/--line/--fg/--muted… ya llegan con los valores
+   del tema OSCURO en ambos temas de la app. --volt es el azul de marca; el "azul eléctrico" es ese
+   mismo volt aclarado hacia cian, y la luz del orbe es --volt-glow. El fondo NO se pinta aquí.
    ====================================================================== */
 .voice-orb {
   --orb-volt: var(--volt, #2f82f0);
@@ -698,8 +878,8 @@ defineExpose({ closePanel, choosePanel, activePanel });
   --orb-faint: var(--faint, var(--zeus-text-muted, #8891a6));
   --orb-amber: var(--amber, var(--zeus-warning, #f5a623));
   --orb-red: var(--red, var(--zeus-danger, #ff5d6c));
-  /* Intensidad de la luz: algo menor sobre platino (claro) para que no lave el metal. */
-  --orb-light: 0.95;
+  /* Intensidad de la luz: el fondo es siempre grafito, así que siempre la de oscuro. */
+  --orb-light: 1.15;
   --orb-size: 380px;
   --orb-stage-min-h: 470px;
 
@@ -711,10 +891,6 @@ defineExpose({ closePanel, choosePanel, activePanel });
   padding: 4px 4px 8px;
   color: var(--orb-fg);
   font-family: var(--zeus-font-sans, inherit);
-}
-
-:global(:root[data-theme='dark']) .voice-orb {
-  --orb-light: 1.15;
 }
 
 /* Rejilla HUD con el azul de marca, desvanecida hacia los bordes: se apoya en el metal, no lo tapa. */
@@ -1217,6 +1393,11 @@ defineExpose({ closePanel, choosePanel, activePanel });
   margin-top: 10px;
   max-height: min(60vh, 560px);
   overflow: auto;
+  padding: 14px;
+  border-radius: var(--zeus-radius-sm, 8px);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--fg);
 }
 
 .win-text {
@@ -1428,6 +1609,16 @@ defineExpose({ closePanel, choosePanel, activePanel });
   cursor: pointer;
 }
 
+.orb-type-attach:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.orb-type-attach:not(:disabled):hover {
+  color: var(--orb-fg);
+  border-color: color-mix(in srgb, var(--orb-volt) 60%, transparent);
+}
+
 .orb-type-attach svg {
   width: 20px;
   height: 20px;
@@ -1448,24 +1639,87 @@ defineExpose({ closePanel, choosePanel, activePanel });
   cursor: default;
 }
 
-.orb-attach-wrapper {
-  position: relative;
+.orb-attach-choice {
   z-index: 2;
   width: 100%;
-  max-width: 420px;
+  max-width: 620px;
+  box-sizing: border-box;
+  padding: 16px 18px 14px;
+}
+
+.choice-title {
+  margin: 0 0 10px;
+  font-size: var(--zeus-text-sm, 13px);
+  font-weight: var(--zeus-weight-semibold, 600);
+  color: var(--orb-fg);
+  overflow-wrap: anywhere;
+}
+
+.choice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.choice-btn,
+.choice-cancel {
+  padding: 8px 14px;
+  border-radius: var(--zeus-radius-sm, 8px);
+  font-size: var(--zeus-text-sm, 13px);
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.choice-btn {
+  border: 1px solid color-mix(in srgb, var(--orb-volt) 45%, transparent);
+  background: color-mix(in srgb, var(--orb-volt) 12%, var(--orb-panel));
+  color: var(--orb-fg);
+  font-weight: var(--zeus-weight-medium, 500);
+}
+
+.choice-btn:hover {
+  border-color: var(--orb-volt-hi);
+}
+
+.choice-cancel {
+  border: 1px solid var(--orb-line);
+  background: transparent;
+  color: var(--orb-muted);
+}
+
+.choice-btn:focus-visible,
+.choice-cancel:focus-visible {
+  outline: none;
+  box-shadow: var(--zeus-shadow-focus, 0 0 0 3px rgba(47, 130, 240, 0.35));
+}
+
+.choice-note {
+  margin: 8px 0 0;
+  font-size: var(--zeus-text-xs, 12px);
+  color: var(--orb-muted);
 }
 
 .orb-attach-chip {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 620px;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 6px;
   padding: 6px 10px;
-  border-radius: var(--zeus-radius-full, 999px);
+  border-radius: var(--zeus-radius, 12px);
   border: 1px solid var(--orb-line);
   background: var(--orb-panel-2);
   font-size: var(--zeus-text-xs, 12px);
   color: var(--orb-muted);
+}
+
+.chip-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .orb-attach-chip a {

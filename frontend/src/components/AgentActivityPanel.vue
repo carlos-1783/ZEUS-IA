@@ -1,5 +1,8 @@
 <template>
-  <div class="activity-panel">
+  <!-- zeus-theme-dark: el workspace de voz es SIEMPRE grafito (set oscuro de zeus-theme-tokens.css),
+       también en tema platino, para que la luz del orbe irradie. Una sola tarjeta oscura, cabecera
+       incluida: sin doble marco. El resto de la app sigue en el tema elegido. -->
+  <div class="activity-panel zeus-theme-dark">
     <!-- Header: identidad del agente + único punto de entrada a Herramientas/Actividad/Métricas
          (menú ⋮). Sin toggle Texto/Voz aquí — el orbe tiene su propio respaldo de texto discreto. El
          orbe ya no tiene cabecera propia: esta es la única, para no duplicar marco ni identidad.
@@ -357,12 +360,10 @@ const formatMetricValue = (value) => {
 
 <style scoped>
 .activity-panel {
-  /* Superficie "metal cepillado" — capas de gradiente (veta + barrido de
-     luz diagonal + brillo/sombra de esquina) sobre la base platino, más
-     grano SVG en ::before. Sistema validado en preview-rafael.html antes
-     de aplicarse aquí; ver tokens zeus-metal y zeus-noise-svg en
-     zeus-light-system.css. Los bloques de contenido (tarjetas, header)
-     siguen flotando encima como superficies blancas con sombra. */
+  /* Acero grafito (--zeus-metal-bg -> --metal-page del set oscuro, que
+     .zeus-theme-dark re-declara en este ámbito en ambos temas) + grano SVG
+     en ::before. Todo lo de dentro (cabecera, orbe, hologramas, paneles del
+     menú ⋮) lee los mismos tokens, ya resueltos en oscuro. */
   position: relative;
   overflow-x: hidden;
   background-image: var(--zeus-metal-bg);

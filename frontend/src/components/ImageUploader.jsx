@@ -1,23 +1,10 @@
 import { defineComponent, ref, computed } from 'vue';
-import api from '@/services/api';
 import { PERSEO_IMAGES_ENABLED } from '@/config';
 import {
   MEDIA_UPLOAD_UI,
   resolveMediaUploadState,
 } from '@/utils/mediaUploadPolicy';
-
-const ALLOWED_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/gif',
-  'video/mp4',
-  'video/webm',
-  'video/quicktime',
-  'application/pdf',
-];
-
-const ACCEPT_ATTR = 'image/*,video/*,application/pdf';
+import { MEDIA_ACCEPT_ATTR as ACCEPT_ATTR, isAllowedMediaType, uploadMediaFile } from '@/utils/mediaUpload';
 
 export default defineComponent({
   name: 'ImageUploader',
@@ -66,7 +53,7 @@ export default defineComponent({
       if (!file) return;
       revokePreview();
       uploadedUrl.value = '';
-      if (!ALLOWED_TYPES.includes(file.type)) {
+      if (!isAllowedMediaType(file)) {
         errorMessage.value = MEDIA_UPLOAD_UI.error.show;
         return;
       }
@@ -101,13 +88,7 @@ export default defineComponent({
       emit('state-change', { state: 'uploading' });
 
       try {
-        const formData = new FormData();
-        formData.append('file', selectedFile.value);
-
-        const data = await api.postFormData('/api/v1/upload', formData);
-        if (!data?.success) {
-          throw new Error(data?.detail || data?.error || MEDIA_UPLOAD_UI.error.show);
-        }
+        const data = await uploadMediaFile(selectedFile.value);
 
         uploadedUrl.value = data.url;
         emit('uploaded', {

@@ -136,12 +136,34 @@ def no_external_messaging():
 
 @pytest.fixture(autouse=True)
 def no_real_classifier_model(monkeypatch):
-    """J8b: ningun test alcanza el modelo real del clasificador de JARVIS (aunque otro test deje una
-    OPENAI_API_KEY en settings). Sin modelo rige el criterio estricto J8. Los tests del clasificador
-    inyectan su propio cliente simulado con monkeypatch (se aplica despues de este fixture)."""
+    """J8b: ningun test alcanza el modelo real del clasificador de JARVIS (aunque el entorno o otro
+    test deje una OPENAI_API_KEY en settings). Dos capas:
+      1. Inyeccion por defecto "sin modelo" (`_client_provider` -> None): rige el criterio estricto J8.
+         Los tests del clasificador inyectan su cliente simulado (set_client_provider o monkeypatch de
+         `get_client`, que se aplica despues de este fixture).
+      2. Guardia ruidosa: si algo intenta construir el cliente OpenAI REAL del clasificador
+         (`build_real_client`), no se construye (lanza) y el test FALLA en el teardown, aunque
+         `comprehend` haya capturado la excepcion y caido a reglas. El original queda en `.real`
+         para el test que comprueba el camino de produccion sin llamar a la red."""
     import services.jarvis_model_comprehension as mc
 
-    monkeypatch.setattr(mc, "get_client", lambda: None)
+    intentos = []
+    real = mc.build_real_client
+
+    def _guardia():
+        intentos.append(1)
+        raise RuntimeError("tests: prohibido construir el cliente OpenAI real del clasificador de JARVIS")
+
+    _guardia.real = real
+    _guardia.intentos = intentos
+    monkeypatch.setattr(mc, "_client_provider", lambda: None)
+    monkeypatch.setattr(mc, "build_real_client", _guardia)
+    yield
+    if intentos:
+        pytest.fail(
+            f"Se intento construir el cliente OpenAI real del clasificador de JARVIS {len(intentos)} vez/veces "
+            "en un test: inyecta un cliente (mc.set_client_provider / monkeypatch de mc.get_client)."
+        )
 
 
 # ---------------------------------------------------------------------------

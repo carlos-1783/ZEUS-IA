@@ -165,8 +165,22 @@ def load_config() -> ClassifierConfig:
 
 
 # --------------------------------------------------------------------------------- cliente
-def get_client() -> Any:
-    """Cliente OpenAI sincrono o None si no hay clave. Los tests lo sustituyen (monkeypatch)."""
+# Punto UNICO de inyeccion del cliente del clasificador. None = camino de produccion (cliente OpenAI
+# real construido por `build_real_client`). Un proveedor inyectado (callable sin argumentos que
+# devuelve un objeto con `.chat.completions.create(**kw)` o None = "sin modelo") lo sustituye; asi lo
+# usan los tests (conftest inyecta "sin modelo" por defecto) sin tocar el camino de produccion.
+_client_provider: Optional[Callable[[], Any]] = None
+
+
+def set_client_provider(provider: Optional[Callable[[], Any]]) -> None:
+    """Inyecta el proveedor del cliente del clasificador (None restaura el cliente real)."""
+    global _client_provider
+    _client_provider = provider
+
+
+def build_real_client() -> Any:
+    """Cliente OpenAI sincrono REAL (sin reintentos: el timeout lo marca la config) o None si no hay
+    clave. Unico lugar del modulo que construye un cliente con red."""
     try:
         from config.settings import settings
 
@@ -178,6 +192,15 @@ def get_client() -> Any:
     from openai import OpenAI
 
     return OpenAI(api_key=key, max_retries=0)
+
+
+def get_client() -> Any:
+    """Cliente que usa `comprehend`: el proveedor inyectado si lo hay; si no, el cliente real.
+    Compatibilidad: los tests pueden seguir sustituyendo esta funcion entera (monkeypatch)."""
+    provider = _client_provider
+    if provider is not None:
+        return provider()
+    return build_real_client()
 
 
 # --------------------------------------------------------------------------------- puerta

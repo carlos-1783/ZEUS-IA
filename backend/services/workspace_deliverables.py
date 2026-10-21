@@ -139,12 +139,15 @@ def _normalize_perseo_content(raw: str, extra_context: Optional[Dict[str, Any]] 
 def normalize_perseo_chat_message(raw: str) -> str:
     """
     Normaliza el texto de chat de PERSEO para mostrar solo copy útil al usuario final.
+
+    Criterio CTA: el mensaje de chat es lo que dijo el modelo (limpio de disclaimers);
+    el código NUNCA le añade un «CTA: …» propio, ni aunque sea pura conversación.
+    El CTA es un campo del ENTREGABLE de campaña (`content["cta"]` del payload que
+    guarda `persist_agent_chat_deliverable` / devuelve `normalize_perseo_workspace_payload`),
+    no texto inyectado en la respuesta conversacional.
     """
     normalized = _normalize_perseo_content(raw or "", extra_context=None)
     copy = str((normalized.get("content") or {}).get("copy") or "").strip()
-    cta = str((normalized.get("content") or {}).get("cta") or "").strip()
-    if copy and cta:
-        return f"{copy}\n\nCTA: {cta}"
     return copy or (raw or "").strip()
 
 

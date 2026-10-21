@@ -294,8 +294,41 @@ def test_parada_con_clasificador_erroneo_affirm_alto_no_ejecuta_nada(db, client,
 def test_perseo_charla_llega_al_modelo_con_su_prompt_y_el_cliente_ve_la_respuesta(db, client, llm):
     u, _ = _user(db)
     out = _post(client, u, "/api/v1/chat/perseo/chat", "hola perseo, ¿qué te parece mi estrategia en redes?")
-    # PERSEO normaliza su chat y anade su CTA por defecto (workspace_deliverables.normalize_perseo_chat_message).
-    _talked(out, llm, _prompts(), agent="PERSEO", extra_suffix="\n\nCTA: Reserva ahora")
+    # La charla de PERSEO llega tal cual la dijo el modelo: el codigo no le anade ningun CTA.
+    _talked(out, llm, _prompts(), agent="PERSEO")
+    assert "CTA" not in out["message"] and "Reserva ahora" not in out["message"]
+
+
+def test_perseo_charla_regresion_sin_cta_en_el_chat_pero_el_entregable_conserva_su_cta(db, client, llm):
+    """Regresion: el chat de PERSEO nunca lleva «CTA:» anadido por codigo. El CTA vive en el
+    entregable de campana guardado en el workspace (content["cta"]), no en el mensaje."""
+    from app.models.document_approval import DocumentApproval
+    from services.workspace_deliverables import (
+        normalize_perseo_chat_message,
+        normalize_perseo_workspace_payload,
+    )
+
+    assert normalize_perseo_chat_message(MODEL_REPLY) == MODEL_REPLY
+    assert "CTA:" not in normalize_perseo_chat_message("Hola.\n\nTu estrategia en redes va bien.")
+
+    u, _ = _user(db)
+    out = _post(client, u, "/api/v1/chat/perseo/chat", "hola perseo, ¿qué te parece mi estrategia en redes?")
+    assert out["success"] is True and "CTA:" not in out["message"]
+    assert out["message"] == MODEL_REPLY
+
+    db.expire_all()
+    doc = (
+        db.query(DocumentApproval)
+        .filter(DocumentApproval.user_id == u.id, DocumentApproval.agent_name == "PERSEO")
+        .order_by(DocumentApproval.id.desc())
+        .first()
+    )
+    assert doc is not None, "el chat de PERSEO debe seguir guardando su entregable en el workspace"
+    content = (doc.document_payload or {}).get("content") or {}
+    assert content.get("cta") == "Reserva ahora"  # el entregable conserva su CTA como campo
+    assert "CTA:" not in str(content.get("copy") or "")  # y el copy no arrastra el sufijo del chat
+    shown = normalize_perseo_workspace_payload(doc.document_payload)
+    assert shown["content"]["cta"] == "Reserva ahora"
 
 
 # ----------------------------------------------------------------------------- diagnostico

@@ -94,7 +94,10 @@ def _clean_marketing_text(raw: str) -> str:
 
     if parts:
         merged = "\n\n".join(parts)
-        merged = re.sub(r"\b\d+\.\s*", "", merged).strip()
+        # Solo la numeración de lista a inicio de línea («1. uno»), con espacio obligatorio:
+        # nunca toca cifras dentro del texto («3.5», «9.20€», «1.234,56 €»). Espacios solo de la
+        # propia línea ([ \t]): con \s se comería la línea en blanco y pegaría el párrafo a la lista.
+        merged = re.sub(r"(?m)^[ \t]*\d+\.[ \t]+", "", merged).strip()
         max_body = 12000
         if len(merged) > max_body:
             merged = merged[: max_body - 1].rsplit(" ", 1)[0] + "…"

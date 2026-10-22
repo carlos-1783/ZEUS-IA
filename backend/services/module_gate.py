@@ -46,6 +46,7 @@ ACTION_MODULE: Dict[str, str] = {
     "run_compliance_audit": "agents",
     # Fase 2 / Step 1: el cierre del dia son ventas del TPV.
     "get_daily_close": "tpv",
+    "get_vat_quarter": "tpv",  # IVA trimestral = calculo sobre las ventas del TPV (/tpv/fiscal/quarterly-vat)
     "get_attendance_status": "control_horario",
     "review_contracts": "agents",  # como el resto de JUSTICIA
     "get_coordination_report": "agents",
@@ -76,6 +77,7 @@ EXECUTOR_ACTION_MODULE: Dict[str, str] = {
     "get_security_status": "admin",
     # Fase 2 / Step 1: cierre de ventas del dia = datos del TPV.
     "get_daily_close": "tpv",
+    "get_vat_quarter": "tpv",  # IVA trimestral de las ventas TPV
     # Fase 2 / Step 1: fichajes de la empresa = control horario (como get_shift_status).
     "get_attendance_status": "control_horario",
     "review_contracts": "agents",
@@ -91,6 +93,7 @@ EXECUTOR_UNMAPPED_ACTIONS = frozenset(
         "create_campaign", "get_cashflow", "get_metrics",
         "generate_invoice", "register_qr_payment", "generate_model_303", "get_tax_summary",
         "get_pending_invoices",  # Fase 2 / Step 1: facturacion de ambas verticales (como las de arriba)
+        "get_last_invoice", "get_invoices_today",  # facturas: ambas verticales (como get_pending_invoices)
         "get_sales_performance",  # Fase 2 / Step 1: TPV + facturas, ambas verticales (transversal)
         # Fase 2 / Step 1: agenda = reservas (hosteleria) + reuniones CRM (oficina); pedidos no tiene
         # modelo (bloqueo honesto, no lee nada).

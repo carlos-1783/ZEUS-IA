@@ -142,6 +142,56 @@ const LABELS: Record<string, string> = {
   action_type: 'Acción',
   description: 'Descripción',
   error: 'Error',
+  // RAFAEL · get_last_invoice / get_invoices_today / get_vat_quarter
+  invoice: 'Factura',
+  invoices: 'Facturas',
+  invoices_count: 'Facturas en total',
+  issue_date: 'Fecha de emisión',
+  customer: 'Cliente',
+  amount_total: 'Total',
+  tax_amount: 'IVA',
+  from_tpv: 'Generada desde el TPV',
+  void_count: 'Anuladas',
+  period_label: 'Periodo',
+  vat_total: 'IVA repercutido',
+  base_total: 'Base imponible',
+  grand_total: 'Total vendido (IVA incl.)',
+  sales_count: 'Ventas del TPV',
+  by_rate: 'Desglose por tipo de IVA',
+  rate: 'Tipo',
+  tax_base: 'Base imponible',
+  vat_amount: 'Cuota de IVA',
+  recargo_total: 'Recargo de equivalencia',
+};
+
+// Claves que son IMPORTES en euros (se muestran con «€», formato es-ES). Solo claves inequívocas:
+// `total` no está porque en algunas consultas es un recuento (p. ej. contratos).
+const MONEY_KEYS = new Set([
+  'amount_total', 'tax_amount', 'tax_total', 'amount_due', 'vat_total', 'base_total', 'grand_total',
+  'tax_base', 'vat_amount', 'recargo_total',
+]);
+
+/**
+ * Presentación por consulta (intent del backend): título de la ventana, claves que no se muestran
+ * (técnicas o ya dichas en el título), etiquetas propias de esa consulta y filas de texto claro.
+ */
+interface IntentView {
+  title: (m: Record<string, any>) => string;
+  hidden: string[];
+  labels?: Record<string, string>;
+  rows?: (m: Record<string, any>) => WinRow[];
+}
+const INTENT_VIEWS: Record<string, IntentView> = {
+  get_vat_quarter: {
+    title: (m) => (m.period_label ? `IVA del ${m.period_label}` : 'IVA del trimestre'),
+    hidden: ['period_label', 'period', 'year', 'quarter', 'submitted_to_aeat'],
+    rows: (m) =>
+      m.submitted_to_aeat === false
+        ? [{ label: 'Hacienda', value: 'No presentado a Hacienda (cálculo orientativo)' }]
+        : [],
+  },
+  get_last_invoice: { title: () => 'Última factura', hidden: ['found'] },
+  get_invoices_today: { title: () => 'Facturas de hoy', hidden: [], labels: { count: 'Facturas emitidas' } },
 };
 
 // Valores (y claves dinámicas: decisiones THALOS, gravedades, formas de pago, estados) que el
@@ -222,6 +272,9 @@ export function formatScalar(v: unknown): string {
     return Number.isFinite(v) ? v.toLocaleString('es-ES', { maximumFractionDigits: 2 }) : '—';
   }
   if (typeof v === 'string') {
+    // Fecha sin hora (AAAA-MM-DD, día ya resuelto en el servidor) -> dd/mm/aaaa, sin conversión de zona
+    const dOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+    if (dOnly) return `${dOnly[3]}/${dOnly[2]}/${dOnly[1]}`;
     // Fechas ISO -> formato local legible
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v)) {
       const d = new Date(v);
@@ -250,7 +303,20 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v);
 }
 
-function tableFrom(title: string, list: Record<string, unknown>[]): WinTable {
+/** Valor de una clave: los importes (MONEY_KEYS) en euros es-ES; el resto como formatScalar. */
+export function formatValue(key: string, v: unknown): string {
+  if (MONEY_KEYS.has(key) && typeof v === 'number' && Number.isFinite(v)) {
+    return v.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+  }
+  return formatScalar(v);
+}
+
+export interface ShapeOptions {
+  hidden?: Set<string>;
+  labels?: Record<string, string>;
+}
+
+function tableFrom(title: string, list: Record<string, unknown>[], opts: ShapeOptions = {}): WinTable {
   const cols: string[] = [];
   for (const row of list.slice(0, MAX_TABLE_ROWS)) {
     for (const k of Object.keys(row)) {
@@ -262,8 +328,8 @@ function tableFrom(title: string, list: Record<string, unknown>[]): WinTable {
   return {
     title,
     columns: cols,
-    columnLabels: cols.map(humanizeKey),
-    rows: list.slice(0, MAX_TABLE_ROWS).map((r) => cols.map((c) => formatScalar(r[c]))),
+    columnLabels: cols.map((c) => opts.labels?.[c] ?? humanizeKey(c)),
+    rows: list.slice(0, MAX_TABLE_ROWS).map((r) => cols.map((c) => formatValue(c, r[c]))),
     more: Math.max(0, list.length - MAX_TABLE_ROWS),
   };
 }
@@ -273,26 +339,28 @@ export function shapeData(
   data: Record<string, unknown>,
   out: { figures: WinFigure[]; rows: WinRow[]; tables: WinTable[] },
   prefix = '',
+  opts: ShapeOptions = {},
 ): void {
   for (const [key, value] of Object.entries(data)) {
-    if (HIDDEN_KEYS.has(key)) continue;
-    const label = prefix ? `${prefix} · ${humanizeKey(key)}` : humanizeKey(key);
+    if (HIDDEN_KEYS.has(key) || (!prefix && opts.hidden?.has(key))) continue;
+    const name = (!prefix && opts.labels?.[key]) || humanizeKey(key);
+    const label = prefix ? `${prefix} · ${name}` : name;
     if (typeof value === 'number' && Number.isFinite(value) && !prefix && out.figures.length < MAX_FIGURES) {
-      out.figures.push({ label, value: formatScalar(value) });
+      out.figures.push({ label, value: formatValue(key, value) });
     } else if (Array.isArray(value)) {
       if (!value.length) {
         out.rows.push({ label, value: 'Ninguno' });
       } else if (value.every(isPlainObject)) {
-        const t = tableFrom(label, value as Record<string, unknown>[]);
+        const t = tableFrom(label, value as Record<string, unknown>[], opts);
         if (t.columns.length) out.tables.push(t);
       } else {
         out.rows.push({ label, value: formatScalar(value) });
       }
     } else if (isPlainObject(value)) {
-      if (!prefix) shapeData(value, out, label);
+      if (!prefix) shapeData(value, out, label, opts);
       else out.rows.push({ label, value: formatScalar(value) });
     } else {
-      out.rows.push({ label, value: formatScalar(value) });
+      out.rows.push({ label, value: formatValue(key, value) });
     }
   }
 }
@@ -394,10 +462,17 @@ export function windowsForChatResponse(data: any, agentFallback: string): Jarvis
           ? 'Necesito un dato'
           : 'Respuesta';
   const kind: WinKind = wholeBlocked ? 'blocked' : failed ? 'error' : 'answer';
+  // Presentación propia de la consulta (título, claves ocultas, etiquetas) si el backend la ejecutó.
+  const intent = String(exec?.intent || data?.intent || '');
+  const metrics = exec && isPlainObject(exec.metrics) ? (exec.metrics as Record<string, any>) : {};
+  const view = kind === 'answer' && !data?.needs_confirmation && !data?.needs_clarification
+    ? INTENT_VIEWS[intent]
+    : undefined;
+  const shapeOpts: ShapeOptions = view ? { hidden: new Set(view.hidden), labels: view.labels } : {};
   const blockedText = String(message || exec?.message || '').trim();
   const main = emptyWindow(
     kind,
-    title,
+    view ? view.title(metrics) : title,
     src,
     wholeBlocked
       ? blockedText || 'El servidor ha bloqueado la petición; no se ha ejecutado nada.'
@@ -409,8 +484,11 @@ export function windowsForChatResponse(data: any, agentFallback: string): Jarvis
 
   if (exec) {
     const shaped = { figures: main.figures, rows: main.rows, tables: main.tables };
-    if (isPlainObject(exec.metrics) && Object.keys(exec.metrics).length) shapeData(exec.metrics, shaped);
-    if (isPlainObject(exec.data) && Object.keys(exec.data).length) shapeData(exec.data, shaped);
+    if (isPlainObject(exec.metrics) && Object.keys(exec.metrics).length) {
+      shapeData(exec.metrics, shaped, '', shapeOpts);
+    }
+    if (isPlainObject(exec.data) && Object.keys(exec.data).length) shapeData(exec.data, shaped, '', shapeOpts);
+    if (view?.rows) main.rows.push(...view.rows(metrics));
     if (Array.isArray(exec.steps)) {
       for (const st of exec.steps) {
         if (isPlainObject(st) && isPlainObject(st.data) && Object.keys(st.data).length) {

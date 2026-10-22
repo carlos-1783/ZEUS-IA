@@ -44,6 +44,7 @@ from services import jarvis_model_comprehension as model_comp
 from services import jarvis_plan as plan_mod
 from services import jarvis_evidence
 from services import jarvis_ops_actions as ops_actions
+from services.jarvis_legal_block import legal_block
 from services import module_gate
 from services.zeus_global_context import attach_context_to_action_payload, enrich_chat_context
 from services.chain_log import log_chain_step
@@ -638,6 +639,13 @@ async def try_handle_zeus_chat(
     if resumed is not None:
         task = resumed
     else:
+        # Guardarrail legal: una ORDEN de enviar algo a la AEAT/Verifactu o de presentar/pagar/aplazar
+        # impuestos se bloquea con su motivo, sin modelo y sin ejecutar nada (zeus-guardarrailes-legales).
+        blk = None if (has_negation(message) or is_stop_order(message)) else legal_block(message)
+        if blk is not None:
+            _step("ORQUESTAR", "legal_block", "blocked_legal", reason=blk[0])
+            return {"handled": True, "success": False, "executed": False, "status": "blocked_legal",
+                    "intent": "unknown", "message": blk[1]}
         task = parse_message(message)  # criterio estricto J8: red de seguridad y fallback
         # J9a: intencion clara de un modulo que la empresa no tiene -> se responde ya, sin modelo.
         if task.intent != "unknown" and not task.ambiguous_with and not (
@@ -768,11 +776,25 @@ async def try_handle_agent_read(
     agent = (agent_name or "").strip().upper()
     if agent in ("", AGENT_ZEUS, "ZEUS") or has_negation(message):
         return None
+    blk = legal_block(message)  # orden de tramite con la AEAT/impuestos: bloqueo honesto, nunca el modelo
+    if blk is not None:
+        import services.crm_office_service as crm_svc
+
+        log_chain_step(
+            "ORQUESTAR", company_id=crm_svc.primary_company_id(db, user), user=user, agent=agent,
+            action="legal_block",
+            status="blocked_legal", details={"reason": blk[0], "source": "agent_workspace"},
+        )
+        return {"handled": True, "success": False, "executed": False, "status": "blocked_legal",
+                "intent": "unknown", "message": blk[1]}
     task = parse_message(message)
     if (task.intent == "unknown" or task.needs_clarification or task.ambiguous_with
             or task.confidence < MIN_CONFIDENCE):
         return None
     action = build_action(db, user, task)
+    alias = ops_actions.AGENT_INTENT_ALIASES.get((agent, task.intent))
+    if alias is not None:  # p. ej. «¿cuánto llevo hoy?» en RAFAEL -> su cierre de hoy (get_daily_close)
+        action = action.model_copy(update={"action_type": alias[0], "payload": {**action.payload, **alias[1]}})
     spec = ops_actions.READ_ACTIONS.get(action.action_type)
     if spec is None or spec[1] != agent:
         return None
@@ -790,7 +812,7 @@ async def try_handle_agent_read(
                  "status": result.status, "source": "agent_workspace"},
     )
     payload = _to_chat_payload(result)
-    payload["intent"] = task.intent
+    payload["intent"] = alias[0] if alias is not None else task.intent
     if result.executed:
         from services.thalos_request_guard_v1 import thalos_audit_result
 

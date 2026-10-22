@@ -70,6 +70,9 @@ def _map_intent_to_action_type(intent: str, legacy_action: Optional[str]) -> str
         "track_leads": "track_leads",
         "get_daily_close": "get_daily_close",
         "get_pending_invoices": "get_pending_invoices",
+        "get_last_invoice": "get_last_invoice",
+        "get_invoices_today": "get_invoices_today",
+        "get_vat_quarter": "get_vat_quarter",
         "get_sales_performance": "get_sales_performance",
         "get_attendance_status": "get_attendance_status",
         "get_today_agenda": "get_today_agenda",
@@ -115,8 +118,10 @@ def _modules_for_intent(intent: str) -> List[str]:
         return ["crm", "activity_log"]
     if intent == "get_daily_close":
         return ["tpv", "activity_log"]
-    if intent == "get_pending_invoices":
+    if intent in ("get_pending_invoices", "get_last_invoice", "get_invoices_today"):
         return ["rafael_agent", "activity_log"]
+    if intent == "get_vat_quarter":
+        return ["tpv", "rafael_agent", "activity_log"]
     if intent == "get_sales_performance":
         return ["perseo_agent", "activity_log"]
     if intent in ("get_attendance_status", "get_today_agenda", "get_weekly_orders"):

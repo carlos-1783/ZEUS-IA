@@ -26,7 +26,9 @@ MANDATORY_ACTIONS = {
     "RAFAEL": frozenset(
         {"generate_invoice", "register_qr_payment", "generate_model_303", "get_tax_summary",
          # Fase 2 / Step 1: lecturas reales para chat/voz (cierre de ventas del dia, cobros pendientes)
-         "get_daily_close", "get_pending_invoices"}
+         "get_daily_close", "get_pending_invoices",
+         # lecturas del chat de RAFAEL: ultima factura, facturas de hoy, IVA del trimestre (TPV)
+         "get_last_invoice", "get_invoices_today", "get_vat_quarter"}
     ),
     "PERSEO": frozenset({"create_campaign", "launch_campaign", "track_leads",
                          "get_sales_performance"}),  # Fase 2 / Step 1
@@ -47,7 +49,8 @@ _STRICT_AGENT_ACTIONS: Dict[str, str] = {
     a: ag for ag in ("JUSTICIA", "AFRODITA", "THALOS") for a in MANDATORY_ACTIONS[ag]
 }
 _STRICT_AGENT_ACTIONS["register_qr_payment"] = "RAFAEL"  # J2b
-for _a in ("get_daily_close", "get_pending_invoices"):  # Fase 2 / Step 1
+for _a in ("get_daily_close", "get_pending_invoices",  # Fase 2 / Step 1
+           "get_last_invoice", "get_invoices_today", "get_vat_quarter"):
     _STRICT_AGENT_ACTIONS[_a] = "RAFAEL"
 _STRICT_AGENT_ACTIONS["get_sales_performance"] = "PERSEO"
 _STRICT_AGENT_ACTIONS["get_coordination_report"] = "ZEUS"
@@ -64,6 +67,24 @@ def track_leads_summary(db: Session, user: User) -> Dict[str, Any]:
         "high_priority": sum(1 for l in leads if (l.customer_priority or "") == "high"),
         "with_meeting": sum(1 for l in leads if l.meeting_at is not None),
     }
+
+
+def _vat_quarter_period(payload: Dict[str, Any], today: Any) -> Tuple[int, int]:
+    """Trimestre pedido en el chat: `quarter_ref` "current" (por defecto, dia LOCAL) o "previous", o
+    `quarter` 1-4 (+ `year`, por defecto el actual). Nunca un trimestre futuro. Invalido -> ValueError."""
+    cur_q = (today.month - 1) // 3 + 1
+    ref = payload.get("quarter_ref") or ("explicit" if payload.get("quarter") is not None else "current")
+    if ref == "current":
+        return today.year, cur_q
+    if ref == "previous":
+        return (today.year, cur_q - 1) if cur_q > 1 else (today.year - 1, 4)
+    if ref != "explicit":
+        raise ValueError("quarter_ref no valido")
+    year = int(payload.get("year") or today.year)
+    quarter = int(payload.get("quarter"))  # ausente -> TypeError (invalido), nunca KeyError
+    if not 1 <= quarter <= 4 or year < 2000 or (year, quarter) > (today.year, cur_q):
+        raise ValueError("trimestre fuera de rango")
+    return year, quarter
 
 
 def _fiscal_period(payload: Dict[str, Any]) -> Tuple[int, int]:
@@ -551,6 +572,32 @@ async def _dispatch(
         else:
             body = rafael_reads.pending_invoices_summary(db, cid)
             msg = f"Facturas pendientes de cobro: {body['pending_count']} ({body['pending_amount']:.2f} €)."
+        return {"success": True, "executed": True, "company_id": cid, "message": msg, "data": body}
+
+    if action in ("get_last_invoice", "get_invoices_today", "get_vat_quarter"):
+        # Lecturas de RAFAEL para el chat: solo la empresa de la sesion (resuelta en servidor). Nada se
+        # envia a la AEAT/Verifactu: el IVA trimestral es el calculo de /tpv/fiscal/quarterly-vat.
+        from services import rafael_daily_reads_v1 as rafael_reads
+        from services.local_day_v1 import today_local
+
+        cid = zeus_action.company_id
+        if cid is None:
+            return _fail("El usuario no tiene empresa asociada.")
+        if action == "get_last_invoice":
+            body = rafael_reads.last_invoice_summary(db, cid)
+            msg = (f"Última factura: {body['invoice']['invoice_number']}." if body["found"]
+                   else "No hay facturas todavía.")
+        elif action == "get_invoices_today":
+            body = rafael_reads.invoices_day_summary(db, cid, today_local())
+            msg = f"Facturas de hoy: {body['count']} ({body['amount_total']:.2f} €)."
+        else:
+            try:
+                year, quarter = _vat_quarter_period(payload, today_local())
+            except (TypeError, ValueError):
+                return _fail("Trimestre no válido: indica este trimestre, el anterior o 1-4 de un año pasado "
+                             "o actual.", status="invalid_payload")
+            body = rafael_reads.vat_quarter_summary(db, cid, year, quarter)
+            msg = f"IVA {body['period']} (ventas TPV): {body['vat_total']:.2f} €."
         return {"success": True, "executed": True, "company_id": cid, "message": msg, "data": body}
 
     # PERSEO

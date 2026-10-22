@@ -68,6 +68,9 @@ INTENT_LABELS: Dict[str, str] = {
     "track_leads": "el estado de tus leads",
     "get_daily_close": "el cierre de ventas del día",
     "get_pending_invoices": "tus facturas pendientes de cobro",
+    "get_last_invoice": "tu última factura",
+    "get_invoices_today": "las facturas de hoy",
+    "get_vat_quarter": "el IVA del trimestre",
     "get_sales_performance": "cómo van tus ventas",
     "get_attendance_status": "los fichajes de hoy",
     "get_today_agenda": "tu agenda de hoy",
@@ -611,6 +614,53 @@ _PENDING_INVOICES_RE = re.compile(
     r"|\b(?:que|cuantas)\s+facturas?\b.{0,30}?\b(?:pendientes?|cobrar|vencidas?|impagadas?)\b"
     r"|\bpendientes?\s+de\s+cobro\b"
 )
+# RAFAEL: lecturas de facturas e IVA trimestral para el chat. LISTA BLANCA de marco de consulta: la lectura
+# solo se dispara si TODO el mensaje, fuera del sintagma reconocido, son palabras de mostrar/preguntar
+# (muéstrame, enséñame, dime, quiero ver, cuál/qué/cuánto…), cortesía/vocativos, determinantes y
+# complementos de tiempo. Cualquier otra palabra (un verbo como «cancela», «marca», «sube», «registra», un
+# importe, un destinatario…) => NO es lectura y el mensaje sigue su camino (accion, bloqueo legal o modelo).
+# Ante la duda, no lectura.
+_LAST_INVOICE_RE = re.compile(r"\bultima\s+factura\b|\bfactura\s+mas\s+reciente\b")
+_INVOICES_TODAY_RE = re.compile(r"\bfacturas?\b[^.?!;]{0,30}?\bhoy\b|\bhoy\b[^.?!;]{0,20}?\bfacturas?\b")
+_QUERY_PREFIX_WORDS = frozenset(
+    "hola oye ey buenas zeus jarvis rafael porfa por favor venga vale ok a "
+    "muestrame muestranos ensename ensenanos dime dinos digame dame deme mostrar mostrarme ensenar ensenarme "
+    "decir decirme quiero quisiera necesito me gustaria puedes podrias puede podria ver saber conocer "
+    "consultar consulta calcula calculame calcular "
+    "cual cuales que cuanto cuanta cuantos cuantas es son era fue "
+    "la el las los lo mi mis nuestra nuestras nuestro nuestros tu tus de del hay tengo tenemos".split()
+)
+_QUERY_SUFFIX_WORDS = frozenset(
+    "de del hoy este esta actual pasado anterior emitida emitidas emitido hecha hechas hecho que he hemos "
+    "tengo tenemos hay en la el mi mis nuestra empresa negocio ya ahora mismo por favor porfa".split()
+)
+# Con negacion («no me enseñes la última factura») se reconoce la consulta para PREGUNTAR, nunca ejecutar.
+_QUERY_NEG_WORDS = frozenset("no nunca jamas me ensenes muestres digas".split())
+_YEAR_TOKEN_RE = re.compile(r"20\d{2}")
+
+
+def _is_query_frame(f: str, m: "re.Match[str]", allow_negation: bool = False) -> bool:
+    """True si, fuera del sintagma `m`, todo el mensaje es marco de consulta (lista blanca)."""
+    pre = re.findall(r"\w+", f[:m.start()])
+    post = re.findall(r"\w+", f[m.end():])
+    allowed = _QUERY_PREFIX_WORDS | (_QUERY_NEG_WORDS if allow_negation else frozenset())
+    return (all(w in allowed for w in pre)
+            and all(w in _QUERY_SUFFIX_WORDS or _YEAR_TOKEN_RE.fullmatch(w) for w in post))
+
+
+_VAT_QUARTER_RE = re.compile(
+    r"\biva\s+(?:(?:llevo|llevamos|tengo|tenemos|pago|pagamos|hay|he\s+repercutido|repercutido|"
+    r"(?:tengo\s+)?(?:a|que)\s+pagar)\s+)?"
+    r"(?:(?:de|del|en)\s+)?(?:(?:este|el|mi|nuestro)\s+)?"
+    r"(?:(?P<ord>primer|1er|segundo|tercer|tercero|cuarto)\s+)?trimestr\w*"
+    r"(?:\s+(?P<prev>pasado|anterior))?"
+)
+_ORD_QUARTER = {"primer": 1, "1er": 1, "segundo": 2, "tercer": 3, "tercero": 3, "cuarto": 4}
+# «¿cuánto llevo hoy?» (ventas del dia). No casa si habla de horas/trabajo/fichaje («cuánto llevo hoy trabajando»).
+_LLEVO_TODAY_RE = re.compile(
+    r"\bcuanto\s+(?:llevo|llevamos)\s+(?:(?:vendido|facturado|recaudado|hecho|cobrado|ganado|de\s+caja)\s+)?"
+    r"(?:hoy|de\s+hoy)\b(?![^.?!;]{0,25}\b(?:trabaj\w*|fichad\w*|horas?|jornada|turno)\b)"
+)
 _SALES_PERF_RE = re.compile(
     r"\bcomo\s+(?:van|vamos|andan|marchan|estan|llevamos)\s+(?:de\s+)?(?:las\s+|mis\s+|nuestras\s+)?ventas\b"
     r"|\b(?:evolucion|tendencia|rendimiento)\s+de\s+(?:las\s+|mis\s+)?ventas\b"
@@ -881,8 +931,9 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
     # --- TPV
     sales = bool(_SALES_WORD_RE.search(f))
     caja_today = bool(_CAJA_TODAY_RE.search(f))
-    if (sales and _TODAY_RE.search(f)) or caja_today:
-        base = 0.88 if sales else 0.75
+    llevo_today = bool(_LLEVO_TODAY_RE.search(f))
+    if (sales and _TODAY_RE.search(f)) or caja_today or llevo_today:
+        base = 0.88 if (sales or llevo_today) else 0.75
         c.append(_Cand("tpv_sales_today", "tpv_sales_summary", base, "tpv_today",
                        suppresses={"tpv_sales_summary"}, metadata={"period": "today", "days": 1}))
     elif sales:
@@ -938,9 +989,37 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
         c.append(_Cand("get_daily_close", "get_daily_close", 0.88, "daily_close",
                        suppresses={"tpv_sales_summary", "tpv_sales_today", "get_cashflow"},
                        metadata={"day": day}))
-    if _PENDING_INVOICES_RE.search(f):
+    pending_inv = bool(_PENDING_INVOICES_RE.search(f))
+    if pending_inv:
         c.append(_Cand("get_pending_invoices", "get_pending_invoices", 0.86, "pending_invoices",
                        suppresses={"tpv_sales_summary", "get_cashflow"}))
+
+    # --- RAFAEL: ultima factura, facturas de hoy (solo si el mensaje es una CONSULTA: _is_query_frame).
+    # Con negacion («no me enseñes la última factura») se entiende la consulta pero no se ejecuta: se pregunta.
+    negated = _NEGATION_ANY_RE.search(f) is not None
+    neg_kw = {"missing": ["explicit_intent"], "question": QUESTION_NEGATED} if negated else {}
+    ml = _LAST_INVOICE_RE.search(f)
+    mt = _INVOICES_TODAY_RE.search(f)
+    if not pending_inv and ml and _is_query_frame(f, ml, negated):
+        c.append(_Cand("get_last_invoice", "get_last_invoice", 0.86, "last_invoice",
+                       suppresses={"tpv_sales_summary", "tpv_sales_today", "get_cashflow"}, **neg_kw))
+    elif not pending_inv and not ml and mt and _is_query_frame(f, mt, negated):
+        c.append(_Cand("get_invoices_today", "get_invoices_today", 0.86, "invoices_today",
+                       suppresses={"tpv_sales_summary", "tpv_sales_today", "get_cashflow"}, **neg_kw))
+    # --- RAFAEL: IVA del trimestre (calculo de /tpv/fiscal/quarterly-vat; nada se presenta a Hacienda)
+    mv = _VAT_QUARTER_RE.search(f)
+    if mv and _is_query_frame(f, mv, negated):
+        vmeta: Dict[str, Any] = {"quarter_ref": "current"}
+        if mv.group("prev"):
+            vmeta = {"quarter_ref": "previous"}
+        elif mv.group("ord"):
+            vmeta = {"quarter": _ORD_QUARTER[mv.group("ord")]}
+            my = re.search(r"\b(20\d{2})\b", f)
+            if my:
+                vmeta["year"] = int(my.group(1))
+        c.append(_Cand("get_vat_quarter", "get_vat_quarter", 0.86, "vat_quarter",
+                       suppresses={"tpv_sales_summary", "tpv_sales_today", "get_metrics", "get_cashflow"},
+                       metadata=vmeta, **neg_kw))
 
     # --- Fase 2 / Step 1: PERSEO «¿cómo van las ventas?» (30 dias por defecto, frente a los anteriores).
     # Con «hoy», «ayer» o un periodo cerrado (semana/mes pasado, fecha) siguen las consultas TPV/cierre.

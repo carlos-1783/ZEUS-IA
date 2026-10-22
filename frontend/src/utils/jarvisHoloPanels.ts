@@ -55,15 +55,34 @@ const TOPICS: Array<[HoloKey, string]> = [
 ];
 
 /**
+ * Coletillas que cada panel ACEPTA porque de verdad muestra eso. Un panel nunca acepta un periodo que
+ * no aplica: «enséñame las facturas de hoy» no abre «Facturación» (que lista las últimas, sin filtrar
+ * por fecha) sino que va al chat del agente, que sí filtra por hoy. Cualquier otra coletilla (de hoy,
+ * de ayer, de la semana, del mes, del trimestre, una fecha…) => no hay panel => va al agente.
+ *   facturación: últimas facturas (sin periodo)      -> solo «recientes»
+ *   tareas:      eventos de las últimas 24 h           -> «recientes», «de las últimas 24 horas»
+ *   marketing:   métricas de las integraciones          -> ninguna
+ *   actividad:   del agente, últimos 7 días             -> «recientes», «del agente», «de los últimos 7 días»
+ */
+const SUFFIXES: Record<HoloKey, string[]> = {
+  billing: ['reciente', 'recientes'],
+  tasks: ['reciente', 'recientes', 'de las ultimas 24 horas', 'de las ultimas 24 h', 'de las ultimas veinticuatro horas'],
+  marketing: [],
+  activity: ['reciente', 'recientes', 'del agente', 'de los ultimos 7 dias', 'de los ultimos siete dias'],
+};
+
+/**
  * Detecta la petición de una PANTALLA (verbo de mostrar + tema, o el tema a secas). Conservador a
- * propósito: «crea una factura» o «lanza una campaña» NO abren panel; van al agente.
+ * propósito: «crea una factura» o «lanza una campaña» NO abren panel; van al agente. Tampoco una
+ * petición acotada a un periodo que el panel no aplica (ver SUFFIXES).
  */
 export function detectHoloRequest(message: string): HoloKey | null {
   const m = fold(message).replace(/^(?:oye |hey |ok )?(?:jarvis|zeus)\s*/, '');
   if (!m || m.split(' ').length > 9) return null;
   for (const [key, topic] of TOPICS) {
+    const sfx = SUFFIXES[key].length ? `(?:\\s+(?:${SUFFIXES[key].join('|')}))?` : '';
     const withVerb = new RegExp(
-      `^(?:${SHOW_VERB})\\s+(?:me\\s+)?(?:la |las |el |los |mi |mis |toda la |todas las )?(?:pantalla de |panel de )?${topic}(?:\\s+(?:de hoy|de la semana|del mes|del agente|reciente|recientes))?$`,
+      `^(?:${SHOW_VERB})\\s+(?:me\\s+)?(?:la |las |el |los |mi |mis |toda la |todas las )?(?:pantalla de |panel de )?${topic}${sfx}$`,
     );
     const bare = new RegExp(`^(?:la |las |el |los |mi |mis )?(?:pantalla de |panel de )?${topic}$`);
     if (withVerb.test(m) || bare.test(m)) return key;

@@ -1,4 +1,5 @@
-"""RAFAEL: consultas reales para el chat/voz (cierre de ventas TPV de un dia y facturas pendientes).
+"""RAFAEL: consultas reales para el chat/voz (cierre de ventas TPV de un dia, facturas pendientes,
+ultima factura, facturas de un dia e IVA trimestral de las ventas TPV).
 
 Todo sale de la BD filtrado por la empresa (`company_id`) que resuelve el ejecutor en servidor.
 
@@ -117,4 +118,115 @@ def pending_invoices_summary(db: Session, company_id: int, *, top: int = 5) -> D
         "drafts_count": int(drafts),
         "top": items[:top],
         "source": "invoices",
+    }
+
+
+def _invoice_row(inv: Any) -> Dict[str, Any]:
+    """Factura -> fila para el chat. `issue_date` en dia LOCAL (Invoice.issue_date es naive UTC)."""
+    from datetime import timezone as _tz
+
+    issued = None
+    if inv.issue_date is not None:
+        issued = inv.issue_date.replace(tzinfo=_tz.utc).astimezone(local_tz()[0]).date().isoformat()
+    total = round(float(inv.total or 0), 2)
+    return {
+        "invoice_number": inv.invoice_number,
+        "issue_date": issued,
+        "customer": getattr(inv.customer, "name", None) if inv.customer_id else None,
+        "amount_total": total,
+        "tax_amount": round(float(inv.tax_amount or 0), 2),
+        "amount_due": round(max(total - float(inv.amount_paid or 0), 0.0), 2),
+        "status": inv.status.value if inv.status else None,
+        "from_tpv": inv.tpv_sale_id is not None,
+    }
+
+
+def _invoices_base(db: Session, company_id: int):
+    """Facturas (no presupuestos/proformas/rectificativas) de la empresa. Mismos enums que
+    `pending_invoices_summary` (nunca literales de texto)."""
+    from app.models.erp import Invoice, InvoiceType
+
+    type_ok = (Invoice.invoice_type == InvoiceType.INVOICE) | (Invoice.invoice_type.is_(None))
+    return db.query(Invoice).filter(Invoice.company_id == company_id, type_ok)
+
+
+def last_invoice_summary(db: Session, company_id: int) -> Dict[str, Any]:
+    """Ultima factura de la empresa (por fecha de emision; a igualdad, la de mayor id), sea cual sea
+    su estado (el estado va en la respuesta: un borrador se dice que es borrador)."""
+    from app.models.erp import Invoice
+
+    base = _invoices_base(db, company_id)
+    last = base.order_by(Invoice.issue_date.desc(), Invoice.id.desc()).first()
+    out: Dict[str, Any] = {"found": last is not None, "invoices_count": base.count()}
+    if last is not None:
+        out["invoice"] = _invoice_row(last)
+    out["source"] = "invoices"
+    return out
+
+
+def invoices_day_summary(db: Session, company_id: int, day: date, *, top: int = 10) -> Dict[str, Any]:
+    """Facturas emitidas el dia LOCAL `day`. Las anuladas no suman al total (se cuentan aparte) y los
+    borradores se cuentan aparte (aun no estan emitidas)."""
+    from app.models.erp import Invoice, InvoiceStatus
+
+    start, end = day_bounds_utc(day)
+    # Invoice.issue_date es naive UTC: se comparan limites UTC sin zona.
+    start_n, end_n = start.replace(tzinfo=None), end.replace(tzinfo=None)
+    rows = (
+        _invoices_base(db, company_id)
+        .filter(Invoice.issue_date >= start_n, Invoice.issue_date < end_n)
+        .order_by(Invoice.issue_date.desc(), Invoice.id.desc())
+        .all()
+    )
+    issued = [i for i in rows if i.status not in (InvoiceStatus.VOID, InvoiceStatus.DRAFT)]
+    by_status: Dict[str, int] = {}
+    for i in rows:
+        k = i.status.value if i.status else "desconocido"
+        by_status[k] = by_status.get(k, 0) + 1
+    return {
+        "date": day.isoformat(),
+        "timezone": local_tz()[1],
+        "count": len(issued),
+        "amount_total": round(sum(float(i.total or 0) for i in issued), 2),
+        "tax_total": round(sum(float(i.tax_amount or 0) for i in issued), 2),
+        "drafts_count": sum(1 for i in rows if i.status == InvoiceStatus.DRAFT),
+        "void_count": sum(1 for i in rows if i.status == InvoiceStatus.VOID),
+        "by_status": by_status,
+        "invoices": [_invoice_row(i) for i in rows[:top]],
+        "source": "invoices",
+    }
+
+
+VAT_DRAFT_NOTE = ("Cálculo orientativo sobre las ventas TPV registradas; no se ha presentado ni enviado "
+                  "nada a Hacienda.")
+
+
+def vat_quarter_summary(db: Session, company_id: int, year: int, quarter: int) -> Dict[str, Any]:
+    """IVA del trimestre de las ventas TPV de la EMPRESA: reutiliza el calculo de
+    `GET /tpv/fiscal/quarterly-vat` (`tpv_quarterly_vat_v1.quarterly_vat_breakdown`) con ambito estricto
+    a la empresa de la sesion (sin el fallback de ventas legado sin empresa del endpoint)."""
+    from app.models.fiscal import TPVSale
+    from services.tpv_quarterly_vat_v1 import quarterly_vat_breakdown
+
+    body = quarterly_vat_breakdown(db, TPVSale.company_id == company_id, year, quarter,
+                                   include_sales_count=True)
+    vat_total = round(body["iva_4"] + body["iva_10"] + body["iva_21"], 2)
+    base_total = round(body["base_4"] + body["base_10"] + body["base_21"], 2)
+    # Orden pensado para la ventana del chat: periodo legible, importes principales, desglose por tipo,
+    # nota. `year`/`quarter`/`period` quedan para consumidores de maquina (la ventana los oculta).
+    return {
+        "period_label": f"{quarter}T {year}",
+        "vat_total": vat_total,
+        "base_total": base_total,
+        "grand_total": body["grand_total"],
+        "sales_count": body["sales_count"],
+        "by_rate": [{"rate": f"{r} %", "tax_base": body[f"base_{r}"], "vat_amount": body[f"iva_{r}"]}
+                    for r in (4, 10, 21)],
+        "recargo_total": body["recargo_total"],
+        "note": VAT_DRAFT_NOTE,
+        "submitted_to_aeat": False,
+        "period": body["period"],
+        "year": year,
+        "quarter": quarter,
+        "source": "tpv_sales",
     }

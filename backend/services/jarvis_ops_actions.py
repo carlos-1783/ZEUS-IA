@@ -34,6 +34,9 @@ READ_ACTIONS: Dict[str, Tuple[str, str]] = {
     "track_leads": ("track_leads", "PERSEO"),
     "get_daily_close": ("get_daily_close", "RAFAEL"),
     "get_pending_invoices": ("get_pending_invoices", "RAFAEL"),
+    "get_last_invoice": ("get_last_invoice", "RAFAEL"),
+    "get_invoices_today": ("get_invoices_today", "RAFAEL"),
+    "get_vat_quarter": ("get_vat_quarter", "RAFAEL"),
     "get_sales_performance": ("get_sales_performance", "PERSEO"),
     "get_attendance_status": ("get_attendance_status", "AFRODITA"),
     "get_today_agenda": ("get_today_agenda", "AFRODITA"),
@@ -46,6 +49,14 @@ READ_ACTIONS: Dict[str, Tuple[str, str]] = {
 READ_PAYLOAD_KEYS: Dict[str, Tuple[str, ...]] = {
     "get_daily_close": ("day",),
     "get_sales_performance": ("days",),
+    "get_vat_quarter": ("quarter_ref", "quarter", "year"),
+}
+# Consultas que, en el chat de UN agente concreto, se resuelven con otra lectura de ese agente:
+# (agente, intencion del parser) -> (accion de READ_ACTIONS, payload fijo). En el workspace de RAFAEL
+# «¿cuánto llevo hoy?» / «¿cuánto he facturado hoy?» (ventas TPV de hoy, que en ZEUS atiende
+# tpv_sales_summary) es el cierre de hoy de RAFAEL: ventas TPV del dia + arqueo si lo hay.
+AGENT_INTENT_ALIASES: Dict[Tuple[str, str], Tuple[str, Dict[str, Any]]] = {
+    ("RAFAEL", "tpv_sales_today"): ("get_daily_close", {"day": "today"}),
 }
 WRITE_ACTIONS = frozenset({"create_ops_route", "create_inventory_movement"})
 # Consultas que un paso de plan puede ejecutar (nombre del ejecutor -> (accion del chat, agente)).
@@ -63,6 +74,10 @@ PLAN_READ_ACTIONS: Dict[str, Tuple[str, str]] = {
     "get_today_agenda": ("get_today_agenda", "AFRODITA"),
     "review_contracts": ("review_contracts", "JUSTICIA"),
 }
+
+
+_INVOICE_STATUS_ES = {"draft": "borrador sin emitir", "sent": "emitida", "paid": "cobrada",
+                      "partially_paid": "cobrada en parte", "void": "anulada", "overdue": "vencida"}
 
 
 def _eur(v: Any) -> str:
@@ -98,6 +113,39 @@ def _format_read(chat_action: str, result: Dict[str, Any]) -> str:
                 if data["overdue_count"] else "")
         return (f"Facturas pendientes de cobro: {data['pending_count']} por {_eur(data['pending_amount'])}"
                 f"{over}.{drafts}")
+    if chat_action == "get_last_invoice" and "found" in data:
+        if not data["found"]:
+            return "No hay facturas todavía en tu empresa."
+        inv = data["invoice"]
+        who = f" a {inv['customer']}" if inv.get("customer") else ""
+        state = _INVOICE_STATUS_ES.get(inv.get("status") or "", inv.get("status") or "sin estado")
+        due = f", pendiente de cobro {_eur(inv['amount_due'])}" if inv["amount_due"] and inv.get("status") != "void" else ""
+        origin = " Generada desde una venta del TPV." if inv.get("from_tpv") else ""
+        return (f"Última factura: {inv['invoice_number']} del {inv['issue_date'] or 'sin fecha'}{who}, total "
+                f"{_eur(inv['amount_total'])} (IVA {_eur(inv['tax_amount'])}), {state}{due}.{origin}")
+    if chat_action == "get_invoices_today" and "invoices" in data:
+        extra = []
+        if data["drafts_count"]:
+            extra.append(f"{data['drafts_count']} borrador(es) sin emitir")
+        if data["void_count"]:
+            extra.append(f"{data['void_count']} anulada(s)")
+        tail = f" Además: {', '.join(extra)}." if extra else ""
+        if not data["count"]:
+            return f"Hoy ({data['date']}) no hay facturas emitidas en tu empresa: 0 facturas.{tail}"
+        nums = ", ".join(f"{i['invoice_number']} ({_eur(i['amount_total'])})" for i in data["invoices"]
+                         if i.get("status") not in ("draft", "void"))
+        return (f"Facturas de hoy ({data['date']}): {data['count']} por {_eur(data['amount_total'])} "
+                f"(IVA {_eur(data['tax_total'])}): {nums}.{tail}")
+    if chat_action == "get_vat_quarter" and "vat_total" in data:
+        q = f"{data['quarter']}T {data['year']}"
+        if not data["sales_count"]:
+            return f"No hay ventas TPV registradas en el {q}: IVA repercutido 0,00 €. {data['note']}"
+        parts = [f"{r['rate']} base {_eur(r['tax_base'])} cuota {_eur(r['vat_amount'])}"
+                 for r in data["by_rate"] if r["tax_base"] or r["vat_amount"]]
+        rec = f" Recargo de equivalencia {_eur(data['recargo_total'])}." if data["recargo_total"] else ""
+        return (f"IVA repercutido en las ventas TPV del {q}: {_eur(data['vat_total'])} sobre una base de "
+                f"{_eur(data['base_total'])} ({data['sales_count']} {'venta' if data['sales_count'] == 1 else 'ventas'}, total {_eur(data['grand_total'])}). "
+                f"Por tipo: {'; '.join(parts)}.{rec} {data['note']}")
     if chat_action == "get_sales_performance" and "current" in data:
         cur, prev, d = data["current"], data["previous"], data["window_days"]
         if not cur["tpv_count"] and not cur["invoice_count"]:

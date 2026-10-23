@@ -4,6 +4,7 @@ El cerebro central que coordina todos los agentes
 """
 
 import json
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, TYPE_CHECKING
 from agents.base_agent import BaseAgent
@@ -11,6 +12,29 @@ from services.activity_logger import activity_logger
 
 if TYPE_CHECKING:
     from services.teamflow_engine import TeamFlowEngine
+
+logger = logging.getLogger(__name__)
+
+
+def _with_today_activity(context: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Contesta el PROPIO ZEUS: evalua el proveedor perezoso de la actividad de hoy (lo pone el chat de
+    ZEUS CORE en servidor) y la anade a una COPIA de `zeus_global_context`. Solo aqui se lee la BD; al
+    delegar o en pre-lanzamiento el proveedor no se evalua. Un fallo inesperado no rompe la charla: el
+    modelo recibe que el dato no esta disponible (nunca la ausencia de dato, que invitaria a inventar)."""
+    from services.zeus_global_context import TODAY_ACTIVITY_KEY, TODAY_ACTIVITY_PROVIDER_KEY
+
+    provider = (context or {}).get(TODAY_ACTIVITY_PROVIDER_KEY)
+    if not callable(provider):
+        return context
+    try:
+        text = provider()
+    except Exception:
+        logger.exception("ZEUS: no se pudo cargar la actividad de hoy")
+        text = "Actividad de hoy: no se ha podido leer ahora; no des cifras de hoy y dilo."
+    out = dict(context)
+    out.pop(TODAY_ACTIVITY_PROVIDER_KEY, None)
+    out["zeus_global_context"] = {**(out.get("zeus_global_context") or {}), TODAY_ACTIVITY_KEY: text}
+    return out
 
 
 class ZeusCore(BaseAgent):
@@ -155,7 +179,7 @@ class ZeusCore(BaseAgent):
         """ZEUS maneja la solicitud directamente (cuando no hay agente apropiado)"""
         print("🏛️ [ZEUS] Manejando solicitud directamente")
         
-        result = self.make_decision(user_message, additional_context=context)
+        result = self.make_decision(user_message, additional_context=_with_today_activity(context))
         result["routed_by"] = "ZEUS CORE"
         result["selected_agent"] = "ZEUS CORE (directo)"
         

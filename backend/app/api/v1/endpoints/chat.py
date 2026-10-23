@@ -603,6 +603,14 @@ async def _chat_impl(
         # para superusuarios sin empresa. Se fija aqui, tras build_server_context.
         context["_is_superuser"] = bool(getattr(current_user, "is_superuser", False))
 
+        if agent_name == "ZEUS CORE":
+            # La charla de ZEUS (p. ej. «resumen del día») recibe las ventas TPV, el arqueo y las facturas
+            # de HOY de la empresa de la sesion (lecturas reales de RAFAEL), con 0 explicito si no hay.
+            # Perezoso: solo se lee (y se registra) si contesta el propio ZEUS, no si delega.
+            from services.zeus_global_context import TODAY_ACTIVITY_PROVIDER_KEY, make_today_activity_provider
+
+            context[TODAY_ACTIVITY_PROVIDER_KEY] = make_today_activity_provider(current_user, context)
+
         log_chain_step(
             "ORQUESTAR", company_id=chain_company, user=current_user, agent=agent_name,
             action="route_to_agent", status="success",

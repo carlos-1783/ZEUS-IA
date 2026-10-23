@@ -503,28 +503,150 @@ def warehouse_summary(db: Session, user: User) -> Dict[str, Any]:
     }
 
 
-def company_inventory_status(db: Session, company_id: int, *, limit: int = 200) -> Dict[str, Any]:
-    """J9c: estado real del inventario ERP de UNA empresa (Product.company_id == company_id)."""
+def _qty_es(v: Any) -> str:
+    """Cantidad en formato es-ES (sin decimales si es entera; coma decimal)."""
+    f = float(v or 0)
+    if f.is_integer():
+        return f"{int(f):,}".replace(",", ".")
+    return f"{f:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".").rstrip("0").rstrip(",")
+
+
+def company_inventory_status(db: Session, company_id: int, *, limit: int = 500) -> Dict[str, Any]:
+    """Estado real del inventario de UNA empresa (la de la sesion): catalogo del TPV + productos ERP.
+
+    - TPV (`tpv_products`, TPVProduct.company_id == company_id): es donde vive el catalogo real de
+      hosteleria (el alta crea los productos TPV). `stock` NULL = el producto no lleva control de stock.
+      El TPV no tiene campo de minimo: un producto solo TPV nunca se cuenta «bajo minimos».
+    - ERP (`products`, Product.company_id == company_id): `track_inventory`, `quantity_on_hand` y
+      `low_stock_threshold` (> 0 = minimo definido).
+    - Sin duplicar: un producto ERP y uno TPV de la misma empresa con el mismo SKU/ID o nombre son UNA
+      referencia (mismo emparejamiento `_match_keys` que la vista combinada y la sincronizacion de stock).
+      Si el ERP lleva el control de stock manda el ERP (precedencia de `merge_products_view`); si no,
+      se usa el stock del TPV.
+    """
     flags = current_flags()
-    if not flags.get("AFRODITA_USE_ERP"):
-        raise HTTPException(status_code=503, detail="AFRODITA_USE_ERP=false")
-    rows = (
-        db.query(Product)
-        .filter(Product.company_id == company_id, Product.track_inventory.is_(True))
-        .order_by(Product.name.asc())
-        .limit(min(limit, 500))
-        .all()
+    use_tpv, use_erp = bool(flags.get("AFRODITA_USE_TPV")), bool(flags.get("AFRODITA_USE_ERP"))
+    if not use_tpv and not use_erp:
+        raise HTTPException(status_code=503, detail="AFRODITA_USE_TPV=false y AFRODITA_USE_ERP=false")
+    cap = min(limit, 500)
+    tpv_rows: List[TPVProduct] = (
+        db.query(TPVProduct).filter(TPVProduct.company_id == company_id)
+        .order_by(TPVProduct.name.asc()).limit(cap).all()
+        if use_tpv else []
     )
-    items = [_erp_row(p) for p in rows]
-    low = [i for i in items if i["quantity_on_hand"] <= i["low_stock_threshold"]]
-    return {
+    erp_rows: List[Product] = (
+        db.query(Product).filter(Product.company_id == company_id)
+        .order_by(Product.name.asc()).limit(cap).all()
+        if use_erp else []
+    )
+
+    items: List[Dict[str, Any]] = []
+    used_tpv: set[int] = set()
+    for erp in erp_rows:
+        twin: Optional[TPVProduct] = None
+        for idx, tpv in enumerate(tpv_rows):
+            if idx not in used_tpv and _match_keys(erp, tpv):
+                twin = tpv
+                used_tpv.add(idx)
+                break
+        if erp.track_inventory:
+            stock: Optional[float] = float(erp.quantity_on_hand or 0)
+        elif twin is not None and twin.stock is not None:
+            stock = float(twin.stock)
+        else:
+            stock = None
+        threshold = float(erp.low_stock_threshold or 0) if erp.track_inventory else 0.0
+        items.append({
+            "sku": erp.sku, "name": erp.name, "stock": stock,
+            "min_stock": threshold if threshold > 0 else None,
+            "source": "tpv+erp" if twin is not None else "erp",
+        })
+    for idx, tpv in enumerate(tpv_rows):
+        if idx in used_tpv:
+            continue
+        items.append({
+            "sku": None, "name": tpv.name,
+            "stock": float(tpv.stock) if tpv.stock is not None else None,
+            "min_stock": None, "source": "tpv",
+        })
+    items.sort(key=lambda i: (i["name"] or "").lower())
+
+    tracked = [i for i in items if i["stock"] is not None]
+    untracked = [i for i in items if i["stock"] is None]
+    out = [i for i in tracked if i["stock"] <= 0]
+    low = [i for i in tracked if i["stock"] > 0 and i["min_stock"] is not None and i["stock"] <= i["min_stock"]]
+    top = sorted((i for i in tracked if i["stock"] > 0), key=lambda i: (-i["stock"], (i["name"] or "").lower()))
+
+    def _brief(i: Dict[str, Any], with_min: bool = False) -> Dict[str, Any]:
+        d: Dict[str, Any] = {"name": i["name"], "stock": i["stock"]}
+        if i["sku"]:
+            d["sku"] = i["sku"]
+        if with_min:
+            d["min_stock"] = i["min_stock"]
+        return d
+
+    result = {
         "company_id": company_id,
-        "items": items,
         "total_skus": len(items),
-        "total_units": round(sum(i["quantity_on_hand"] for i in items), 2),
+        "tracked_skus": len(tracked),
+        "out_of_stock_count": len(out),
         "low_stock_count": len(low),
-        "low_stock_items": [
-            {"sku": i["sku"], "name": i["name"], "stock": i["quantity_on_hand"]} for i in low[:20]
-        ],
-        "source": "products",
+        "untracked_skus": len(untracked),
+        "without_min_count": sum(1 for i in tracked if i["min_stock"] is None),
+        "total_units": round(sum(i["stock"] for i in tracked), 2),
+        "out_of_stock_items": [_brief(i) for i in out[:20]],
+        "low_stock_items": [_brief(i, with_min=True) for i in low[:20]],
+        "top_items": [_brief(i) for i in top[:5]],
+        "untracked_items": [{"name": i["name"]} for i in untracked[:20]],
+        "items": items,
+        "tpv_products": len(tpv_rows),
+        "erp_products": len(erp_rows),
+        "sources": [s for s, on in (("tpv_products", use_tpv), ("products", use_erp)) if on],
     }
+    logger.info(
+        "afrodita_inventory_status company_id=%s refs=%s tracked=%s out=%s low=%s untracked=%s tpv=%s erp=%s",
+        company_id, len(items), len(tracked), len(out), len(low), len(untracked), len(tpv_rows), len(erp_rows),
+    )
+    return result
+
+
+def inventory_status_text(inv: Dict[str, Any]) -> str:
+    """Respuesta en espanol (es-ES) con los datos reales de `company_inventory_status`; el vacio es un dato."""
+    total = int(inv.get("total_skus") or 0)
+    if not total:
+        return "No tienes productos dados de alta en el TPV ni en el inventario de tu empresa."
+    tracked = int(inv.get("tracked_skus") or 0)
+    untracked = int(inv.get("untracked_skus") or 0)
+    refs = "1 referencia" if total == 1 else f"{total} referencias"
+    if not tracked:
+        return (f"Inventario: {refs}, pero ninguna lleva control de stock (no tienen stock indicado en el TPV), "
+                "así que no puedo decirte cuántas unidades te quedan.")
+
+    def _names(lst: List[Dict[str, Any]], with_min: bool = False) -> str:
+        parts = []
+        for i in lst[:5]:
+            q = _qty_es(i.get("stock"))
+            parts.append(f"{i.get('name')} ({q}, mínimo {_qty_es(i.get('min_stock'))})" if with_min
+                         else f"{i.get('name')} ({q})")
+        return ", ".join(parts)
+
+    head = f"Inventario: {refs}"
+    if untracked:
+        head += f" ({tracked} con control de stock y {untracked} sin control de stock)"
+    head += f", {_qty_es(inv.get('total_units'))} unidades en stock."
+    out_n = int(inv.get("out_of_stock_count") or 0)
+    low_n = int(inv.get("low_stock_count") or 0)
+    parts = [head]
+    parts.append(f" Sin stock: {out_n} ({_names(inv.get('out_of_stock_items') or [])})." if out_n
+                 else " Ninguna sin stock.")
+    if low_n:
+        parts.append(f" Bajo mínimos: {low_n} ({_names(inv.get('low_stock_items') or [], with_min=True)}).")
+    else:
+        parts.append(" Ninguna bajo mínimos.")
+    nomin = int(inv.get("without_min_count") or 0)
+    if nomin:
+        parts.append(f" {nomin} sin mínimo definido.")
+    top = inv.get("top_items") or []
+    if top:
+        parts.append(f" Más stock: {_names(top)}.")
+    return "".join(parts)

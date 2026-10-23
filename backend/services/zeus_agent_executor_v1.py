@@ -680,7 +680,7 @@ async def _dispatch(
     if action == "get_inventory_status":
         from fastapi import HTTPException
 
-        from services.afrodita_ops_service_v1 import company_inventory_status
+        from services.afrodita_ops_service_v1 import company_inventory_status, inventory_status_text
 
         cid = zeus_action.company_id
         if cid is None:
@@ -691,7 +691,7 @@ async def _dispatch(
             return _fail(str(exc.detail))
         return {
             "success": True, "executed": True, "company_id": cid,
-            "message": f"Inventario: {inv['total_skus']} referencias, {inv['low_stock_count']} con stock bajo.",
+            "message": inventory_status_text(inv),
             "data": inv,
         }
 

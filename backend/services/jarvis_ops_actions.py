@@ -222,11 +222,9 @@ def _format_read(chat_action: str, result: Dict[str, Any]) -> str:
         return (f"Seguridad de tu empresa ({data['window_days']} días): {data['events_total']} eventos, "
                 f"{data['denied_total']} rechazados, {data['critical_total']} críticos.{tail}")
     if chat_action == "get_inventory_status" and "total_skus" in data:
-        low = data.get("low_stock_items") or []
-        names = ", ".join(f"{i.get('name')} ({i.get('stock'):g})" for i in low[:5] if isinstance(i.get("stock"), (int, float)))
-        tail = f" Stock bajo: {names}." if names else ""
-        return (f"Inventario: {data['total_skus']} referencias, {data.get('total_units', 0):g} unidades en total, "
-                f"{data.get('low_stock_count', 0)} con stock bajo.{tail}")
+        from services.afrodita_ops_service_v1 import inventory_status_text
+
+        return inventory_status_text(data)
     return str(result.get("message") or "")
 
 

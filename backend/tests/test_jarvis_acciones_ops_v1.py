@@ -167,7 +167,7 @@ def test_inventario_por_chat_solo_de_su_empresa(db, client):
     _product(db, cb)
     oa = say(client, ua, "¿cómo está el inventario?")
     ob = say(client, ub, "dime el estado del inventario")
-    assert "3 referencias" in oa["message"] and "1 referencias" in ob["message"]
+    assert "3 referencias" in oa["message"] and "1 referencia," in ob["message"]
     assert not approvals(db, ua)
 
 

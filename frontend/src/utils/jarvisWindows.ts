@@ -162,6 +162,17 @@ const LABELS: Record<string, string> = {
   tax_base: 'Base imponible',
   vat_amount: 'Cuota de IVA',
   recargo_total: 'Recargo de equivalencia',
+  // AFRODITA · get_inventory_status (catálogo del TPV + productos del ERP de la empresa)
+  tracked_skus: 'Con control de stock',
+  untracked_skus: 'Sin control de stock',
+  out_of_stock_count: 'Sin stock',
+  out_of_stock_items: 'Productos sin stock',
+  without_min_count: 'Sin mínimo definido',
+  min_stock: 'Mínimo',
+  top_items: 'Con más stock',
+  untracked_items: 'Productos sin control de stock',
+  tpv_products: 'Productos del TPV',
+  erp_products: 'Productos del ERP',
 };
 
 // Claves que son IMPORTES en euros (se muestran con «€», formato es-ES). Solo claves inequívocas:
@@ -192,6 +203,17 @@ const INTENT_VIEWS: Record<string, IntentView> = {
   },
   get_last_invoice: { title: () => 'Última factura', hidden: ['found'] },
   get_invoices_today: { title: () => 'Facturas de hoy', hidden: [], labels: { count: 'Facturas emitidas' } },
+  get_inventory_status: {
+    title: () => 'Inventario',
+    // `items` es el listado completo (ya resumido en las tablas); `sources` son nombres de tablas.
+    hidden: ['items', 'sources', 'tpv_products', 'erp_products'],
+    labels: {
+      total_skus: 'Referencias',
+      total_units: 'Unidades en stock',
+      low_stock_count: 'Bajo mínimos',
+      low_stock_items: 'Productos bajo mínimos',
+    },
+  },
 };
 
 // Valores (y claves dinámicas: decisiones THALOS, gravedades, formas de pago, estados) que el

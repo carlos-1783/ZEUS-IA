@@ -550,7 +550,8 @@ def company_inventory_status(db: Session, company_id: int, *, limit: int = 500) 
             stock = None
         threshold = float(erp.low_stock_threshold or 0) if erp.track_inventory else 0.0
         items.append({
-            "sku": erp.sku, "name": erp.name, "stock": stock,
+            # nombre recortado (igual que el emparejamiento `_match_keys`): «Harina » sale como «Harina»
+            "sku": (erp.sku or "").strip() or None, "name": (erp.name or "").strip(), "stock": stock,
             "min_stock": threshold if threshold > 0 else None,
             "source": "tpv+erp" if twin is not None else "erp",
         })
@@ -558,7 +559,7 @@ def company_inventory_status(db: Session, company_id: int, *, limit: int = 500) 
         if idx in used_tpv:
             continue
         items.append({
-            "sku": None, "name": tpv.name,
+            "sku": None, "name": (tpv.name or "").strip(),
             "stock": float(tpv.stock) if tpv.stock is not None else None,
             "min_stock": None, "source": "tpv",
         })
@@ -603,6 +604,22 @@ def company_inventory_status(db: Session, company_id: int, *, limit: int = 500) 
     return result
 
 
+def _stock_names(lst: List[Dict[str, Any]], with_min: bool = False, shown: int = 5) -> str:
+    """«Nombre (cantidad)» o «Nombre (cantidad, mínimo M)» de los primeros `shown` productos."""
+    parts = []
+    for i in lst[:shown]:
+        q = _qty_es(i.get("stock"))
+        parts.append(f"{i.get('name')} ({q}, mínimo {_qty_es(i.get('min_stock'))})" if with_min
+                     else f"{i.get('name')} ({q})")
+    return ", ".join(parts)
+
+
+def _with_min_count(inv: Dict[str, Any]) -> int:
+    """Productos con control de stock Y minimo definido: los unicos de los que se puede decir si estan
+    bajo minimos (sin minimo, «ninguno bajo minimos» seria inventado)."""
+    return max(int(inv.get("tracked_skus") or 0) - int(inv.get("without_min_count") or 0), 0)
+
+
 def inventory_status_text(inv: Dict[str, Any]) -> str:
     """Respuesta en espanol (es-ES) con los datos reales de `company_inventory_status`; el vacio es un dato."""
     total = int(inv.get("total_skus") or 0)
@@ -615,31 +632,152 @@ def inventory_status_text(inv: Dict[str, Any]) -> str:
         return (f"Inventario: {refs}, pero ninguna lleva control de stock (no tienen stock indicado en el TPV), "
                 "así que no puedo decirte cuántas unidades te quedan.")
 
-    def _names(lst: List[Dict[str, Any]], with_min: bool = False) -> str:
-        parts = []
-        for i in lst[:5]:
-            q = _qty_es(i.get("stock"))
-            parts.append(f"{i.get('name')} ({q}, mínimo {_qty_es(i.get('min_stock'))})" if with_min
-                         else f"{i.get('name')} ({q})")
-        return ", ".join(parts)
-
     head = f"Inventario: {refs}"
     if untracked:
         head += f" ({tracked} con control de stock y {untracked} sin control de stock)"
     head += f", {_qty_es(inv.get('total_units'))} unidades en stock."
     out_n = int(inv.get("out_of_stock_count") or 0)
     low_n = int(inv.get("low_stock_count") or 0)
+    with_min = _with_min_count(inv)
     parts = [head]
-    parts.append(f" Sin stock: {out_n} ({_names(inv.get('out_of_stock_items') or [])})." if out_n
+    parts.append(f" Sin stock: {out_n} ({_stock_names(inv.get('out_of_stock_items') or [])})." if out_n
                  else " Ninguna sin stock.")
     if low_n:
-        parts.append(f" Bajo mínimos: {low_n} ({_names(inv.get('low_stock_items') or [], with_min=True)}).")
+        parts.append(f" Bajo mínimos: {low_n} ({_stock_names(inv.get('low_stock_items') or [], with_min=True)}).")
+    elif not with_min:
+        # sin ningun minimo definido no se sabe si algo esta bajo minimos: decirlo, no «ninguna»
+        parts.append(" No puedo saber cuáles están bajo mínimos porque ninguna tiene mínimo definido.")
     else:
-        parts.append(" Ninguna bajo mínimos.")
+        parts.append(f" Ninguna bajo mínimos (de las {with_min} con mínimo definido)." if with_min > 1
+                     else " Ninguna bajo mínimos (de la única con mínimo definido).")
     nomin = int(inv.get("without_min_count") or 0)
-    if nomin:
+    if nomin and with_min:
         parts.append(f" {nomin} sin mínimo definido.")
     top = inv.get("top_items") or []
     if top:
-        parts.append(f" Más stock: {_names(top)}.")
+        parts.append(f" Más stock: {_stock_names(top)}.")
     return "".join(parts)
+
+
+# Consultas de alerta de stock del chat («productos sin stock», «¿algo bajo mínimos?», «¿qué me falta?»):
+# "out" = agotados, "low" = bajo minimos / poco stock, "alerts" = ambas cosas.
+INVENTORY_FOCUS = ("out", "low", "alerts")
+# + "product": stock de UN producto (`product_stock_text`), con el nombre pedido en `product`
+INVENTORY_READ_FOCUS = INVENTORY_FOCUS + ("product",)
+
+
+def inventory_alerts_text(inv: Dict[str, Any], focus: str) -> str:
+    """Respuesta a una consulta de ALERTA de stock con los datos reales de `company_inventory_status`.
+    Honesta: si ningun producto lleva control de stock, o ninguno tiene minimo definido, lo dice (nunca
+    «ninguno bajo minimos» sin minimos). Los productos sin control de stock se mencionan: de esos no se sabe."""
+    if focus not in INVENTORY_FOCUS:
+        raise ValueError("focus no valido")
+    total = int(inv.get("total_skus") or 0)
+    if not total:
+        return ("No tienes productos dados de alta en el TPV ni en el inventario de tu empresa, así que no puedo "
+                "decirte qué falta.")
+    tracked = int(inv.get("tracked_skus") or 0)
+    untracked = int(inv.get("untracked_skus") or 0)
+    if not tracked:
+        refs = ("1 referencia, pero no lleva control de stock (no tiene" if total == 1
+                else f"{total} referencias, pero ninguna lleva control de stock (no tienen")
+        return (f"Inventario: {refs} stock indicado en el TPV ni en el inventario), así que no puedo saber qué se "
+                "ha agotado ni qué está bajo mínimos.")
+    out_n = int(inv.get("out_of_stock_count") or 0)
+    low_n = int(inv.get("low_stock_count") or 0)
+    with_min = _with_min_count(inv)
+    nomin = int(inv.get("without_min_count") or 0)
+
+    def _list(n: int, items: List[Dict[str, Any]], with_min_: bool = False) -> str:
+        more = f" y {n - 5} más" if n > 5 else ""
+        return f"{_stock_names(items, with_min=with_min_)}{more}"
+
+    parts: List[str] = []
+    if focus in ("out", "alerts"):
+        if out_n:
+            parts.append(f"Sin stock: {out_n} ({_list(out_n, inv.get('out_of_stock_items') or [])}).")
+        else:
+            parts.append("Ningún producto con control de stock está agotado." if tracked > 1
+                         else "Tu único producto con control de stock no está agotado.")
+    if focus in ("low", "alerts"):
+        if not with_min:
+            parts.append("No puedo saber qué está bajo mínimos porque ningún producto tiene mínimo definido.")
+        elif low_n:
+            parts.append(f"Bajo mínimos: {low_n} "
+                         f"({_list(low_n, inv.get('low_stock_items') or [], with_min_=True)}).")
+        else:
+            parts.append(f"Ninguno de los {with_min} productos con mínimo definido está bajo mínimos."
+                         if with_min > 1 else "El único producto con mínimo definido no está bajo mínimos.")
+        if with_min and nomin:
+            parts.append(f"{nomin} con control de stock no tienen mínimo definido." if nomin > 1
+                         else "1 con control de stock no tiene mínimo definido.")
+        if focus == "low" and out_n:
+            parts.append(f"Además, sin stock: {out_n} ({_list(out_n, inv.get('out_of_stock_items') or [])}).")
+    if untracked:
+        parts.append(f"{untracked} productos no llevan control de stock: de esos no sé cuántas unidades quedan."
+                     if untracked > 1 else
+                     "1 producto no lleva control de stock: de ese no sé cuántas unidades quedan.")
+    return " ".join(parts)
+
+
+# Stock de UN producto («¿me queda cerveza?», «¿cuánto stock queda de harina?»): se busca en los productos de
+# `company_inventory_status` (empresa de la sesion), sin acentos ni mayusculas, admitiendo singular/plural y
+# el nombre de pila del producto («vino» -> «Vino tinto»). Nunca se inventa: si no esta, se dice.
+_PRODUCT_ARTICLES = ("el ", "la ", "los ", "las ", "un ", "una ", "unos ", "unas ")
+
+
+def _product_key(value: Any) -> str:
+    from services.intent_parser import fold
+
+    return fold(" ".join(str(value or "").split())).strip()
+
+
+def _product_variants(product: str) -> set:
+    p = _product_key(product)
+    for art in _PRODUCT_ARTICLES:
+        if p.startswith(art):
+            p = p[len(art):]
+            break
+    out = {p, p + "s", p + "es"}
+    if p.endswith("es") and len(p) > 4:
+        out.add(p[:-2])
+    if p.endswith("s") and len(p) > 3:
+        out.add(p[:-1])
+    return {v for v in out if v}
+
+
+def match_inventory_items(items: List[Dict[str, Any]], product: str) -> List[Dict[str, Any]]:
+    """Productos del inventario cuyo nombre es `product` (o empieza por el: «vino» -> «Vino tinto»)."""
+    variants = _product_variants(product)
+    if not variants:
+        return []
+    exact = [i for i in items if _product_key(i.get("name")) in variants]
+    if exact:
+        return exact
+    return [i for i in items if any(_product_key(i.get("name")).startswith(v + " ") for v in variants)]
+
+
+def product_stock_text(inv: Dict[str, Any], product: str) -> str:
+    """Stock real de los productos que coinciden con `product` en el inventario de la empresa de la sesion."""
+    found = match_inventory_items(inv.get("items") or [], product)
+    if not found:
+        return f"No encuentro «{' '.join(str(product or '').split())}» en tu inventario."
+    parts = []
+    for i in found[:5]:
+        name, stock, mn = i.get("name"), i.get("stock"), i.get("min_stock")
+        if stock is None:
+            parts.append(f"{name} no lleva control de stock, así que no sé cuántas unidades quedan.")
+            continue
+        q = _qty_es(stock)
+        units = "unidad" if float(stock) == 1 else "unidades"
+        if stock <= 0:
+            parts.append(f"{name}: sin stock (0 unidades).")
+        elif mn is not None and stock <= mn:
+            parts.append(f"{name}: quedan {q} {units} (mínimo {_qty_es(mn)}: bajo mínimos).")
+        elif mn is not None:
+            parts.append(f"{name}: quedan {q} {units} (mínimo {_qty_es(mn)}).")
+        else:
+            parts.append(f"{name}: quedan {q} {units}.")
+    if len(found) > 5:
+        parts.append(f"Y {len(found) - 5} productos más con ese nombre.")
+    return " ".join(parts)

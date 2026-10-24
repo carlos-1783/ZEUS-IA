@@ -46,8 +46,11 @@ from services import jarvis_evidence
 from services import jarvis_ops_actions as ops_actions
 from services.jarvis_legal_block import legal_block
 from services.jarvis_schedule_write_block import schedule_write_block
+from services.jarvis_invoice_write_block import invoice_order_check
 from services.afrodita_workspace_service_v1 import active_employee_names_for_session
-from services.intent_parser import staff_member_cue, staff_member_task
+from services.intent_parser import (
+    has_negation_outside_stock_phrase, product_stock_cue, product_stock_task, staff_member_cue, staff_member_task,
+)
 
 
 def _staff_names_loader(db: Session, user: User):
@@ -61,6 +64,68 @@ def _staff_names_loader(db: Session, user: User):
         return cache["names"]
 
     return load
+
+
+# Tema de la ultima LECTURA ejecutada en un hilo del chat de ZEUS: si fue de facturas, «anula la última» o
+# «cancélala» en el turno siguiente se entienden como ordenes sobre facturas (bloqueo honesto). Mismo
+# almacenamiento y caducidad que el estado de aclaracion (AgentOperationalState, 15 min).
+_READ_TOPIC_KEY = "jarvis_last_read_topic"
+_READ_TOPIC_TTL_SECONDS = 15 * 60
+_INVOICE_READS = frozenset({"get_last_invoice", "get_invoices_today", "get_invoices_period", "get_pending_invoices"})
+
+
+def _remember_read_topic(company_key: str, thread_key: str, action_type: str) -> None:
+    from datetime import datetime, timezone
+
+    mem = memory_load(company_key, AGENT_ZEUS, thread_key)
+    arts = dict((mem.get("operational") or {}).get("artifacts") or {})
+    arts[_READ_TOPIC_KEY] = {"topic": "invoices" if action_type in _INVOICE_READS else action_type,
+                             "at": datetime.now(timezone.utc).isoformat()}
+    persist_operational_state(company_key, AGENT_ZEUS, thread_key, artifacts=arts)
+
+
+def _recent_invoice_topic(company_key: str, thread_key: str) -> bool:
+    from datetime import datetime, timedelta, timezone
+
+    mem = memory_load(company_key, AGENT_ZEUS, thread_key)
+    st = ((mem.get("operational") or {}).get("artifacts") or {}).get(_READ_TOPIC_KEY)
+    if not isinstance(st, dict) or st.get("topic") != "invoices":
+        return False
+    try:
+        at = datetime.fromisoformat(st["at"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - at <= timedelta(seconds=_READ_TOPIC_TTL_SECONDS)
+
+
+
+
+def _product_names_loader(db: Session, user: User):
+    """Nombres del inventario real (TPV + ERP) de la EMPRESA DE LA SESION, leidos de la BD solo si el mensaje parece
+    «¿me queda X?» / «stock de X» y una vez por mensaje (como la plantilla del cuadrante). Sin flags de inventario o
+    sin empresa -> lista vacia (X no se reconoce como producto)."""
+    cache: Dict[str, Any] = {}
+
+    def load():
+        if "names" not in cache:
+            import services.crm_office_service as crm_svc
+            from services.afrodita_ops_service_v1 import company_inventory_status
+
+            names: list = []
+            try:
+                cid = crm_svc.primary_company_id(db, user)
+                if cid is not None:
+                    names = [i["name"] for i in company_inventory_status(db, cid)["items"]]
+            except HTTPException:
+                names = []
+            cache["names"] = names
+        return cache["names"]
+
+    return load
+
+
 from services import module_gate
 from services.zeus_global_context import attach_context_to_action_payload, enrich_chat_context
 from services.chain_log import log_chain_step
@@ -671,11 +736,28 @@ async def try_handle_zeus_chat(
             _step("ORQUESTAR", "schedule_write_block", "not_available", reason=sblk[0])
             return {"handled": True, "success": False, "executed": False, "status": "not_available",
                     "intent": "unknown", "message": sblk[1]}
+        # Orden de anular/cancelar/borrar/rectificar/firmar una factura: no hay accion de chat (ni legal sin
+        # rectificativa/Verifactu). Respuesta fija con el motivo, sin modelo, sin lectura y sin ejecutar nada.
+        # La misma orden negada («no canceles la factura»): no se hace nada, respuesta fija. Sin «factura»
+        # («anula la última») solo si el turno anterior de este hilo fue una lectura de facturas.
+        ichk = invoice_order_check(message, invoice_context=_recent_invoice_topic(company_id, thread_id))
+        if ichk is not None and ichk[0] == "block":
+            _step("ORQUESTAR", "invoice_write_block", "not_available", reason=ichk[1])
+            return {"handled": True, "success": False, "executed": False, "status": "not_available",
+                    "intent": "unknown", "message": ichk[2]}
+        if ichk is not None:
+            _step("ORQUESTAR", "invoice_write_block", "negated")
+            return {"handled": True, "success": True, "executed": False, "intent": "unknown",
+                    "message": ichk[2]}
         # Turno/horario de UN empleado («¿cuándo trabaja Ana?», «turnos de Ana»): el nombre solo cuenta si esta
         # en la plantilla de la empresa de la sesion (BD, servidor). Sin «turno/horario/trabaja» ni se consulta.
         task = None
         if not (has_negation(message) or is_stop_order(message)) and staff_member_cue(message):
             task = staff_member_task(message, staff_names)
+        if task is None and product_stock_cue(message):
+            # «¿me queda cerveza?»: stock de UN producto de la empresa de la sesion (criterio hibrido de
+            # intent_parser.product_stock_task: producto real de la sesion o stock nombrado de forma explicita)
+            task = product_stock_task(message, _product_names_loader(db, user))
         if task is None:
             task = parse_message(message)  # criterio estricto J8: red de seguridad y fallback
         # J9a: intencion clara de un modulo que la empresa no tiene -> se responde ya, sin modelo.
@@ -788,6 +870,8 @@ async def try_handle_zeus_chat(
         if not audit["ok"]:
             return {"handled": True, "success": False, "executed": False,
                     "message": f"No se puede confirmar la accion: auditoria THALOS fallida ({audit['reason']})."}
+        if action.action_type in ops_actions.READ_ACTIONS:
+            _remember_read_topic(company_id, thread_id, action.action_type)  # contexto del turno siguiente
     return payload
 
 
@@ -805,7 +889,26 @@ async def try_handle_agent_read(
     En cualquier otro caso devuelve None y el agente responde como siempre (LLM). Nunca ejecuta
     escrituras ni crea aprobaciones: eso sigue siendo solo del chat de ZEUS (J3/J3b)."""
     agent = (agent_name or "").strip().upper()
-    if agent in ("", AGENT_ZEUS, "ZEUS") or has_negation(message):
+    if agent in ("", AGENT_ZEUS, "ZEUS"):
+        return None
+    # Cualquier agente: orden de anular/cancelar/borrar/rectificar/firmar una factura -> respuesta fija y honesta
+    # (no hay accion de chat), nunca el modelo ni una lectura (como en el chat de ZEUS); la orden negada -> no se
+    # hace nada, respuesta fija. En el chat de RAFAEL el contexto es de facturas: «anula la última» cuenta.
+    ichk = invoice_order_check(message, invoice_context=(agent == "RAFAEL"))
+    if ichk is not None:
+        import services.crm_office_service as crm_svc
+
+        log_chain_step(
+            "ORQUESTAR", company_id=crm_svc.primary_company_id(db, user), user=user, agent=agent,
+            action="invoice_write_block", status="not_available" if ichk[0] == "block" else "negated",
+            details={"reason": ichk[1], "source": "agent_workspace"},
+        )
+        if ichk[0] == "block":
+            return {"handled": True, "success": False, "executed": False, "status": "not_available",
+                    "intent": "unknown", "message": ichk[2]}
+        return {"handled": True, "success": True, "executed": False, "intent": "unknown", "message": ichk[2]}
+    # «¿qué productos no tienen stock?» es la consulta, no una negacion (el resto de negaciones: como siempre)
+    if has_negation_outside_stock_phrase(message):
         return None
     blk = legal_block(message)  # orden de tramite con la AEAT/impuestos: bloqueo honesto, nunca el modelo
     if blk is not None:
@@ -837,6 +940,9 @@ async def try_handle_agent_read(
     task = None
     if agent == "AFRODITA" and not is_stop_order(message) and staff_member_cue(message):
         task = staff_member_task(message, staff_names)  # turno de UN empleado de la plantilla (ver chat ZEUS)
+    if task is None and product_stock_cue(message):
+        # «¿me queda cerveza?» (ver chat de ZEUS); en AFRODITA (su dominio) un X que no esta -> «No encuentro…»
+        task = product_stock_task(message, _product_names_loader(db, user), domain=(agent == "AFRODITA"))
     if task is None:
         task = parse_message(message)
     if (task.intent == "unknown" or task.needs_clarification or task.ambiguous_with
@@ -847,28 +953,37 @@ async def try_handle_agent_read(
     if alias is not None:  # p. ej. «¿cuánto llevo hoy?» en RAFAEL -> su cierre de hoy (get_daily_close)
         action = action.model_copy(update={"action_type": alias[0], "payload": {**action.payload, **alias[1]}})
     spec = ops_actions.READ_ACTIONS.get(action.action_type)
-    if spec is None or spec[1] != agent:
+    if spec is None:
+        return None
+    # Lectura de OTRO agente pedida en este chat («productos sin stock» en RAFAEL, «facturas de ayer» en
+    # AFRODITA): se ejecuta la lectura real del agente dueño por el mismo camino (modulo de la empresa, ejecutor
+    # del dueño con su guard THALOS y la empresa de la sesion) y se dice quien la lleva. Solo las de
+    # CROSS_AGENT_READS de este chat; el resto sigue como antes.
+    owner = spec[1]
+    if owner != agent and action.action_type not in ops_actions.CROSS_AGENT_READS.get(agent, frozenset()):
         return None
     company_int = action.company_id
     log_chain_step(
-        "COMPRENDER", company_id=company_int, user=user, agent=agent, action="derive_action",
+        "COMPRENDER", company_id=company_int, user=user, agent=owner, action="derive_action",
         status="success", details={"intent": task.intent, "action_type": action.action_type,
-                                   "source": "agent_workspace"},
+                                   "source": "agent_workspace", "workspace_agent": agent},
     )
     result = await execute_action(db, user, action, force_execute=False)
     log_chain_step(
-        "ACTUAR", company_id=company_int, user=user, agent=agent, action=action.action_type,
+        "ACTUAR", company_id=company_int, user=user, agent=owner, action=action.action_type,
         status="success" if result.executed else "failed",
         details={"executed": bool(result.executed), "result_company_id": result.company_id,
-                 "status": result.status, "source": "agent_workspace"},
+                 "status": result.status, "source": "agent_workspace", "workspace_agent": agent},
     )
     payload = _to_chat_payload(result)
     payload["intent"] = alias[0] if alias is not None else task.intent
+    if owner != agent and payload.get("message"):
+        payload["message"] = f"Esto lo lleva {owner}: {payload['message']}"
     if result.executed:
         from services.thalos_request_guard_v1 import thalos_audit_result
 
         audit = thalos_audit_result(
-            db, user=user, company_id=company_int, agent=agent, action=action.action_type,
+            db, user=user, company_id=company_int, agent=owner, action=action.action_type,
             result={"success": result.success, "executed": result.executed, "company_id": result.company_id},
             source="thalos_audit_agent_chat",
         )

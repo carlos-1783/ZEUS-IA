@@ -30,6 +30,7 @@ ZeusActionType = Literal[
     "get_pending_invoices",  # Fase 2 / Step 1: RAFAEL
     "get_last_invoice",  # RAFAEL: ultima factura
     "get_invoices_today",  # RAFAEL: facturas de hoy
+    "get_invoices_period",  # RAFAEL: facturas de ayer / esta semana / la pasada / este mes / el pasado
     "get_vat_quarter",  # RAFAEL: IVA del trimestre (ventas TPV, sin envio a la AEAT)
     "get_sales_performance",  # Fase 2 / Step 1: PERSEO
     "get_attendance_status",  # Fase 2 / Step 1: AFRODITA

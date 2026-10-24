@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from datetime import date
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.schemas.zeus_task import ZeusEntities, ZeusTaskObject
 
@@ -70,6 +70,7 @@ INTENT_LABELS: Dict[str, str] = {
     "get_pending_invoices": "tus facturas pendientes de cobro",
     "get_last_invoice": "tu última factura",
     "get_invoices_today": "las facturas de hoy",
+    "get_invoices_period": "las facturas de un periodo",
     "get_vat_quarter": "el IVA del trimestre",
     "get_sales_performance": "cómo van tus ventas",
     "get_attendance_status": "los fichajes de hoy",
@@ -292,7 +293,7 @@ _CASH_CUE_RE = re.compile(
     r"revisa|dime)\b.{0,25}?\bcaja\b"
 )
 _SALES_WORD_RE = re.compile(
-    r"\b(venta|ventas|vendido|vendidos|vendimos|vendi|vendemos|vender|facturado|facturacion|facturamos|"
+    r"\b(venta|ventas|vendido|vendidos|vendimos|vendi|vendemos|vender|facturado|facturacion|facturamos|facture|"
     r"recaudado|recaudacion|tpv|ticket|tickets|comanda|comandas)\b"
 )
 _TODAY_RE = re.compile(r"\b(hoy|de\s+hoy|este\s+dia)\b")
@@ -638,6 +639,192 @@ _QUERY_SUFFIX_WORDS = frozenset(
 # Con negacion («no me enseñes la última factura») se reconoce la consulta para PREGUNTAR, nunca ejecutar.
 _QUERY_NEG_WORDS = frozenset("no nunca jamas me ensenes muestres digas".split())
 _YEAR_TOKEN_RE = re.compile(r"20\d{2}")
+# RAFAEL: facturas de un PERIODO («facturas de ayer / de esta semana / de este mes / del mes pasado»). Mismo
+# criterio de lista blanca: el sintagma es «factura(s)» y el periodo debe ser UNO solo de estos (lo resuelve el
+# servidor: rafael_daily_reads_v1.invoice_period_bounds). Con «hoy» manda «facturas de hoy»; «la semana que
+# viene», «de mañana», «de enero»… no son un periodo reconocido -> no es esta lectura.
+_INVOICE_WORD_RE = re.compile(r"\bfacturas?\b")
+_INVOICE_PERIOD_RES = (
+    ("last_week", re.compile(r"\bsemana\s+(?:pasada|anterior)\b|\bultima\s+semana\b")),
+    ("last_month", re.compile(r"\bmes\s+(?:pasado|anterior)\b|\bultimo\s+mes\b")),
+    ("week", re.compile(r"\bsemana\b(?!\s+(?:pasada|anterior|que\s+viene|proxima|siguiente))")),
+    ("month", re.compile(r"\bmes\b(?!\s+(?:pasado|anterior|que\s+viene|proximo|siguiente))")),
+    ("yesterday", re.compile(r"\bayer\b")),
+)
+# «listado / lista / resumen / total / importe de las facturas de ayer» son la misma consulta (las emitidas, su
+# total e IVA). Criterio facturas frente a ventas: el SUSTANTIVO «factura(s)» = documentos de factura de RAFAEL;
+# el VERBO «facturar» («¿cuánto he facturado este mes?», «¿cuánto facturé ayer?», «¿qué facturé ayer?») = importe
+# vendido = ventas TPV / cierre del dia, como ya hacia HEAD con «he facturado» y «facturamos».
+_INVOICE_PERIOD_PRE = _QUERY_PREFIX_WORDS | frozenset(
+    "dices dime todas cuantas listado lista resumen total totales importe importes suma relacion".split())
+_INVOICE_PERIOD_POST = _QUERY_SUFFIX_WORDS | frozenset(
+    "ayer semana mes pasada ultima ultimo las los hice hicimos emiti emitimos esta".split()
+)
+
+
+def _invoice_period(f: str) -> Optional[str]:
+    """Periodo UNICO pedido para las facturas («ultima semana» es la pasada, no la actual); si no hay
+    ninguno o hay varios distintos -> None."""
+    found = []
+    for name, rx in _INVOICE_PERIOD_RES:
+        if rx.search(f):
+            found.append(name)
+    if "last_week" in found and "week" in found and len(_INVOICE_PERIOD_RES[2][1].findall(f)) == 1:
+        found.remove("week")  # «la ultima semana»: la palabra «semana» es la de la semana pasada
+    if "last_month" in found and "month" in found and len(_INVOICE_PERIOD_RES[3][1].findall(f)) == 1:
+        found.remove("month")
+    return found[0] if len(found) == 1 else None
+
+
+# AFRODITA: ALERTAS de stock del inventario real («productos sin stock», «¿algo bajo mínimos?», «¿qué se ha
+# agotado?», «¿qué me falta?», «productos con poco stock»). Mismo criterio de lista blanca (`_is_query_frame`):
+# fuera del sintagma solo puede haber palabras de pregunta/mostrar, productos/artículos/algo y complementos de
+# lugar del inventario. «estoy agotado», «se ha agotado la paciencia», «me falta tiempo», «¿qué me falta por
+# hacer?», «stock de mascarillas en el almacén de Mercadona»… dejan palabras fuera => no es esta lectura.
+# focus: "out" = agotados, "low" = bajo minimos / poco stock, "alerts" = las dos cosas.
+_STOCK_ALERT_RES = (
+    ("alerts", re.compile(r"\b(?:me\s+estoy|nos\s+estamos|estoy|estamos)?\s*quedando\s+sin\s+(?:stock|existencias)\b")),
+    ("out", re.compile(r"\bno\s+(?:tiene|tienen|hay|queda|quedan)\s+(?:stock|existencias)\b")),
+    ("out", re.compile(r"\bsin\s+(?:stock|existencias)\b")),
+    ("out", re.compile(r"\b(?:se\s+)?(?:ha|han)\s+agotado\b|\bagotad[oa]s?\b")),
+    ("low", re.compile(r"\bbajos?\s+(?:de\s+)?minimos?\b")),
+    ("low", re.compile(r"\b(?:con\s+)?(?:poco|bajo)\s+stock\b|\bstock\s+bajo\b|\b(?:con\s+)?pocas\s+existencias\b")),
+    ("low", re.compile(r"\bque\s+(?:me|nos)\s+queda(?:n)?\s+poco\b")),  # «¿qué me queda poco?»; no «me queda poco»
+    ("alerts", re.compile(r"\bque\s+(?:me|nos)\s+falta(?:n)?\b")),
+    ("alerts", re.compile(r"\b(?:hay|tengo|tenemos)\s+que\s+reponer\b")),
+    ("alerts", re.compile(r"\b(?:(?:me|nos)\s+)?falta(?:n)?\s+algo\b")),  # «¿nos falta algo?», «¿falta algo en el almacén?»
+)
+_STOCK_ALERT_WORDS = frozenset(
+    "productos producto articulos articulo referencias referencia cosas cosa algo alguno alguna algun "
+    "esta estan este esten tiene tienen se ha han me nos inventario stock almacen afrodita dices "
+    "ahora mismo ya en el la de del mi nuestro".split()
+)
+_STOCK_ALERT_PRE = _QUERY_PREFIX_WORDS | _STOCK_ALERT_WORDS
+_STOCK_ALERT_POST = _QUERY_SUFFIX_WORDS | _STOCK_ALERT_WORDS
+# «no tiene(n)/hay/queda(n) stock» describe el producto agotado: no es una negacion de la orden.
+_STOCK_NO_PHRASE_RE = re.compile(r"\bno\s+(?:tiene|tienen|hay|queda|quedan)\s+(?:stock|existencias)\b")
+
+
+# Preguntas de CONCEPTO («¿qué es el inventario?», «¿qué significa stock?», «¿para qué sirve…?», «¿cómo funciona…?»,
+# «¿cómo se hace…?»): no piden los datos de la empresa; quedan como en HEAD.
+_CONCEPT_Q_RE = re.compile(
+    r"\b(?:que\s+(?:es|son|significa|significan|quiere\s+decir)|para\s+que\s+sirven?|"
+    r"como\s+(?:funciona|funcionan|se\s+\w+|hago|hacemos|calculo|calculamos|llevo|llevar)|"
+    r"explica\w*|definicion|define)\b"
+)
+
+
+def stock_alert_match(f: str) -> Optional[Tuple[str, "re.Match[str]"]]:
+    """(focus, sintagma) de la primera alerta de stock reconocida en el texto plegado `f`; si no, None."""
+    for focus, rx in _STOCK_ALERT_RES:
+        m = rx.search(f)
+        if m:
+            return focus, m
+    return None
+
+
+def has_negation_outside_stock_phrase(message: str) -> bool:
+    """Como `has_negation`, pero en la CONSULTA «¿qué productos no tienen stock?» el «no» es parte de lo que se
+    pregunta, no una negacion. Solo si el mensaje es esa consulta (lista blanca); si no, como `has_negation`."""
+    f = fold(message or "")
+    sa = stock_alert_match(f)
+    if sa is not None and _STOCK_NO_PHRASE_RE.fullmatch(sa[1].group(0)) and _is_query_frame(
+            f, sa[1], True, _STOCK_ALERT_PRE, _STOCK_ALERT_POST):
+        return bool(_NEGATION_ANY_RE.search(f[:sa[1].start()] + " " + f[sa[1].end():]))
+    return bool(_NEGATION_ANY_RE.search(f))
+
+
+# Stock de UN producto: «¿me queda cerveza?», «¿nos quedan tomates?», «¿cuántas cervezas me quedan?», «¿me queda
+# Coca-Cola?», «stock de leche», «¿hay stock de vino?», «¿cuántas unidades quedan de X?», «existencias de X».
+# Criterio HIBRIDO (decision del revisor):
+#   a) X es un producto del inventario de la EMPRESA DE LA SESION (`names`: nombres leidos de la BD por quien llama,
+#      de forma perezosa y solo para estas frases, igual que la plantilla del cuadrante) -> lectura real de su stock;
+#   b) la frase nombra el stock de forma EXPLICITA y X no esta -> «No encuentro «X» en tu inventario.»;
+#   c) «¿me queda X?» sin palabra de stock y X no esta -> solo en el chat de AFRODITA (su dominio, `domain=True`)
+#      «No encuentro…»; en ZEUS/JARVIS y en RAFAEL sigue el camino de HEAD;
+#   d) `_NOT_PRODUCT` es solo un filtro previo barato (antes de mirar la BD): «¿me queda margen / saldo / tiempo /
+#      alguna duda / el pantalón?» no son productos y siguen como en HEAD (margen -> get_metrics, saldo -> cashflow).
+# Sin fuga entre empresas: (a) solo reconoce productos de la empresa de la sesion, asi que un producto de otra
+# empresa u otro tenant sigue exactamente el mismo camino que uno que no existe.
+_PRODUCT_LEAD_RE = re.compile(
+    r"^(?:(?:hola|oye|ey|zeus|jarvis|afrodita|rafael|porfa|por\s+favor|y|dime|sabes\s+si)\s+)*"
+)
+_P = r"(?P<p>[a-z0-9n '&-]+?)"  # nombre de producto: letras, cifras, espacios, guion, apostrofo, & (Coca-Cola, M&M's)
+_PRODUCT_TAIL = r"(?:\s+en\s+(?:el\s+)?(?:stock|almacen|inventario|bodega|camara))?(?:\s+(?:todavia|aun))?"
+_PRODUCT_STOCK_RES = (
+    (False, re.compile(r"^(?:(?:aun|todavia)\s+)?(?:me|nos)\s+queda(?:n)?\s+(?:(?:algo|alguna?|algunos|algunas|"
+                       r"un\s+poco)\s+de\s+|de\s+)?" + _P + _PRODUCT_TAIL + r"$")),
+    (False, re.compile(r"^(?:(?:aun|todavia)\s+)?queda(?:n)?\s+(?:(?:algo|alguna?|algunos|algunas)\s+de\s+)?"
+                       + _P + _PRODUCT_TAIL + r"$")),
+    (False, re.compile(r"^cuant[oa]s?\s+" + _P + r"\s+(?:me\s+|nos\s+)?queda(?:n)?" + _PRODUCT_TAIL + r"$")),
+    # explicitos: nombran el stock / las unidades / las existencias
+    (True, re.compile(r"^(?:cuanto\s+)?stock\s+(?:me\s+|nos\s+)?(?:queda|hay|tengo|tenemos)\s+de\s+" + _P + r"$")),
+    (True, re.compile(r"^(?:hay|queda|tengo|tenemos)\s+(?:stock|existencias)\s+de\s+" + _P + r"$")),
+    (True, re.compile(r"^cuantas\s+unidades\s+(?:me\s+|nos\s+)?(?:quedan|hay|tengo|tenemos)\s+de\s+" + _P + r"$")),
+    # «stock de leche» / «existencias de leche» a secas (hasta 4 palabras: «stock de mascarillas en el almacén de
+    # Mercadona» no lo es)
+    (True, re.compile(r"^(?:el\s+|las\s+)?(?:stock|existencias)\s+(?:de|del)\s+(?:(?:la|el|los|las)\s+)?" + _P + r"$")),
+)
+# Filtro previo (sin BD) de lo que nunca es un producto: cantidades, tiempo, dinero, estados, cosas del negocio que
+# no son producto, adjetivos/adverbios habituales, pronombres y articulos («¿me queda el pantalón?»).
+_NOT_PRODUCT = frozenset((
+    "poco poca pocos pocas algo nada mucho mucha muchos muchas bastante demasiado tiempo rato bien mal mejor peor "
+    "stock inventario existencias bateria saldo dinero credito creditos presupuesto pasta paciencia vacaciones "
+    "fuerza fuerzas energia ganas trabajo tarea tareas dia dias hora horas minuto minutos mes meses semana semanas "
+    "ano anos espacio sitio sitios hueco huecos plaza plazas reserva reservas mesa mesas cita citas turno turnos "
+    "factura facturas pedido pedidos cliente clientes empleado empleados claro libre listo bonito bonita guapo "
+    "guapa feo fea grande pequeno pequena corto corta largo larga ancho ancha estrecho estrecha justo justa raro "
+    "rara genial perfecto perfecta me nos te le les se lo la seguridad ideas opciones proveedor proveedores "
+    "empresa negocio almacen tienda margen euro euros token tokens licencia licencias mensaje mensajes sesion "
+    "sesiones punto puntos vida vidas duda dudas pregunta preguntas memoria cobertura senal gasolina esperanza "
+    "hambre permiso permisos pendiente pendientes competencia el los un una unos unas alguna alguno algunas "
+    "algunos cuerda prueba pruebas oferta ofertas").split())
+
+
+def _product_query(message: str) -> Optional[Tuple[str, bool]]:
+    """(producto pedido, si la frase nombra el stock de forma explicita) o None."""
+    f = fold(" ".join((message or "").split()))
+    f = re.sub(r"[¿?¡!.,;:]", " ", f)
+    f = _PRODUCT_LEAD_RE.sub("", " ".join(f.split()))
+    if not f or _NEGATION_ANY_RE.search(f):
+        return None
+    for explicit, rx in _PRODUCT_STOCK_RES:
+        m = rx.match(f)
+        if m:
+            prod = m.group("p").strip(" '-&")
+            words = prod.split(" ")
+            if (not prod or words[0] in _NOT_PRODUCT or "por" in words or len(words) > 4
+                    or any(w.endswith("mente") for w in words)):
+                return None
+            return prod, explicit
+    return None
+
+
+def product_stock_cue(message: str) -> bool:
+    """Sin BD: ¿puede ser «¿me queda X?» / «stock de X»? (si no, ni se lee el inventario de la sesion)."""
+    return _product_query(message) is not None
+
+
+def product_stock_task(message: str, names: Any = None, domain: bool = False) -> Optional[ZeusTaskObject]:
+    """Tarea `get_inventory_status` con focus "product" segun el criterio hibrido (ver arriba). `names`: nombres
+    del inventario de la empresa de la SESION (lista o funcion perezosa); `domain`: chat de AFRODITA. El servidor
+    vuelve a buscar X en el inventario de la empresa de la sesion al ejecutar. Si no aplica, None."""
+    q = _product_query(message)
+    if q is None:
+        return None
+    prod, explicit = q
+    if not explicit and not domain:
+        from services.afrodita_ops_service_v1 import match_inventory_items
+
+        raw = names() if callable(names) else names
+        if not match_inventory_items([{"name": n} for n in raw or ()], prod):
+            return None  # (c) fuera de AFRODITA: como en HEAD
+    text = " ".join((message or "").split())
+    return ZeusTaskObject(
+        intent="get_inventory_status", action="get_inventory_status", raw_message=text, confidence=0.86,
+        metadata={"focus": "product", "product": prod},
+        confidence_breakdown={"rule": "product_stock", "base": 0.86},
+    )
 
 
 def _is_query_frame(f: str, m: "re.Match[str]", allow_negation: bool = False,
@@ -1156,6 +1343,13 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
     elif not pending_inv and not ml and mt and _is_query_frame(f, mt, negated):
         c.append(_Cand("get_invoices_today", "get_invoices_today", 0.86, "invoices_today",
                        suppresses={"tpv_sales_summary", "tpv_sales_today", "get_cashflow"}, **neg_kw))
+    elif not pending_inv and not ml and not mt:
+        # facturas de ayer / esta semana / la semana pasada / este mes / el mes pasado (fechas en servidor)
+        mi, inv_period = _INVOICE_WORD_RE.search(f), _invoice_period(f)
+        if mi and inv_period and _is_query_frame(f, mi, negated, _INVOICE_PERIOD_PRE, _INVOICE_PERIOD_POST):
+            c.append(_Cand("get_invoices_period", "get_invoices_period", 0.86, "invoices_period",
+                           suppresses={"tpv_sales_summary", "tpv_sales_today", "get_cashflow", "get_metrics"},
+                           metadata={"period": inv_period}, **neg_kw))
     # --- RAFAEL: IVA del trimestre (calculo de /tpv/fiscal/quarterly-vat; nada se presenta a Hacienda)
     mv = _VAT_QUARTER_RE.search(f)
     if mv and _is_query_frame(f, mv, negated):
@@ -1196,9 +1390,21 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
                        missing=["explicit_intent"] if neg else [], question=QUESTION_NEGATED if neg else None))
 
     # --- J9e: AFRODITA consultas (inventario; turnos ya cubiertos por shift_status)
-    if not ops_write and _INVENTORY_RE.search(f):
+    concept = _CONCEPT_Q_RE.search(f) is not None  # «¿qué es el stock?»: pregunta de concepto, no los datos
+    sa = None if (ops_write or concept) else stock_alert_match(f)
+    if sa is not None and _is_query_frame(f, sa[1], negated, _STOCK_ALERT_PRE, _STOCK_ALERT_POST):
+        # alerta de stock (sin stock / bajo minimos / que falta): inventario real con el foco pedido. «no tienen
+        # stock» forma parte del sintagma: solo cuenta la negacion de fuera («no me enseñes los productos…»).
+        sneg = _NEGATION_ANY_RE.search(f[:sa[1].start()] + " " + f[sa[1].end():]) is not None
+        c.append(_Cand("get_inventory_status", "get_inventory_status", 0.86, "inventory_alert",
+                       metadata={"focus": sa[0]},
+                       **({"missing": ["explicit_intent"], "question": QUESTION_NEGATED} if sneg else {})))
+    elif not ops_write and _INVENTORY_RE.search(f):
+        mi_inv = _INVENTORY_RE.search(f)
+        bare = not concept and _is_query_frame(  # «inventario», «el stock» (no «¿qué es el inventario?»)
+            f, mi_inv, False, _STOCK_ALERT_PRE, _STOCK_ALERT_POST)
         c.append(_Cand("get_inventory_status", "get_inventory_status",
-                       0.82 if _INVENTORY_CUE_RE.search(f) else 0.68, "inventory_status"))
+                       0.82 if (_INVENTORY_CUE_RE.search(f) or bare) else 0.68, "inventory_status"))
 
     # --- turno
     if _SHIFT_RE.search(f) or _SHIFT_STATUS_RE.search(f):

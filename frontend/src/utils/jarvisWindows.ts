@@ -222,10 +222,27 @@ const INTENT_VIEWS: Record<string, IntentView> = {
   },
   get_last_invoice: { title: () => 'Última factura', hidden: ['found'] },
   get_invoices_today: { title: () => 'Facturas de hoy', hidden: [], labels: { count: 'Facturas emitidas' } },
+  // «facturas de ayer / de esta semana / del mes pasado…»: el periodo (resuelto en el servidor) va en el título
+  get_invoices_period: {
+    title: (m) =>
+      m.period_label ? `Facturas ${String(m.period_label).startsWith('el ') ? 'del ' + String(m.period_label).slice(3) : 'de ' + m.period_label}` : 'Facturas',
+    hidden: ['period_label', 'period'],
+    labels: { count: 'Facturas emitidas', date_from: 'Desde', date_to: 'Hasta' },
+  },
   get_inventory_status: {
-    title: () => 'Inventario',
+    // alerta de stock pedida en el chat (`focus`): el título dice qué se ha preguntado
+    title: (m) =>
+      m.focus === 'product'
+        ? `Stock de ${m.product ?? 'un producto'}`
+        : m.focus === 'out'
+        ? 'Productos sin stock'
+        : m.focus === 'low'
+          ? 'Productos bajo mínimos'
+          : m.focus === 'alerts'
+            ? 'Productos sin stock o bajo mínimos'
+            : 'Inventario',
     // `items` es el listado completo (ya resumido en las tablas); `sources` son nombres de tablas.
-    hidden: ['items', 'sources', 'tpv_products', 'erp_products'],
+    hidden: ['items', 'sources', 'tpv_products', 'erp_products', 'focus', 'product'],
     labels: {
       total_skus: 'Referencias',
       total_units: 'Unidades en stock',

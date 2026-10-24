@@ -1,5 +1,5 @@
 """RAFAEL: consultas reales para el chat/voz (cierre de ventas TPV de un dia, facturas pendientes,
-ultima factura, facturas de un dia e IVA trimestral de las ventas TPV).
+ultima factura, facturas de un dia o de un periodo e IVA trimestral de las ventas TPV).
 
 Todo sale de la BD filtrado por la empresa (`company_id`) que resuelve el ejecutor en servidor.
 
@@ -11,8 +11,8 @@ un efectivo contado.
 
 from __future__ import annotations
 
-from datetime import date, datetime
-from typing import Any, Dict, List
+from datetime import date, datetime, timedelta
+from typing import Any, Dict, List, Tuple
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -165,11 +165,62 @@ def last_invoice_summary(db: Session, company_id: int) -> Dict[str, Any]:
 
 
 def invoices_day_summary(db: Session, company_id: int, day: date, *, top: int = 10) -> Dict[str, Any]:
-    """Facturas emitidas el dia LOCAL `day`. Las anuladas no suman al total (se cuentan aparte) y los
-    borradores se cuentan aparte (aun no estan emitidas)."""
+    """Facturas emitidas el dia LOCAL `day` (ver `_invoices_between`)."""
+    return {"date": day.isoformat(), **_invoices_between(db, company_id, day, day, top=top)}
+
+
+# Periodos de «facturas de ayer / de esta semana / de este mes / del mes pasado…» (chat de RAFAEL y ZEUS).
+INVOICE_PERIOD_LABELS = {
+    "yesterday": "ayer",
+    "week": "esta semana",
+    "last_week": "la semana pasada",
+    "month": "este mes",
+    "last_month": "el mes pasado",
+}
+
+
+def invoice_period_bounds(period: str, today: date) -> Tuple[date, date]:
+    """(primer dia, ultimo dia) LOCALES del periodo, resueltos en servidor a partir de `today` (dia local,
+    `local_day_v1.today_local`). La semana va de lunes a domingo; el periodo en curso acaba hoy (nunca un dia
+    futuro). Periodo desconocido -> ValueError (nunca se adivina)."""
+    if period == "yesterday":
+        d = today - timedelta(days=1)
+        return d, d
+    if period == "week":
+        return today - timedelta(days=today.weekday()), today
+    if period == "last_week":
+        monday = today - timedelta(days=today.weekday() + 7)
+        return monday, monday + timedelta(days=6)
+    if period == "month":
+        return today.replace(day=1), today
+    if period == "last_month":
+        last = today.replace(day=1) - timedelta(days=1)
+        return last.replace(day=1), last
+    raise ValueError("periodo no valido")
+
+
+def invoices_period_summary(db: Session, company_id: int, period: str, today: date, *,
+                            top: int = 10) -> Dict[str, Any]:
+    """Facturas emitidas en un periodo de `INVOICE_PERIOD_LABELS`, con el MISMO filtro por dia local que
+    `invoices_day_summary` (`_invoices_between`). Periodo desconocido -> ValueError."""
+    first, last = invoice_period_bounds(period, today)
+    return {
+        "period_label": INVOICE_PERIOD_LABELS[period],
+        "date_from": first.isoformat(),
+        "date_to": last.isoformat(),
+        "period": period,
+        **_invoices_between(db, company_id, first, last, top=top),
+    }
+
+
+def _invoices_between(db: Session, company_id: int, first_day: date, last_day: date, *,
+                      top: int) -> Dict[str, Any]:
+    """Facturas emitidas entre los dias LOCALES `first_day` y `last_day` (ambos incluidos). Las anuladas no
+    suman al total (se cuentan aparte) y los borradores se cuentan aparte (aun no estan emitidas)."""
     from app.models.erp import Invoice, InvoiceStatus
 
-    start, end = day_bounds_utc(day)
+    start, _ = day_bounds_utc(first_day)
+    _, end = day_bounds_utc(last_day)
     # Invoice.issue_date es naive UTC: se comparan limites UTC sin zona.
     start_n, end_n = start.replace(tzinfo=None), end.replace(tzinfo=None)
     rows = (
@@ -184,7 +235,6 @@ def invoices_day_summary(db: Session, company_id: int, day: date, *, top: int = 
         k = i.status.value if i.status else "desconocido"
         by_status[k] = by_status.get(k, 0) + 1
     return {
-        "date": day.isoformat(),
         "timezone": local_tz()[1],
         "count": len(issued),
         "amount_total": round(sum(float(i.total or 0) for i in issued), 2),

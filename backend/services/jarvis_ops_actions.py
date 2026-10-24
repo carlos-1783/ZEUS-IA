@@ -36,6 +36,7 @@ READ_ACTIONS: Dict[str, Tuple[str, str]] = {
     "get_pending_invoices": ("get_pending_invoices", "RAFAEL"),
     "get_last_invoice": ("get_last_invoice", "RAFAEL"),
     "get_invoices_today": ("get_invoices_today", "RAFAEL"),
+    "get_invoices_period": ("get_invoices_period", "RAFAEL"),
     "get_vat_quarter": ("get_vat_quarter", "RAFAEL"),
     "get_sales_performance": ("get_sales_performance", "PERSEO"),
     "get_attendance_status": ("get_attendance_status", "AFRODITA"),
@@ -52,6 +53,18 @@ READ_PAYLOAD_KEYS: Dict[str, Tuple[str, ...]] = {
     "get_sales_performance": ("days",),
     "get_vat_quarter": ("quarter_ref", "quarter", "year"),
     "get_staff_schedule": ("day", "week", "employee"),
+    "get_invoices_period": ("period",),  # yesterday/week/last_week/month/last_month: fechas en servidor
+    # alerta de stock: out/low/alerts; "product" + nombre = stock de UN producto (sin foco: resumen del inventario)
+    "get_inventory_status": ("focus", "product"),
+}
+# Lecturas de OTRO agente que se atienden en el chat de un agente (workspace -> lecturas), con «Esto lo lleva
+# <dueño>: …», por el mismo camino que en el chat de ZEUS (modulo de la empresa y ejecutor del agente dueño):
+# inventario en el chat de RAFAEL y facturas/cierre en el de AFRODITA (los dos chats del dia a dia del negocio).
+# El resto de workspaces (PERSEO, JUSTICIA, THALOS) siguen como antes: tests existentes fijan ese diseño.
+CROSS_AGENT_READS: Dict[str, frozenset] = {
+    "RAFAEL": frozenset({"get_inventory_status"}),
+    "AFRODITA": frozenset({"get_last_invoice", "get_invoices_today", "get_invoices_period", "get_pending_invoices",
+                           "get_daily_close"}),
 }
 # Consultas que, en el chat de UN agente concreto, se resuelven con otra lectura de ese agente:
 # (agente, intencion del parser) -> (accion de READ_ACTIONS, payload fijo). En el workspace de RAFAEL
@@ -84,6 +97,35 @@ _INVOICE_STATUS_ES = {"draft": "borrador sin emitir", "sent": "emitida", "paid":
 
 def _eur(v: Any) -> str:
     return f"{float(v or 0):,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _dmy(iso: Any) -> str:
+    """AAAA-MM-DD -> dd/mm/aaaa (dia ya resuelto en el servidor)."""
+    y, m, d = str(iso).split("-")
+    return f"{d}/{m}/{y}"
+
+
+def invoices_period_text(data: Dict[str, Any]) -> str:
+    """Texto es-ES de `rafael_daily_reads_v1.invoices_period_summary` (mismo criterio que «facturas de hoy»:
+    las emitidas suman; borradores y anuladas se cuentan aparte)."""
+    label = data["period_label"]
+    rango = (_dmy(data["date_from"]) if data["date_from"] == data["date_to"]
+             else f"{_dmy(data['date_from'])} - {_dmy(data['date_to'])}")
+    extra = []
+    if data["drafts_count"]:
+        extra.append(f"{data['drafts_count']} borrador(es) sin emitir")
+    if data["void_count"]:
+        extra.append(f"{data['void_count']} anulada(s)")
+    tail = f" Además: {', '.join(extra)}." if extra else ""
+    if not data["count"]:
+        return (f"{label[0].upper()}{label[1:]} ({rango}) no hay facturas emitidas en tu empresa: 0 facturas."
+                f"{tail}")
+    listed = [i for i in data["invoices"] if i.get("status") not in ("draft", "void")]
+    nums = ", ".join(f"{i['invoice_number']} ({_eur(i['amount_total'])})" for i in listed)
+    more = f" y {data['count'] - len(listed)} más" if data["count"] > len(listed) else ""
+    de = "del " + label[3:] if label.startswith("el ") else "de " + label
+    return (f"Facturas {de} ({rango}): {data['count']} por {_eur(data['amount_total'])} "
+            f"(IVA {_eur(data['tax_total'])}): {nums}{more}.{tail}")
 
 
 def _format_read(chat_action: str, result: Dict[str, Any]) -> str:
@@ -133,11 +175,13 @@ def _format_read(chat_action: str, result: Dict[str, Any]) -> str:
             extra.append(f"{data['void_count']} anulada(s)")
         tail = f" Además: {', '.join(extra)}." if extra else ""
         if not data["count"]:
-            return f"Hoy ({data['date']}) no hay facturas emitidas en tu empresa: 0 facturas.{tail}"
+            return f"Hoy ({_dmy(data['date'])}) no hay facturas emitidas en tu empresa: 0 facturas.{tail}"
         nums = ", ".join(f"{i['invoice_number']} ({_eur(i['amount_total'])})" for i in data["invoices"]
                          if i.get("status") not in ("draft", "void"))
-        return (f"Facturas de hoy ({data['date']}): {data['count']} por {_eur(data['amount_total'])} "
+        return (f"Facturas de hoy ({_dmy(data['date'])}): {data['count']} por {_eur(data['amount_total'])} "
                 f"(IVA {_eur(data['tax_total'])}): {nums}.{tail}")
+    if chat_action == "get_invoices_period" and "period_label" in data:
+        return invoices_period_text(data)
     if chat_action == "get_vat_quarter" and "vat_total" in data:
         q = f"{data['quarter']}T {data['year']}"
         if not data["sales_count"]:
@@ -224,9 +268,12 @@ def _format_read(chat_action: str, result: Dict[str, Any]) -> str:
         return (f"Seguridad de tu empresa ({data['window_days']} días): {data['events_total']} eventos, "
                 f"{data['denied_total']} rechazados, {data['critical_total']} críticos.{tail}")
     if chat_action == "get_inventory_status" and "total_skus" in data:
-        from services.afrodita_ops_service_v1 import inventory_status_text
+        from services.afrodita_ops_service_v1 import inventory_alerts_text, inventory_status_text, product_stock_text
 
-        return inventory_status_text(data)
+        # alerta de stock pedida («productos sin stock», «¿algo bajo mínimos?») o UN producto: solo lo preguntado
+        if data.get("focus") == "product":
+            return product_stock_text(data, data.get("product") or "")
+        return inventory_alerts_text(data, data["focus"]) if data.get("focus") else inventory_status_text(data)
     if chat_action == "get_staff_schedule" and "employees_total" in data:
         from services.afrodita_workspace_service_v1 import staff_schedule_text
 

@@ -28,7 +28,7 @@ MANDATORY_ACTIONS = {
          # Fase 2 / Step 1: lecturas reales para chat/voz (cierre de ventas del dia, cobros pendientes)
          "get_daily_close", "get_pending_invoices",
          # lecturas del chat de RAFAEL: ultima factura, facturas de hoy, IVA del trimestre (TPV)
-         "get_last_invoice", "get_invoices_today", "get_vat_quarter"}
+         "get_last_invoice", "get_invoices_today", "get_invoices_period", "get_vat_quarter"}
     ),
     "PERSEO": frozenset({"create_campaign", "launch_campaign", "track_leads",
                          "get_sales_performance"}),  # Fase 2 / Step 1
@@ -52,7 +52,7 @@ _STRICT_AGENT_ACTIONS: Dict[str, str] = {
 }
 _STRICT_AGENT_ACTIONS["register_qr_payment"] = "RAFAEL"  # J2b
 for _a in ("get_daily_close", "get_pending_invoices",  # Fase 2 / Step 1
-           "get_last_invoice", "get_invoices_today", "get_vat_quarter"):
+           "get_last_invoice", "get_invoices_today", "get_invoices_period", "get_vat_quarter"):
     _STRICT_AGENT_ACTIONS[_a] = "RAFAEL"
 _STRICT_AGENT_ACTIONS["get_sales_performance"] = "PERSEO"
 _STRICT_AGENT_ACTIONS["get_coordination_report"] = "ZEUS"
@@ -576,7 +576,7 @@ async def _dispatch(
             msg = f"Facturas pendientes de cobro: {body['pending_count']} ({body['pending_amount']:.2f} €)."
         return {"success": True, "executed": True, "company_id": cid, "message": msg, "data": body}
 
-    if action in ("get_last_invoice", "get_invoices_today", "get_vat_quarter"):
+    if action in ("get_last_invoice", "get_invoices_today", "get_invoices_period", "get_vat_quarter"):
         # Lecturas de RAFAEL para el chat: solo la empresa de la sesion (resuelta en servidor). Nada se
         # envia a la AEAT/Verifactu: el IVA trimestral es el calculo de /tpv/fiscal/quarterly-vat.
         from services import rafael_daily_reads_v1 as rafael_reads
@@ -592,6 +592,16 @@ async def _dispatch(
         elif action == "get_invoices_today":
             body = rafael_reads.invoices_day_summary(db, cid, today_local())
             msg = f"Facturas de hoy: {body['count']} ({body['amount_total']:.2f} €)."
+        elif action == "get_invoices_period":
+            # periodo con nombre (ayer, esta semana, la pasada, este mes, el pasado); las fechas, en servidor
+            from services.jarvis_ops_actions import invoices_period_text
+
+            period = payload.get("period")
+            if not isinstance(period, str) or period not in rafael_reads.INVOICE_PERIOD_LABELS:
+                return _fail("Periodo no válido: indica ayer, esta semana, la semana pasada, este mes o el mes "
+                             "pasado.", status="invalid_payload")
+            body = rafael_reads.invoices_period_summary(db, cid, period, today_local())
+            msg = invoices_period_text(body)
         else:
             try:
                 year, quarter = _vat_quarter_period(payload, today_local())
@@ -714,20 +724,33 @@ async def _dispatch(
     if action == "get_inventory_status":
         from fastapi import HTTPException
 
-        from services.afrodita_ops_service_v1 import company_inventory_status, inventory_status_text
+        from services.afrodita_ops_service_v1 import (
+            INVENTORY_READ_FOCUS, company_inventory_status, inventory_alerts_text, inventory_status_text,
+            product_stock_text,
+        )
 
         cid = zeus_action.company_id
         if cid is None:
             return _fail("El usuario no tiene empresa asociada.")
+        # alerta de stock: out (agotados) / low (bajo minimos) / alerts (ambos); product: UN producto (`product`)
+        focus = payload.get("focus")
+        product = payload.get("product")
+        if (focus is not None and focus not in INVENTORY_READ_FOCUS) or (
+                focus == "product" and (not isinstance(product, str) or not product.strip())):
+            return _fail("Consulta de stock no válida: indica sin stock, bajo mínimos, ambas o un producto.",
+                         status="invalid_payload")
         try:
             inv = company_inventory_status(db, cid)
         except HTTPException as exc:
             return _fail(str(exc.detail))
-        return {
-            "success": True, "executed": True, "company_id": cid,
-            "message": inventory_status_text(inv),
-            "data": inv,
-        }
+        if focus:
+            inv["focus"] = focus
+        if focus == "product":
+            inv["product"] = " ".join(product.split())  # el servidor lo vuelve a buscar en SU inventario
+            msg = product_stock_text(inv, inv["product"])
+        else:
+            msg = inventory_alerts_text(inv, focus) if focus else inventory_status_text(inv)
+        return {"success": True, "executed": True, "company_id": cid, "message": msg, "data": inv}
 
     if action in ("create_ops_route", "create_inventory_movement"):
         from fastapi import HTTPException

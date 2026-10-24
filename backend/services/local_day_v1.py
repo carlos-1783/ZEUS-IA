@@ -48,3 +48,16 @@ def day_bounds_utc(day: date) -> Tuple[datetime, datetime]:
     start = datetime.combine(day, time.min, tzinfo=tz).astimezone(timezone.utc)
     end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=tz).astimezone(timezone.utc)
     return start, end
+
+
+def local_days_range_utc_naive(
+    first_day: Optional[date], last_day: Optional[date]
+) -> Tuple[Optional[datetime], Optional[datetime]]:
+    """Rango [inicio del dia local `first_day`, inicio del dia local siguiente a `last_day`) en UTC
+    SIN zona, para comparar con columnas DateTime naive UTC (p. ej. Invoice.issue_date).
+
+    Ambos dias van incluidos enteros: una factura de `last_day` a las 23:59 hora local entra. Un
+    extremo None -> ese limite es None (sin cota por ese lado)."""
+    start = day_bounds_utc(first_day)[0].replace(tzinfo=None) if first_day is not None else None
+    end = day_bounds_utc(last_day)[1].replace(tzinfo=None) if last_day is not None else None
+    return start, end

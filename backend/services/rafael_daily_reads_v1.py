@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Tuple
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from services.local_day_v1 import day_bounds_utc, local_tz
+from services.local_day_v1 import day_bounds_utc, local_days_range_utc_naive, local_tz
 
 # Los estados salen con el codigo de la API (draft/sent/paid/void...), no con la label de BD
 # (borrador/enviado/pagado/anulado...): el texto del chat (jarvis_ops_actions) y la ventana
@@ -224,10 +224,8 @@ def _invoices_between(db: Session, company_id: int, first_day: date, last_day: d
     suman al total (se cuentan aparte) y los borradores se cuentan aparte (aun no estan emitidas)."""
     from app.models.erp import Invoice, InvoiceStatus
 
-    start, _ = day_bounds_utc(first_day)
-    _, end = day_bounds_utc(last_day)
-    # Invoice.issue_date es naive UTC: se comparan limites UTC sin zona.
-    start_n, end_n = start.replace(tzinfo=None), end.replace(tzinfo=None)
+    # Invoice.issue_date es naive UTC: se comparan limites UTC sin zona (mismo rango que GET /invoices).
+    start_n, end_n = local_days_range_utc_naive(first_day, last_day)
     rows = (
         _invoices_base(db, company_id)
         .filter(Invoice.issue_date >= start_n, Invoice.issue_date < end_n)

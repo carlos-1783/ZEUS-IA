@@ -2,7 +2,7 @@ from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Path, Body
 from services.thalos_request_guard_v1 import thalos_request_guard
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_, and_
+from sqlalchemy import func, or_, and_, false
 from datetime import date, datetime, time
 
 from app.db.tenant_context import get_db_scoped
@@ -21,6 +21,7 @@ from app.schemas.erp import (
 from app.core.auth import get_current_active_user
 from app.models.user import User
 from services.event_bus import emit_cashflow_updated, emit_payment_registered
+from services.local_day_v1 import local_days_range_utc_naive
 import services.crm_office_service as crm_svc
 from services.zeus_office_mode import (
     require_company_id,
@@ -139,18 +140,23 @@ def list_invoices(
     customer_id: Optional[int] = Query(None, description="Filter by customer ID"),
     status: Optional[str] = Query(None, description="Filter by status"),
     invoice_type: Optional[str] = Query(None, description="Filter by invoice type"),
-    start_date: Optional[date] = Query(None, description="Filter by issue date (greater than or equal)"),
-    end_date: Optional[date] = Query(None, description="Filter by issue date (less than or equal)"),
+    start_date: Optional[date] = Query(None, description="Issue date from this LOCAL day (Europe/Madrid), inclusive"),
+    end_date: Optional[date] = Query(None, description="Issue date up to this LOCAL day (Europe/Madrid), inclusive"),
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    List all invoices with optional filtering and pagination (tenant-scoped)
+    List invoices of the SESSION company with optional filtering and pagination.
     """
-    # Aislamiento de tenant: solo facturas de las empresas del usuario
-    # autenticado (o facturas legacy sin company_id creadas por él mismo).
-    # Usa el mismo helper que get_invoice_or_404 (_invoice_tenant_scope).
-    cids = crm_svc.company_ids_for_user(db, current_user)
-    query = db.query(Invoice).filter(_invoice_tenant_scope(current_user, cids))
+    # Aislamiento de tenant: solo facturas de la EMPRESA DE SESION (la misma con la
+    # que se crean las facturas -- crm_svc.primary_company_id -- y la que leen RAFAEL
+    # y AFRODITA en el chat). Antes se listaban las de TODAS las empresas del usuario
+    # mezcladas. Sin empresa de sesion -> lista vacia (fail-closed), nunca datos.
+    company_id = crm_svc.primary_company_id(db, current_user)
+    if company_id:
+        query = db.query(Invoice).filter(Invoice.company_id == company_id)
+    else:
+        logger.info("list_invoices: usuario %s sin empresa de sesion -> lista vacia", current_user.id)
+        query = db.query(Invoice).filter(false())
 
     # Apply filters
     if customer_id:
@@ -180,11 +186,15 @@ def list_invoices(
             )
         query = query.filter(Invoice.invoice_type == type_member)
         
-    if start_date:
-        query = query.filter(Invoice.issue_date >= start_date)
-        
-    if end_date:
-        query = query.filter(Invoice.issue_date <= end_date)
+    # Fechas = dias LOCALES completos (Europe/Madrid), mismo rango que las lecturas de
+    # RAFAEL: [inicio del dia local start_date, inicio del dia local siguiente a end_date)
+    # en UTC naive (issue_date es DateTime naive UTC). Comparar la columna DateTime con un
+    # `date` dejaba fuera todo el ultimo dia salvo la medianoche exacta.
+    range_start, range_end = local_days_range_utc_naive(start_date, end_date)
+    if range_start is not None:
+        query = query.filter(Invoice.issue_date >= range_start)
+    if range_end is not None:
+        query = query.filter(Invoice.issue_date < range_end)
     
     # Get total count for pagination
     total = query.count()

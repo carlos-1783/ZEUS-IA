@@ -9,7 +9,6 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.company import UserCompany
@@ -23,8 +22,17 @@ logger = logging.getLogger(__name__)
 
 
 def _company_ids(db: Session, user: User) -> List[int]:
+    """Todas las empresas del usuario: solo para AUTORIZAR (p. ej. que un producto sea de una empresa de la
+    que es miembro). Las LECTURAS de negocio usan `_session_company_ids` (solo la empresa de la sesion)."""
     rows = db.query(UserCompany.company_id).filter(UserCompany.user_id == user.id).all()
     return [int(r[0]) for r in rows]
+
+
+def _session_company_ids(db: Session, user: User) -> List[int]:
+    """[empresa de la sesion] (la misma que usa el chat / `company_inventory_status`) o [] si no tiene.
+    Las vistas de inventario, movimientos y rutas nunca mezclan empresas: fail-closed sin empresa."""
+    cid = primary_company_id_for_user(db, user)
+    return [int(cid)] if cid else []
 
 
 def _norm_key(value: Optional[str]) -> str:
@@ -82,27 +90,30 @@ def list_erp_products(db: Session, *, company_ids: List[int], limit: int = 200) 
     return [_erp_row(r) for r in rows]
 
 
+def _session_tpv_rows(db: Session, user: User, *, limit: int = 500) -> List[TPVProduct]:
+    """Productos TPV de la empresa de la sesion (antes: `user_id == user.id` OR cualquier empresa del
+    usuario, que mezclaba empresas y arrastraba productos dados de alta en otro tenant)."""
+    company_ids = _session_company_ids(db, user)
+    if not company_ids:
+        return []
+    return (
+        db.query(TPVProduct)
+        .filter(TPVProduct.company_id.in_(company_ids))
+        .order_by(TPVProduct.name.asc())
+        .limit(limit)
+        .all()
+    )
+
+
 def list_tpv_products(db: Session, user: User, *, limit: int = 500) -> List[Dict[str, Any]]:
-    company_ids = _company_ids(db, user)
-    q = db.query(TPVProduct)
-    if company_ids:
-        q = q.filter(
-            or_(
-                TPVProduct.user_id == user.id,
-                TPVProduct.company_id.in_(company_ids),
-            )
-        )
-    else:
-        q = q.filter(TPVProduct.user_id == user.id)
-    rows = q.order_by(TPVProduct.name.asc()).limit(limit).all()
-    return [_tpv_row(r) for r in rows]
+    return [_tpv_row(r) for r in _session_tpv_rows(db, user, limit=limit)]
 
 
 def merge_products_view(db: Session, user: User) -> Dict[str, Any]:
     flags = current_flags()
     global_mode = get_global_status(db)["execution_mode"]
     ui_badge = global_mode if global_mode in ("REAL", "SIMULATED", "ERROR") else "SIMULATED"
-    company_ids = _company_ids(db, user)
+    company_ids = _session_company_ids(db, user)
     erp_items: List[Dict[str, Any]] = (
         list_erp_products(db, company_ids=company_ids) if flags["AFRODITA_USE_ERP"] else []
     )
@@ -120,19 +131,7 @@ def merge_products_view(db: Session, user: User) -> Dict[str, Any]:
             .limit(500)
             .all()
         )
-    tpv_rows: List[TPVProduct] = []
-    if flags["AFRODITA_USE_TPV"]:
-        q = db.query(TPVProduct)
-        if company_ids:
-            q = q.filter(
-                or_(
-                    TPVProduct.user_id == user.id,
-                    TPVProduct.company_id.in_(company_ids),
-                )
-            )
-        else:
-            q = q.filter(TPVProduct.user_id == user.id)
-        tpv_rows = q.order_by(TPVProduct.name.asc()).limit(500).all()
+    tpv_rows: List[TPVProduct] = _session_tpv_rows(db, user) if flags["AFRODITA_USE_TPV"] else []
 
     for erp in erp_rows:
         erp_d = _erp_row(erp)
@@ -198,12 +197,12 @@ def merge_products_view(db: Session, user: User) -> Dict[str, Any]:
 
 
 def list_inventory_movements(db: Session, user: User, *, limit: int = 100) -> Dict[str, Any]:
-    """Movimientos de productos de las empresas del usuario (fail-closed sin empresa)."""
+    """Movimientos de productos de la empresa de la sesion (fail-closed sin empresa)."""
     flags = current_flags()
     if not flags["AFRODITA_USE_ERP"]:
         return {"movements": [], "count": 0, "source": "inventory_movements", "read_only": True}
 
-    company_ids = _company_ids(db, user)
+    company_ids = _session_company_ids(db, user)
     if not company_ids:
         return {"movements": [], "count": 0, "source": "inventory_movements", "read_only": not writes_enabled()}
     rows = (
@@ -258,17 +257,11 @@ def _sync_tpv_stock_for_product(
     flags = current_flags()
     if not flags.get("AFRODITA_USE_TPV"):
         return None
-    company_ids = _company_ids(db, user)
-    q = db.query(TPVProduct)
-    if company_ids:
-        q = q.filter(
-            or_(
-                TPVProduct.user_id == user.id,
-                TPVProduct.company_id.in_(company_ids),
-            )
-        )
-    else:
-        q = q.filter(TPVProduct.user_id == user.id)
+    if product.company_id is None:
+        return None
+    # Solo el gemelo TPV de la MISMA empresa que el producto ERP (antes: cualquier producto TPV del usuario
+    # o de sus empresas con el mismo nombre/SKU, que podia mover el stock de otra empresa).
+    q = db.query(TPVProduct).filter(TPVProduct.company_id == int(product.company_id))
     for tpv in q.all():
         if _match_keys(product, tpv):
             new_stock = int((tpv.stock or 0) + quantity_delta)
@@ -445,7 +438,7 @@ def create_ops_route(
 
 
 def list_ops_routes(db: Session, user: User, *, limit: int = 50) -> Dict[str, Any]:
-    company_ids = _company_ids(db, user)
+    company_ids = _session_company_ids(db, user)
     if not company_ids:
         return {"routes": [], "count": 0, "source": "ops_routes"}
     rows = (

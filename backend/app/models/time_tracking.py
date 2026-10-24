@@ -91,6 +91,16 @@ class TimeTrackingRecord(Base):
         return f"<TimeTrackingRecord {self.employee_id} {self.check_in_time}>"
 
 
+# Horario BASE que el sistema pone de oficio al dar de alta a un empleado (alta/onboarding del titular,
+# importacion de plantilla en el registro y autorreparacion de Control horario): lunes a viernes
+# 09:00-17:00, turno "completo". No es un turno decidido por la empresa; AFRODITA lo distingue al montar
+# el cuadrante. Una sola fuente para quien lo crea y quien lo reconoce.
+DEFAULT_SCHEDULE_DAYS = (0, 1, 2, 3, 4)
+DEFAULT_SCHEDULE_START = "09:00"
+DEFAULT_SCHEDULE_END = "17:00"
+DEFAULT_SCHEDULE_SHIFT = "completo"
+
+
 class EmployeeSchedule(Base):
     """
     Horario programado de un empleado

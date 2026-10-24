@@ -45,6 +45,22 @@ from services import jarvis_plan as plan_mod
 from services import jarvis_evidence
 from services import jarvis_ops_actions as ops_actions
 from services.jarvis_legal_block import legal_block
+from services.jarvis_schedule_write_block import schedule_write_block
+from services.afrodita_workspace_service_v1 import active_employee_names_for_session
+from services.intent_parser import staff_member_cue, staff_member_task
+
+
+def _staff_names_loader(db: Session, user: User):
+    """Plantilla activa de la empresa de la sesion, leida de la BD solo si hace falta y una vez por mensaje
+    (contexto del bloqueo de ordenes sobre horarios y consulta del turno de un empleado)."""
+    cache: Dict[str, Any] = {}
+
+    def load():
+        if "names" not in cache:
+            cache["names"] = active_employee_names_for_session(db, user)
+        return cache["names"]
+
+    return load
 from services import module_gate
 from services.zeus_global_context import attach_context_to_action_payload, enrich_chat_context
 from services.chain_log import log_chain_step
@@ -646,7 +662,22 @@ async def try_handle_zeus_chat(
             _step("ORQUESTAR", "legal_block", "blocked_legal", reason=blk[0])
             return {"handled": True, "success": False, "executed": False, "status": "blocked_legal",
                     "intent": "unknown", "message": blk[1]}
-        task = parse_message(message)  # criterio estricto J8: red de seguridad y fallback
+        # Orden de crear/cambiar/borrar/enviar horarios o cuadrantes: no hay accion de chat que los guarde.
+        # Respuesta fija y honesta, sin modelo (que podria decir que ya esta cambiado) y sin ejecutar nada.
+        staff_names = _staff_names_loader(db, user)
+        sblk = None if (has_negation(message) or is_stop_order(message)) else schedule_write_block(
+            message, names=staff_names)
+        if sblk is not None:
+            _step("ORQUESTAR", "schedule_write_block", "not_available", reason=sblk[0])
+            return {"handled": True, "success": False, "executed": False, "status": "not_available",
+                    "intent": "unknown", "message": sblk[1]}
+        # Turno/horario de UN empleado («¿cuándo trabaja Ana?», «turnos de Ana»): el nombre solo cuenta si esta
+        # en la plantilla de la empresa de la sesion (BD, servidor). Sin «turno/horario/trabaja» ni se consulta.
+        task = None
+        if not (has_negation(message) or is_stop_order(message)) and staff_member_cue(message):
+            task = staff_member_task(message, staff_names)
+        if task is None:
+            task = parse_message(message)  # criterio estricto J8: red de seguridad y fallback
         # J9a: intencion clara de un modulo que la empresa no tiene -> se responde ya, sin modelo.
         if task.intent != "unknown" and not task.ambiguous_with and not (
             {"explicit_intent", "single_action"} & set(task.missing_entities)
@@ -787,7 +818,27 @@ async def try_handle_agent_read(
         )
         return {"handled": True, "success": False, "executed": False, "status": "blocked_legal",
                 "intent": "unknown", "message": blk[1]}
-    task = parse_message(message)
+    # AFRODITA: orden de crear/cambiar/borrar/enviar horarios o cuadrantes -> no hay accion de chat que los
+    # guarde: respuesta fija y honesta, nunca el modelo (podria contestar que ya lo ha cambiado).
+    # (la negacion ya devolvio None arriba; las ordenes de parada tampoco se bloquean, como en el chat de ZEUS)
+    staff_names = _staff_names_loader(db, user)
+    sblk = (schedule_write_block(message, names=staff_names)
+            if agent == "AFRODITA" and not is_stop_order(message) else None)
+    if sblk is not None:
+        import services.crm_office_service as crm_svc
+
+        log_chain_step(
+            "ORQUESTAR", company_id=crm_svc.primary_company_id(db, user), user=user, agent=agent,
+            action="schedule_write_block",
+            status="not_available", details={"reason": sblk[0], "source": "agent_workspace"},
+        )
+        return {"handled": True, "success": False, "executed": False, "status": "not_available",
+                "intent": "unknown", "message": sblk[1]}
+    task = None
+    if agent == "AFRODITA" and not is_stop_order(message) and staff_member_cue(message):
+        task = staff_member_task(message, staff_names)  # turno de UN empleado de la plantilla (ver chat ZEUS)
+    if task is None:
+        task = parse_message(message)
     if (task.intent == "unknown" or task.needs_clarification or task.ambiguous_with
             or task.confidence < MIN_CONFIDENCE):
         return None

@@ -41,6 +41,7 @@ READ_ACTIONS: Dict[str, Tuple[str, str]] = {
     "get_attendance_status": ("get_attendance_status", "AFRODITA"),
     "get_today_agenda": ("get_today_agenda", "AFRODITA"),
     "get_weekly_orders": ("get_weekly_orders", "AFRODITA"),
+    "get_staff_schedule": ("get_staff_schedule", "AFRODITA"),
     "review_contracts": ("review_contracts", "JUSTICIA"),
     "get_coordination_report": ("get_coordination_report", "ZEUS"),
 }
@@ -50,6 +51,7 @@ READ_PAYLOAD_KEYS: Dict[str, Tuple[str, ...]] = {
     "get_daily_close": ("day",),
     "get_sales_performance": ("days",),
     "get_vat_quarter": ("quarter_ref", "quarter", "year"),
+    "get_staff_schedule": ("day", "week", "employee"),
 }
 # Consultas que, en el chat de UN agente concreto, se resuelven con otra lectura de ese agente:
 # (agente, intencion del parser) -> (accion de READ_ACTIONS, payload fijo). En el workspace de RAFAEL
@@ -225,6 +227,10 @@ def _format_read(chat_action: str, result: Dict[str, Any]) -> str:
         from services.afrodita_ops_service_v1 import inventory_status_text
 
         return inventory_status_text(data)
+    if chat_action == "get_staff_schedule" and "employees_total" in data:
+        from services.afrodita_workspace_service_v1 import staff_schedule_text
+
+        return staff_schedule_text(data)
     return str(result.get("message") or "")
 
 

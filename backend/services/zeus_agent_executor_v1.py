@@ -38,7 +38,9 @@ MANDATORY_ACTIONS = {
     "AFRODITA": frozenset(
         {"get_shift_status", "get_inventory_status", "create_ops_route", "create_inventory_movement",
          # Fase 2 / Step 1: fichajes de la empresa (sin biometria), agenda del dia y pedidos (sin modelo)
-         "get_attendance_status", "get_today_agenda", "get_weekly_orders"}
+         "get_attendance_status", "get_today_agenda", "get_weekly_orders",
+         # cuadrante semanal: empleados reales + horarios guardados de la empresa (solo lectura)
+         "get_staff_schedule"}
     ),
     # Fase 2 / Step 3: consulta real de seguridad de la empresa (thalos_security_events).
     "THALOS": frozenset({"get_security_status"}),
@@ -676,6 +678,38 @@ async def _dispatch(
             body = afro_reads.agenda_today(db, cid, today_local())
             msg = f"Agenda hoy: {body['reservations']} reservas, {body['meetings']} reuniones."
         return {"success": True, "executed": True, "company_id": cid, "message": msg, "data": body}
+
+    if action == "get_staff_schedule":
+        # Cuadrante con los empleados REALES de la empresa de la sesion y sus horarios guardados. Solo lee:
+        # si faltan empleados u horarios, el texto pide el dato (nunca se inventan nombres ni horas).
+        from fastapi import HTTPException
+
+        from services.afrodita_workspace_service_v1 import (
+            company_staff_schedule,
+            resolve_schedule_day,
+            staff_schedule_text,
+        )
+        from services.local_day_v1 import today_local
+
+        cid = zeus_action.company_id
+        if cid is None:
+            return _fail("El usuario no tiene empresa asociada.")
+        today = today_local()
+        try:
+            day = resolve_schedule_day(payload.get("day"), today)
+            emp = payload.get("employee")
+            if emp is not None and not isinstance(emp, str):
+                raise TypeError("empleado no valido")
+            # `employee` es un NOMBRE que se resuelve en el servicio contra la plantilla de ESTA empresa
+            body = company_staff_schedule(db, cid, today, week=str(payload.get("week") or "current"), day=day,
+                                          employee=emp)
+        except (ValueError, TypeError):
+            return _fail("Día, semana o empleado no válidos: indica hoy, un día de la semana (lunes…domingo), "
+                         "esta semana o la semana que viene, y el nombre de un empleado.", status="invalid_payload")
+        except HTTPException as exc:
+            return _fail(str(exc.detail))
+        return {"success": True, "executed": True, "company_id": cid,
+                "message": staff_schedule_text(body), "data": body}
 
     if action == "get_inventory_status":
         from fastapi import HTTPException

@@ -75,6 +75,7 @@ INTENT_LABELS: Dict[str, str] = {
     "get_attendance_status": "los fichajes de hoy",
     "get_today_agenda": "tu agenda de hoy",
     "get_weekly_orders": "los pedidos",
+    "get_staff_schedule": "el cuadrante de turnos de tus empleados",
     "review_contracts": "el estado de tus contratos",
     "get_coordination_report": "el informe de coordinación de los agentes",
     "create_ops_route": "crear una ruta operativa",
@@ -639,13 +640,16 @@ _QUERY_NEG_WORDS = frozenset("no nunca jamas me ensenes muestres digas".split())
 _YEAR_TOKEN_RE = re.compile(r"20\d{2}")
 
 
-def _is_query_frame(f: str, m: "re.Match[str]", allow_negation: bool = False) -> bool:
-    """True si, fuera del sintagma `m`, todo el mensaje es marco de consulta (lista blanca)."""
+def _is_query_frame(f: str, m: "re.Match[str]", allow_negation: bool = False,
+                    pre_words: Optional[frozenset] = None, post_words: Optional[frozenset] = None) -> bool:
+    """True si, fuera del sintagma `m`, todo el mensaje es marco de consulta (lista blanca). `pre_words` /
+    `post_words` sustituyen a las listas por defecto para una consulta concreta (p. ej. el cuadrante)."""
     pre = re.findall(r"\w+", f[:m.start()])
     post = re.findall(r"\w+", f[m.end():])
-    allowed = _QUERY_PREFIX_WORDS | (_QUERY_NEG_WORDS if allow_negation else frozenset())
+    allowed = (pre_words or _QUERY_PREFIX_WORDS) | (_QUERY_NEG_WORDS if allow_negation else frozenset())
+    suffix = post_words or _QUERY_SUFFIX_WORDS
     return (all(w in allowed for w in pre)
-            and all(w in _QUERY_SUFFIX_WORDS or _YEAR_TOKEN_RE.fullmatch(w) for w in post))
+            and all(w in suffix or _YEAR_TOKEN_RE.fullmatch(w) for w in post))
 
 
 _VAT_QUARTER_RE = re.compile(
@@ -672,6 +676,7 @@ _ATTENDANCE_RE = re.compile(
     r"|\b(?:estado|resumen|situacion)\s+de\s+(?:los\s+)?fichajes\b"
     r"|\bquien(?:es)?\s+(?:ha|han)\s+fichado\b"
     r"|\bquien(?:es)?\s+(?:esta|estan)\s+(?:trabajando|fichad[oa]s?|dentro)\b"
+    r"|\bquien(?:es)?\s+(?:trabaja|trabajan)\s+(?:ahora(?:\s+mismo)?|en\s+este\s+momento)\b"
     r"|\bcuantos\s+(?:empleados\s+|trabajadores\s+)?(?:han\s+fichado|estan\s+trabajando|hay\s+trabajando)\b"
 )
 _PERSONAL_RE = re.compile(r"\b(?:mi|mis|estoy|tengo|he)\b")
@@ -683,6 +688,151 @@ _OTHER_DAY_RE = re.compile(
     r"\b(?:manana|ayer|semana|mes|lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b"
 )
 _ORDERS_RE = re.compile(r"\bpedidos\b|\bpedido\s+(?:de|del|para)\b")
+# AFRODITA: cuadrante semanal con los empleados REALES de la empresa y sus horarios guardados (lectura).
+# Mismo criterio de lista blanca que las lecturas de RAFAEL (`_is_query_frame`), ampliada con «hazme /
+# móntame / prepárame el cuadrante» (montar el cuadrante con los datos guardados no escribe nada). Una
+# orden de crear, borrar, cambiar, asignar o enviar («borra el cuadrante», «pon a Carlos de tarde…»,
+# «…y mándaselo a Ana») deja palabras fuera de la lista => NO es esta lectura.
+# Palabras de PLANTILLA (colectivos y puestos). UNA sola lista para la lectura del cuadrante (sintagma y
+# complementos permitidos), el criterio de «turnos» y el contexto del bloqueo de ordenes.
+STAFF_ROLE_WORDS = tuple(
+    "empleado empleados empleada empleadas plantilla personal equipo trabajador trabajadores trabajadora "
+    "trabajadoras camarero camareros camarera camareras cocinero cocineros cocinera cocineras encargado "
+    "encargados encargada encargadas dependiente dependientes dependienta dependientas ayudante ayudantes "
+    "friegaplatos staff".split()
+)
+STAFF_ROLE_ALT = "|".join(sorted(STAFF_ROLE_WORDS, key=len, reverse=True))
+_STAFF_SCHEDULE_RE = re.compile(
+    r"\bcuadrantes?(?:\s+(?:de\s+)?(?:turnos?|horarios?))?(?:\s+semanal(?:es)?)?\b"
+    r"|\b(?:horarios?|turnos?)\s+(?:de|del)\s+(?:(?:los|las|mis|nuestros|nuestras|la|mi|nuestra)\s+)?"
+    rf"(?:{STAFF_ROLE_ALT})\b"
+    r"|\bquien(?:es)?\s+(?:trabaja|trabajan|libra|libran|descansa|descansan)\b"
+    # «turnos» suelto (plural) solo con el marco de consulta: «pásame los turnos», «turnos de la semana».
+    # «mi turno» (singular, el propio) sigue en shift_status.
+    r"|\bturnos\b"
+)
+_STAFF_PREFIX_WORDS = _QUERY_PREFIX_WORDS | frozenset(
+    # Solo verbos de ENSEÑAR/montar con lo guardado. Generar, organizar, planificar, repartir… un cuadrante es
+    # producir uno nuevo: orden sin accion de chat (jarvis_schedule_write_block), nunca esta lectura.
+    "hazme haz hacer hacerme hagas haces harias montame monta montar montarme preparame prepara preparar "
+    "prepararme sacame saca pasame pasanos mandame mandanos enviame envianos me "
+    "un una unos unas afrodita".split()
+)
+# Sin «ahora»: «¿quién trabaja ahora?» es quien esta fichado (get_attendance_status), no el cuadrante.
+_STAFF_DAY_WORDS = {"hoy": "today", "lunes": "lunes", "martes": "martes", "miercoles": "miercoles",
+                    "jueves": "jueves", "viernes": "viernes", "sabado": "sabado", "domingo": "domingo"}
+_STAFF_SUFFIX_WORDS = frozenset(
+    "de del la el los las mi mis tu tus nuestra nuestro nuestros nuestras con empleados empleado trabajadores "
+    "plantilla personal equipo reales real verdad semana semanal semanales esta este actual turnos turno "
+    "horarios horario para que tengo tenemos hay en empresa negocio por favor porfa viene proxima siguiente".split()
+) | frozenset(_STAFF_DAY_WORDS) | frozenset(STAFF_ROLE_WORDS)
+
+
+# «turnos» (plural) es de la PLANTILLA si va suelto («reparte los turnos», «qué turnos hay esta semana») o si lo
+# que le sigue con de/del/para es SOLO un complemento de tiempo o de plantilla («de esta semana», «del lunes»,
+# «de los camareros», «del equipo», o el nombre de un empleado activo si quien llama lo conoce). Con otro
+# sustantivo («turnos de caja», «de reservas», «de reparto», «de la web») no es la plantilla. Criterio UNICO
+# para la lectura del cuadrante y para el bloqueo de ordenes (`jarvis_schedule_write_block`).
+_TURNOS_TIME_C = (
+    r"(?:(?:esta|la|la\s+proxima|la\s+siguiente|proxima|siguiente)\s+)?semana(?:\s+que\s+viene)?"
+    r"|hoy|(?:este\s+)?mes|(?:el\s+)?(?:lunes|martes|miercoles|jueves|viernes|sabado|domingo)"
+)
+_TURNOS_STAFF_C = (
+    r"(?:(?:los|las|mis|nuestros|nuestras|la|mi|el|nuestro|nuestra)\s+)?"
+    rf"(?:{STAFF_ROLE_ALT})"
+)
+# Solo se examinan complementos introducidos por «de/del/para» (decision consciente): otras preposiciones
+# («turnos al grupo», «turnos en caja», «turnos con Ana») dejan «turnos» como suelto -> cuenta como plantilla.
+# Por eso la LECTURA exige ademas el marco de consulta (`_is_query_frame`) y el BLOQUEO un verbo de escritura.
+_TURNOS_LINK_RE = re.compile(r"\s*(?:de|del|para)\s+")
+_TURNOS_COMPLEMENT_RE = re.compile(rf"(?:{_TURNOS_TIME_C}|{_TURNOS_STAFF_C})\b")
+
+
+def turnos_staff_context(after: str, names: Optional[set] = None) -> bool:
+    """`after`: texto (plegado) que sigue a «turnos». True si «turnos» es de la plantilla (ver criterio)."""
+    rest = after
+    while True:
+        link = _TURNOS_LINK_RE.match(rest)
+        if not link:
+            return True  # suelto, o le sigue algo que no es «de/del/para + sustantivo»
+        tail = rest[link.end():]
+        c = _TURNOS_COMPLEMENT_RE.match(tail)
+        if c is not None:
+            rest = tail[c.end():]
+            continue
+        # «de Ana», «de Ana García»: nombre (completo o de pila) de un empleado activo
+        nm = re.match(r"(\w+)(\s+\w+)?", tail)
+        if nm and names and nm.group(2) and f"{nm.group(1)}{nm.group(2)}" in names:
+            rest = tail[nm.end():]
+        elif nm and names and nm.group(1) in names:
+            rest = tail[nm.end(1):]
+        else:
+            return False
+
+
+# Consulta del turno/horario de UN empleado: «turnos de Ana (de esta semana)», «horario de Ana López»,
+# «¿qué turno tiene Ana?», «¿cuándo trabaja Ana?». El nombre SOLO cuenta si esta en la plantilla activa de la
+# empresa de la sesion (lista que pasa quien llama, leida de la BD en el servidor): nunca una mayuscula
+# cualquiera (clientes, proveedores) ni un id del cliente. Mismo marco de consulta que el cuadrante: con un
+# verbo de escritura o cualquier otra palabra no es lectura.
+_EMP = "zzempleadozz"
+_STAFF_MEMBER_CUE_RE = re.compile(r"\b(?:turnos?|horarios?|trabaja)\b")
+_STAFF_MEMBER_RE = re.compile(
+    rf"\b(?:(?:turnos?|horarios?)\s+(?:de|del)\s+{_EMP}"
+    rf"|(?:que|cual(?:es)?)\s+(?:turnos?|horarios?)\s+(?:tiene|hace|lleva|le\s+toca)\s+{_EMP}"
+    rf"|cuando\s+(?:trabaja|libra|entra)\s+{_EMP})\b"
+)
+
+
+def staff_member_cue(message: str) -> bool:
+    """Barato y sin BD: ¿puede ser una consulta de turno/horario de un empleado? (si no, ni se lee la plantilla)."""
+    return bool(_STAFF_MEMBER_CUE_RE.search(fold(message or "")))
+
+
+def staff_member_task(message: str, names: Any) -> Optional[ZeusTaskObject]:
+    """Consulta del turno de UN empleado de la plantilla -> tarea `get_staff_schedule` con `employee` (nombre
+    plegado tal y como aparece en la plantilla; el servidor lo vuelve a resolver contra la empresa de la
+    sesion). None si no es exactamente eso (negacion incluida)."""
+    text = " ".join((message or "").split())
+    f = fold(text)
+    if not f or not _STAFF_MEMBER_CUE_RE.search(f) or _NEGATION_ANY_RE.search(f):
+        return None
+    raw = names() if callable(names) else names
+    tokens = set()
+    for n in raw or ():
+        full = fold(" ".join(str(n or "").split()))
+        if len(full) >= 3:
+            tokens.add(full)
+            if len(full.split(" ")[0]) >= 3:
+                tokens.add(full.split(" ")[0])
+    for tok in sorted(tokens, key=len, reverse=True):  # «ana lopez» antes que «ana»
+        mt = re.search(rf"\b{re.escape(tok)}\b", f)
+        if not mt:
+            continue
+        fx = f[:mt.start()] + _EMP + f[mt.end():]
+        m = _STAFF_MEMBER_RE.search(fx)
+        if m and _is_query_frame(fx, m, False, _STAFF_PREFIX_WORDS, _STAFF_SUFFIX_WORDS):
+            meta = {"employee": tok, **_staff_schedule_meta(fx, m)}
+            return ZeusTaskObject(
+                intent="get_staff_schedule", action="get_staff_schedule", raw_message=text, confidence=0.86,
+                metadata=meta, confidence_breakdown={"rule": "staff_member", "base": 0.86},
+            )
+        return None
+    return None
+
+
+def _staff_schedule_meta(f: str, m: "re.Match[str]") -> Dict[str, Any]:
+    """Dia concreto (hoy o un dia de la semana, si solo se nombra uno) y semana (esta o la que viene)."""
+    post = re.findall(r"\w+", f[m.end():])
+    days = {_STAFF_DAY_WORDS[w] for w in post if w in _STAFF_DAY_WORDS}
+    meta: Dict[str, Any] = {}
+    if len(days) == 1:
+        meta["day"] = days.pop()
+    if re.search(r"\b(?:que\s+viene|proxima|siguiente)\b", f[m.end():]):
+        meta["week"] = "next"
+    return meta
+
+
 # JUSTICIA (Fase 2 / Step 1): estado de los contratos (plural: «revisa el contrato X» es otra peticion).
 _CONTRACTS_RE = re.compile(
     r"\b(?:revis\w*|estado\s+de|situacion\s+de|cuantos|ver|dame|muestra\w*|lista\w*|que\s+pasa\s+con)\s+"
@@ -1073,6 +1223,13 @@ def _candidates(text: str, f: str, ent: ZeusEntities) -> List[_Cand]:
     if _ORDERS_RE.search(f) and not ops_write:
         c.append(_Cand("get_weekly_orders", "get_weekly_orders", 0.84, "orders",
                        suppresses={"tpv_sales_summary", "tpv_sales_today"}))
+    # --- AFRODITA: cuadrante semanal (empleados reales + horarios guardados), solo ante una CONSULTA
+    ms = _STAFF_SCHEDULE_RE.search(f)
+    if (ms and _is_query_frame(f, ms, negated, _STAFF_PREFIX_WORDS, _STAFF_SUFFIX_WORDS)
+            and (ms.group(0) != "turnos" or turnos_staff_context(f[ms.end():]))):
+        c.append(_Cand("get_staff_schedule", "get_staff_schedule", 0.86, "staff_schedule",
+                       suppresses={"shift_status", "get_attendance_status", "get_metrics"},
+                       metadata=_staff_schedule_meta(f, ms), **neg_kw))
     return c
 
 

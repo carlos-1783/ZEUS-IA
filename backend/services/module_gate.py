@@ -48,6 +48,7 @@ ACTION_MODULE: Dict[str, str] = {
     "get_daily_close": "tpv",
     "get_vat_quarter": "tpv",  # IVA trimestral = calculo sobre las ventas del TPV (/tpv/fiscal/quarterly-vat)
     "get_attendance_status": "control_horario",
+    "get_staff_schedule": "control_horario",  # cuadrante = empleados y horarios de Control horario
     "review_contracts": "agents",  # como el resto de JUSTICIA
     "get_coordination_report": "agents",
 }
@@ -80,6 +81,7 @@ EXECUTOR_ACTION_MODULE: Dict[str, str] = {
     "get_vat_quarter": "tpv",  # IVA trimestral de las ventas TPV
     # Fase 2 / Step 1: fichajes de la empresa = control horario (como get_shift_status).
     "get_attendance_status": "control_horario",
+    "get_staff_schedule": "control_horario",  # cuadrante semanal (empleados + horarios de la empresa)
     "review_contracts": "agents",
     "get_coordination_report": "agents",  # Fase 2 / Step 1: ZEUS coordina a los agentes
 }

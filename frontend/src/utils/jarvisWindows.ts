@@ -173,6 +173,25 @@ const LABELS: Record<string, string> = {
   untracked_items: 'Productos sin control de stock',
   tpv_products: 'Productos del TPV',
   erp_products: 'Productos del ERP',
+  // AFRODITA · get_staff_schedule (empleados reales + horarios guardados de la empresa)
+  employees_total: 'Empleados',
+  employees_with_schedule: 'Con horario',
+  shifts_count: 'Turnos guardados',
+  roster: 'Cuadrante semanal',
+  role_title: 'Puesto',
+  shift_week: 'Horario',
+  hours_week: 'Horas/semana',
+  without_schedule: 'Sin horario',
+  uncovered_days: 'Días sin nadie asignado',
+  default_schedule_only: 'Solo con el horario base del sistema',
+  ambiguous_schedule: 'Horario en varias empresas (sin asignar)',
+  schedule_day: 'Día',
+  schedule_day_name: 'Día',
+  schedule_is_today: 'Hoy',
+  day_working: 'Trabajan',
+  day_off: 'Libran',
+  shift_slot: 'Horario',
+  employee_query: 'Empleado consultado',
 };
 
 // Claves que son IMPORTES en euros (se muestran con «€», formato es-ES). Solo claves inequívocas:
@@ -213,6 +232,16 @@ const INTENT_VIEWS: Record<string, IntentView> = {
       low_stock_count: 'Bajo mínimos',
       low_stock_items: 'Productos bajo mínimos',
     },
+  },
+  get_staff_schedule: {
+    title: (m) =>
+      m.schedule_day?.schedule_day_name
+        ? `Turnos del ${m.schedule_day.schedule_day_name}`
+        : m.schedule_week === 'next'
+          ? 'Cuadrante de la semana que viene'
+          : 'Cuadrante semanal',
+    // `missing` y `schedule_week` son códigos internos (lo que falta ya lo pide el texto; la semana va en el título).
+    hidden: ['missing', 'schedule_week'],
   },
 };
 

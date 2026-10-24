@@ -705,7 +705,7 @@ def _seed_onboarding_employees(
 ) -> tuple[int, int, list[str]]:
     """Importa empleados en savepoints; no hace rollback de la sesión principal."""
     from app.models.company_employee import CompanyEmployee
-    from app.models.time_tracking import EmployeeSchedule
+    from app.models.time_tracking import DEFAULT_SCHEDULE_DAYS, DEFAULT_SCHEDULE_END, DEFAULT_SCHEDULE_SHIFT, DEFAULT_SCHEDULE_START, EmployeeSchedule
 
     warnings: list[str] = []
     seeded = 0
@@ -766,7 +766,7 @@ def _seed_onboarding_employees(
                 seeded += 1
 
                 if has_schedules:
-                    for dow in range(5):
+                    for dow in DEFAULT_SCHEDULE_DAYS:
                         ex = (
                             db.query(EmployeeSchedule)
                             .filter(
@@ -782,9 +782,9 @@ def _seed_onboarding_employees(
                                 employee_id=employee_code,
                                 user_id=user_id,
                                 day_of_week=dow,
-                                start_time="09:00",
-                                end_time="17:00",
-                                shift_type="completo",
+                                start_time=DEFAULT_SCHEDULE_START,
+                                end_time=DEFAULT_SCHEDULE_END,
+                                shift_type=DEFAULT_SCHEDULE_SHIFT,
                                 is_active=True,
                             )
                         )

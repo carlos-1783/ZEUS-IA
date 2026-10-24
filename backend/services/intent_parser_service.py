@@ -76,6 +76,7 @@ def _map_intent_to_action_type(intent: str, legacy_action: Optional[str]) -> str
         "get_sales_performance": "get_sales_performance",
         "get_attendance_status": "get_attendance_status",
         "get_today_agenda": "get_today_agenda",
+        "get_staff_schedule": "get_staff_schedule",
         "get_weekly_orders": "get_weekly_orders",
         "review_contracts": "review_contracts",
         "get_coordination_report": "get_coordination_report",
@@ -124,7 +125,7 @@ def _modules_for_intent(intent: str) -> List[str]:
         return ["tpv", "rafael_agent", "activity_log"]
     if intent == "get_sales_performance":
         return ["perseo_agent", "activity_log"]
-    if intent in ("get_attendance_status", "get_today_agenda", "get_weekly_orders"):
+    if intent in ("get_attendance_status", "get_today_agenda", "get_weekly_orders", "get_staff_schedule"):
         return ["afrodita_agent", "activity_log"]
     if intent == "get_coordination_report":
         return ["zeus_core", "activity_log"]

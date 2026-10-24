@@ -17,7 +17,7 @@ from app.core.config import settings
 from app.models.user import User
 from app.models.company import Company, UserCompany
 from app.models.company_employee import CompanyEmployee
-from app.models.time_tracking import EmployeeSchedule
+from app.models.time_tracking import DEFAULT_SCHEDULE_DAYS, DEFAULT_SCHEDULE_END, DEFAULT_SCHEDULE_SHIFT, DEFAULT_SCHEDULE_START, EmployeeSchedule
 from app.models.tpv_table import TPVTable
 from app.models.time_tracking import TimeTrackingRecord, RecordStatus
 from services.control_horario_service import HorarioBusinessProfile, CheckInMethod
@@ -350,15 +350,15 @@ def _backfill_default_schedules_if_missing(db: Session, user: User) -> None:
         )
         if has_any:
             continue
-        for dow in range(5):  # L-V
+        for dow in DEFAULT_SCHEDULE_DAYS:  # L-V
             db.add(
                 EmployeeSchedule(
                     employee_id=code,
                     user_id=user.id,
                     day_of_week=dow,
-                    start_time="09:00",
-                    end_time="17:00",
-                    shift_type="completo",
+                    start_time=DEFAULT_SCHEDULE_START,
+                    end_time=DEFAULT_SCHEDULE_END,
+                    shift_type=DEFAULT_SCHEDULE_SHIFT,
                     is_active=True,
                 )
             )

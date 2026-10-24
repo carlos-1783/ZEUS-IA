@@ -142,7 +142,7 @@ def _create_owner_employee_and_default_schedules(
     from sqlalchemy import inspect
 
     from app.models.company_employee import CompanyEmployee
-    from app.models.time_tracking import EmployeeSchedule
+    from app.models.time_tracking import DEFAULT_SCHEDULE_DAYS, DEFAULT_SCHEDULE_END, DEFAULT_SCHEDULE_SHIFT, DEFAULT_SCHEDULE_START, EmployeeSchedule
 
     out: Dict[str, Any] = {
         "company_employee_id": None,
@@ -183,7 +183,7 @@ def _create_owner_employee_and_default_schedules(
         logger.warning("inspect BD para employee_schedules: %s", e)
         return out
 
-    for dow in range(5):
+    for dow in DEFAULT_SCHEDULE_DAYS:
         ex = (
             db.query(EmployeeSchedule)
             .filter(
@@ -200,9 +200,9 @@ def _create_owner_employee_and_default_schedules(
                 employee_id=code,
                 user_id=user.id,
                 day_of_week=dow,
-                start_time="09:00",
-                end_time="17:00",
-                shift_type="completo",
+                start_time=DEFAULT_SCHEDULE_START,
+                end_time=DEFAULT_SCHEDULE_END,
+                shift_type=DEFAULT_SCHEDULE_SHIFT,
                 is_active=True,
             )
         )

@@ -1153,6 +1153,8 @@ class TPVService:
 
     @staticmethod
     def _invoice_result(invoice: Any, ticket_id: str, already_existed: bool) -> Dict[str, Any]:
+        from app.schemas.erp import invoice_status_code
+
         return {
             "success": True,
             "already_existed": already_existed,
@@ -1166,7 +1168,8 @@ class TPVService:
                 "subtotal": float(invoice.subtotal or 0),
                 "tax_amount": float(invoice.tax_amount or 0),
                 "total": float(invoice.total or 0),
-                "status": invoice.status.value if hasattr(invoice.status, "value") else invoice.status,
+                # Codigo de API (paid...), no la label de BD (pagado...): mismo contrato que /invoices.
+                "status": invoice_status_code(invoice.status),
                 "issue_date": invoice.issue_date.isoformat() if invoice.issue_date else None,
                 "generated_at": datetime.utcnow().isoformat(),
             },

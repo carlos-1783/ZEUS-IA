@@ -15,7 +15,8 @@ from app.schemas.erp import (
     InvoiceCreate, InvoiceUpdate, InvoiceInDB, InvoiceResponse, InvoiceListResponse,
     InvoiceItemCreate, InvoiceItemInDB,
     PaymentCreate, PaymentInDB, PaymentResponse,
-    InvoiceStatus, InvoiceType, PaymentStatus, PaymentMethod
+    InvoiceStatus, InvoiceType, PaymentStatus, PaymentMethod,
+    invoice_status_code,
 )
 from app.core.auth import get_current_active_user
 from app.models.user import User
@@ -155,11 +156,29 @@ def list_invoices(
     if customer_id:
         query = query.filter(Invoice.customer_id == customer_id)
         
+    # Los filtros llegan con los codigos de la API (draft/paid/invoice...), no con las
+    # labels de la BD (borrador/pagado/factura...): se traducen por NOMBRE al miembro del
+    # enum del modelo. Pasar el string tal cual hacia que Postgres rechazase la consulta
+    # (label inexistente en el ENUM -> 500). Codigo desconocido -> 422 controlado.
     if status:
-        query = query.filter(Invoice.status == status)
-        
+        try:
+            status_member = ModelInvoiceStatus[InvoiceStatus(status).name]
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Estado de factura no válido: {status}. Valores: {', '.join(s.value for s in InvoiceStatus)}",
+            )
+        query = query.filter(Invoice.status == status_member)
+
     if invoice_type:
-        query = query.filter(Invoice.invoice_type == invoice_type)
+        try:
+            type_member = ModelInvoiceType[InvoiceType(invoice_type).name]
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Tipo de factura no válido: {invoice_type}. Valores: {', '.join(t.value for t in InvoiceType)}",
+            )
+        query = query.filter(Invoice.invoice_type == type_member)
         
     if start_date:
         query = query.filter(Invoice.issue_date >= start_date)
@@ -300,7 +319,9 @@ def create_invoice(
         subtotal=float(totals["subtotal"]),
         tax_amount=float(totals["tax_amount"]),
         total=float(totals["total"]),
-        status_value=str(invoice.status.value if hasattr(invoice.status, "value") else invoice.status),
+        # Codigo de API (draft/paid...), que es lo que valida OFFICE_MODE_V1; el .value
+        # del modelo es la label de BD (borrador/pagado...).
+        status_value=invoice_status_code(invoice.status) or "",
     )
 
     # Verificamos que la fila resultante es legible ANTES de confirmar la

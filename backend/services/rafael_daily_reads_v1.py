@@ -19,6 +19,11 @@ from sqlalchemy.orm import Session
 
 from services.local_day_v1 import day_bounds_utc, local_tz
 
+# Los estados salen con el codigo de la API (draft/sent/paid/void...), no con la label de BD
+# (borrador/enviado/pagado/anulado...): el texto del chat (jarvis_ops_actions) y la ventana
+# (jarvisWindows.ts) trabajan con esos codigos.
+from app.schemas.erp import invoice_status_code
+
 NO_CASH_COUNT_NOTE = (
     "Ese día no se hizo arqueo de caja en el TPV, así que el cierre son las ventas registradas."
 )
@@ -106,7 +111,7 @@ def pending_invoices_summary(db: Session, company_id: int, *, top: int = 5) -> D
             "amount_due": round(due, 2),
             "due_date": inv.due_date.date().isoformat() if inv.due_date else None,
             "overdue": bool(overdue),
-            "status": inv.status.value if inv.status else None,
+            "status": invoice_status_code(inv.status),
         })
     items.sort(key=lambda i: (not i["overdue"], i["due_date"] or "9999-12-31"))
     drafts = base.filter(Invoice.status == InvoiceStatus.DRAFT, type_ok).count()
@@ -136,7 +141,7 @@ def _invoice_row(inv: Any) -> Dict[str, Any]:
         "amount_total": total,
         "tax_amount": round(float(inv.tax_amount or 0), 2),
         "amount_due": round(max(total - float(inv.amount_paid or 0), 0.0), 2),
-        "status": inv.status.value if inv.status else None,
+        "status": invoice_status_code(inv.status),
         "from_tpv": inv.tpv_sale_id is not None,
     }
 
@@ -232,7 +237,7 @@ def _invoices_between(db: Session, company_id: int, first_day: date, last_day: d
     issued = [i for i in rows if i.status not in (InvoiceStatus.VOID, InvoiceStatus.DRAFT)]
     by_status: Dict[str, int] = {}
     for i in rows:
-        k = i.status.value if i.status else "desconocido"
+        k = invoice_status_code(i.status) or "desconocido"
         by_status[k] = by_status.get(k, 0) + 1
     return {
         "timezone": local_tz()[1],

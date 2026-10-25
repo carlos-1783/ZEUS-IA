@@ -3,13 +3,14 @@ DAR DE BAJA, INVALIDAR, SUPRIMIR, DEJAR SIN EFECTO, RECTIFICAR, MODIFICAR o FIRM
 
 Que existe hoy en el backend (revisado antes de decidir):
   - No hay ninguna accion de chat sobre facturas (ni en `CONFIRMABLE_ACTIONS` ni en el ejecutor de agentes).
-  - `POST /invoices/{id}/void` (REST, con THALOS) pasa a «anulada» cualquier factura no cobrada, tambien una
-    ya EMITIDA, sin generar factura rectificativa. En España una factura emitida no se borra ni se anula: se
-    corrige con una factura rectificativa que la referencie (Reglamento de facturacion, RD 1619/2012, art. 15).
-    Enganchar el chat a ese endpoint propagaria ese problema legal: NO se hace (decision pendiente del titular).
-  - No existe endpoint para borrar facturas, ni para emitir rectificativas (el tipo `credit_note` existe en el
-    modelo, sin flujo), ni para firmarlas: la firma/huella de Verifactu no esta implementada
-    (`jarvis_legal_block`, zeus-guardarrailes-legales).
+  - `POST /invoices/{id}/void` (REST, con THALOS) solo anula BORRADORES. Una factura ya EMITIDA (enviada,
+    pagada, pagada en parte, vencida) se rechaza con 409 sin tocar nada: en España una factura emitida no se
+    borra ni se anula, se corrige con una factura rectificativa que la referencie (Reglamento de facturacion,
+    RD 1619/2012, art. 15). El chat no se engancha a ese endpoint (decision pendiente del titular): el texto
+    fijo de abajo no promete ninguna anulacion.
+  - No existe endpoint para borrar facturas (tampoco borradores: la serie debe ser correlativa y sin huecos),
+    ni para emitir rectificativas (el tipo `credit_note` existe en el modelo, sin flujo), ni para firmarlas:
+    la firma/huella de Verifactu no esta implementada (`jarvis_legal_block`, zeus-guardarrailes-legales).
 Por eso una orden asi NO se contesta con una lectura («cancela la última factura» no enseña la última factura)
 ni la decide el modelo conversacional (podria contestar que ya esta anulada): texto fijo con el motivo, sin
 ejecutar nada. Mismo patron que `jarvis_legal_block` y `jarvis_schedule_write_block`.

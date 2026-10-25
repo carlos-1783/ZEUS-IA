@@ -586,6 +586,58 @@ def send_invoice(
 
     return {"success": True, "data": InvoiceInDB.model_validate(invoice)}
 
+# Estados en los que la factura ya esta EMITIDA. En España una factura emitida no se anula ni se
+# borra: se corrige con una factura rectificativa que la referencie (RD 1619/2012, art. 15). ZEUS
+# todavia no emite rectificativas, asi que /void se bloquea sin tocar nada. No hay borrado fisico de
+# facturas (ni de borradores): el borrador ya tiene numero de la serie, que debe ser correlativa y sin
+# huecos, y los registros de caja (cashflow_ledger.invoice_id) deben seguir apuntando a una fila real.
+_EMITTED_STATUSES = frozenset({
+    ModelInvoiceStatus.SENT,
+    ModelInvoiceStatus.PAID,
+    ModelInvoiceStatus.PARTIALLY_PAID,
+    ModelInvoiceStatus.OVERDUE,
+})
+_EMITTED_LABEL_ES = {
+    ModelInvoiceStatus.SENT: "enviada",
+    ModelInvoiceStatus.PAID: "pagada",
+    ModelInvoiceStatus.PARTIALLY_PAID: "pagada en parte",
+    ModelInvoiceStatus.OVERDUE: "vencida",
+}
+
+
+def _ensure_draft_for_void(invoice: Invoice, action: str, current_user: User) -> None:
+    """Solo un BORRADOR se puede anular. Se comprueba ANTES de cualquier efecto (estado,
+    stock, pagos, eventos): si la factura esta emitida o ya anulada se lanza 409 sin escribir nada.
+
+    409 (y no 400) porque la peticion es valida pero choca con el ESTADO actual del recurso, igual que
+    `create_payment` sobre una factura anulada en este mismo router."""
+    if invoice.status == ModelInvoiceStatus.VOID:
+        logger.info("invoices.%s bloqueado: factura %s ya anulada (usuario %s)", action, invoice.id, current_user.id)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Esta factura ya está anulada: no se puede anular de nuevo.",
+        )
+    if invoice.status in _EMITTED_STATUSES:
+        logger.info(
+            "invoices.%s bloqueado: factura %s emitida (estado %s, usuario %s) -> requiere rectificativa",
+            action, invoice.id, invoice_status_code(invoice.status), current_user.id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Esta factura ya está emitida (estado: {_EMITTED_LABEL_ES[invoice.status]}): no se puede "
+                "anular ni borrar, requiere una factura rectificativa (función futura)."
+            ),
+        )
+    if invoice.status != ModelInvoiceStatus.DRAFT:
+        # Estado desconocido (enum ampliado sin actualizar esta regla): fail-closed, no se toca nada.
+        logger.warning("invoices.%s bloqueado: factura %s en estado no contemplado %r", action, invoice.id, invoice.status)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Solo se puede anular una factura en borrador.",
+        )
+
+
 @router.post("/{invoice_id}/void", response_model=InvoiceResponse, dependencies=[Depends(thalos_request_guard)])
 def void_invoice(
     invoice_id: int = Path(..., description="ID of the invoice to void"),
@@ -593,46 +645,21 @@ def void_invoice(
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    Void an invoice
+    Anula un BORRADOR (pasa a «anulado»). Una factura emitida (enviada, pagada, pagada en parte,
+    vencida) no se anula: 409, requiere factura rectificativa. Ya anulada: 409. En ningun caso se
+    envia nada a terceros.
+
+    Un borrador nunca ha movido stock (create_invoice solo descuenta stock en facturas creadas como
+    pagadas, que no son borradores), asi que anularlo no revierte inventario.
     """
     invoice = get_invoice_orm_or_404(db, invoice_id, current_user)
-    
-    if invoice.status == ModelInvoiceStatus.VOID:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invoice is already void"
-        )
-    
-    if invoice.status == ModelInvoiceStatus.PAID:
-        # In a real app, you might want to issue a refund
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot void a paid invoice"
-        )
-    
-    # Reverse inventory movements if needed
-    if invoice.status in [ModelInvoiceStatus.PAID, ModelInvoiceStatus.PARTIALLY_PAID]:
-        for item in invoice.items:
-            if item.product_id:
-                product = db.query(Product).filter(Product.id == item.product_id).first()
-                if product and product.track_inventory:
-                    movement = InventoryMovement(
-                        product_id=product.id,
-                        movement_type=InventoryMovementType.RETURN,
-                        quantity=item.quantity,  # Positive for returns
-                        unit_cost=product.cost or 0,
-                        reference=f"Void invoice #{invoice.invoice_number}",
-                        created_by=current_user.id
-                    )
-                    db.add(movement)
-                    
-                    # Update stock level
-                    product.quantity_on_hand += item.quantity
-    
-    # Update invoice status
+    _ensure_draft_for_void(invoice, "void", current_user)
+
     invoice.status = ModelInvoiceStatus.VOID
-    
     db.commit()
     db.refresh(invoice)
-    
+    logger.info("invoices.void: borrador %s (%s) anulado por usuario %s",
+                invoice.id, invoice.invoice_number, current_user.id)
+
     return {"success": True, "data": InvoiceInDB.model_validate(invoice)}
+

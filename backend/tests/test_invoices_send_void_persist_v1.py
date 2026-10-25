@@ -74,15 +74,23 @@ def test_send_and_void_other_company_404_without_change(client):
     assert _db_status(inv) == InvoiceStatus.DRAFT
 
 
-def test_void_sent_persists_and_double_void_rejected(client):
+def test_void_sent_blocked_draft_void_persists_and_double_void_rejected(client):
+    # Tarea C (Facturas): una factura ENVIADA ya esta emitida -> no se anula (requiere
+    # rectificativa): 409 y la BD no cambia. Antes este test fijaba que se anulaba (200).
     h = _login(client)
+    sent = _create_invoice(client, h)
+    assert client.post(f"{API}/invoices/{sent}/send", headers=h).status_code == 200
+    r = client.post(f"{API}/invoices/{sent}/void", headers=h)
+    assert r.status_code == 409, r.text
+    assert "rectificativa" in r.json()["detail"]
+    assert _db_status(sent) == InvoiceStatus.SENT
+    # El borrador si se anula y persiste
     inv = _create_invoice(client, h)
-    assert client.post(f"{API}/invoices/{inv}/send", headers=h).status_code == 200
     r = client.post(f"{API}/invoices/{inv}/void", headers=h)
     assert r.status_code == 200, r.text
     assert r.json()["data"]["status"] == "void"
     assert _db_status(inv) == InvoiceStatus.VOID
-    assert client.post(f"{API}/invoices/{inv}/void", headers=h).status_code == 400
+    assert client.post(f"{API}/invoices/{inv}/void", headers=h).status_code == 409
 
 
 def test_void_paid_invoice_rejected_and_unchanged(client):
@@ -96,7 +104,7 @@ def test_void_paid_invoice_rejected_and_unchanged(client):
     finally:
         db.close()
     r = client.post(f"{API}/invoices/{inv}/void", headers=h)
-    assert r.status_code == 400
+    assert r.status_code == 409, r.text  # Tarea C: emitida -> 409 (antes 400 "Cannot void a paid invoice")
     assert _db_status(inv) == InvoiceStatus.PAID
 
 

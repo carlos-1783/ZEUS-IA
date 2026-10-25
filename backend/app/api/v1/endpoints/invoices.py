@@ -384,6 +384,10 @@ def update_invoice(
             detail="Invoice status cannot be changed via PUT; use /send, /void or /payments",
         )
     allowed = {"customer_id", "due_date", "notes"}
+    # Primero se valida TODO y despues se escribe: antes cada campo se asignaba al ORM segun se
+    # leia y se hacia commit sin comprobar due_date contra issue_date (se podia guardar un
+    # vencimiento anterior a la emision). Ahora, si algo no es valido, no se toca la fila.
+    changes: Dict[str, Any] = {}
     for field, value in invoice_in.items():
         if field not in allowed:
             continue
@@ -391,13 +395,29 @@ def update_invoice(
             # Mismo control de tenant que create_invoice: 404 si el cliente
             # es de otra empresa.
             crm_svc.resolve_customer(db, current_user, value)
-        if field == "due_date" and isinstance(value, str):
+        if field == "due_date" and value is not None:
+            if not isinstance(value, str):
+                raise HTTPException(status_code=422, detail="Invalid due_date")
             try:
                 value = datetime.fromisoformat(value)
             except ValueError:
                 raise HTTPException(status_code=422, detail="Invalid due_date")
-        setattr(invoice, field, value)
+        changes[field] = value
 
+    # Misma regla que create (InvoiceBase.validate_due_date): el vencimiento no puede ser anterior
+    # a la emision. issue_date no se puede editar (no esta en la lista blanca), asi que se compara
+    # con el de la fila. Se compara por DIA: create guarda issue_date y due_date truncados a
+    # medianoche (create_invoice) e InvoiceUpdate.due_date es `date`; comparar con la hora haria que
+    # una factura del TPV emitida a las 12:30 no pudiera vencer ese mismo dia y una de la API si.
+    # Sin issue_date en la fila (legacy NULL) no hay contra que comparar: no se inventa.
+    new_due = changes.get("due_date")
+    if new_due is not None and invoice.issue_date is not None and new_due.date() < invoice.issue_date.date():
+        logger.info("invoices.update: factura %s rechazada, due_date %s < issue_date %s (usuario %s)",
+                    invoice.id, new_due.date(), invoice.issue_date.date(), current_user.id)
+        raise HTTPException(status_code=422, detail="Due date cannot be before issue date")
+
+    for field, value in changes.items():
+        setattr(invoice, field, value)
     db.commit()
     db.refresh(invoice)
 

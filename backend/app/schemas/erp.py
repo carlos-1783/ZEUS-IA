@@ -130,7 +130,9 @@ class InvoiceItemBase(BaseModel):
     product_id: Optional[int] = Field(None, gt=0, description="Product ID if applicable")
     description: str = Field(..., min_length=1, max_length=500, description="Item description")
     quantity: float = Field(1.0, gt=0, description="Quantity")
-    unit_price: float = Field(..., gt=0, description="Unit price")
+    # ge=0 (no gt=0): una linea a 0 EUR es legitima (invitacion, cortesia). El TPV ya la
+    # persiste asi (services/tpv_service.py, InvoiceItem.unit_price = 0).
+    unit_price: float = Field(..., ge=0, description="Unit price")
     tax_rate: float = Field(0.0, ge=0, le=100, description="Tax rate in percentage")
     discount: float = Field(0.0, ge=0, description="Discount amount")
 
@@ -291,18 +293,29 @@ class InventoryMovementInDB(InventoryMovementBase):
     created_at: datetime
     created_by: Optional[int]
 
-class InvoiceItemInDB(InvoiceItemBase):
+# Respuestas de factura: describen lo que YA esta guardado, no validan reglas de negocio.
+# No heredan de InvoiceBase/InvoiceItemBase (que son de ENTRADA: gt/ge/le, longitudes y el
+# validador due_date >= issue_date). Si una regla de entrada se aplicaba aqui, una sola fila
+# antigua o generada por otro flujo (p. ej. una linea a 0 EUR del TPV, un NULL de una fila
+# legacy, un due_date anterior a issue_date) hacia fallar la serializacion y GET /invoices/
+# devolvia 500 para TODA la empresa. Lo que sea NULL en BD sale como null: nunca se rellena.
+class InvoiceItemInDB(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     invoice_id: int
-    product_id: Optional[int]
-    subtotal: float
-    tax_amount: float
-    total: float
-    created_at: datetime
-    updated_at: datetime
+    product_id: Optional[int] = None
+    description: Optional[str] = None
+    quantity: Optional[float] = None
+    unit_price: Optional[float] = None
+    tax_rate: Optional[float] = None
+    discount: Optional[float] = None
+    subtotal: Optional[float] = None
+    tax_amount: Optional[float] = None
+    total: Optional[float] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
-class InvoiceInDB(InvoiceBase):
+class InvoiceInDB(BaseModel):
     # NOTA (Bloque 2 multi-tenant-bd): sin from_attributes=True, model_validate()
     # sobre un objeto ORM falla (ValidationError: "Input should be a valid
     # dictionary or instance of InvoiceInDB") — rompía GET /invoices/{id} para
@@ -311,15 +324,21 @@ class InvoiceInDB(InvoiceBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     invoice_number: str
-    subtotal: float
-    tax_amount: float
-    discount_amount: float
-    total: float
-    amount_paid: float
-    amount_due: float
-    created_at: datetime
-    updated_at: datetime
-    created_by: Optional[int]
+    customer_id: Optional[int] = None
+    invoice_type: Optional[InvoiceType] = None
+    status: Optional[InvoiceStatus] = None
+    issue_date: Optional[datetime] = None
+    due_date: Optional[datetime] = None
+    notes: Optional[str] = None
+    subtotal: Optional[float] = None
+    tax_amount: Optional[float] = None
+    discount_amount: Optional[float] = None
+    total: Optional[float] = None
+    amount_paid: Optional[float] = None
+    amount_due: Optional[float] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    created_by: Optional[int] = None
     items: List[InvoiceItemInDB] = []
 
 class PaymentInDB(PaymentBase):

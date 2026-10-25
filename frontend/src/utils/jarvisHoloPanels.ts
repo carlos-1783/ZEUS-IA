@@ -92,6 +92,8 @@ export function detectHoloRequest(message: string): HoloKey | null {
 
 const eur = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
 function money(v: unknown): string {
+  // null/undefined/'' = sin dato: '—'. Number(null) daría 0 y pintaría «0,00 €», una cifra inventada.
+  if (v === null || v === undefined || v === '') return '—';
   const n = Number(v);
   return Number.isFinite(n) ? eur.format(n) : '—';
 }
@@ -140,10 +142,16 @@ async function loadBilling(get: Getter): Promise<HoloPanel> {
     p.message = 'Sin datos: todavía no hay facturas registradas.';
     return p;
   }
-  const due = list.reduce((acc, i) => acc + (Number(i?.amount_due) || 0), 0);
+  // Solo se suman las facturas con importe pendiente conocido; las que lo tienen a null (filas
+  // antiguas) no cuentan como 0: se indica cuántas tienen dato y, si ninguna, '—'.
+  const withDue = list.filter((i) => i?.amount_due !== null && i?.amount_due !== undefined && Number.isFinite(Number(i.amount_due)));
+  const due = withDue.length ? withDue.reduce((acc, i) => acc + Number(i.amount_due), 0) : null;
+  const dueLabel = withDue.length === list.length
+    ? `Pendiente de cobro (últimas ${list.length})`
+    : `Pendiente de cobro (${withDue.length} de las últimas ${list.length} con dato)`;
   p.figures = [
     { label: 'Facturas en total', value: String(data?.total ?? list.length) },
-    { label: `Pendiente de cobro (últimas ${list.length})`, value: money(due) },
+    { label: dueLabel, value: money(due) },
   ];
   p.columns = ['Nº', 'Fecha', 'Total', 'Estado'];
   p.rows = list.map((i) => [String(i?.invoice_number || i?.id || '—'), shortDate(i?.issue_date), money(i?.total), statusEs(i?.status)]);

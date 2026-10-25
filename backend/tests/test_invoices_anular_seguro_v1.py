@@ -2,7 +2,7 @@
 
 En España una factura EMITIDA no se anula ni se borra: se corrige con una factura rectificativa
 (RD 1619/2012, art. 15). Regla:
-  - borrador (draft): POST /void -> 200 (queda «anulado», conserva numero y lineas).
+  - borrador (draft): POST /void -> 200 (queda «void», conserva numero y lineas).
   - NO hay borrado fisico: DELETE /invoices/{id} -> 405 (la serie no tiene huecos y los registros de
     caja siguen apuntando a una fila que existe).
   - emitida (sent, paid, partially_paid, overdue): /void -> 409 con un detail que dice que requiere
@@ -27,7 +27,6 @@ from app.models.user import User
 pytestmark = pytest.mark.usefixtures("no_external_messaging")
 API = settings.API_V1_STR
 EMITTED = ("sent", "paid", "partially_paid", "overdue")
-_DB_LABEL = {"sent": "enviado", "paid": "pagado", "partially_paid": "partially_paid", "overdue": "vencido"}
 _ES = {"sent": "enviada", "paid": "pagada", "partially_paid": "pagada en parte", "overdue": "vencida"}
 
 
@@ -136,9 +135,8 @@ def _snapshot(inv, product_id=None):
         row = db.query(Invoice).filter(Invoice.id == inv).first()
         if row is None:
             return None
-        from app.schemas.erp import invoice_status_code
         return {
-            "status_api": invoice_status_code(row.status),
+            "status_api": row.status.value,
             "status_db": row.status.value,
             "total": row.total, "amount_paid": row.amount_paid, "amount_due": row.amount_due,
             "updated_at": row.updated_at,
@@ -163,7 +161,7 @@ def test_void_draft_becomes_void(client, h_a):
     assert r.status_code == 200, r.text
     assert r.json()["data"]["status"] == "void"
     snap = _snapshot(inv)
-    assert snap["status_api"] == "void" and snap["status_db"] == "anulado"
+    assert snap["status_api"] == "void" and snap["status_db"] == "void"
     assert len(snap["items"]) == 2  # anular no borra lineas
 
 
@@ -203,7 +201,7 @@ def test_numbering_after_void_stays_unique_across_companies(client, h_a, h_b):
 def test_emitted_invoice_cannot_be_voided(client, h_a, product_id, state):
     inv = _make_emitted(client, h_a, state, product_id)
     before = _snapshot(inv, product_id)
-    assert before["status_db"] == _DB_LABEL[state]
+    assert before["status_db"] == state
     r = client.post(f"{API}/invoices/{inv}/void", headers=h_a)
     assert r.status_code == 409, r.text
     detail = r.json()["detail"]

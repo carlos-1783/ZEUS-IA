@@ -182,10 +182,7 @@ def _load_invoice(db: Session, cid: int, iid: int):
     row = db.query(Invoice).filter(Invoice.id == iid, Invoice.company_id == cid).first()
     if row is None:
         return None
-    from app.schemas.erp import invoice_status_code
-
-    # Codigo de API (draft/paid...), no la label de BD (borrador/pagado...).
-    status = invoice_status_code(row.status) or "draft"
+    status = str(getattr(row.status, "value", row.status) or "draft")
     ev = make("invoice", row.id, "RAFAEL", f"Factura {row.invoice_number}", status)
     return ev, {"invoice_number": row.invoice_number, "total": row.total, "issue_date": _iso(row.issue_date)}
 

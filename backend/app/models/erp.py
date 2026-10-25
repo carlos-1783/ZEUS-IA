@@ -156,29 +156,21 @@ class InventoryMovement(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 
-# Los .value de InvoiceStatus/InvoiceType son las labels EXACTAS de los tipos ENUM
-# `invoicestatus`/`invoicetype` de PostgreSQL en produccion (enum_range confirmado en
-# Railway): con values_callable es el .value lo que viaja a la BD, y una label que el tipo
-# no tiene rompe tanto el INSERT ("invalid input value for enum") como la lectura
-# (LookupError de SQLAlchemy -> 500 en /invoices). Una BD nueva llega a estas mismas
-# labels con la migracion 0070. NO es el contrato de la API: el frontend y el chat siguen
-# usando los codigos de app.schemas.erp (draft/sent/paid/...), traducidos por NOMBRE de
-# miembro en el borde (app.schemas.erp.invoice_status_code / invoice_type_code).
 class InvoiceStatus(PyEnum):
-    """Invoice status (.value = label del ENUM invoicestatus de PostgreSQL)"""
-    DRAFT = "borrador"
-    SENT = "enviado"
-    PAID = "pagado"
+    """Invoice status"""
+    DRAFT = "draft"
+    SENT = "sent"
+    PAID = "paid"
     PARTIALLY_PAID = "partially_paid"
-    VOID = "anulado"
-    OVERDUE = "vencido"
+    VOID = "void"
+    OVERDUE = "overdue"
 
 class InvoiceType(PyEnum):
-    """Invoice types (.value = label del ENUM invoicetype de PostgreSQL)"""
-    INVOICE = "factura"
+    """Invoice types"""
+    INVOICE = "invoice"
     CREDIT_NOTE = "credit_note"
     PROFORMA = "proforma"
-    ESTIMATE = "estimación"
+    ESTIMATE = "estimate"
 
 class Invoice(Base):
     """Invoice model for billing"""

@@ -37,48 +37,6 @@ class InvoiceType(str, Enum):
     PROFORMA = "proforma"
     ESTIMATE = "estimate"
 
-# Contrato de la API de facturas: los codigos de InvoiceStatus/InvoiceType de ESTE modulo
-# (draft/sent/paid/partially_paid/void/overdue; invoice/credit_note/proforma/estimate) son
-# los que envia y espera el frontend (jarvisHoloPanels/jarvisWindows) y el texto del chat
-# (jarvis_ops_actions). En la BD las labels son otras (las del ENUM de PostgreSQL de
-# produccion, ver app.models.erp.InvoiceStatus). La traduccion se hace SIEMPRE por NOMBRE
-# de miembro (DRAFT <-> DRAFT), nunca comparando un literal con lo leido de la BD.
-def _api_code(schema_enum, value: Any) -> Optional[str]:
-    if value is None:
-        return None
-    if isinstance(value, schema_enum):
-        return value.value
-    if isinstance(value, Enum):
-        if value.name in schema_enum.__members__:
-            return schema_enum[value.name].value
-        raise ValueError(f"{type(value).__name__}.{value.name} no tiene codigo en {schema_enum.__name__}")
-    if isinstance(value, str) and value in {m.value for m in schema_enum}:
-        return value
-    raise ValueError(f"Valor no valido para {schema_enum.__name__}: {value!r}")
-
-
-def invoice_status_code(value: Any) -> Optional[str]:
-    """Codigo de API (p. ej. 'paid') de un estado de factura: miembro del enum del MODELO
-    (lo leido de la BD), del schema, o ya un codigo de API. None -> None; otro -> ValueError."""
-    return _api_code(InvoiceStatus, value)
-
-
-def invoice_type_code(value: Any) -> Optional[str]:
-    """Codigo de API (p. ej. 'invoice') de un tipo de factura (mismo criterio que
-    `invoice_status_code`)."""
-    return _api_code(InvoiceType, value)
-
-
-def _schema_member(schema_enum, value: Any) -> Any:
-    """Validador `before`: un miembro del enum del MODELO (otra clase, .value = label de BD)
-    se convierte al miembro del schema con el mismo NOMBRE. Sin esto Pydantic valida por
-    .value ('pagado') y la respuesta de /invoices falla. Strings del cliente: sin tocar
-    (Pydantic los valida contra los codigos de API)."""
-    if isinstance(value, Enum) and not isinstance(value, schema_enum) and value.name in schema_enum.__members__:
-        return schema_enum[value.name]
-    return value
-
-
 class PaymentMethod(str, Enum):
     CASH = "cash"
     CREDIT_CARD = "credit_card"
@@ -161,16 +119,6 @@ class InvoiceBase(BaseModel):
     notes: Optional[str] = Field(None, description="Additional notes")
 
     model_config = ConfigDict(from_attributes=True)
-
-    @field_validator('status', mode='before')
-    @classmethod
-    def _status_from_model(cls, v: Any) -> Any:
-        return _schema_member(InvoiceStatus, v)
-
-    @field_validator('invoice_type', mode='before')
-    @classmethod
-    def _type_from_model(cls, v: Any) -> Any:
-        return _schema_member(InvoiceType, v)
 
     @model_validator(mode='after')
     def validate_due_date(self) -> 'InvoiceBase':

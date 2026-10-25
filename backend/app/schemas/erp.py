@@ -58,7 +58,9 @@ class ProductBase(BaseModel):
     description: Optional[str] = Field(None, description="Product description")
     
     # Pricing
-    price: float = Field(..., gt=0, description="Base price")
+    # ge=0 (no gt=0): un producto a 0 EUR es legitimo (invitacion, muestra, cortesia), igual que
+    # la linea de factura a 0 EUR. Un precio negativo sigue rechazandose (422).
+    price: float = Field(..., ge=0, description="Base price")
     cost: Optional[float] = Field(None, ge=0, description="Cost price")
     tax_rate: float = Field(0.0, ge=0, le=100, description="Tax rate in percentage")
     
@@ -78,7 +80,9 @@ class ProductVariantBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="Variant name")
     
     # Pricing overrides
-    price_override: Optional[float] = Field(None, gt=0, description="Override base price if set")
+    # ge=0, mismo criterio que ProductBase.price: una variante a 0 EUR es legitima. None = usa el
+    # precio base (no es lo mismo que 0).
+    price_override: Optional[float] = Field(None, ge=0, description="Override base price if set")
     cost_override: Optional[float] = Field(None, ge=0, description="Override cost price if set")
     
     # Inventory
@@ -250,7 +254,7 @@ class ProductUpdate(BaseModel):
     sku: Optional[str] = Field(None, min_length=1, max_length=50)
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = None
-    price: Optional[float] = Field(None, gt=0)
+    price: Optional[float] = Field(None, ge=0)  # ge=0: ver ProductBase.price
     cost: Optional[float] = Field(None, ge=0)
     tax_rate: Optional[float] = Field(None, ge=0, le=100)
     track_inventory: Optional[bool] = None
@@ -265,7 +269,7 @@ class ProductVariantUpdate(BaseModel):
     # existiera en el schema.
     sku: Optional[str] = Field(None, min_length=1, max_length=50)
     name: Optional[str] = Field(None, min_length=1, max_length=100)
-    price_override: Optional[float] = Field(None, gt=0)
+    price_override: Optional[float] = Field(None, ge=0)  # ge=0: ver ProductVariantBase
     cost_override: Optional[float] = Field(None, ge=0)
     quantity_on_hand: Optional[float] = Field(None, ge=0)
 
@@ -276,22 +280,55 @@ class InvoiceUpdate(BaseModel):
     notes: Optional[str] = None
 
 # Response schemas
-class ProductVariantInDB(ProductVariantBase):
+# Respuestas de producto / variante / movimiento: mismo criterio que InvoiceInDB (ver abajo).
+# Describen lo que YA esta guardado; no heredan de ProductBase/ProductVariantBase/
+# InventoryMovementBase, que son de ENTRADA (price gt/ge, min_length, quantity != 0,
+# max_length...). Antes, una sola fila antigua o creada por otro flujo que no cumpliera una regla
+# de entrada (p. ej. un producto a 0 EUR, un tax_rate NULL, un movimiento con quantity 0) hacia
+# fallar la serializacion y GET /products/ devolvia 500 para TODA la empresa. Lo que sea NULL en
+# BD sale como null: nunca se rellena con 0, "" ni fechas inventadas. Mismos campos que antes.
+class ProductVariantInDB(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: int
-    product_id: int
-    created_at: datetime
-    updated_at: datetime
+    product_id: Optional[int] = None
+    sku: Optional[str] = None
+    name: Optional[str] = None
+    price_override: Optional[float] = None
+    cost_override: Optional[float] = None
+    quantity_on_hand: Optional[float] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
-class ProductInDB(ProductBase):
+class ProductInDB(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: int
-    created_at: datetime
-    updated_at: datetime
+    sku: Optional[str] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[float] = None
+    cost: Optional[float] = None
+    tax_rate: Optional[float] = None
+    track_inventory: Optional[bool] = None
+    quantity_on_hand: Optional[float] = None
+    low_stock_threshold: Optional[float] = None
+    category: Optional[ProductCategory] = None
+    status: Optional[ProductStatus] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     variants: List[ProductVariantInDB] = []
 
-class InventoryMovementInDB(InventoryMovementBase):
+class InventoryMovementInDB(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: int
-    created_at: datetime
-    created_by: Optional[int]
+    movement_type: Optional[InventoryMovementType] = None
+    product_id: Optional[int] = None
+    variant_id: Optional[int] = None
+    quantity: Optional[float] = None
+    unit_cost: Optional[float] = None
+    reference: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: Optional[datetime] = None
+    created_by: Optional[int] = None
 
 # Respuestas de factura: describen lo que YA esta guardado, no validan reglas de negocio.
 # No heredan de InvoiceBase/InvoiceItemBase (que son de ENTRADA: gt/ge/le, longitudes y el

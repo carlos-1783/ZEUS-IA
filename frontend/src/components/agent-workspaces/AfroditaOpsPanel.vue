@@ -78,7 +78,7 @@
         <p><strong>{{ warehouse.total_skus }}</strong> SKUs · <strong>{{ warehouse.total_units }}</strong> unidades</p>
         <p v-if="warehouse.low_stock_count">⚠️ {{ warehouse.low_stock_count }} en stock bajo</p>
         <ul v-if="warehouse.low_stock_items?.length">
-          <li v-for="item in warehouse.low_stock_items" :key="item.id">{{ item.name }} ({{ item.stock }})</li>
+          <li v-for="item in warehouse.low_stock_items" :key="item.id">{{ item.name }} ({{ formatStock(item.stock) }})</li>
         </ul>
       </div>
     </section>
@@ -197,7 +197,8 @@ const movements = computed<MovementRow[]>(() =>
   }))
 )
 
-const formatStock = (v: number | null | undefined) => (v == null ? '-' : String(v))
+// Sin dato (NULL en BD o producto sin control de stock) se muestra «—», nunca una cifra inventada.
+const formatStock = (v: number | null | undefined) => (v == null ? '—' : String(v))
 
 onMounted(async () => {
   try {

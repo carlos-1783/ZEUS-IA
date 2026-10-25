@@ -11,7 +11,6 @@ from datetime import date, datetime, time
 from typing import Any, Dict, Optional, Tuple
 
 from fastapi import HTTPException
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.customer import Customer
@@ -20,6 +19,7 @@ from app.models.scan_event import ScanEvent
 from app.models.user import User
 from app.schemas.customer import CustomerCreate
 import services.crm_office_service as crm_svc
+from services.invoice_numbering_v1 import next_invoice_number
 from services.event_bus import (
     emit_cashflow_updated,
     emit_invoice_generated,
@@ -172,7 +172,8 @@ def _create_invoice_draft(
     tax_rate = 21.0
     subtotal = round(amt / (1 + tax_rate / 100), 2)
     tax_amount = round(amt - subtotal, 2)
-    invoice_number = f"INV-{datetime.utcnow().strftime('%Y%m%d')}-{db.query(func.count(Invoice.id)).scalar() + 1}"
+    # Misma serie y mismo bloqueo que POST /invoices/ (antes count(*)+1, repetia numero en concurrencia).
+    invoice_number = next_invoice_number(db)
 
     inv = Invoice(
         invoice_number=invoice_number,

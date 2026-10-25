@@ -22,6 +22,7 @@ from app.models.user import User
 from services.event_bus import emit_cashflow_updated, emit_payment_registered
 from services.local_day_v1 import local_days_range_utc_naive
 import services.crm_office_service as crm_svc
+from services.invoice_numbering_v1 import next_invoice_number
 from services.zeus_office_mode import (
     require_company_id,
     validate_invoice_logical,
@@ -239,8 +240,9 @@ def create_invoice(
     company_id = crm_svc.primary_company_id(db, current_user)
     require_company_id(company_id, context="facturación")
 
-    # Generate invoice number (in a real app, use a proper sequence)
-    invoice_number = f"INV-{datetime.utcnow().strftime('%Y%m%d')}-{db.query(func.count(Invoice.id)).scalar() + 1}"
+    # Numero de la serie INV: bloqueo transaccional global + max(N)+1 (services/invoice_numbering_v1).
+    # Antes count(*)+1: dos altas simultaneas (o dos empresas bajo RLS) repetian numero -> 500.
+    invoice_number = next_invoice_number(db)
     
     # Create invoice
     invoice_data = invoice_in.dict(exclude={"items"}, exclude_unset=True)

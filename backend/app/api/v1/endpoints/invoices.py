@@ -531,10 +531,14 @@ def list_invoice_payments(
     """
     List all payments for an invoice
     """
-    # Verify invoice exists
-    invoice = get_invoice_or_404(db, invoice_id, current_user)
-    
-    return invoice.payments
+    # Entidad ORM con el mismo filtro de tenant que /send y /void (404 si es de otra empresa
+    # o, sin empresa, de otro usuario). get_invoice_or_404 devuelve InvoiceInDB (Pydantic), que
+    # no tiene `.payments`: `invoice.payments` lanzaba AttributeError y el endpoint daba 500 siempre.
+    invoice = get_invoice_orm_or_404(db, invoice_id, current_user)
+    payments = sorted(invoice.payments, key=lambda p: p.id)
+    logger.info("invoices.list_payments: factura %s -> %d pagos (usuario %s)",
+                invoice.id, len(payments), current_user.id)
+    return [PaymentInDB.model_validate(p) for p in payments]
 
 @router.post("/{invoice_id}/send", response_model=InvoiceResponse, dependencies=[Depends(thalos_request_guard)])
 def send_invoice(

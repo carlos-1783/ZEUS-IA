@@ -378,11 +378,23 @@ class InvoiceInDB(BaseModel):
     created_by: Optional[int] = None
     items: List[InvoiceItemInDB] = []
 
-class PaymentInDB(PaymentBase):
+# Respuesta de pago: mismo criterio que InvoiceInDB. No hereda de PaymentBase (ENTRADA: amount gt=0,
+# transaction_id/reference max_length=100, status/payment_date obligatorios). Un pago antiguo con
+# NULL (status, payment_date, created_at son NULL-ables en BD), con importe 0 o con un
+# transaction_id largo hacia fallar GET /invoices/{id}/payments con 500. PaymentCreate sigue estricto.
+class PaymentInDB(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     invoice_id: int
-    created_at: datetime
-    created_by: Optional[int]
+    amount: Optional[float] = None
+    payment_method: Optional[PaymentMethod] = None
+    status: Optional[PaymentStatus] = None
+    transaction_id: Optional[str] = None
+    reference: Optional[str] = None
+    notes: Optional[str] = None
+    payment_date: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    created_by: Optional[int] = None
 
 # Response models for API endpoints
 class ProductResponse(BaseModel):

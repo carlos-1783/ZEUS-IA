@@ -131,14 +131,31 @@ def calculate_invoice_totals(invoice: Invoice, db: Session) -> Dict[str, float]:
         "amount_due": amount_due
     }
 
+def _enum_query_or_422(value: str, enum_cls, param: str):
+    """Valida un filtro de query contra los valores (en ingles) del Enum del modelo ANTES de tocar la BD.
+
+    Con el `str` tal cual, un valor fuera del enum llegaba a PostgreSQL, que rechaza el literal del
+    tipo ENUM (DataError: invalid input value for enum) y el listado daba 500. Ahora: 422 con la lista
+    de valores validos. Vacio (`?status=`) sigue sin filtrar, como antes."""
+    try:
+        return enum_cls(value)
+    except ValueError:
+        valid = [e.value for e in enum_cls]
+        logger.info("list_invoices: filtro %s=%r no valido -> 422", param, value)
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid {param} '{value}'. Valid values: {', '.join(valid)}",
+        )
+
+
 @router.get("/", response_model=InvoiceListResponse)
 def list_invoices(
     db: Session = Depends(get_db_scoped),
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, le=1000, description="Maximum number of records to return"),
     customer_id: Optional[int] = Query(None, description="Filter by customer ID"),
-    status: Optional[str] = Query(None, description="Filter by status"),
-    invoice_type: Optional[str] = Query(None, description="Filter by invoice type"),
+    status: Optional[str] = Query(None, description="Filter by status: " + ", ".join(e.value for e in InvoiceStatus)),
+    invoice_type: Optional[str] = Query(None, description="Filter by invoice type: " + ", ".join(e.value for e in InvoiceType)),
     start_date: Optional[date] = Query(None, description="Issue date from this LOCAL day (Europe/Madrid), inclusive"),
     end_date: Optional[date] = Query(None, description="Issue date up to this LOCAL day (Europe/Madrid), inclusive"),
     current_user: User = Depends(get_current_active_user)
@@ -146,6 +163,10 @@ def list_invoices(
     """
     List invoices of the SESSION company with optional filtering and pagination.
     """
+    # Filtros de enum validados ANTES de cualquier consulta (422 sin tocar la BD).
+    status_filter = _enum_query_or_422(status, ModelInvoiceStatus, "status") if status else None
+    type_filter = _enum_query_or_422(invoice_type, ModelInvoiceType, "invoice_type") if invoice_type else None
+
     # Aislamiento de tenant: solo facturas de la EMPRESA DE SESION (la misma con la
     # que se crean las facturas -- crm_svc.primary_company_id -- y la que leen RAFAEL
     # y AFRODITA en el chat). Antes se listaban las de TODAS las empresas del usuario
@@ -161,11 +182,11 @@ def list_invoices(
     if customer_id:
         query = query.filter(Invoice.customer_id == customer_id)
         
-    if status:
-        query = query.filter(Invoice.status == status)
-        
-    if invoice_type:
-        query = query.filter(Invoice.invoice_type == invoice_type)
+    if status_filter is not None:
+        query = query.filter(Invoice.status == status_filter)
+
+    if type_filter is not None:
+        query = query.filter(Invoice.invoice_type == type_filter)
         
     # Fechas = dias LOCALES completos (Europe/Madrid), mismo rango que las lecturas de
     # RAFAEL: [inicio del dia local start_date, inicio del dia local siguiente a end_date)

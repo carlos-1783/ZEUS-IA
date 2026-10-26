@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Enum, Text, JSON, Numeric, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Enum, Text, JSON, Numeric, UniqueConstraint, Index, CheckConstraint, PrimaryKeyConstraint, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -175,9 +175,21 @@ class InvoiceType(PyEnum):
 class Invoice(Base):
     """Invoice model for billing"""
     __tablename__ = "invoices"
-    
+    # Numero unico POR EMPRESA (migracion 0070), no global: cada empresa lleva su propia serie correlativa
+    # (contador en invoice_counters). Las filas legacy sin empresa conservan un numero unico entre ellas.
+    __table_args__ = (
+        Index("uq_invoices_company_id_invoice_number", "company_id", "invoice_number", unique=True),
+        Index(
+            "uq_invoices_invoice_number_without_company",
+            "invoice_number",
+            unique=True,
+            postgresql_where=text("company_id IS NULL"),
+            sqlite_where=text("company_id IS NULL"),
+        ),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
-    invoice_number = Column(String(50), unique=True, index=True, nullable=False)
+    invoice_number = Column(String(50), index=True, nullable=False)
     
     # References
     company_id = Column(Integer, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -224,6 +236,21 @@ class Invoice(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     notes = Column(Text, nullable=True)
+
+class InvoiceCounter(Base):
+    """Ultimo numero emitido por empresa y serie (migracion 0070). Solo lo toca
+    services/invoice_numbering_v1 dentro de la transaccion que crea la factura."""
+    __tablename__ = "invoice_counters"
+    __table_args__ = (
+        PrimaryKeyConstraint("company_id", "series", name="pk_invoice_counters"),
+        CheckConstraint("last_number >= 0", name="ck_invoice_counters_last_number_non_negative"),
+    )
+
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    series = Column(String(20), nullable=False)
+    last_number = Column(Integer, nullable=False, default=0, server_default="0")
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
+
 
 class InvoiceItem(Base):
     """Line items on an invoice"""

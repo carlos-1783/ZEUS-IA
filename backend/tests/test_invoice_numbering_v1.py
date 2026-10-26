@@ -1,9 +1,10 @@
-"""Numeracion de facturas INV-YYYYMMDD-N (services/invoice_numbering_v1): max(N)+1, formato intacto.
+"""Numeracion de facturas INV-YYYYMMDD-N correlativa POR EMPRESA (services/invoice_numbering_v1, migracion 0070).
 
-Antes POST /invoices/ y el escaneo QR usaban count(*)+1: con huecos (o bajo RLS, o en concurrencia) repetia un
-numero ya usado y el UNIQUE global de invoice_number devolvia 500. Aqui (SQLite) se fija el calculo y que ambos
-creadores usan el helper; la concurrencia REAL se prueba contra Postgres con el script del scratchpad
-(pg_t4_concurrencia.py), porque SQLite no tiene advisory locks ni concurrencia de escritura real.
+Antes N era global (max de todas las empresas + 1, leyendo saltandose la RLS) y el UNIQUE de invoice_number era
+global. Ahora cada empresa tiene su contador en invoice_counters y el numero es unico por empresa. Aqui (SQLite)
+se fija el contrato: contador por empresa, sin contar filas, rollback sin consumir numero, mismo numero
+permitido en empresas distintas y la API y el escaneo QR comparten serie. La concurrencia REAL y la RLS se
+prueban contra Postgres en test_invoice_numbering_pg_concurrencia_v1.py.
 """
 from __future__ import annotations
 
@@ -14,13 +15,14 @@ from datetime import datetime
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
 from app.db.base import SessionLocal
 from app.main import app
 from app.models.company import UserCompany
 from app.models.user import User
-from services.invoice_numbering_v1 import INVOICE_NUMBER_LOCK_KEY, next_invoice_number
+from services.invoice_numbering_v1 import next_invoice_number
 
 pytestmark = pytest.mark.usefixtures("no_external_messaging")
 API = settings.API_V1_STR
@@ -33,8 +35,7 @@ def client():
         yield c
 
 
-@pytest.fixture(scope="module")
-def user(client):
+def _register(client):
     suf = uuid.uuid4().hex[:10]
     payload = {"email": f"invnum_{suf}@example.com", "password": "TestPass1", "full_name": "Titular Numeracion",
                "phone": "612345678", "company_name": f"Empresa Num {suf}", "business_type": "restaurant"}
@@ -52,20 +53,23 @@ def user(client):
     return {"Authorization": f"Bearer {login.json()['access_token']}"}, u.id, cid
 
 
-def _insert_numbers(*numbers):
-    db = SessionLocal()
-    try:
-        for n in numbers:
-            db.execute(text("INSERT INTO invoices (invoice_number) VALUES (:n)"), {"n": n})
-        db.commit()
-    finally:
-        db.close()
+@pytest.fixture(scope="module")
+def user(client):
+    return _register(client)
 
 
-def _next():
+@pytest.fixture(scope="module")
+def other_user(client):
+    return _register(client)
+
+
+def _reserve(cid, *, commit=False):
     db = SessionLocal()
     try:
-        return next_invoice_number(db, now=datetime(2026, 10, 25, 13, 0))
+        number = next_invoice_number(db, cid, now=datetime(2026, 10, 25, 13, 0))
+        if commit:
+            db.commit()
+        return number
     finally:
         db.rollback()
         db.close()
@@ -77,25 +81,66 @@ def _n(number):
     return int(m.group(2))
 
 
-def test_lock_key_is_a_signed_bigint():
-    assert -(2 ** 63) <= INVOICE_NUMBER_LOCK_KEY < 2 ** 63
+def _counter(cid):
+    db = SessionLocal()
+    try:
+        return db.execute(text("SELECT last_number FROM invoice_counters WHERE company_id = :c AND series = 'INV'"),
+                          {"c": cid}).scalar()
+    finally:
+        db.close()
 
 
-def test_next_is_max_suffix_plus_one_not_count(client):
-    base = _n(_next()) - 1
-    big = base + 1000
-    # Otra serie, sufijos no numericos, ceros a la izquierda y otra fecha: no cuentan / no rompen.
-    _insert_numbers(f"INV-20200101-{big}", f"INV-20261024-{big - 5}", f"FRA-TICKET_{uuid.uuid4().hex[:12]}",
-                    f"INV-20200101-{big + 7}x", f"INV-2020-{big + 9}", f"INV-20200101-0{big + 11}")
-    got = _next()
-    assert got == f"INV-20261025-{big + 1}"  # el maximo vale aunque sea de otro dia: N es global
+def test_company_id_is_required():
+    db = SessionLocal()
+    try:
+        with pytest.raises(ValueError):
+            next_invoice_number(db, None)
+    finally:
+        db.close()
 
 
-def test_paging_skips_many_malformed_rows(client):
-    base = _n(_next()) - 1
-    # 205 filas mal formadas MAS largas que cualquier numero valido: ocupan la primera pagina (200).
-    _insert_numbers(*[f"INV-XXXXXXXX-{uuid.uuid4().hex}{i:04d}" for i in range(205)])
-    assert _next() == f"INV-20261025-{base + 1}"
+def test_counter_per_company_and_rollback_does_not_consume(client, user, other_user):
+    _, _, a = user
+    _, _, b = other_user
+    first_a = _n(_reserve(a, commit=True))
+    assert _reserve(a) == f"INV-20261025-{first_a + 1}"         # sin commit -> rollback
+    assert _reserve(a) == f"INV-20261025-{first_a + 1}"         # el numero no se consumio
+    assert _counter(a) == first_a
+    # Otra empresa lleva su propia serie: no se ve afectada por los numeros de A.
+    first_b = _n(_reserve(b, commit=True))
+    assert _n(_reserve(b, commit=True)) == first_b + 1
+    assert _counter(a) == first_a
+
+
+def test_counter_does_not_count_rows(client, user):
+    """Filas existentes (otras series, numeros sueltos) no cambian N: manda el contador."""
+    _, uid, cid = user
+    base = _counter(cid) or 0
+    db = SessionLocal()
+    try:
+        for num in (f"FRA-TICKET_{uuid.uuid4().hex[:12]}", f"INV-20200101-{base + 900}", "INV-XXXXXXXX-abc"):
+            db.execute(text("INSERT INTO invoices (invoice_number, company_id) VALUES (:n, :c)"), {"n": num, "c": cid})
+        db.commit()
+    finally:
+        db.close()
+    assert _reserve(cid) == f"INV-20261025-{base + 1}"
+
+
+def test_same_number_allowed_in_two_companies_but_unique_within_one(client, user, other_user):
+    _, _, a = user
+    _, _, b = other_user
+    num = f"INV-20261025-{uuid.uuid4().int % 10 ** 8 + 10 ** 8}"
+    db = SessionLocal()
+    try:
+        db.execute(text("INSERT INTO invoices (invoice_number, company_id) VALUES (:n, :c)"), {"n": num, "c": a})
+        db.execute(text("INSERT INTO invoices (invoice_number, company_id) VALUES (:n, :c)"), {"n": num, "c": b})
+        db.commit()
+        with pytest.raises(IntegrityError):
+            db.execute(text("INSERT INTO invoices (invoice_number, company_id) VALUES (:n, :c)"), {"n": num, "c": a})
+            db.flush()
+        db.rollback()
+    finally:
+        db.close()
 
 
 def test_api_and_scan_flow_use_the_same_series(client, user):
@@ -103,8 +148,7 @@ def test_api_and_scan_flow_use_the_same_series(client, user):
     c = client.post(f"{API}/customers", headers=h, json={"name": "Cliente Num", "email": f"cl_{uuid.uuid4().hex[:8]}@example.com"})
     assert c.status_code == 201, c.text
     cust = c.json()["data"]["id"]
-    base = _n(_next()) - 1 + 500
-    _insert_numbers(f"INV-20200101-{base}")
+    base = _counter(cid) or 0
 
     nums = []
     for _ in range(2):
@@ -127,3 +171,4 @@ def test_api_and_scan_flow_use_the_same_series(client, user):
     today = datetime.utcnow().strftime("%Y%m%d")
     assert [FMT.match(n).group(1) for n in nums] == [today] * 3
     assert [_n(n) for n in nums] == [base + 1, base + 2, base + 3]
+    assert _counter(cid) == base + 3

@@ -172,8 +172,8 @@ def _create_invoice_draft(
     tax_rate = 21.0
     subtotal = round(amt / (1 + tax_rate / 100), 2)
     tax_amount = round(amt - subtotal, 2)
-    # Misma serie y mismo bloqueo que POST /invoices/ (antes count(*)+1, repetia numero en concurrencia).
-    invoice_number = next_invoice_number(db)
+    # Misma serie y mismo contador por empresa que POST /invoices/ (services/invoice_numbering_v1).
+    invoice_number = next_invoice_number(db, company_id)
 
     inv = Invoice(
         invoice_number=invoice_number,

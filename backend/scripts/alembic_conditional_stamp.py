@@ -2,8 +2,16 @@
 Railway / legacy Postgres: tablas ya creadas sin Alembic (alembic_version vacío o ausente).
 Sin esto, `alembic upgrade head` intenta reaplicar 0001 y falla con "relation users already exists".
 
-Solo hace `alembic stamp head` cuando hay tabla `users` y no hay revisión registrada.
+Solo hace `alembic stamp` cuando hay tabla `users` y no hay revisión registrada.
 Bases nuevas (sin `users`): no toca nada; las migraciones crean el esquema con normalidad.
+
+Revisión del stamp: `0069` (LEGACY_STAMP_REVISION), NO `head`. Una BD legacy la construyó `create_all` desde
+los modelos: tiene las tablas, pero no los objetos que solo crean las migraciones (funciones SQL, policies,
+GRANT). Con `stamp head` la 0070 se daría por aplicada sin ejecutarse y faltaría la función
+`invoice_next_number` (toda alta de factura fallaría). Sellando 0069, el `alembic upgrade head` que viene
+justo después en el arranque ejecuta 0070 en adelante, y esas migraciones son idempotentes (crean solo lo
+que falta). Regla para migraciones nuevas (0071+): deben ser idempotentes, porque también correrán sobre
+BD legacy construidas por create_all.
 """
 from __future__ import annotations
 
@@ -11,6 +19,9 @@ import os
 import shutil
 import subprocess
 import sys
+
+# Última revisión cuyas migraciones NO son idempotentes (0001..0069 crean tablas que create_all ya creó).
+LEGACY_STAMP_REVISION = "0069"
 
 # No usar `python -m alembic`: en /app la carpeta local `alembic/` (migraciones) oculta el paquete
 # instalado y Python no encuentra __main__.py.
@@ -32,13 +43,14 @@ def _alembic_cwd() -> str:
     return cwd
 
 
-def _run_stamp_head() -> int:
+def _run_stamp_legacy() -> int:
     exe = shutil.which("alembic")
     if not exe:
         print("alembic_conditional_stamp: no hay ejecutable 'alembic' en PATH")
         return 1
     cwd = _alembic_cwd()
-    return subprocess.call([exe, "stamp", "head"], cwd=cwd)
+    print(f"alembic_conditional_stamp: stamp {LEGACY_STAMP_REVISION} (el upgrade head posterior aplica el resto)")
+    return subprocess.call([exe, "stamp", LEGACY_STAMP_REVISION], cwd=cwd)
 
 
 def _bootstrap_import_path() -> str:
@@ -101,18 +113,18 @@ def main() -> int:
 
         if not has_av:
             print(
-                "alembic_conditional_stamp: legacy — users existe, sin alembic_version -> parches + stamp head"
+                "alembic_conditional_stamp: legacy — users existe, sin alembic_version -> parches + stamp legacy"
             )
             _apply_runtime_schema_patches()
-            return _run_stamp_head()
+            return _run_stamp_legacy()
 
         n = conn.execute(text("SELECT COUNT(*) FROM alembic_version")).scalar()
         if n == 0:
             print(
-                "alembic_conditional_stamp: legacy — alembic_version vacío -> parches + stamp head"
+                "alembic_conditional_stamp: legacy — alembic_version vacío -> parches + stamp legacy"
             )
             _apply_runtime_schema_patches()
-            return _run_stamp_head()
+            return _run_stamp_legacy()
 
     _apply_runtime_schema_patches()
     print("alembic_conditional_stamp: alembic_version ya definida; sin stamp")

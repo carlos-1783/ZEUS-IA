@@ -176,23 +176,26 @@ def test_delete_draft_not_allowed_405_and_invoice_kept(client, h_a):
     assert client.get(f"{API}/invoices/{inv}", headers=h_a).status_code == 200
 
 
-def test_numbering_after_void_stays_unique_across_companies(client, h_a, h_b):
-    """Regresion: la numeracion es count(Invoice.id)+1 global. Anular (no borrar) no baja el recuento,
-    asi que la siguiente factura de otra empresa no repite numero (antes, con borrado fisico de un
-    borrador que no era el ultimo -> IntegrityError UNIQUE invoice_number -> 500)."""
+def test_numbering_after_void_stays_unique_within_each_company(client, h_a, h_b):
+    """Regresion: anular (no borrar) no libera ni repite numero. Desde la migracion 0070 la serie INV es
+    correlativa POR EMPRESA (contador en invoice_counters) y el numero es unico por empresa: la siguiente
+    factura de A no reutiliza el numero anulado, y B lleva su propia serie (puede coincidir con un numero de A)."""
     first = _create_draft(client, h_a)
     second = _create_draft(client, h_a)
     assert client.post(f"{API}/invoices/{first}/void", headers=h_a).status_code == 200
+    fourth = _create_draft(client, h_a)
     third = _create_draft(client, h_b)  # _create_draft ya exige 201
     db = SessionLocal()
     try:
-        numbers = [db.query(Invoice).filter(Invoice.id == i).one().invoice_number for i in (first, second, third)]
-        assert db.query(Invoice).filter(Invoice.id == first).one().status == InvoiceStatus.VOID
-        all_numbers = [n for (n,) in db.query(Invoice.invoice_number).all()]
+        rows = {i: db.query(Invoice).filter(Invoice.id == i).one() for i in (first, second, fourth, third)}
+        assert rows[first].status == InvoiceStatus.VOID
+        all_pairs = [(c, n) for (c, n) in db.query(Invoice.company_id, Invoice.invoice_number).all()]
     finally:
         db.close()
-    assert len(set(numbers)) == 3, numbers
-    assert len(all_numbers) == len(set(all_numbers))
+    n = {i: int(r.invoice_number.rsplit("-", 1)[1]) for i, r in rows.items()}
+    assert rows[first].company_id == rows[second].company_id == rows[fourth].company_id != rows[third].company_id
+    assert n[second] == n[first] + 1 and n[fourth] == n[second] + 1  # correlativa, sin reutilizar el anulado
+    assert len(all_pairs) == len(set(all_pairs))  # unico por (empresa, numero)
 
 
 # ----------------------------------------------------------------------------------- emitidas

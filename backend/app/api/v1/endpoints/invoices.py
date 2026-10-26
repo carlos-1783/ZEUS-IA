@@ -240,9 +240,9 @@ def create_invoice(
     company_id = crm_svc.primary_company_id(db, current_user)
     require_company_id(company_id, context="facturación")
 
-    # Numero de la serie INV: bloqueo transaccional global + max(N)+1 (services/invoice_numbering_v1).
-    # Antes count(*)+1: dos altas simultaneas (o dos empresas bajo RLS) repetian numero -> 500.
-    invoice_number = next_invoice_number(db)
+    # Numero de la serie INV correlativo POR EMPRESA: contador de invoice_counters en esta misma
+    # transaccion (services/invoice_numbering_v1, migracion 0070). Si el alta falla, no se consume.
+    invoice_number = next_invoice_number(db, company_id)
     
     # Create invoice
     invoice_data = invoice_in.dict(exclude={"items"}, exclude_unset=True)

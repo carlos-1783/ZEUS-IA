@@ -33,6 +33,24 @@ app_ctx_int()/app_ctx_company_ids(): vacio o basura -> NULL -> cero filas, nunca
   invoices con company_id NULL (legacy): solo su created_by. agent_activities con company_id NULL: solo
   las del email del contexto. Tablas de log (thalos_*, agent_activities): ademas se puede INSERTAR con
   company_id NULL (evento anonimo/sin empresa), pero no leerlo (sus modelos no usan RETURNING).
+- Las 38 tablas con company_id que no tenian RLS, mismo patron fail-closed:
+  * company_id NOT NULL -> solo empresas del contexto.
+  * company_id NULLable con columna de dueno (user_id/owner_user_id/created_by) -> ademas, las filas SIN
+    empresa solo para su dueno (mismo criterio que invoices en 0047); ninguna otra empresa las ve.
+  * zeus_transactions (NULLable sin dueno): las filas sin empresa solo en modo system.
+  * zeus_closure_audits: log (INSERT con company_id NULL permitido, sin RETURNING).
+  * agent_decision_log / agent_operational_state / agent_short_term_buffer guardan company_id como texto
+    ("12" o "platform" del superusuario): se compara como texto; "platform" solo en modo system.
+  * user_companies: SELECT propias filas o de empresas del contexto (la resolucion de empresas del login
+    las necesita); INSERT/UPDATE/DELETE solo en empresas del contexto (nadie se anade a otra empresa).
+- Tablas hijas sin company_id: visibles/escribibles solo si su fila padre lo es (EXISTS sobre el padre,
+  al que se le aplica su propia RLS): invoice_items y payments (invoices), product_variants e
+  inventory_movements (products), customer_contacts (customers), tpv_sale_items (tpv_sales),
+  teamflow_events (teamflow_items), time_control_events (time_tracking_records, o su propio user_id si
+  no tiene registro). Coste: un acceso por PK al padre por fila hija (indice de la PK del padre).
+- Indices company_id que faltaban en tablas que ahora filtran por empresa en cada consulta:
+  ix_rls_<tabla>_company_id (crm_leads, crm_sale_links, legal_documents, teamflow_items,
+  zeus_pending_approvals). Solo se crean si no hay ya un indice que empiece por company_id.
 
 Idempotente: GRANT/ALTER DEFAULT PRIVILEGES repetidos no fallan ni duplican nada; corre igual sobre una BD
 legacy construida por create_all (sello 0069 + upgrade).
@@ -300,6 +318,109 @@ _LEGACY_POLICIES = {
 }
 
 
+# T3: tablas con company_id sin RLS hasta ahora --------------------------------------------------------
+_T3_STRICT = (
+    "cashflow_ledger", "company_employees", "crm_activity_logs", "crm_leads", "crm_sale_links",
+    "customer_records", "expenses", "scan_events", "stored_files", "time_cost_checkins",
+    "tpv_cash_closures", "tpv_operator_sessions", "tpv_tables", "zeus_inbox_items",
+    "zeus_pending_approvals", "zeus_transactions", "zeus_closure_audits",
+)
+_T3_OWNER = {
+    "chat_messages": "user_id", "customers": "owner_user_id", "document_approvals": "user_id",
+    "employee_work_sessions": "user_id", "fiscal_profiles": "user_id", "legal_documents": "user_id",
+    "ops_routes": "user_id", "outbound_messages": "user_id", "products": "created_by",
+    "reservations": "user_id", "teamflow_items": "user_id", "thalos_workspace_items": "user_id",
+    "time_tracking_records": "user_id", "tpv_products": "user_id", "tpv_sales": "user_id",
+    "workspace_files": "user_id", "workspace_playbooks": "user_id",
+}
+_T3_TEXT_COMPANY = ("agent_decision_log", "agent_operational_state", "agent_short_term_buffer")
+_T3_LOG_INSERT_NULL = ("zeus_closure_audits",)
+# hija -> (padre, fk, condicion extra opcional)
+_T3_CHILDREN = {
+    "invoice_items": ("invoices", "invoice_id", None),
+    "payments": ("invoices", "invoice_id", None),
+    "product_variants": ("products", "product_id", None),
+    "inventory_movements": ("products", "product_id", None),
+    "customer_contacts": ("customers", "customer_id", None),
+    "tpv_sale_items": ("tpv_sales", "tpv_sale_id", None),
+    "teamflow_events": ("teamflow_items", "item_id", None),
+    "time_control_events": ("time_tracking_records", "record_id", f"(record_id IS NULL AND user_id = {_CTX_USER})"),
+}
+_T3_INDEXES = ("crm_leads", "crm_sale_links", "legal_documents", "teamflow_items", "zeus_pending_approvals")
+
+
+def _t3_expressions():
+    out = {}
+    for t in _T3_STRICT:
+        out[t] = f"app_rls_system() OR {_IN_CTX}"
+    for t, owner in _T3_OWNER.items():
+        out[t] = f"app_rls_system() OR {_IN_CTX} OR (company_id IS NULL AND {owner} = {_CTX_USER})"
+    for t in _T3_TEXT_COMPANY:
+        out[t] = "app_rls_system() OR company_id = ANY (app_ctx_company_ids()::text[])"
+    for child, (parent, fk, extra) in _T3_CHILDREN.items():
+        expr = f"app_rls_system() OR EXISTS (SELECT 1 FROM {parent} p WHERE p.id = {child}.{fk})"
+        if extra:
+            expr += f" OR {extra}"
+        out[child] = expr
+    return out
+
+
+_UC_SELECT = (f"app_rls_system() OR company_id = ANY (app_ctx_company_ids()) OR user_id = {_CTX_USER}")
+_UC_WRITE = "app_rls_system() OR company_id = ANY (app_ctx_company_ids())"
+
+
+def _user_companies_policies() -> None:
+    op.execute("ALTER TABLE user_companies ENABLE ROW LEVEL SECURITY")
+    op.execute("ALTER TABLE user_companies FORCE ROW LEVEL SECURITY")
+    for cmd in ("select", "insert", "update", "delete"):
+        op.execute(f"DROP POLICY IF EXISTS tenant_isolation_user_companies_{cmd} ON user_companies")
+    op.execute(f"CREATE POLICY tenant_isolation_user_companies_select ON user_companies FOR SELECT USING ({_UC_SELECT})")
+    op.execute(f"CREATE POLICY tenant_isolation_user_companies_insert ON user_companies FOR INSERT WITH CHECK ({_UC_WRITE})")
+    op.execute(f"CREATE POLICY tenant_isolation_user_companies_update ON user_companies FOR UPDATE USING ({_UC_WRITE}) WITH CHECK ({_UC_WRITE})")
+    op.execute(f"CREATE POLICY tenant_isolation_user_companies_delete ON user_companies FOR DELETE USING ({_UC_WRITE})")
+
+
+def _has_company_index(bind, table: str) -> bool:
+    return bool(bind.exec_driver_sql(
+        "SELECT EXISTS (SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid "
+        "AND a.attnum = i.indkey[0] WHERE i.indrelid = %(t)s::regclass AND a.attname = 'company_id')",
+        {"t": table},
+    ).scalar())
+
+
+def _upgrade_t3(bind) -> None:
+    for table, expr in _t3_expressions().items():
+        if _has_table(bind, table):
+            _fail_closed(table, expr)
+    for table in _T3_LOG_INSERT_NULL:
+        if _has_table(bind, table):
+            _log_insert_null(table)
+    if _has_table(bind, "user_companies"):
+        _user_companies_policies()
+    for table in _T3_INDEXES:
+        if _has_table(bind, table) and not _has_company_index(bind, table):
+            op.execute(f"CREATE INDEX IF NOT EXISTS ix_rls_{table}_company_id ON {table} (company_id)")
+
+
+def _downgrade_t3(bind) -> None:
+    for table in _T3_INDEXES:
+        op.execute(f"DROP INDEX IF EXISTS ix_rls_{table}_company_id")
+    if _has_table(bind, "user_companies"):
+        for cmd in ("select", "insert", "update", "delete"):
+            op.execute(f"DROP POLICY IF EXISTS tenant_isolation_user_companies_{cmd} ON user_companies")
+        op.execute("ALTER TABLE user_companies NO FORCE ROW LEVEL SECURITY")
+        op.execute("ALTER TABLE user_companies DISABLE ROW LEVEL SECURITY")
+    for table in _T3_LOG_INSERT_NULL:
+        if _has_table(bind, table):
+            op.execute(f"DROP POLICY IF EXISTS tenant_log_insert_{table} ON {table}")
+    for table in _t3_expressions():
+        if not _has_table(bind, table):
+            continue
+        op.execute(f"DROP POLICY IF EXISTS tenant_isolation_{table} ON {table}")
+        op.execute(f"ALTER TABLE {table} NO FORCE ROW LEVEL SECURITY")
+        op.execute(f"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY")
+
+
 def _has_table(bind, table: str) -> bool:
     from sqlalchemy import inspect
 
@@ -328,9 +449,11 @@ def _upgrade_policies(bind) -> None:
     for table in _LOG_INSERT_NULL:
         if _has_table(bind, table):
             _log_insert_null(table)
+    _upgrade_t3(bind)
 
 
 def _downgrade_policies(bind) -> None:
+    _downgrade_t3(bind)
     for table in _LOG_INSERT_NULL:
         if _has_table(bind, table):
             op.execute(f"DROP POLICY IF EXISTS tenant_log_insert_{table} ON {table}")

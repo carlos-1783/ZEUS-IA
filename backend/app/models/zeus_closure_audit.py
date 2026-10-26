@@ -11,6 +11,8 @@ from app.db.base import Base
 
 class ZeusClosureAudit(Base):
     __tablename__ = "zeus_closure_audits"
+    # RLS (0071): log en el que se puede INSERTAR con company_id NULL sin poder leerlo -> sin RETURNING.
+    __table_args__ = {"implicit_returning": False}
 
     id = Column(Integer, primary_key=True, index=True)
     layer = Column(String(32), nullable=False, index=True)  # api|service|agent|event_bus|db

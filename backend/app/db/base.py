@@ -625,7 +625,7 @@ def _migrate_company_type_column():
     parche de arranque como el resto de columnas de este archivo. En
     cualquier instalación donde esa migración no se haya ejecutado de verdad
     (mismo motivo que el resto de parches de aquí: bases 'legacy' donde
-    alembic_conditional_stamp.py hace `stamp head` sin ejecutar), CUALQUIER
+    alembic_conditional_stamp.py hace `stamp 0069` sin ejecutar 0001..0069), CUALQUIER
     query ORM sobre Company (SELECT * de facto) rompe con
     'no such column: companies.company_type' — incluye GET /onboarding/status
     y POST /onboarding/profile, confirmado reproduciendo el error real."""
@@ -794,8 +794,9 @@ def _migrate_company_employees_tpv_pin_hash():
 
 def _migrate_zeus_approvals_execution_columns():
     """result_json / executed_at en zeus_pending_approvals (J2, alembic 0059).
-    Igual que otros parches: en despliegues con `stamp head` este parche
-    idempotente es el que realmente anade las columnas."""
+    Igual que otros parches: en despliegues legacy sellados con `stamp 0069`
+    (sin ejecutar 0001..0069) este parche idempotente es el que realmente
+    anade las columnas."""
     from sqlalchemy import inspect, text
 
     try:
@@ -921,8 +922,8 @@ def _migrate_consent_columns():
 def _migrate_agent_activities_company_id():
     """company_id en agent_activities (aislamiento multi-tenant de la actividad
     de agentes IA). Necesario porque en despliegues existentes (Railway con
-    `users` ya presente) alembic_conditional_stamp.py hace `stamp head` sin
-    ejecutar las migraciones — este parche idempotente es el único mecanismo
+    `users` ya presente) alembic_conditional_stamp.py hace `stamp 0069` sin
+    ejecutar las migraciones 0001..0069 (esta es la 0043) — este parche idempotente es el único mecanismo
     que realmente añade la columna ahí, igual que _migrate_tpv_company_columns
     para invoices/tpv_*."""
     from sqlalchemy import inspect, text

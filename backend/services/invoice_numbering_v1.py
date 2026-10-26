@@ -57,8 +57,9 @@ def _next_counter_value_pg(db: Session, company_id: int, series: str) -> int:
         ).scalar_one())
     except DBAPIError as exc:
         if getattr(exc.orig, "pgcode", None) == _PG_UNDEFINED_FUNCTION:
-            # BD sin la migracion 0070 (p. ej. upgrade fallido y arranque "starting API anyway"): error claro
-            # (503) en vez de un 500 opaco. El llamador hace rollback y lo registra.
+            # BD sin la migracion 0070 (el arranque ya se detiene si el upgrade falla, pero puede pasar con
+            # SKIP_DB_MIGRATE=1 o una BD restaurada de antes de 0070): error claro (503) en vez de un 500
+            # opaco. El llamador hace rollback y lo registra.
             logger.error("invoice_numbering: falta la funcion invoice_next_number (migracion 0070 no aplicada)")
             raise HTTPException(status_code=503, detail=NUMBERING_UNAVAILABLE_DETAIL) from exc
         raise

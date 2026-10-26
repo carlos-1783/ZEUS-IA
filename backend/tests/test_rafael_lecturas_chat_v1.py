@@ -202,7 +202,7 @@ def test_ultima_factura_real_y_aislada(db):
     assert inv["invoice_number"] == last.invoice_number and inv["amount_total"] == 121.0
     assert inv["customer"] == "Bar Pepe" and inv["amount_due"] == 100.0 and inv["status"] == "sent"
     assert r.metrics["invoices_count"] == 2
-    assert last.invoice_number in r.message and "121,00 €" in r.message and "777" not in r.message
+    assert last.invoice_number in r.message and "121,00 €" in r.message and "777,00 €" not in r.message
     log = (db.query(AgentActivity)
            .filter(AgentActivity.company_id == c.id, AgentActivity.action_type == "agent_action_get_last_invoice")
            .order_by(AgentActivity.id.desc()).first())
@@ -233,7 +233,7 @@ def test_facturas_de_hoy_reales_y_aisladas(db):
     assert m["drafts_count"] == 1 and m["void_count"] == 1
     nums = {i["invoice_number"] for i in m["invoices"]}
     assert {a.invoice_number, b.invoice_number} <= nums and len(nums) == 4
-    assert "150,00 €" in r.message and "999" not in r.message and "400" not in r.message
+    assert "150,00 €" in r.message and "999,00 €" not in r.message and "400,00 €" not in r.message
 
 
 def test_facturas_de_hoy_vacio_es_cero(db):
@@ -261,7 +261,7 @@ def test_iva_trimestre_reutiliza_el_calculo_del_tpv_y_aislado(db):
     assert rates == {"4 %": (10.0, 0.40), "10 %": (3.0, 0.30), "21 %": (2.5, 0.52)}
     assert m["vat_total"] == 1.22 and m["grand_total"] == 16.72
     assert m["submitted_to_aeat"] is False and "no se ha presentado" in r.message
-    assert "1,22 €" in r.message and "189" not in r.message
+    assert "1,22 €" in r.message and "189,00 €" not in r.message
     # trimestre anterior: solo la venta de 500 €
     p = _read(db, u, c.id, "get_vat_quarter", {"quarter_ref": "previous"})
     assert p.success and p.metrics["sales_count"] == 1 and p.metrics["by_rate"][2]["vat_amount"] == 105.0
@@ -318,6 +318,9 @@ def test_chat_rafael_ultima_factura_no_llega_al_llm(db, client):
     assert out["execution"]["metrics"]["invoice"]["amount_total"] == 60.5
 
 
+# Los numeros de factura y de ticket de estos tests son aleatorios (F-/T-<hex>): pueden contener «555», «999»...
+# Por eso la ausencia de datos de otra empresa se comprueba con el importe completo («555,00 €»), no con cifras
+# sueltas que podrian salir dentro de un numero de factura (fallo intermitente de ~1 %).
 def test_chat_rafael_facturas_de_hoy_y_aislamiento(db, client):
     ua, ca = _user(db)
     ub, cb = _user(db)
@@ -327,7 +330,7 @@ def test_chat_rafael_facturas_de_hoy_y_aislamiento(db, client):
     ob = agent_say(client, ub, "rafael", "facturas de hoy")
     assert oa["intent"] == ob["intent"] == "get_invoices_today"
     assert oa["execution"]["metrics"]["count"] == 1 and oa["execution"]["metrics"]["amount_total"] == 20.0
-    assert ob["execution"]["metrics"]["amount_total"] == 555.0 and "555" not in oa["message"]
+    assert ob["execution"]["metrics"]["amount_total"] == 555.0 and "555,00 €" not in oa["message"]
 
 
 def test_chat_rafael_cuanto_llevo_hoy_es_el_cierre_de_hoy(db, client):
@@ -342,7 +345,7 @@ def test_chat_rafael_cuanto_llevo_hoy_es_el_cierre_de_hoy(db, client):
         assert out["intent"] == "get_daily_close", (msg, out["intent"])
         m = out["execution"]["metrics"]
         assert m["date"] == today_local().isoformat() and m["tickets"] == 1 and m["total"] == 11.0, msg
-        assert "11,00 €" in out["message"] and "330" not in out["message"]
+        assert "11,00 €" in out["message"] and "330,00 €" not in out["message"]
 
 
 def test_chat_rafael_iva_del_trimestre(db, client):

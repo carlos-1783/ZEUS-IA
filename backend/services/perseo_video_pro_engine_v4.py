@@ -31,6 +31,7 @@ from services.perseo_video_engine_v3 import (
     _resolve_image_path,
     _temp_root,
     _word_count,
+    assert_crm_refs_in_company,
     resolve_tenant_company,
 )
 from services.perseo_video_engine_v1 import _video_duration
@@ -341,6 +342,9 @@ def generate_perseo_video_pro_v4(
     customer_id: Optional[int] = None,
     enable_preview_gif: bool = True,
 ) -> Dict[str, Any]:
+    # Tenant y referencias CRM del cliente validados ANTES de nada (403/404 sin efectos).
+    company, company_id = _resolve_tenant_id(db, user, tenant_id)
+    assert_crm_refs_in_company(db, company_id, lead_id=lead_id, customer_id=customer_id)
     execution = get_execution_status(db)
     if execution["execution_mode"] == "ERROR":
         raise HTTPException(status_code=503, detail="execution_mode ERROR")
@@ -348,7 +352,6 @@ def generate_perseo_video_pro_v4(
         raise HTTPException(status_code=403, detail="writes_enabled false")
 
     _ffmpeg_path()
-    company, company_id = _resolve_tenant_id(db, user, tenant_id)
     brand = _branding_for_tenant(company, branding)
     brand_color = _brand_color_ffmpeg(brand.get("primary_color", "#004481"))
 

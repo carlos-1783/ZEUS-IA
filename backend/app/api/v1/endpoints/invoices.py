@@ -240,6 +240,20 @@ def create_invoice(
     company_id = crm_svc.primary_company_id(db, current_user)
     require_company_id(company_id, context="facturación")
 
+    # product_id de las lineas viene del cliente: tiene que ser un producto de ESTA empresa. Antes una
+    # linea podia referenciar un producto de otra empresa (quedaba guardado en invoice_items). 404 sin
+    # revelar si existe en otra empresa, antes de numerar ni escribir nada.
+    line_product_ids = {int(i.product_id) for i in invoice_in.items if getattr(i, "product_id", None)}
+    if line_product_ids:
+        own = {
+            pid for (pid,) in db.query(Product.id).filter(
+                Product.id.in_(line_product_ids), Product.company_id == company_id
+            ).all()
+        }
+        missing = sorted(line_product_ids - own)
+        if missing:
+            raise HTTPException(status_code=404, detail=f"Producto {missing[0]} no encontrado")
+
     # Numero de la serie INV correlativo POR EMPRESA: contador de invoice_counters en esta misma
     # transaccion (services/invoice_numbering_v1, migracion 0070). Si el alta falla, no se consume.
     invoice_number = next_invoice_number(db, company_id)

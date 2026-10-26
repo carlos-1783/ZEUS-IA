@@ -204,7 +204,14 @@ def run_zeus_core_workspace_bootstrap(
         )
 
     ensure_user_company_link_for_operations(db, user)
-    cid = company_id or primary_company_id_for_user(db, user)
+    if company_id:
+        # company_id del cliente: solo una empresa del usuario (403 si no; antes se guardaba el documento
+        # de configuracion en la empresa indicada, fuera la que fuera).
+        import services.crm_office_service as crm_svc
+
+        cid = crm_svc.resolve_company_for_user(db, user, company_id, context="workspace-bootstrap")
+    else:
+        cid = primary_company_id_for_user(db, user)
     if not cid:
         raise HTTPException(status_code=400, detail="company_id requerido para guardar configuración de workspace.")
 

@@ -444,7 +444,13 @@ def create_inventory_movement(
     """
     # Verify product exists
     product = get_product_or_404(db, product_id, current_user)
-    
+
+    # El body tambien trae product_id y el movimiento se construye con **movement_in.dict(): tiene que
+    # ser el MISMO producto de la ruta (ya validado como de la empresa). Antes un product_id ajeno en el
+    # body creaba el movimiento sobre el producto de otra empresa. 404 sin revelar si existe, sin escribir.
+    if int(movement_in.product_id) != int(product_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
     # If variant is specified, verify it exists and belongs to the product
     variant = None
     if movement_in.variant_id:

@@ -125,19 +125,38 @@ def resolve_tenant_company(db: Session, user: User, tenant_id: str) -> Tuple[Com
     allowed = company_ids_for_user(db, user)
     company: Optional[Company] = None
 
+    # Antes `if allowed and ...`: un usuario SIN empresas (allowed vacio) podia operar sobre cualquier
+    # tenant. Ahora el tenant tiene que ser una de sus empresas siempre.
     if tid.isdigit():
         cid = int(tid)
-        if allowed and cid not in allowed:
+        if cid not in allowed:
             raise HTTPException(status_code=403, detail="Sin acceso al tenant")
         company = db.query(Company).filter(Company.id == cid).first()
     else:
         company = db.query(Company).filter(Company.slug == tid).first()
-        if company and allowed and company.id not in allowed:
+        if company and company.id not in allowed:
             raise HTTPException(status_code=403, detail="Sin acceso al tenant")
 
     if not company:
         raise HTTPException(status_code=404, detail="Tenant no encontrado")
     return company, company.id
+
+
+def assert_crm_refs_in_company(
+    db: Session, company_id: int, *, lead_id: Optional[int] = None, customer_id: Optional[int] = None
+) -> None:
+    """lead_id / customer_id vienen del cliente: tienen que ser de la empresa del tenant. Si no -> 404 (sin
+    revelar si existen en otra empresa), antes de generar ni registrar nada. Antes el customer_id ajeno se
+    guardaba en el registro CRM de esta empresa y el lead ajeno se ignoraba con un 200."""
+    from app.models.crm_lead import CrmLead
+    from app.models.customer import Customer
+
+    if lead_id and not db.query(CrmLead.id).filter(CrmLead.id == lead_id, CrmLead.company_id == company_id).first():
+        raise HTTPException(status_code=404, detail="Lead no encontrado")
+    if customer_id and not db.query(Customer.id).filter(
+        Customer.id == customer_id, Customer.company_id == company_id
+    ).first():
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
 
 
 def _branding_for_tenant(
@@ -432,6 +451,9 @@ def generate_perseo_video_v3(
     campaign_id: Optional[str] = None,
     customer_id: Optional[int] = None,
 ) -> Dict[str, Any]:
+    # Tenant y referencias CRM del cliente validados ANTES de nada (403/404 sin efectos).
+    company, company_id = resolve_tenant_company(db, user, tenant_id)
+    assert_crm_refs_in_company(db, company_id, lead_id=lead_id, customer_id=customer_id)
     execution = get_execution_status(db)
     if execution["execution_mode"] == "ERROR":
         raise HTTPException(status_code=503, detail="execution_mode ERROR")
@@ -442,7 +464,6 @@ def generate_perseo_video_v3(
         )
 
     _ffmpeg_path()
-    company, company_id = resolve_tenant_company(db, user, tenant_id)
     brand = _branding_for_tenant(company, branding)
 
     copy_result = _generate_conversion_copy(

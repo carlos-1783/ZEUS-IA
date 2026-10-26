@@ -7,7 +7,8 @@ Decisiones:
 - NULL = dato desconocido -> None en la respuesta (la UI ya muestra «—» para null).
 - Stock desconocido NO es «sin stock» ni «bajo minimos»: va a «sin control de stock» (untracked) y no suma
   unidades. Si el TPV gemelo si sabe el stock, se usa el del TPV (mismo criterio que con ERP sin control).
-- `low_stock_threshold` NULL sigue siendo «sin minimo» (0), como antes: no es precio ni stock.
+- `low_stock_threshold` NULL = minimo desconocido -> None en la respuesta (no 0) y el producto NUNCA cuenta
+  «bajo minimos» (no se puede comparar contra un minimo que no se sabe). Un 0 real sigue siendo 0.
 """
 from __future__ import annotations
 
@@ -60,6 +61,12 @@ def _erp(db, company, name, qty, threshold=5.0, track=True):
                 category=ProductCategory.GOODS, status=ProductStatus.ACTIVE)
     db.add(p)
     db.commit()
+    if threshold is None:
+        # Igual que con el stock: el default del modelo (0.0) taparia el NULL de una fila antigua.
+        db.execute(text("UPDATE products SET low_stock_threshold = NULL WHERE id = :i"), {"i": p.id})
+        db.commit()
+        db.refresh(p)
+        assert p.low_stock_threshold is None
     if qty is None:
         # El default del modelo (0.0) se aplicaria al pasar None: se deja NULL como una fila antigua de BD.
         db.execute(text("UPDATE products SET quantity_on_hand = NULL WHERE id = :i"), {"i": p.id})
@@ -83,12 +90,13 @@ def test_rows_keep_null_price_and_stock_as_none():
                           track_inventory=True, category=None, status=None, price=None)
     row = _erp_row(erp)
     assert row["price"] is None and row["quantity_on_hand"] is None
-    assert row["low_stock_threshold"] == 0.0
+    assert row["low_stock_threshold"] is None
     tpv = SimpleNamespace(product_id="P", name="Y", stock=None, category="C", price=None, company_id=1)
     assert _tpv_row(tpv)["price"] is None and _tpv_row(tpv)["stock"] is None
     # Un 0 real sigue siendo 0 (no se confunde con vacio)
-    erp.price, erp.quantity_on_hand = 0, 0
+    erp.price, erp.quantity_on_hand, erp.low_stock_threshold = 0, 0, 0
     assert _erp_row(erp)["price"] == 0.0 and _erp_row(erp)["quantity_on_hand"] == 0.0
+    assert _erp_row(erp)["low_stock_threshold"] == 0.0
 
 
 def test_inventory_status_null_stock_is_untracked_not_out_of_stock(db, owner):
@@ -121,3 +129,24 @@ def test_merged_view_and_warehouse_do_not_turn_null_into_zero(db, owner):
     wh = warehouse_summary(db, u)
     assert wh["low_stock_count"] == 1 and wh["total_units"] == 0.0
     assert [i["name"] for i in wh["low_stock_items"]] == ["Azucar"]
+
+
+def test_null_min_is_unknown_never_low_stock(db, owner):
+    """Minimo NULL: se informa null y no cuenta «bajo minimos»; el agotado sigue siendo agotado."""
+    u, c = owner
+    _erp(db, c, "Cafe", 2, threshold=None)     # stock conocido, minimo desconocido
+    _erp(db, c, "Leche", 0, threshold=None)    # agotado, minimo desconocido
+    _erp(db, c, "Sal", 2)                      # control: minimo 5 -> bajo minimos
+    inv = company_inventory_status(db, c.id)
+    items = {i["name"]: i for i in inv["items"]}
+    assert items["Cafe"]["min_stock"] is None and items["Leche"]["min_stock"] is None
+    assert [i["name"] for i in inv["low_stock_items"]] == ["Sal"]
+    assert [i["name"] for i in inv["out_of_stock_items"]] == ["Leche"]
+    assert inv["without_min_count"] == 2
+    view = merge_products_view(db, u)
+    rows = {i["name"]: i for i in view["items"]}
+    assert rows["Cafe"]["low_stock"] is False and rows["Leche"]["low_stock"] is False
+    assert rows["Sal"]["low_stock"] is True
+    assert rows["Leche"]["stock"] == 0.0             # el stock 0 real no se pierde
+    wh = warehouse_summary(db, u)
+    assert [i["name"] for i in wh["low_stock_items"]] == ["Sal"]

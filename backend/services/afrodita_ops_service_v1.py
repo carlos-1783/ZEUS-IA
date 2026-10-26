@@ -60,7 +60,8 @@ def _erp_row(p: Product) -> Dict[str, Any]:
         "sku": p.sku,
         "name": p.name,
         "quantity_on_hand": _num_or_none(p.quantity_on_hand),
-        "low_stock_threshold": float(p.low_stock_threshold or 0),
+        # Minimo NULL = no se sabe cual es: None (la UI muestra «—»), no un 0 inventado.
+        "low_stock_threshold": _num_or_none(p.low_stock_threshold),
         "track_inventory": bool(p.track_inventory),
         "category": cat,
         "status": status,
@@ -161,10 +162,11 @@ def merge_products_view(db: Session, user: User) -> Dict[str, Any]:
                 "stock": stock,
                 "erp_quantity_on_hand": erp_d["quantity_on_hand"],
                 "tpv_stock": tpv_d["stock"] if tpv_d else None,
-                # Stock ERP desconocido (NULL) -> no se puede decir que este bajo minimos.
+                # Stock ERP o minimo desconocidos (NULL) -> no se puede decir que este bajo minimos.
                 "low_stock": bool(
                     erp_d["track_inventory"]
                     and erp_d["quantity_on_hand"] is not None
+                    and erp_d["low_stock_threshold"] is not None
                     and erp_d["quantity_on_hand"] <= erp_d["low_stock_threshold"]
                 ),
                 "category": erp_d["category"],
@@ -556,11 +558,12 @@ def company_inventory_status(db: Session, company_id: int, *, limit: int = 500) 
             stock = float(twin.stock)
         else:
             stock = None
-        threshold = float(erp.low_stock_threshold or 0) if erp.track_inventory else 0.0
+        # Minimo NULL (desconocido) o 0 = «sin minimo»: min_stock None, nunca cuenta como bajo minimos.
+        threshold = _num_or_none(erp.low_stock_threshold) if erp.track_inventory else None
         items.append({
             # nombre recortado (igual que el emparejamiento `_match_keys`): «Harina » sale como «Harina»
             "sku": (erp.sku or "").strip() or None, "name": (erp.name or "").strip(), "stock": stock,
-            "min_stock": threshold if threshold > 0 else None,
+            "min_stock": threshold if threshold is not None and threshold > 0 else None,
             "source": "tpv+erp" if twin is not None else "erp",
         })
     for idx, tpv in enumerate(tpv_rows):

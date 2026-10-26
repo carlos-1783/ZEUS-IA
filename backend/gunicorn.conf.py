@@ -21,6 +21,18 @@ for _stream_name in ("stdout", "stderr"):
 
 import os
 
+# Saneado CENTRAL del entorno (app/core/env_sanitize.py) ANTES de leer ninguna variable: este fichero lo
+# carga gunicorn antes de importar la app, asi que PORT/WEB_CONCURRENCY/GUNICORN_*/ZEUS_APP_ROOT con
+# comillas o espacios pegados desde el panel llegaban crudos. Mismo modulo y misma regla que la app; el log
+# solo muestra NOMBRES de variables. El directorio de este fichero (backend/) se anade al path por si
+# gunicorn se lanza desde otro cwd.
+_here = os.path.dirname(os.path.abspath(__file__))
+if _here not in sys.path:
+    sys.path.insert(0, _here)
+from app.core.env_sanitize import sanitize_environ  # noqa: E402
+
+sanitize_environ()
+
 _root = (os.getenv("ZEUS_APP_ROOT") or "").strip()
 if _root and os.path.isdir(_root):
     os.chdir(_root)

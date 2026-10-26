@@ -80,6 +80,12 @@ def _apply_runtime_schema_patches() -> None:
 
 
 def main() -> int:
+    # Saneado CENTRAL del entorno antes de leer DATABASE_*: este script corre ANTES de importar la app
+    # (primer paso del startCommand). Mismo modulo que app/core/config.py; el log solo da NOMBRES.
+    _bootstrap_import_path()
+    from app.core.env_sanitize import sanitize_environ
+
+    sanitize_environ()
     # Misma URL que alembic/env.py: la privilegiada si existe (stamp y parches son DDL), si no DATABASE_URL.
     url = (
         (os.environ.get("DATABASE_MIGRATION_URL") or "").strip()

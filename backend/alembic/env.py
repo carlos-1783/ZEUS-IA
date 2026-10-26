@@ -36,7 +36,12 @@ target_metadata = Base.metadata
 
 
 def get_url():
-    """Get database URL from environment or config"""
+    """URL de migraciones: DATABASE_MIGRATION_URL (rol propietario del esquema, necesario para DDL,
+    policies y GRANT) si esta definida; si no, DATABASE_URL exactamente como antes. El entorno ya
+    esta saneado (app.core.config -> sanitize_environ, importado via app.db.base)."""
+    migration_url = (os.environ.get("DATABASE_MIGRATION_URL") or "").strip()
+    if migration_url:
+        return migration_url
     from app.config import settings
     return settings.DATABASE_URL
 

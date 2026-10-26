@@ -80,7 +80,12 @@ def _apply_runtime_schema_patches() -> None:
 
 
 def main() -> int:
-    url = os.environ.get("DATABASE_URL") or os.environ.get("SQLALCHEMY_DATABASE_URI")
+    # Misma URL que alembic/env.py: la privilegiada si existe (stamp y parches son DDL), si no DATABASE_URL.
+    url = (
+        (os.environ.get("DATABASE_MIGRATION_URL") or "").strip()
+        or os.environ.get("DATABASE_URL")
+        or os.environ.get("SQLALCHEMY_DATABASE_URI")
+    )
     if not url:
         print("alembic_conditional_stamp: sin DATABASE_URL, omitiendo")
         return 0

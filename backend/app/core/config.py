@@ -394,7 +394,11 @@ class Settings(BaseSettings):
     
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'zeus.db')}")
-    
+    # Conexion PRIVILEGIADA (propietario del esquema) solo para DDL: alembic, stamp legacy,
+    # ensure_schema_patches y create_all del arranque. DATABASE_URL queda para la app (rol sin
+    # SUPERUSER ni BYPASSRLS, p.ej. zeus_app). Si falta, todo usa DATABASE_URL como antes.
+    DATABASE_MIGRATION_URL: Optional[str] = os.getenv("DATABASE_MIGRATION_URL") or None
+
     # Frontend URL (para enlaces en emails, p. ej. reset password)
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
 

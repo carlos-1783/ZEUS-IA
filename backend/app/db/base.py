@@ -38,6 +38,21 @@ else:
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+# Conexion de ESQUEMA (DDL): ensure_schema_patches(), create_tables() y sus backfills. Con
+# DATABASE_MIGRATION_URL definida es el rol propietario (el de alembic); sin ella es EXACTAMENTE el
+# mismo engine de la app (comportamiento anterior). La app (SessionLocal) nunca usa este engine.
+SCHEMA_DATABASE_URL = settings.DATABASE_MIGRATION_URL or SQLALCHEMY_DATABASE_URL
+if SCHEMA_DATABASE_URL == SQLALCHEMY_DATABASE_URL:
+    schema_engine = engine
+else:
+    schema_engine = create_engine(
+        SCHEMA_DATABASE_URL,
+        poolclass=NullPool,  # uso puntual en el arranque: sin conexiones privilegiadas ociosas en el pool
+        connect_args={"connect_timeout": int(os.getenv("ZEUS_DB_CONNECT_TIMEOUT", "30"))},
+    )
+    logger.info("Engine de esquema separado (DATABASE_MIGRATION_URL) para DDL de arranque")
+SchemaSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=schema_engine)
+
 Base = declarative_base()
 
 
@@ -73,7 +88,7 @@ def _current_role_can_alter_schema() -> bool:
     try:
         from sqlalchemy import text
 
-        with engine.connect() as conn:
+        with schema_engine.connect() as conn:
             row = conn.execute(
                 text(
                     """
@@ -224,7 +239,7 @@ def create_tables():
             # company_employee/zeus_analytics y create_all fallaba con NoReferencedTableError en BD vacia).
             _import_all_models()
 
-            Base.metadata.create_all(bind=engine)
+            Base.metadata.create_all(bind=schema_engine)
             print("[DATABASE] [OK] Tablas creadas correctamente")
             
             ensure_schema_patches()
@@ -261,7 +276,7 @@ def _migrate_user_columns():
     
     try:
         # Verificar si la tabla users existe
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
         if "users" not in inspector.get_table_names():
             print("[MIGRATION] Tabla 'users' no existe aún, se creará con el esquema correcto")
             return
@@ -304,7 +319,7 @@ def _migrate_user_columns():
         for column_name, column_type in columns_to_add.items():
             if column_name not in existing_columns:
                 try:
-                    with engine.begin() as conn:
+                    with schema_engine.begin() as conn:
                         if is_postgres:
                             # PostgreSQL syntax
                             sql = f'ALTER TABLE users ADD COLUMN "{column_name}" {column_type}'
@@ -354,7 +369,7 @@ def _migrate_document_approvals_columns():
     from sqlalchemy.exc import OperationalError, ProgrammingError
 
     try:
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
         if "document_approvals" not in inspector.get_table_names():
             print("[MIGRATION] Tabla 'document_approvals' no existe aún; se creará con create_all")
             return
@@ -388,7 +403,7 @@ def _migrate_document_approvals_columns():
             if column_name in existing_columns:
                 continue
             try:
-                with engine.begin() as conn:
+                with schema_engine.begin() as conn:
                     if is_postgres:
                         sql = (
                             f'ALTER TABLE document_approvals '
@@ -411,7 +426,7 @@ def _migrate_document_approvals_columns():
         try:
             indexes = {ix["name"] for ix in inspector.get_indexes("document_approvals")}
             if "ix_document_approvals_ticket_id" not in indexes and "ticket_id" in existing_columns:
-                with engine.begin() as conn:
+                with schema_engine.begin() as conn:
                     if is_postgres:
                         conn.execute(
                             text(
@@ -433,7 +448,7 @@ def _migrate_document_approvals_columns():
         try:
             indexes = {ix["name"] for ix in inspector.get_indexes("document_approvals")}
             if "ix_document_approvals_company_id" not in indexes and "company_id" in existing_columns:
-                with engine.begin() as conn:
+                with schema_engine.begin() as conn:
                     if is_postgres:
                         conn.execute(
                             text(
@@ -468,7 +483,7 @@ def _migrate_rafael_fiscal_tables():
     from sqlalchemy.exc import OperationalError, ProgrammingError
 
     try:
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
         tables = set(inspector.get_table_names())
         is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
 
@@ -476,12 +491,12 @@ def _migrate_rafael_fiscal_tables():
             try:
                 from app.models.expense import Expense
 
-                Expense.__table__.create(bind=engine, checkfirst=True)
+                Expense.__table__.create(bind=schema_engine, checkfirst=True)
                 print("[MIGRATION] [OK] Tabla expenses creada")
             except Exception as e:
                 print(f"[MIGRATION] [WARN] No se pudo crear expenses con ORM: {e}")
                 try:
-                    with engine.begin() as conn:
+                    with schema_engine.begin() as conn:
                         if is_postgres:
                             conn.execute(
                                 text(
@@ -551,7 +566,7 @@ def _migrate_tpv_company_columns():
     from sqlalchemy.exc import OperationalError, ProgrammingError
 
     try:
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
         is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
         tables = ("tpv_products", "tpv_sales", "invoices")
         for table_name in tables:
@@ -561,7 +576,7 @@ def _migrate_tpv_company_columns():
             if "company_id" in cols:
                 continue
             try:
-                with engine.begin() as conn:
+                with schema_engine.begin() as conn:
                     if is_postgres:
                         conn.execute(
                             text(f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "company_id" INTEGER')
@@ -581,7 +596,7 @@ def _migrate_tpv_company_columns():
                 indexes = {ix["name"] for ix in inspector.get_indexes(table_name)}
                 idx_name = f"ix_{table_name}_company_id"
                 if idx_name not in indexes:
-                    with engine.begin() as conn:
+                    with schema_engine.begin() as conn:
                         if is_postgres:
                             conn.execute(
                                 text(f'CREATE INDEX IF NOT EXISTS "{idx_name}" ON "{table_name}" (company_id)')
@@ -598,7 +613,7 @@ def _migrate_tpv_company_columns():
             inv_cols = {c["name"] for c in inspector.get_columns("invoices")}
             if "company_id" in inv_cols and "created_by" in inv_cols:
                 try:
-                    with engine.begin() as conn:
+                    with schema_engine.begin() as conn:
                         conn.execute(
                             text(
                                 """
@@ -633,7 +648,7 @@ def _migrate_company_type_column():
     from sqlalchemy.exc import OperationalError, ProgrammingError
 
     try:
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
         is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
         table_name = "companies"
         if table_name not in inspector.get_table_names():
@@ -641,7 +656,7 @@ def _migrate_company_type_column():
         cols = {c["name"] for c in inspector.get_columns(table_name)}
         if "company_type" not in cols:
             try:
-                with engine.begin() as conn:
+                with schema_engine.begin() as conn:
                     if is_postgres:
                         conn.execute(
                             text('ALTER TABLE "companies" ADD COLUMN IF NOT EXISTS "company_type" VARCHAR(32)')
@@ -660,7 +675,7 @@ def _migrate_company_type_column():
             indexes = {ix["name"] for ix in inspector.get_indexes(table_name)}
             idx_name = "ix_companies_company_type"
             if idx_name not in indexes:
-                with engine.begin() as conn:
+                with schema_engine.begin() as conn:
                     if is_postgres:
                         conn.execute(
                             text(f'CREATE INDEX IF NOT EXISTS "{idx_name}" ON "companies" (company_type)')
@@ -679,7 +694,7 @@ def _migrate_company_type_column():
         try:
             from app.models.company import Company
 
-            session = SessionLocal()
+            session = SchemaSessionLocal()
             try:
                 rows = session.query(Company).filter(Company.company_type.is_(None)).all()
                 for co in rows:
@@ -710,14 +725,14 @@ def _migrate_invoice_tpv_sale_link():
     from sqlalchemy.exc import OperationalError, ProgrammingError
 
     try:
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
         if "invoices" not in inspector.get_table_names():
             return
         is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
         cols = {c["name"] for c in inspector.get_columns("invoices")}
         if "tpv_sale_id" not in cols:
             try:
-                with engine.begin() as conn:
+                with schema_engine.begin() as conn:
                     if is_postgres:
                         conn.execute(
                             text('ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "tpv_sale_id" INTEGER')
@@ -736,7 +751,7 @@ def _migrate_invoice_tpv_sale_link():
             indexes = {ix["name"] for ix in inspector.get_indexes("invoices")}
             idx_name = "ix_invoices_tpv_sale_id"
             if idx_name not in indexes:
-                with engine.begin() as conn:
+                with schema_engine.begin() as conn:
                     if is_postgres:
                         conn.execute(
                             text(f'CREATE UNIQUE INDEX IF NOT EXISTS "{idx_name}" ON "invoices" (tpv_sale_id)')
@@ -763,7 +778,7 @@ def _migrate_company_employees_tpv_pin_hash():
     from sqlalchemy.exc import OperationalError, ProgrammingError
 
     try:
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
         is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
         table_name = "company_employees"
         if table_name not in inspector.get_table_names():
@@ -772,7 +787,7 @@ def _migrate_company_employees_tpv_pin_hash():
         if "tpv_pin_hash" in cols:
             return
         try:
-            with engine.begin() as conn:
+            with schema_engine.begin() as conn:
                 if is_postgres:
                     conn.execute(
                         text('ALTER TABLE "company_employees" ADD COLUMN IF NOT EXISTS "tpv_pin_hash" VARCHAR(255)')
@@ -800,7 +815,7 @@ def _migrate_zeus_approvals_execution_columns():
     from sqlalchemy import inspect, text
 
     try:
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
         table_name = "zeus_pending_approvals"
         if table_name not in inspector.get_table_names():
             return
@@ -813,7 +828,7 @@ def _migrate_zeus_approvals_execution_columns():
         for col, ddl in wanted.items():
             if col in cols:
                 continue
-            with engine.begin() as conn:
+            with schema_engine.begin() as conn:
                 if is_postgres:
                     conn.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "{col}" {ddl}'))
                 else:
@@ -828,7 +843,7 @@ def _migrate_zeus_approvals_chat_columns():
     from sqlalchemy import inspect, text
 
     try:
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
         table_name = "zeus_pending_approvals"
         if table_name not in inspector.get_table_names():
             return
@@ -841,13 +856,13 @@ def _migrate_zeus_approvals_chat_columns():
         for col, ddl in wanted.items():
             if col in cols:
                 continue
-            with engine.begin() as conn:
+            with schema_engine.begin() as conn:
                 if is_postgres:
                     conn.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "{col}" {ddl}'))
                 else:
                     conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col} {ddl}"))
             print(f"[MIGRATION] [OK] {table_name}.{col} agregada")
-        with engine.begin() as conn:
+        with schema_engine.begin() as conn:
             conn.execute(text(
                 f"CREATE INDEX IF NOT EXISTS ix_zeus_pending_approvals_thread_id ON {table_name} (thread_id)"
             ))
@@ -860,7 +875,7 @@ def _migrate_zeus_approvals_executing_at():
     from sqlalchemy import inspect, text
 
     try:
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
         table_name = "zeus_pending_approvals"
         if table_name not in inspector.get_table_names():
             return
@@ -869,7 +884,7 @@ def _migrate_zeus_approvals_executing_at():
         if "executing_at" in cols:
             return
         ddl = "TIMESTAMP WITH TIME ZONE" if is_postgres else "DATETIME"
-        with engine.begin() as conn:
+        with schema_engine.begin() as conn:
             if is_postgres:
                 conn.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "executing_at" {ddl}'))
             else:
@@ -900,7 +915,7 @@ def _migrate_consent_columns():
         ),
     }
     try:
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
         tables = set(inspector.get_table_names())
         for table_name, cols in wanted.items():
             if table_name not in tables:
@@ -909,7 +924,7 @@ def _migrate_consent_columns():
             for col, ddl in cols:
                 if col in existing:
                     continue
-                with engine.begin() as conn:
+                with schema_engine.begin() as conn:
                     if is_postgres:
                         conn.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "{col}" {ddl}'))
                     else:
@@ -930,7 +945,7 @@ def _migrate_agent_activities_company_id():
     from sqlalchemy.exc import OperationalError, ProgrammingError
 
     try:
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
         is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
         table_name = "agent_activities"
         if table_name not in inspector.get_table_names():
@@ -938,7 +953,7 @@ def _migrate_agent_activities_company_id():
         cols = {c["name"] for c in inspector.get_columns(table_name)}
         if "company_id" not in cols:
             try:
-                with engine.begin() as conn:
+                with schema_engine.begin() as conn:
                     if is_postgres:
                         conn.execute(
                             text(f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "company_id" INTEGER')
@@ -957,7 +972,7 @@ def _migrate_agent_activities_company_id():
             indexes = {ix["name"] for ix in inspector.get_indexes(table_name)}
             idx_name = f"ix_{table_name}_company_id"
             if idx_name not in indexes:
-                with engine.begin() as conn:
+                with schema_engine.begin() as conn:
                     if is_postgres:
                         conn.execute(
                             text(f'CREATE INDEX IF NOT EXISTS "{idx_name}" ON "{table_name}" (company_id)')
@@ -972,7 +987,7 @@ def _migrate_agent_activities_company_id():
 
         # Backfill best-effort desde user_email -> users -> user_companies
         try:
-            with engine.begin() as conn:
+            with schema_engine.begin() as conn:
                 conn.execute(
                     text(
                         """
@@ -1012,7 +1027,7 @@ def _migrate_role_check_constraints():
         return
 
     try:
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
 
         if "users" in inspector.get_table_names():
             existing_ck = {c["name"] for c in inspector.get_check_constraints("users")}
@@ -1020,7 +1035,7 @@ def _migrate_role_check_constraints():
                 print("[MIGRATION] [INFO] ck_users_role ya existe")
             else:
                 try:
-                    with engine.begin() as conn:
+                    with schema_engine.begin() as conn:
                         conn.execute(
                             text("UPDATE users SET role = 'owner' WHERE role IS NULL OR role NOT IN ('owner', 'employee')")
                         )
@@ -1043,7 +1058,7 @@ def _migrate_role_check_constraints():
                 print("[MIGRATION] [INFO] ck_user_companies_role ya existe")
             else:
                 try:
-                    with engine.begin() as conn:
+                    with schema_engine.begin() as conn:
                         conn.execute(
                             text(
                                 "UPDATE user_companies SET role = 'company_admin' "
@@ -1075,7 +1090,7 @@ def _migrate_rename_misleading_company_id_columns():
     from sqlalchemy.exc import OperationalError, ProgrammingError
 
     try:
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
         renames = (
             ("payroll_drafts", "company_id", "owner_user_id"),
             ("automation_readiness", "company_id", "user_id"),
@@ -1089,7 +1104,7 @@ def _migrate_rename_misleading_company_id_columns():
             if old_col not in cols:
                 continue
             try:
-                with engine.begin() as conn:
+                with schema_engine.begin() as conn:
                     conn.execute(text(f"ALTER TABLE {table_name} RENAME COLUMN {old_col} TO {new_col}"))
                 print(f"[MIGRATION] [OK] {table_name}.{old_col} renombrada a {new_col}")
             except (OperationalError, ProgrammingError) as e:
@@ -1104,7 +1119,7 @@ def _migrate_smart_time_control_tables():
     from sqlalchemy.exc import OperationalError, ProgrammingError
 
     try:
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
         tables = set(inspector.get_table_names())
         is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
 
@@ -1112,7 +1127,7 @@ def _migrate_smart_time_control_tables():
             cols = {c["name"] for c in inspector.get_columns("time_tracking_records")}
             if "extra_hours" not in cols:
                 try:
-                    with engine.begin() as conn:
+                    with schema_engine.begin() as conn:
                         if is_postgres:
                             conn.execute(
                                 text(
@@ -1144,7 +1159,7 @@ def _migrate_time_cost_engine_v1():
     from sqlalchemy.exc import OperationalError, ProgrammingError
 
     try:
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
         tables = set(inspector.get_table_names())
         is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
 
@@ -1152,7 +1167,7 @@ def _migrate_time_cost_engine_v1():
             cols = {c["name"] for c in inspector.get_columns("company_employees")}
             if "hourly_rate" not in cols:
                 try:
-                    with engine.begin() as conn:
+                    with schema_engine.begin() as conn:
                         if is_postgres:
                             conn.execute(
                                 text(
@@ -1178,7 +1193,7 @@ def _migrate_time_cost_engine_v1():
             ):
                 if col_name not in cols:
                     try:
-                        with engine.begin() as conn:
+                        with schema_engine.begin() as conn:
                             if is_postgres:
                                 conn.execute(
                                     text(
@@ -1207,7 +1222,7 @@ def _migrate_cashflow_ledger():
     from sqlalchemy import inspect
 
     try:
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
         if "cashflow_ledger" in inspector.get_table_names():
             return
         print("[MIGRATION] [INFO] cashflow_ledger se creará vía create_all si el modelo está importado")
@@ -1220,11 +1235,11 @@ def _migrate_zeus_domain_events():
     from sqlalchemy import inspect
 
     try:
-        if "zeus_domain_events" in inspect(engine).get_table_names():
+        if "zeus_domain_events" in inspect(schema_engine).get_table_names():
             return
         from app.models.zeus_domain_event import ZeusDomainEvent
 
-        ZeusDomainEvent.__table__.create(bind=engine, checkfirst=True)
+        ZeusDomainEvent.__table__.create(bind=schema_engine, checkfirst=True)
         print("[MIGRATION] [OK] zeus_domain_events creada")
     except Exception as e:
         print(f"[MIGRATION] [WARN] zeus_domain_events migrate: {e}")
@@ -1237,11 +1252,11 @@ def _migrate_zeus_analytics_tables():
     try:
         from app.models.zeus_analytics import ZeusAlert, ZeusAutomation, ZeusAutomationLog, ZeusEvent
 
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
         names = set(inspector.get_table_names())
         for model in (ZeusEvent, ZeusAlert, ZeusAutomation, ZeusAutomationLog):
             if model.__tablename__ not in names:
-                model.__table__.create(bind=engine, checkfirst=True)
+                model.__table__.create(bind=schema_engine, checkfirst=True)
                 print(f"[MIGRATION] [OK] {model.__tablename__} creada")
     except Exception as e:
         print(f"[MIGRATION] [WARN] zeus_analytics tables migrate: {e}")
@@ -1253,7 +1268,7 @@ def _migrate_company_billing_fields():
     from sqlalchemy.exc import OperationalError, ProgrammingError
 
     try:
-        inspector = inspect(engine)
+        inspector = inspect(schema_engine)
         if "companies" not in inspector.get_table_names():
             return
         is_postgres = "postgresql" in settings.DATABASE_URL.lower() or "postgres" in settings.DATABASE_URL.lower()
@@ -1268,7 +1283,7 @@ def _migrate_company_billing_fields():
             if col_name in cols:
                 continue
             try:
-                with engine.begin() as conn:
+                with schema_engine.begin() as conn:
                     if is_postgres:
                         conn.execute(
                             text(f'ALTER TABLE "companies" ADD COLUMN IF NOT EXISTS "{col_name}" {col_type}')
@@ -1286,7 +1301,7 @@ def _migrate_company_billing_fields():
         try:
             indexes = {ix["name"] for ix in inspector.get_indexes("companies")}
             if "ix_companies_tax_id" not in indexes:
-                with engine.begin() as conn:
+                with schema_engine.begin() as conn:
                     if is_postgres:
                         conn.execute(
                             text('CREATE INDEX IF NOT EXISTS "ix_companies_tax_id" ON "companies" (tax_id)')

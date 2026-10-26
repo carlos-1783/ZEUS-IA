@@ -34,22 +34,9 @@ logger = logging.getLogger(__name__)
 
 
 def _company_id(db: Session, user: User, company_id: Optional[int]) -> int:
-    """Empresa del escaneo. Sin company_id: la primaria del usuario. Con company_id (viene del cliente):
-    solo si es una de SUS empresas (user_companies); si no, 403 ANTES de escribir nada. Antes se usaba
-    tal cual y un usuario de A podia crear clientes/facturas/eventos en la empresa B."""
-    if company_id:
-        try:
-            requested = int(company_id)
-        except (TypeError, ValueError):
-            raise HTTPException(status_code=400, detail="company_id no valido.")
-        if requested not in {int(c) for c in crm_svc.company_ids_for_user(db, user)}:
-            logger.warning("scan rechazado: user_id=%s pide company_id=%s que no es suya", user.id, requested)
-            raise HTTPException(status_code=403, detail="No tienes acceso a esa empresa.")
-        return requested
-    cid = crm_svc.primary_company_id(db, user)
-    if not cid:
-        raise HTTPException(status_code=400, detail="company_id requerido.")
-    return int(cid)
+    """Empresa del escaneo: la primaria del usuario o, si el cliente indica company_id, solo una de SUS
+    empresas (403 antes de escribir nada). Regla comun: crm_office_service.resolve_company_for_user."""
+    return crm_svc.resolve_company_for_user(db, user, company_id, context="scan")
 
 
 def _persist_scan(

@@ -48,6 +48,34 @@ def primary_company_id(db: Session, user: User) -> Optional[int]:
     return uc.company_id if uc else None
 
 
+def resolve_company_for_user(
+    db: Session, user: User, requested_company_id: Any, *, context: str = "operacion"
+) -> int:
+    """Empresa sobre la que opera una peticion cuando el cliente PUEDE indicar company_id.
+
+    - Sin company_id (None/0/""): la empresa primaria del usuario (400 si no tiene ninguna).
+    - Con company_id: solo si es una de SUS empresas (user_companies); si no, 403 ANTES de leer o escribir
+      nada (no se devuelve nunca un 200 con datos de otra empresa ni un 200 vacio).
+    Sin excepcion para superusuarios: en estas rutas un superusuario tambien opera solo sobre sus empresas
+    (decision tomada para /scan; las rutas globales de superusuario son otras).
+    """
+    if requested_company_id not in (None, "", 0):
+        try:
+            requested = int(requested_company_id)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="company_id no valido.")
+        if requested not in {int(c) for c in company_ids_for_user(db, user)}:
+            logger.warning(
+                "%s rechazado: user_id=%s pide company_id=%s que no es suya", context, user.id, requested
+            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes acceso a esa empresa.")
+        return requested
+    cid = primary_company_id(db, user)
+    if not cid:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="company_id requerido.")
+    return int(cid)
+
+
 def _customer_scope_filter(user: User, cids: List[int]):
     if not cids:
         return Customer.owner_user_id == user.id

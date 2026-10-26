@@ -4,26 +4,16 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user
 from app.db.session import get_db
-from app.models.company import UserCompany
 from app.models.user import User
+import services.crm_office_service as crm_svc
 from services.cashflow_ledger_service import get_balance, get_summary
 
 router = APIRouter()
-
-
-def _primary_company_id(db: Session, user: User) -> Optional[int]:
-    link = (
-        db.query(UserCompany)
-        .filter(UserCompany.user_id == user.id)
-        .order_by(UserCompany.id.asc())
-        .first()
-    )
-    return int(link.company_id) if link else None
 
 
 @router.get("/summary")
@@ -33,9 +23,9 @@ def cashflow_summary(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    cid = company_id or _primary_company_id(db, current_user)
-    if not cid:
-        raise HTTPException(status_code=400, detail="company_id requerido.")
+    # Empresa de la sesion; un company_id ajeno -> 403 (antes devolvia el saldo real de la otra empresa
+    # con la app como postgres, o un 200 a cero con RLS).
+    cid = crm_svc.resolve_company_for_user(db, current_user, company_id, context="cashflow")
     return {"success": True, **get_summary(db, company_id=cid, days=days)}
 
 
@@ -45,7 +35,5 @@ def cashflow_balance(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    cid = company_id or _primary_company_id(db, current_user)
-    if not cid:
-        raise HTTPException(status_code=400, detail="company_id requerido.")
+    cid = crm_svc.resolve_company_for_user(db, current_user, company_id, context="cashflow")
     return {"success": True, "company_id": cid, "balance": get_balance(db, company_id=cid)}

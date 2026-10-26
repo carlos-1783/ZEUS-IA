@@ -47,6 +47,11 @@ def _match_keys(erp: Product, tpv: TPVProduct) -> bool:
     return False
 
 
+def _num_or_none(value: Any) -> Optional[float]:
+    """NULL en BD = dato desconocido: se devuelve None (la UI muestra «—»), nunca 0 inventado."""
+    return float(value) if value is not None else None
+
+
 def _erp_row(p: Product) -> Dict[str, Any]:
     cat = p.category.value if hasattr(p.category, "value") else str(p.category or "")
     status = p.status.value if hasattr(p.status, "value") else str(p.status or "")
@@ -54,12 +59,12 @@ def _erp_row(p: Product) -> Dict[str, Any]:
         "erp_id": p.id,
         "sku": p.sku,
         "name": p.name,
-        "quantity_on_hand": float(p.quantity_on_hand or 0),
+        "quantity_on_hand": _num_or_none(p.quantity_on_hand),
         "low_stock_threshold": float(p.low_stock_threshold or 0),
         "track_inventory": bool(p.track_inventory),
         "category": cat,
         "status": status,
-        "price": float(p.price or 0),
+        "price": _num_or_none(p.price),
         "source": "erp",
     }
 
@@ -70,7 +75,7 @@ def _tpv_row(p: TPVProduct) -> Dict[str, Any]:
         "name": p.name,
         "stock": p.stock,
         "category": p.category,
-        "price": float(p.price or 0),
+        "price": _num_or_none(p.price),
         "company_id": p.company_id,
         "source": "tpv",
     }
@@ -144,8 +149,8 @@ def merge_products_view(db: Session, user: User) -> Dict[str, Any]:
                 used_tpv.add(idx)
                 break
         tpv_d = _tpv_row(tpv_match) if tpv_match else None
-        stock = erp_d["quantity_on_hand"]
-        if tpv_d and tpv_d.get("stock") is not None and stock == 0:
+        stock = erp_d["quantity_on_hand"]  # None = stock ERP desconocido (NULL), no 0
+        if tpv_d and tpv_d.get("stock") is not None and (stock is None or stock == 0):
             stock = float(tpv_d["stock"])
         merged.append(
             {
@@ -156,8 +161,10 @@ def merge_products_view(db: Session, user: User) -> Dict[str, Any]:
                 "stock": stock,
                 "erp_quantity_on_hand": erp_d["quantity_on_hand"],
                 "tpv_stock": tpv_d["stock"] if tpv_d else None,
+                # Stock ERP desconocido (NULL) -> no se puede decir que este bajo minimos.
                 "low_stock": bool(
                     erp_d["track_inventory"]
+                    and erp_d["quantity_on_hand"] is not None
                     and erp_d["quantity_on_hand"] <= erp_d["low_stock_threshold"]
                 ),
                 "category": erp_d["category"],
@@ -542,9 +549,10 @@ def company_inventory_status(db: Session, company_id: int, *, limit: int = 500) 
                 twin = tpv
                 used_tpv.add(idx)
                 break
-        if erp.track_inventory:
-            stock: Optional[float] = float(erp.quantity_on_hand or 0)
+        if erp.track_inventory and erp.quantity_on_hand is not None:
+            stock: Optional[float] = float(erp.quantity_on_hand)
         elif twin is not None and twin.stock is not None:
+            # ERP sin control de stock, o con control pero cantidad NULL (desconocida): manda el TPV si la sabe
             stock = float(twin.stock)
         else:
             stock = None

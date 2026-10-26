@@ -27,7 +27,9 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user
 from app.core.verticals_registry import allowed_company_types_for_module
-from app.db.base import get_db
+# Mismo get_db que app.core.auth y los endpoints: FastAPI deduplica y la comprobacion corre en la
+# sesion con el contexto RLS del usuario (con otro callable seria una sesion sin contexto: fail-closed).
+from app.db.session import get_db
 from app.models.company import Company, UserCompany
 from app.models.user import User
 

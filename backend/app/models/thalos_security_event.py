@@ -11,6 +11,9 @@ from app.db.base import Base
 
 class ThalosSecurityEvent(Base):
     __tablename__ = "thalos_security_events"
+    # RLS (0071): tabla de log en la que se puede INSERTAR con company_id NULL (evento anonimo/sin empresa)
+    # sin poder LEERLO. Sin RETURNING (id via nextval previo), el INSERT no necesita ver la fila.
+    __table_args__ = {"implicit_returning": False}
 
     id = Column(Integer, primary_key=True, index=True)
     event_type = Column(String(64), nullable=False, index=True)
@@ -28,6 +31,9 @@ class ThalosSecurityEvent(Base):
 
 class ThalosLoginAttempt(Base):
     __tablename__ = "thalos_login_attempts"
+    # RLS (0071): tabla de log en la que se puede INSERTAR con company_id NULL (evento anonimo/sin empresa)
+    # sin poder LEERLO. Sin RETURNING (id via nextval previo), el INSERT no necesita ver la fila.
+    __table_args__ = {"implicit_returning": False}
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), nullable=False, index=True)

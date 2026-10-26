@@ -747,12 +747,9 @@ async def workspace_thalos_logs(
     except Exception as exc:
         # Fase 2 (#23): antes `except: pass` -> el fallo del escaneo real desaparecia en silencio.
         logger.exception("THALOS log-monitor: fallo el escaneo real (user=%s company=%s)", current_user.id, cid)
-        # Transaccion abortada (Postgres): se deshace y se re-fija el contexto de tenant
-        # (este endpoint solo lo usa superusuario -> contexto sin empresa, igual que get_db_scoped).
+        # Transaccion abortada (Postgres): se deshace. El contexto RLS de la sesion (superusuario ->
+        # modo system) vive en Session.info y after_begin lo re-aplica en la transaccion siguiente.
         db.rollback()
-        from app.db.tenant_context import set_tenant_context
-
-        set_tenant_context(db, None, user_id=current_user.id, user_email=current_user.email)
         real_scan_error = f"{type(exc).__name__}: {exc}"[:300]
         result = {**result, "real_scan_error": real_scan_error}
     text = _text_generic("Monitor de logs de seguridad", result)

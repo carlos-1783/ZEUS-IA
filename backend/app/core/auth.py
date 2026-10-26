@@ -257,11 +257,11 @@ async def get_current_user_from_token(
         if token_data is None or token_data.sub is None:
             raise credentials_exception
             
-        # Get the user from the database
-        user = get_user(db, email=token_data.sub)
+        # Get the user from the database (RLS: lookup acotado + contexto de ese usuario y sus empresas)
+        user = get_principal_by_email(db, token_data.sub)
         if user is None:
             raise credentials_exception
-            
+        rls_context.bind_user_context(db, user)
         return user
         
     except JWTError as e:
@@ -344,17 +344,27 @@ async def get_current_user(
             raise credentials_exception
             
         # Intentar obtener el usuario por ID primero (el caso más común)
+        # RLS (fail-closed): la sesion de la peticion empieza sin contexto y no ve ninguna fila de
+        # empresa. El JWT ya esta verificado: se fija el contexto de SU usuario para cargar su fila
+        # (bind_principal) y despues el definitivo, usuario + sus empresas (superusuario: system
+        # auditado). Es la MISMA sesion que recibe el endpoint (FastAPI deduplica get_db) y el evento
+        # after_begin lo re-aplica en cada transaccion: toda la peticion queda acotada a su tenant.
         user = None
         try:
             user_id = int(user_identifier)
-            user = get_user_by_id(db, user_id=user_id)
         except (ValueError, TypeError):
-            # Si no es un ID numérico, intentar por email
-            user = get_user(db, email=user_identifier)
+            user_id = None
+        if user_id is not None:
+            user = get_principal_by_id(db, user_id)
+        else:
+            # Si no es un ID numérico, intentar por email (lookup acotado)
+            user = get_principal_by_email(db, str(user_identifier))
             
         if user is None:
             logger.warning(f"Usuario no encontrado para el identificador: {user_identifier}")
+            rls_context.clear_context(db)
             raise credentials_exception
+        rls_context.bind_user_context(db, user)
 
         # Resolver scopes efectivos y adjuntarlos al payload
         effective_scopes = resolve_user_scopes(user, payload.get("scopes"))

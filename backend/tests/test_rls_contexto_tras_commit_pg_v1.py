@@ -14,7 +14,10 @@ Si falta la variable, el servidor no responde o el rol no existe -> skip con el 
 Aislamiento: no toca las tablas de la BD. Crea un esquema temporal con una tabla `invoices` minima y le aplica
 la MISMA expresion de policy que tiene `public.invoices` en esa BD (leida de pg_policies: se prueba la policy
 real migrada, no una copia escrita a mano), ENABLE + FORCE RLS, y se conecta como el rol de aplicacion.
-  - CONTROL: sin el evento after_begin la fuga tras commit se reproduce (el test detecta el fallo).
+  - CONTROL: sin el evento after_begin el contexto se pierde tras commit (el test detecta el fallo).
+
+Desde 0071 la policy es FAIL-CLOSED: sin contexto no se ve nada (antes, 0047: se veia todo). Los tests leen la
+policy real y comprueban el comportamiento de la generacion migrada en esa BD.
 """
 from __future__ import annotations
 
@@ -34,6 +37,7 @@ PG_URL = os.environ.get("ZEUS_TEST_PG_URL", "").strip()
 APP_ROLE = os.environ.get("ZEUS_TEST_PG_APP_ROLE", "zeus_app").strip()
 A, B = 101, 202
 ROWS = {A: 3, B: 5}
+POLICY = {"fail_closed": None}  # se rellena con la policy real leida de la BD
 
 
 @pytest.fixture(scope="module")
@@ -55,6 +59,7 @@ def schema():
                                   "AND tablename = 'invoices' AND policyname = 'tenant_isolation_invoices'")).scalar()
             if not qual:
                 pytest.skip("public.invoices no tiene la policy tenant_isolation_invoices (BD sin 0047)")
+            POLICY["fail_closed"] = "app_ctx_company_ids" in qual  # 0071
             c.execute(text(f'CREATE SCHEMA "{name}"'))
             c.execute(text(f'CREATE TABLE "{name}".invoices (id serial PRIMARY KEY, company_id integer, '
                            f'created_by integer, invoice_number varchar(50))'))
@@ -100,10 +105,13 @@ def _see(db):
     return n, companies, cid
 
 
-def test_role_is_not_superuser_and_policy_is_fail_open_without_context(engine):
-    """Punto de partida (hoy): sin contexto la policy de 0047 deja ver todas las empresas."""
+def test_role_is_not_superuser_and_behaviour_without_context(engine):
+    """Sin contexto: 0071 (fail-closed) no deja ver ninguna fila; 0047 (fail-open) dejaba ver todas."""
     with Session(engine) as db:
-        assert _see(db) == (sum(ROWS.values()), 2, A)
+        if POLICY["fail_closed"]:
+            assert _see(db) == (0, 0, None)
+        else:
+            assert _see(db) == (sum(ROWS.values()), 2, A)
 
 
 def test_company_a_never_sees_b_first_query_and_after_commit(engine):
@@ -183,14 +191,16 @@ def test_concurrent_sessions_a_and_b_never_cross(schema):
 
 
 def test_control_without_after_begin_context_is_lost_after_commit(engine):
-    """CONTROL: sin el evento (comportamiento anterior) la fuga tras commit se reproduce."""
+    """CONTROL: sin el evento el contexto se pierde tras commit (fuga con 0047, vacio con 0071)."""
     event.remove(Session, "after_begin", tc._reapply_tenant_context)
     try:
         with Session(engine) as db:
             tc.set_tenant_context(db, A, user_id=1)
             assert _see(db) == (ROWS[A], 1, A)
             db.commit()
-            assert _see(db) == (sum(ROWS.values()), 2, A)  # ve A y B
+            # contexto perdido: fail-open (0047) veia A y B; fail-closed (0071) no ve nada (sin fuga)
+            expected = (0, 0, None) if POLICY["fail_closed"] else (sum(ROWS.values()), 2, A)
+            assert _see(db) == expected
     finally:
         event.listen(Session, "after_begin", tc._reapply_tenant_context)
     with Session(engine) as db:

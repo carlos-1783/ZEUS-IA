@@ -11,6 +11,9 @@ from app.db.base import Base
 
 class ThalosAlert(Base):
     __tablename__ = "thalos_alerts"
+    # RLS (0071): tabla de log en la que se puede INSERTAR con company_id NULL (evento anonimo/sin empresa)
+    # sin poder LEERLO. Sin RETURNING (id via nextval previo), el INSERT no necesita ver la fila.
+    __table_args__ = {"implicit_returning": False}
 
     id = Column(Integer, primary_key=True, index=True)
     event_id = Column(Integer, ForeignKey("thalos_events.id", ondelete="CASCADE"), nullable=True, index=True)

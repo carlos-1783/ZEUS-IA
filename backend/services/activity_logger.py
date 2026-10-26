@@ -170,6 +170,9 @@ class ActivityLogger:
         """
         ensure_tables_initialized()
         db = SessionLocal()
+        # RLS: una actividad sin empresa ni email se puede insertar pero no leer (policy fail-closed); sin
+        # expirar en el commit, el objeto devuelto conserva sus valores (id incluido) sin releer la fila.
+        db.expire_on_commit = False
         try:
             if rls_context.is_postgres(db):
                 # RLS: el log se llama desde peticiones, hilos y workers; resolver el email/la empresa del

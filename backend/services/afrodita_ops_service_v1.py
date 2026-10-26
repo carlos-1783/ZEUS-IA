@@ -162,11 +162,14 @@ def merge_products_view(db: Session, user: User) -> Dict[str, Any]:
                 "stock": stock,
                 "erp_quantity_on_hand": erp_d["quantity_on_hand"],
                 "tpv_stock": tpv_d["stock"] if tpv_d else None,
-                # Stock ERP o minimo desconocidos (NULL) -> no se puede decir que este bajo minimos.
+                # Stock ERP desconocido (NULL) o minimo NULL/0 (= «sin minimo», igual que en
+                # company_inventory_status) -> no se puede decir que este bajo minimos. Antes un minimo 0
+                # con stock 0 daba «bajo minimos» en esta vista y no en la otra.
                 "low_stock": bool(
                     erp_d["track_inventory"]
                     and erp_d["quantity_on_hand"] is not None
                     and erp_d["low_stock_threshold"] is not None
+                    and erp_d["low_stock_threshold"] > 0
                     and erp_d["quantity_on_hand"] <= erp_d["low_stock_threshold"]
                 ),
                 "category": erp_d["category"],

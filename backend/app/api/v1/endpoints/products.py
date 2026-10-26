@@ -141,8 +141,10 @@ def list_products(
         query = query.filter(Product.status == status)
         
     if low_stock is not None:
+        # Minimo NULL o 0 = «sin minimo» (misma regla que AFRODITA): nunca cuenta como stock bajo.
         query = query.filter(
             Product.track_inventory == True,
+            Product.low_stock_threshold > 0,
             Product.quantity_on_hand <= Product.low_stock_threshold
         )
     

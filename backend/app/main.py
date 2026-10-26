@@ -413,9 +413,30 @@ elif os.path.isdir(assets_vol):
     print("[DEBUG] Assets mounted at /assets (STATIC_DIR)")
 
 
+_HEALTH_MIGRATION_TIMEOUT_S = 5.0
+
+
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "zeus-ia"}
+    """Healthcheck de Railway (railway.toml: healthcheckPath). Siempre 200: INFORMA del estado de las
+    migraciones (revision de la BD frente a la head del codigo), no cambia el codigo HTTP. Publico: solo
+    numeros de revision; si la BD falla o tarda, se dice en `migrations.error` sin mensaje ni traza."""
+    import asyncio
+
+    from starlette.concurrency import run_in_threadpool
+
+    from app.db.base import engine
+    from app.db.migration_status import migration_status
+
+    try:
+        migrations = await asyncio.wait_for(
+            run_in_threadpool(migration_status, engine), timeout=_HEALTH_MIGRATION_TIMEOUT_S
+        )
+    except asyncio.TimeoutError:
+        migrations = {"current": None, "head": None, "up_to_date": False, "error": "db: timeout"}
+    except Exception as exc:  # /health nunca debe romperse por esto
+        migrations = {"current": None, "head": None, "up_to_date": False, "error": type(exc).__name__}
+    return {"status": "healthy", "service": "zeus-ia", "migrations": migrations}
 
 
 def _debug_dependencies():

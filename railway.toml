@@ -11,7 +11,9 @@ dockerfilePath = "Dockerfile"
 [deploy]
 # Stamp condicional (legacy: tablas sin fila en alembic_version) y luego upgrade.
 # SKIP_DB_MIGRATE=1 salta migraciones pero arranca Gunicorn.
-startCommand = "sh -c 'if [ \"${SKIP_DB_MIGRATE}\" != \"1\" ] && [ \"${SKIP_DB_MIGRATE}\" != \"true\" ]; then python scripts/alembic_conditional_stamp.py && (alembic upgrade head || echo \"[ZEUS] WARN: alembic upgrade failed — starting API anyway\") && python scripts/ensure_schema_patches.py; fi && exec gunicorn -c gunicorn.conf.py app.main:app'"
+# Si el stamp o `alembic upgrade head` fallan, el arranque se DETIENE (exit != 0, Gunicorn no arranca):
+# no se sirve la API con un esquema a medias. /health informa de la revision (migrations.up_to_date).
+startCommand = "sh -c 'if [ \"${SKIP_DB_MIGRATE}\" != \"1\" ] && [ \"${SKIP_DB_MIGRATE}\" != \"true\" ]; then python scripts/alembic_conditional_stamp.py && alembic upgrade head && python scripts/ensure_schema_patches.py; fi && exec gunicorn -c gunicorn.conf.py app.main:app'"
 healthcheckPath = "/health"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"

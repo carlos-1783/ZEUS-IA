@@ -96,7 +96,10 @@ async def actions_execute(
         )
 
     # sync: handler_execution_or_block → activity_write_final
-    session = SessionLocal()
+    # RLS: sesion del superusuario autenticado (modo system auditado con su id como motivo).
+    from app.db.rls_context import open_user_session
+
+    session = open_user_session(current_user.id)
     try:
         activity = session.query(AgentActivity).filter(AgentActivity.id == activity_id).first()
         if not activity:

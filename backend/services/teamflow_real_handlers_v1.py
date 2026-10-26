@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException
 
 from app.db.session import SessionLocal
+from app.db.rls_context import open_activity_session
 from app.models.agent_activity import AgentActivity
 from app.models.document_approval import DocumentApproval
 from app.models.user import User
@@ -86,7 +87,7 @@ def _fail(msg: str) -> Dict[str, Any]:
 
 
 def handle_contract_creator_rrhh(activity: AgentActivity) -> Dict[str, Any]:
-    session = SessionLocal()
+    session = open_activity_session(activity)
     try:
         user = _user_from_activity(session, activity)
         if not user:
@@ -121,7 +122,7 @@ def handle_contract_creator_rrhh(activity: AgentActivity) -> Dict[str, Any]:
 
 
 def handle_invoice_sent(activity: AgentActivity) -> Dict[str, Any]:
-    session = SessionLocal()
+    session = open_activity_session(activity)
     try:
         user = _user_from_activity(session, activity)
         if not user:
@@ -179,7 +180,7 @@ def handle_invoice_sent(activity: AgentActivity) -> Dict[str, Any]:
 
 
 def handle_document_signed(activity: AgentActivity) -> Dict[str, Any]:
-    session = SessionLocal()
+    session = open_activity_session(activity)
     try:
         user = _user_from_activity(session, activity)
         if not user:
@@ -223,7 +224,7 @@ def handle_document_signed(activity: AgentActivity) -> Dict[str, Any]:
 
 
 def handle_contract_generator(activity: AgentActivity) -> Dict[str, Any]:
-    session = SessionLocal()
+    session = open_activity_session(activity)
     try:
         user = _user_from_activity(session, activity)
         if not user:
@@ -251,7 +252,7 @@ def handle_contract_generator(activity: AgentActivity) -> Dict[str, Any]:
 
 
 def handle_image_analyzer(activity: AgentActivity) -> Dict[str, Any]:
-    session = SessionLocal()
+    session = open_activity_session(activity)
     try:
         data = _payload(activity)
         url = data.get("image_url") or data.get("url")
@@ -271,7 +272,7 @@ def handle_image_analyzer(activity: AgentActivity) -> Dict[str, Any]:
 
 
 def handle_ads_campaign_builder(activity: AgentActivity) -> Dict[str, Any]:
-    session = SessionLocal()
+    session = open_activity_session(activity)
     try:
         user = _user_from_activity(session, activity)
         if not user:

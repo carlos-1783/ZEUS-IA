@@ -53,7 +53,7 @@ def store_output(
     listaba a TODAS las empresas. Sin empresa no se guarda fichero (el resultado sigue en
     la BD, en los detalles de la actividad) y se devuelve None: nunca a disco local.
     Sin R2 configurado tampoco: aviso en log y None (el entregable queda en BD)."""
-    from app.db.base import SessionLocal
+    from app.db.rls_context import open_tenant_session
     from services import object_storage
 
     if not isinstance(company_id, int):
@@ -65,7 +65,7 @@ def store_output(
             agent, filename, ", ".join(object_storage.missing_config()),
         )
         return None
-    db = SessionLocal()
+    db = open_tenant_session(company_id, user_id=user_id)  # RLS: solo la empresa del entregable
     try:
         row = object_storage.store_file(
             db,

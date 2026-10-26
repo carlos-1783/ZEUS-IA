@@ -239,7 +239,9 @@ def _load_reference_image(raw: str, user_id: Optional[int]) -> Optional[Image.Im
 
     if not (raw or "").strip() or not user_id:
         return None
-    db = SessionLocal()
+    from app.db.rls_context import open_user_session
+
+    db = open_user_session(user_id)  # RLS: la imagen se resuelve como SU usuario
     try:
         row = find_input(db, raw, user_id)
         data = object_storage.read_bytes(row)

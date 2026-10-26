@@ -80,7 +80,15 @@ def _store(
     fname = filename or local_path.name
     ct = content_type or mimetypes.guess_type(fname)[0] or "application/octet-stream"
     data = Path(local_path).read_bytes()
-    db = SessionLocal()
+    # RLS: contexto del usuario dueño del fichero (o de la empresa indicada si no hay usuario).
+    from app.db import rls_context
+
+    if user_id:
+        db = rls_context.open_user_session(user_id)
+    elif isinstance(company_id, int):
+        db = rls_context.open_tenant_session(company_id)
+    else:
+        db = SessionLocal()
     try:
         cid = company_id if isinstance(company_id, int) else _company_for_user(db, user_id)
         try:

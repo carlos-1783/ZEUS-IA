@@ -413,9 +413,9 @@ class CalculateHoursRequest(BaseModel):
 
 def _scoped_counts(user: User, db: Optional[Session]) -> Dict[str, int]:
     if db is None:
-        from app.db.base import SessionLocal
+        from app.db.rls_context import open_user_session
 
-        with SessionLocal() as own:
+        with open_user_session(user.id) as own:  # RLS: contexto del propio usuario
             return _scoped_counts(user, own)
     cids = _company_ids_for_control_horario(db, user)
     active = (
@@ -468,8 +468,8 @@ async def _get_control_horario_info(current_user: User, db: Optional[Session] = 
     is_superuser = getattr(current_user, 'is_superuser', False)
     own_db = False
     if db is None:
-        from app.db.base import SessionLocal
-        db = SessionLocal()
+        from app.db.rls_context import open_user_session
+        db = open_user_session(current_user.id)  # RLS: contexto del propio usuario
         own_db = True
     try:
         profile, config = _resolve_profile_config(db, current_user)

@@ -125,9 +125,14 @@ def get_current_websocket_user(
             logger.warning("No email found in token")
             return None
             
-        # Get user directly from database
-        from app.core.auth import get_user_by_email
-        user = get_user_by_email(db, user_email)
+        # Token firmado -> la sesion de la conexion actua como su titular (lookup acotado + su contexto
+        # RLS: sus empresas; superusuario en modo system auditado).
+        from app.core.auth import get_principal_by_email
+        from app.db import rls_context
+
+        user = get_principal_by_email(db, user_email)
+        if user is not None:
+            rls_context.bind_user_context(db, user)
         if not user:
             logger.warning(f"User not found in database: {user_email}")
             return None

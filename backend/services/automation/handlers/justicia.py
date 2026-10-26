@@ -21,6 +21,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
+from app.db.rls_context import open_activity_session
 from app.models.agent_activity import AgentActivity
 from app.models.user import User
 
@@ -66,7 +67,7 @@ def handle_justicia_task(activity: AgentActivity) -> Dict[str, Any]:
     """Auditoría GDPR real + documentos pendientes reales, scopeados al usuario
     real de la actividad. Si el payload trae un `document_id` NO se sella ni se aprueba
     nada: se informa de que requiere accion humana explicita."""
-    session = SessionLocal()
+    session = open_activity_session(activity)
     try:
         user = _user_from_activity(session, activity)
         if not user:

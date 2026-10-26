@@ -136,7 +136,9 @@ class Justicia(BaseAgent):
                 "conclusions": [],
             }
         else:
-            db = SessionLocal()
+            from app.db.rls_context import open_user_session
+
+            db = open_user_session(user_id)  # RLS: la auditoria ve lo que ve ESE usuario
             try:
                 from app.models.user import User
 
@@ -190,8 +192,10 @@ class Justicia(BaseAgent):
             from services.legal_fiscal_firewall import firewall
             from app.db.session import SessionLocal
             
-            # Obtener sesión de BD
-            db = SessionLocal()
+            # Obtener sesión de BD (RLS: contexto del usuario dueño del borrador)
+            from app.db.rls_context import open_user_session
+
+            db = open_user_session(user_id)
             firewall.db = db
             
             # Generar ID único para el documento

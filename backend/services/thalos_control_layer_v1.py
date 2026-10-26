@@ -195,10 +195,12 @@ def global_status_payload() -> Dict[str, Any]:
 
     db_stats: Dict[str, Any] = {}
     try:
-        from app.db.session import SessionLocal
+        from app.db.rls_context import open_system_session
         from services.thalos_monitor_service import audit_from_db
 
-        db = SessionLocal()
+        # Recuento GLOBAL del motor de seguridad; el unico endpoint que lo sirve (GET /thalos/v1/status)
+        # exige superusuario -> vision global explicita y auditada.
+        db = open_system_session("thalos_control_layer: estado global (endpoint solo superusuario)")
         try:
             db_stats = audit_from_db(db)
         finally:

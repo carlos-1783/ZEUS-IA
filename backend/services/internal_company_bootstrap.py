@@ -18,6 +18,7 @@ from typing import Any, Dict, Optional, Tuple
 from sqlalchemy.exc import OperationalError
 
 from app.db.base import SessionLocal
+from app.db.rls_context import open_system_session
 from app.models.user import User
 from app.models.company import Company, UserCompany
 from services.activity_logger import ActivityLogger
@@ -232,7 +233,9 @@ def run_bootstrap() -> Dict[str, Any]:
         "error": None,
     }
 
-    session = SessionLocal()
+    # RLS: bootstrap de la empresa interna de plataforma (lo lanza el arranque o un superusuario desde
+    # /admin): vision global explicita y auditada.
+    session = open_system_session("internal_company_bootstrap: empresa interna de plataforma")
     try:
         # Punto 0: Comprobar tablas; si faltan, aplicar migración automáticamente (más seguridad)
         try:
@@ -248,7 +251,7 @@ def run_bootstrap() -> Dict[str, Any]:
                         f"{err or 'Ejecuta: cd backend && alembic upgrade head'}"
                     )
                     return result
-                session = SessionLocal()
+                session = open_system_session("internal_company_bootstrap: reintento tras migracion")
                 try:
                     session.query(Company).limit(1).first()
                 except OperationalError:

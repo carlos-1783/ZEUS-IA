@@ -199,6 +199,10 @@ def apply_unsubscribe(db: Session, token: Optional[str]) -> Optional[Customer]:
         logger.warning("unsubscribe rechazado: token no valido")
         return None
     company_id, customer_id = parsed
+    # RLS: token firmado (HMAC) ligado a UNA empresa -> la sesion anonima actua solo sobre esa empresa.
+    from app.db import rls_context
+
+    rls_context.set_tenant_context(db, company_id)
     customer = (
         db.query(Customer)
         .filter(Customer.id == customer_id, Customer.company_id == company_id)
@@ -297,6 +301,32 @@ def count_recent(
         q = q.filter(OutboundMessage.recipient_hash == recipient_hash(channel, recipient))
     return q.count()
 
+
+def count_recent_all_companies(
+    db: Session,
+    *,
+    window: timedelta,
+    channel: str,
+    purpose: str,
+    recipient: str,
+    statuses: Tuple[str, ...] = ("sent", "failed"),
+) -> int:
+    """Como count_recent sin filtro de empresa (limite anti-abuso por destinatario en TODAS las empresas).
+    En Postgres con RLS la sesion solo ve su empresa: se usa la funcion acotada outbound_recent_count()
+    (0071, SECURITY DEFINER), que devuelve SOLO el recuento por hash de destinatario."""
+    from app.db import rls_context
+
+    if not rls_context.is_postgres(db):
+        return count_recent(db, window=window, channel=channel, purpose=purpose, recipient=recipient,
+                            statuses=statuses)
+    from sqlalchemy import text as _text
+
+    since = datetime.now(timezone.utc) - window
+    return int(db.execute(
+        _text("SELECT outbound_recent_count(:ch, :pu, :rh, :since, :st)"),
+        {"ch": channel, "pu": purpose, "rh": recipient_hash(channel, recipient), "since": since,
+         "st": list(statuses)},
+    ).scalar() or 0)
 
 def enforce_company_direct_limit(db: Session, company_id: int, channel: str) -> None:
     limit = direct_limit_per_hour()

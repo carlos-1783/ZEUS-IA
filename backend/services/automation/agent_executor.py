@@ -10,7 +10,7 @@ import os
 from datetime import datetime
 from typing import Dict, Optional
 
-from app.db.session import SessionLocal
+from app.db.rls_context import open_system_session
 from app.models.agent_activity import AgentActivity
 from services.activity_logger import ActivityLogger
 
@@ -61,7 +61,10 @@ class AgentAutomationExecutor:
             await asyncio.sleep(AUTOMATION_INTERVAL)
 
     def _process_cycle(self) -> None:
-        session = SessionLocal()
+        # Cola global de actividades pendientes de TODAS las empresas: vision global explicita (modo
+        # system auditado). Cada handler abre su propia sesion con el contexto del usuario/empresa de
+        # la actividad (app.db.rls_context.open_activity_session).
+        session = open_system_session("agent_executor: cola global de actividades pendientes")
         try:
             pending = (
                 session.query(AgentActivity)

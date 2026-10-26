@@ -119,6 +119,12 @@ def _worker(job_id: str, handler: JobHandler) -> None:
         row = db.query(PerseoJob).filter(PerseoJob.job_id == job_id).first()
         if not row:
             return
+        # RLS: perseo_jobs es una tabla por usuario (sin empresa); el resto del trabajo se hace con el
+        # contexto de SU usuario (sus empresas), nunca con una sesion sin filtro.
+        if row.user_id is not None:
+            from app.db.rls_context import bind_user_id_context
+
+            bind_user_id_context(db, int(row.user_id))
         metrics = _load(row.metrics_json, {})
         retry = int(metrics.get("retry_count") or 0)
         update_job(db, job_id, status="processing", progress=5)

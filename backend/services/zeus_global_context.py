@@ -136,9 +136,10 @@ def make_today_activity_provider(user: User, context: Dict[str, Any]) -> Callabl
     correlation_id = current_correlation_id()
 
     def provider() -> str:
-        from app.db.base import SessionLocal
+        from app.db.rls_context import open_tenant_session
 
-        db = SessionLocal()
+        # Hilo propio: sesion con el contexto RLS de la empresa del contexto global (servidor).
+        db = open_tenant_session(company_id, user_id=getattr(user, "id", None))
         try:
             text, stats = build_today_activity(db, company_id, modules)
         finally:

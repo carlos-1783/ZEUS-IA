@@ -25,7 +25,9 @@ def _synthetic_expiry(created_at: datetime) -> datetime:
     return base + timedelta(days=POLICY_VALIDITY_DAYS)
 
 
-def run_policy_expiration_check(db: Session, *, actor: Optional[User] = None) -> Dict[str, Any]:
+def run_policy_expiration_check(
+    db: Session, *, actor: Optional[User] = None, company_id: Optional[int] = None
+) -> Dict[str, Any]:
     """
     Scan policies/contracts nearing expiration (synthetic expiry from created_at + 365d).
     Emits policy_expiring for documents expiring within 7 days.
@@ -34,16 +36,15 @@ def run_policy_expiration_check(db: Session, *, actor: Optional[User] = None) ->
     horizon = now + timedelta(days=EXPIRY_WINDOW_DAYS)
     emitted: List[Dict[str, Any]] = []
 
-    rows = (
-        db.query(LegalDocument)
-        .filter(
-            LegalDocument.doc_type.in_(("policy", "contract")),
-            LegalDocument.status.in_(("draft", "approved")),
-        )
-        .order_by(LegalDocument.id.desc())
-        .limit(500)
-        .all()
+    q = db.query(LegalDocument).filter(
+        LegalDocument.doc_type.in_(("policy", "contract")),
+        LegalDocument.status.in_(("draft", "approved")),
     )
+    if company_id is not None:
+        # Worker por empresa (RLS): filtro explicito ademas de la policy, para que en SQLite (sin RLS)
+        # cada vuelta tampoco procese documentos de otras empresas.
+        q = q.filter(LegalDocument.company_id == company_id)
+    rows = q.order_by(LegalDocument.id.desc()).limit(500).all()
 
     for row in rows:
         if not row.created_at:
@@ -78,10 +79,11 @@ def run_policy_expiration_check(db: Session, *, actor: Optional[User] = None) ->
     }
 
 
-def run_automation_cycle(db: Session) -> Dict[str, Any]:
-    """Single automation cycle — all cron jobs."""
+def run_automation_cycle(db: Session, *, company_id: Optional[int] = None) -> Dict[str, Any]:
+    """Single automation cycle — all cron jobs (de UNA empresa si se indica company_id)."""
     results = {
-        "policy_expiration_check": run_policy_expiration_check(db),
+        "company_id": company_id,
+        "policy_expiration_check": run_policy_expiration_check(db, company_id=company_id),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     return results

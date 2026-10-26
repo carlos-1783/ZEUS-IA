@@ -1453,3 +1453,8 @@ def get_db():
     """Función de compatibilidad - usar session.get_db() en su lugar"""
     from app.db.session import get_db as get_db_with_retry
     yield from get_db_with_retry()
+
+
+# Registra el evento after_begin que re-aplica el contexto RLS en cada transaccion (app/db/rls_context.py).
+# Import al final: rls_context no importa este modulo a nivel de cabecera, asi que no hay ciclo.
+import app.db.rls_context  # noqa: E402,F401

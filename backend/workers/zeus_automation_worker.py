@@ -7,7 +7,6 @@ import threading
 import time
 
 from app.core.config import settings
-from app.db.session import SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +20,31 @@ def _interval_sec() -> int:
     return max(3600, int(getattr(settings, "ZEUS_AUTOMATION_INTERVAL_SEC", 86400) or 86400))
 
 
+def run_cycle_all_companies() -> int:
+    """Un ciclo del job recorriendo las empresas UNA A UNA, cada una en una sesion con SU contexto RLS
+    (nunca una sesion sin filtro). Listar las empresas es lo unico que necesita vision global: se hace en
+    modo system auditado y solo se leen los ids. Devuelve el total de eventos emitidos."""
+    from app.db.rls_context import open_tenant_session, system_db
+    from app.models.company import Company
+    from services.zeus_automation_engine_v1 import run_automation_cycle
+
+    with system_db("zeus_automation_worker: listar ids de empresas para recorrerlas una a una") as sdb:
+        company_ids = [int(r[0]) for r in sdb.query(Company.id).order_by(Company.id.asc()).all()]
+    emitted = 0
+    for cid in company_ids:
+        db = open_tenant_session(cid)
+        try:
+            result = run_automation_cycle(db, company_id=cid)
+            db.commit()
+            emitted += int(result.get("policy_expiration_check", {}).get("emitted") or 0)
+        except Exception:
+            logger.exception("[ZEUS_AUTOMATION_WORKER] cycle failed company_id=%s", cid)
+            db.rollback()
+        finally:
+            db.close()
+    return emitted
+
+
 def _worker_loop() -> None:
     global _worker_running, _last_run_at
     interval = _interval_sec()
@@ -28,22 +52,12 @@ def _worker_loop() -> None:
     while _worker_running:
         now = time.monotonic()
         if now - _last_run_at >= interval:
-            db = SessionLocal()
             try:
-                from services.zeus_automation_engine_v1 import run_automation_cycle
-
-                result = run_automation_cycle(db)
-                db.commit()
+                emitted = run_cycle_all_companies()
                 _last_run_at = now
-                logger.info(
-                    "[ZEUS_AUTOMATION_WORKER] cycle policy_emitted=%s",
-                    result.get("policy_expiration_check", {}).get("emitted"),
-                )
+                logger.info("[ZEUS_AUTOMATION_WORKER] cycle policy_emitted=%s", emitted)
             except Exception:
                 logger.exception("[ZEUS_AUTOMATION_WORKER] cycle failed")
-                db.rollback()
-            finally:
-                db.close()
         time.sleep(min(60, interval // 10))
 
 

@@ -11,6 +11,7 @@ from typing import Dict, Any
 from app.models.agent_activity import AgentActivity
 from app.models.user import User
 from app.db.session import SessionLocal
+from app.db.rls_context import open_activity_session
 from services.payroll_assistant_service import (
     generate_and_persist,
     send_to_labor_advisor,
@@ -36,7 +37,7 @@ def handle_payroll_draft_generate(activity: AgentActivity) -> Dict[str, Any]:
     payload = activity.details if isinstance(activity.details, dict) else {}
     user_email = (activity.user_email or "").strip()
 
-    session = SessionLocal()
+    session = open_activity_session(activity)
     try:
         employee_id = payload.get("employee_id")
         gross_salary = float(payload.get("gross_salary", 0) or 0)

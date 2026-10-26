@@ -145,9 +145,11 @@ def _persist_audit(
             db.add(row)
             db.flush()
         else:
-            from app.db.session import SessionLocal
+            from app.db import rls_context
 
-            s = SessionLocal()
+            # RLS: fila de auditoria escrita con el contexto de SU empresa (sin empresa: la policy de
+            # INSERT de zeus_closure_audits admite company_id NULL).
+            s = rls_context.open_tenant_session(company_id) if company_id is not None else rls_context._new_session()
             try:
                 s.add(row)
                 s.commit()

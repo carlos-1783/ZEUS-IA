@@ -3,7 +3,8 @@ from typing import Optional
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.db.base import SessionLocal
+from app.db.base import SessionLocal  # noqa: F401 (compatibilidad de imports)
+from app.db.rls_context import open_system_session
 from app.core.config import settings
 from app.core.security import get_password_hash, verify_password
 from app.models.user import User
@@ -33,7 +34,8 @@ def ensure_initial_superuser() -> None:
         )
         return
 
-    db = SessionLocal()
+    # RLS: arranque, vision global explicita y auditada (buscar/crear el superusuario por email).
+    db = open_system_session("startup: ensure_initial_superuser")
     try:
         # Normalize email for comparison (case-insensitive)
         email_normalized = email.strip().lower()

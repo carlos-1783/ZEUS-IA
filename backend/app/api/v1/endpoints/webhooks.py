@@ -250,7 +250,16 @@ async def stripe_webhook_handler(
     
     db = SessionLocal()
     try:
-        user = db.query(User).filter(User.email == customer_email).first()
+        # RLS: evento firmado por Stripe para el titular de `customer_email`. Se resuelve SOLO su id
+        # (lookup acotado) y la sesion actua como ese cliente y SOLO su empresa primaria (nunca modo
+        # system, aunque el email sea de un superusuario: la peticion la origina Stripe, no el usuario).
+        # Un usuario nuevo se crea con id reservado y el contexto de su propia fila (la empresa la crea
+        # el bootstrap con prepare_new_company). Nunca una sesion sin filtro.
+        from app.db import rls_context
+
+        existing_user_id = rls_context.lookup_user_id_by_email(db, customer_email)
+        user = (rls_context.bind_user_single_company(db, existing_user_id)
+                if existing_user_id is not None else None)
         is_new_user = user is None
         
         if is_new_user:
@@ -266,6 +275,10 @@ async def stripe_webhook_handler(
                 plan=plan or "startup",
                 stripe_customer_id=stripe_customer_id,
             )
+            new_user_id = rls_context.preallocate_id(db, "users")
+            if new_user_id is not None:
+                user.id = new_user_id
+                rls_context.bind_principal(db, new_user_id, str(customer_email).strip().lower())
             db.add(user)
             db.commit()
             db.refresh(user)

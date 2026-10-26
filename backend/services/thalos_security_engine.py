@@ -88,7 +88,20 @@ def record_login_attempt(
     """
     clean_email = (email or "").strip().lower()[:255]
     company_id = None
-    if clean_email:
+    from app.db import rls_context
+
+    if clean_email and rls_context.is_postgres(db):
+        # RLS: el intento de login es anonimo; la empresa del email se resuelve con la funcion acotada
+        # user_primary_company_by_email() (0071, solo devuelve el id) y la fila se escribe con el
+        # contexto de ESA empresa (o sin empresa: la policy de INSERT de thalos_login_attempts admite
+        # company_id NULL, el caso central de esta tabla: emails inventados).
+        from sqlalchemy import text as _text
+
+        company_id = db.execute(
+            _text("SELECT user_primary_company_by_email(:e)"), {"e": clean_email}
+        ).scalar()
+        rls_context.set_tenant_context(db, company_id)
+    elif clean_email:
         from app.models.company import UserCompany
         from app.models.user import User as _User
 

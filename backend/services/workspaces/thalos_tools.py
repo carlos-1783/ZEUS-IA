@@ -16,10 +16,11 @@ def monitor_security_logs(payload: Dict[str, Any]) -> Dict[str, Any]:
         from app.core.config import settings
 
         if getattr(settings, "THALOS_ENABLED", True) and logs:
-            from app.db.session import SessionLocal
+            from app.db.rls_context import open_system_session
             from services.thalos_monitor_service import ingest_log_lines
 
-            db = SessionLocal()
+            # Endpoint solo superusuario (workspaces.py): ingesta global de logs, system auditado.
+            db = open_system_session("thalos_tools.monitor_security_logs (superusuario)")
             try:
                 result = ingest_log_lines(db, logs, source="workspace_tools")
                 db.commit()
@@ -48,11 +49,12 @@ def monitor_security_logs(payload: Dict[str, Any]) -> Dict[str, Any]:
 def detect_threat_events(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Evaluar eventos desde BD."""
     try:
-        from app.db.session import SessionLocal
+        from app.db.rls_context import open_system_session
         from services.thalos_monitor_service import audit_from_db
         from services.thalos_threat_engine import evaluate_events
 
-        db = SessionLocal()
+        # Endpoint solo superusuario (workspaces.py): motor de amenazas global, system auditado.
+        db = open_system_session("thalos_tools.detect_threat_events (superusuario)")
         try:
             candidates = evaluate_events(db)
             audit = audit_from_db(db)

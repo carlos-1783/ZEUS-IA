@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 from app.db.session import SessionLocal
+from app.db.rls_context import open_activity_session
 from app.models.agent_activity import AgentActivity
 from .. import utils
 from .thalos_v1 import _is_superuser_email
@@ -45,7 +46,7 @@ def _blocked_superuser_required(action: str) -> Dict[str, Any]:
 
 
 def _require_superuser(activity: AgentActivity) -> bool:
-    db = SessionLocal()
+    db = open_activity_session(activity)
     try:
         return _is_superuser_email(db, activity.user_email)
     finally:

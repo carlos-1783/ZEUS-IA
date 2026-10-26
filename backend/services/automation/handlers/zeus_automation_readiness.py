@@ -14,6 +14,7 @@ from typing import Dict, Any
 from app.models.agent_activity import AgentActivity
 from app.models.user import User
 from app.db.session import SessionLocal
+from app.db.rls_context import open_activity_session
 from services.automation_readiness_service import (
     evaluate_and_persist,
     STATUS_READY_FOR_FULL_AUTOMATION,
@@ -29,7 +30,7 @@ def handle_automation_readiness_evaluate(activity: AgentActivity) -> Dict[str, A
     payload = activity.details if isinstance(activity.details, dict) else {}
     user_email = (activity.user_email or "").strip()
 
-    session = SessionLocal()
+    session = open_activity_session(activity)
     try:
         # La evaluacion es POR USUARIO (automation_readiness.user_id). Fase 2: antes se tomaba
         # payload["company_id"] (escrito por el cliente) como user_id, y si no habia usuario se

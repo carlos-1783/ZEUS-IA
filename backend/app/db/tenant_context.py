@@ -46,75 +46,29 @@ de `zeus_app` en `dec54c0`).
 """
 from __future__ import annotations
 
-from typing import Optional
-
 import logging
 
 from fastapi import Depends
-from sqlalchemy import event, text
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user
 from app.db.session import get_db
 from app.models.user import User
 
-logger = logging.getLogger(__name__)
-
-# Clave en `Session.info` donde se guarda el contexto RLS de la sesión. Vive lo
-# mismo que el objeto Session (una petición), nunca en la conexión del pool.
-_RLS_INFO_KEY = "rls_tenant_context"
-
-_SET_CONTEXT_SQL = text(
-    "SELECT set_config('app.current_company_id', :company_id, true), "
-    "set_config('app.current_user_id', :user_id, true), "
-    "set_config('app.current_user_email', :user_email, true)"
+# Las primitivas viven en app.db.rls_context (sin dependencias de auth, para que app.core.auth pueda
+# usarlas sin import circular). Se re-exportan aqui por compatibilidad con los imports existentes.
+from app.db.rls_context import (  # noqa: F401
+    RLS_INFO_KEY as _RLS_INFO_KEY,
+    _SET_CONTEXT_SQL,
+    _context_params,
+    _reapply_rls_context as _reapply_tenant_context,
+    set_system_context,
+    set_tenant_context,
+    system_db,
+    tenant_db,
 )
 
-
-def _context_params(ctx: dict) -> dict:
-    return {
-        "company_id": str(ctx["company_id"]) if ctx.get("company_id") is not None else "",
-        "user_id": str(ctx["user_id"]) if ctx.get("user_id") is not None else "",
-        "user_email": ctx.get("user_email") or "",
-    }
-
-
-@event.listens_for(Session, "after_begin")
-def _reapply_tenant_context(session: Session, transaction, connection) -> None:
-    """Re-fija el contexto RLS al empezar CADA transacción de una sesión que ya
-    lo tenía (set_tenant_context). Antes el contexto era `set_config(..., true)`
-    (local a la transacción) y desaparecía en el primer commit/rollback de la
-    petición: todo lo que la petición consultaba después (refresh, lecturas
-    posteriores) iba SIN empresa y, con las policies fail-open de 0047, veía
-    datos de todas las empresas.
-
-    Se sigue usando alcance LOCAL a la transacción (no set_config de sesión):
-    el valor muere solo en commit/rollback, así que una conexión devuelta al
-    pool nunca arrastra el contexto de otra petición, sin depender de un
-    reset en checkin. Sesiones sin contexto (workers, scripts, SQLite) -> no-op."""
-    ctx = session.info.get(_RLS_INFO_KEY)
-    if ctx is None or connection.dialect.name != "postgresql":
-        return
-    connection.execute(_SET_CONTEXT_SQL, _context_params(ctx))
-
-
-def set_tenant_context(
-    db: Session,
-    company_id: Optional[int],
-    user_id: Optional[int] = None,
-    user_email: Optional[str] = None,
-) -> None:
-    """Fija el contexto de empresa/usuario que leen las RLS policies para TODA
-    la vida de la sesión `db`: se aplica ya a la transacción actual y el evento
-    `after_begin` lo vuelve a aplicar en cada transacción nueva (tras commit o
-    rollback). Alcance de cada set_config: la transacción (is_local=true).
-    No-op fuera de Postgres."""
-    if db.bind is None or db.bind.dialect.name != "postgresql":
-        return
-    ctx = {"company_id": company_id, "user_id": user_id, "user_email": user_email}
-    db.info[_RLS_INFO_KEY] = ctx
-    db.execute(_SET_CONTEXT_SQL, _context_params(ctx))
-    logger.debug("rls_context set company_id=%s user_id=%s", company_id, user_id)
+logger = logging.getLogger(__name__)
 
 
 def get_db_scoped(

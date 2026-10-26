@@ -41,6 +41,20 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _memory_session(company_id: Any):
+    """Sesion con el contexto RLS de la empresa dueña de la memoria (clave ya resuelta en servidor por
+    unified_agent_runtime._memory_scope): id numerico -> esa empresa; "platform" (solo superusuario) ->
+    modo system auditado; cualquier otra clave -> sin contexto (fail-closed en Postgres)."""
+    from app.db import rls_context
+
+    key = str(company_id or "").strip()
+    if key.isdigit():
+        return rls_context.open_tenant_session(int(key))
+    if key == "platform":
+        return rls_context.open_system_session("agent_memory: espacio platform del superusuario")
+    return SessionLocal()
+
+
 def _ensure_memory_schema_once() -> bool:
     """
     Una sola vez por proceso. Si falla (BD caída, etc.), no reintentar en bucle agresivo.
@@ -74,7 +88,7 @@ def load(
     empty = {"short_term": [], "operational": {}, "decisions": []}
     if not _ensure_memory_schema_once():
         return empty
-    session = SessionLocal()
+    session = _memory_session(company_id)
     try:
         company_id = company_id or "default"
         agent_id = (agent_id or "").upper()
@@ -153,7 +167,7 @@ def persist_short_term(
     """Upsert conversation buffer. TTL 6h. No relanza: el chat debe responder aunque falle la BD."""
     if not _ensure_memory_schema_once():
         return
-    session = SessionLocal()
+    session = _memory_session(company_id)
     try:
         company_id = company_id or "default"
         agent_id = (agent_id or "").upper()
@@ -207,7 +221,7 @@ def persist_operational_state(
     """Upsert operational state. Errores silenciados para no tumbar automatización."""
     if not _ensure_memory_schema_once():
         return
-    session = SessionLocal()
+    session = _memory_session(company_id)
     try:
         company_id = company_id or "default"
         agent_id = (agent_id or "").upper()
@@ -264,7 +278,7 @@ def append_decision_log(
     """Append immutable decision log entry. Errores silenciados."""
     if not _ensure_memory_schema_once():
         return
-    session = SessionLocal()
+    session = _memory_session(company_id)
     try:
         company_id = company_id or "default"
         agent_id = (agent_id or "").upper()

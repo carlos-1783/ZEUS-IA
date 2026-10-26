@@ -54,7 +54,10 @@ def _unique_company_slug(db: Session, base: str, user_id: int) -> str:
     tail = f"{_slugify(base)}-{user_id}"[:100]
     slug = tail
     n = 2
-    while db.query(Company.id).filter(Company.slug == slug).first():
+    from app.db.rls_context import company_slug_taken
+
+    # El slug es unico GLOBAL: con RLS hay que comprobarlo con la funcion acotada (solo devuelve si existe).
+    while company_slug_taken(db, slug):
         suf = f"-{n}"
         slug = (tail[: 100 - len(suf)] + suf) if len(tail) + len(suf) > 100 else tail + suf
         n += 1
@@ -331,6 +334,9 @@ def apply_registration_onboarding(
                     "roce_id": ROCE_ID,
                 },
             )
+            from app.db.rls_context import prepare_new_company
+
+            prepare_new_company(db, company)
             db.add(company)
             db.flush()
             db.add(
@@ -528,10 +534,10 @@ def schedule_post_register_bootstrap(
     sector = BUSINESS_TYPE_TO_SECTOR.get(business_type, "servicios profesionales")
 
     def run() -> None:
-        from app.db.session import SessionLocal
+        from app.db.rls_context import open_user_session
         from services.global_company_bootstrap import run_global_autonomous_bootstrap
 
-        db = SessionLocal()
+        db = open_user_session(user_id)  # RLS: hilo de fondo de ESTE usuario (sus empresas)
         try:
             u = db.query(User).filter(User.id == user_id).first()
             if not u:

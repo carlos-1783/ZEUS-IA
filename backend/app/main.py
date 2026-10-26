@@ -195,7 +195,10 @@ def _execute_zeus_launch_started():
     """
     Opcional: actividad interna + WhatsApp al superusuario (solo si ZEUS_LAUNCH_WHATSAPP=true).
     """
-    session = SessionLocal()
+    # RLS: tarea de arranque sobre el superusuario y la empresa interna: modo system auditado.
+    from app.db.rls_context import open_system_session
+
+    session = open_system_session("startup: zeus_launch_started")
     try:
         # Obtener superusuario
         superuser = session.query(User).filter(User.is_superuser == True).first()
@@ -298,10 +301,11 @@ async def startup_event():
         create_tables()
         ensure_initial_superuser()
         try:  # J2b: aprobaciones que quedaron en `executing` por un reinicio (nunca se re-ejecutan)
-            from app.db.base import SessionLocal
+            from app.db.rls_context import open_system_session
             from services.zeus_human_approval_v1 import recover_stuck_approvals
 
-            _db = SessionLocal()
+            # Mantenimiento de arranque sobre aprobaciones de TODAS las empresas: system auditado.
+            _db = open_system_session("startup: recover_stuck_approvals")
             try:
                 n = recover_stuck_approvals(_db)
                 if n:

@@ -10,7 +10,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from sqlalchemy.orm import Session
 
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, get_db as get_request_db
 from app.models.agent_activity import AgentActivity
 from app.core.auth import get_current_active_user
 from app.models.user import User
@@ -60,6 +60,7 @@ async def get_agent_activities(
     limit: int = 50,
     days: int = 7,
     current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_request_db),
 ):
     """
     Obtener actividades recientes de un agente
@@ -80,7 +81,8 @@ async def get_agent_activities(
             agent_name=agent_name.upper(),
             user_email=effective_user_email,
             limit=limit,
-            days=days
+            days=days,
+            db=db,
         )
         
         return {
@@ -116,6 +118,7 @@ async def get_agent_metrics(
     user_email: Optional[str] = None,
     days: int = 30,
     current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_request_db),
 ):
     """
     Obtener métricas agregadas de un agente
@@ -136,7 +139,8 @@ async def get_agent_metrics(
         metrics = ActivityLogger.get_agent_metrics(
             agent_name=agent_name.upper(),
             user_email=effective_user_email,
-            days=days
+            days=days,
+            db=db,
         )
         
         return {
@@ -248,6 +252,7 @@ async def get_all_agents_summary(
     user_email: Optional[str] = None,
     days: int = 7,
     current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_request_db),
 ):
     """
     Obtener resumen de actividades de todos los agentes
@@ -269,7 +274,8 @@ async def get_all_agents_summary(
             metrics = ActivityLogger.get_agent_metrics(
                 agent_name=agent,
                 user_email=effective_user_email,
-                days=days
+                days=days,
+                db=db,
             )
             summary[agent] = metrics
         

@@ -7,7 +7,7 @@ import threading
 import time
 
 from app.core.config import settings
-from app.db.session import SessionLocal
+from app.db.rls_context import open_system_session
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,10 @@ def _worker_loop() -> None:
     interval = max(5, int(getattr(settings, "THALOS_WORKER_INTERVAL_SEC", 30) or 30))
     logger.info("[THALOS_WORKER] started interval=%ss", interval)
     while _worker_running:
-        db = SessionLocal()
+        # Vision global EXPLICITA (modo system auditado): el monitor de seguridad correlaciona eventos de
+        # todas las empresas (fuerza bruta, IPs, patrones) y escribe cada alerta con la empresa resuelta;
+        # no sirve datos a ningun tenant. Ver app/db/rls_context.py.
+        db = open_system_session("thalos_worker: ciclo global del monitor de seguridad")
         try:
             from services.thalos_monitor_service import run_monitor_cycle
 

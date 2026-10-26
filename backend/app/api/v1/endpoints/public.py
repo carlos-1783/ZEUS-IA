@@ -81,6 +81,18 @@ def unsubscribe_confirm(token: str = Query(..., max_length=200), db: Session = D
 
 
 def _get_user_by_slug(db: Session, slug: str) -> Optional[User]:
+    """Titular de la web publica `slug`. RLS: peticion anonima -> el titular se resuelve con la funcion
+    acotada public_site_user_id_by_slug() (0071: solo devuelve el id si la web esta habilitada y el
+    usuario activo) y la sesion pasa a actuar SOLO con la empresa de la web (la primaria del titular, la
+    misma en la que se crean las reservas): ni sus otras empresas ni modo system aunque el titular sea
+    superusuario. La pagina publica solo ve y escribe datos de esa empresa."""
+    from app.db import rls_context
+
+    if rls_context.is_postgres(db):
+        uid = rls_context.public_site_user_id_by_slug(db, slug)
+        if uid is None:
+            return None
+        return rls_context.bind_user_single_company(db, uid)
     return db.query(User).filter(
         User.public_site_slug == slug,
         User.public_site_enabled == True,
@@ -162,7 +174,9 @@ async def _confirm_by_whatsapp(db: Session, r: Reservation, body: "CreateReserva
         )
 
     per_phone = _env_limit("PUBLIC_WHATSAPP_LIMIT_PER_PHONE_PER_DAY", 3)
-    used = consent_svc.count_recent(
+    # Limite anti-abuso GLOBAL por telefono (todas las empresas): con RLS se cuenta con la funcion
+    # acotada outbound_recent_count() (0071: solo devuelve un numero), ver count_recent_all_companies.
+    used = consent_svc.count_recent_all_companies(
         db, window=timedelta(days=1), channel=consent_svc.CHANNEL_WHATSAPP,
         purpose="reservation_confirmation", recipient=phone,
     )

@@ -283,8 +283,11 @@ async def create_account_after_payment(
         )
 
         # 3. Verificar que el email no exista
-        existing_user = db.query(User).filter(User.email == request.email).first()
-        if existing_user:
+        # RLS: peticion anonima (pago verificado) -> existencia via lookup acotado; el usuario y su empresa
+        # nuevos se crean con id reservado y el contexto de esas filas (app/db/rls_context.py).
+        from app.db import rls_context
+
+        if rls_context.lookup_user_id_by_email(db, request.email) is not None:
             raise HTTPException(
                 status_code=400,
                 detail="Ya existe una cuenta con este email"
@@ -312,6 +315,10 @@ async def create_account_after_payment(
             stripe_subscription_id=request.stripe_subscription_id,
         )
         
+        new_user_id = rls_context.preallocate_id(db, "users")
+        if new_user_id is not None:
+            new_user.id = new_user_id
+            rls_context.bind_principal(db, new_user_id, str(request.email).strip().lower())
         db.add(new_user)
         db.commit()
         db.refresh(new_user)

@@ -11,6 +11,7 @@ import logging
 from app.core.config import settings
 from app.core.security import verify_password
 from app.db.session import get_db
+from app.db import rls_context
 from app.models.user import User
 from app.schemas.user import TokenPayload
 
@@ -90,6 +91,40 @@ def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
         )
 
 
+def get_principal_by_email(db: Session, email: str) -> Optional[User]:
+    """Usuario que se AUTENTICA con este email (login, token con sub=email, reset de contrasena).
+
+    Con RLS fail-closed una sesion sin contexto no ve ninguna fila de `users`, asi que buscar por email
+    directamente no encuentra a nadie (login 401 para todos). En Postgres se resuelve SOLO el id con la
+    funcion acotada auth_user_id_by_email() (migracion 0071), se fija el contexto de ESE usuario
+    (bind_principal: su propia fila, ninguna empresa) y se carga su fila por id. No lista usuarios ni
+    expone columnas de nadie mas. Fuera de Postgres equivale a get_user()."""
+    if not email:
+        return None
+    if not rls_context.is_postgres(db):
+        return get_user(db, email)
+    email_normalized = email.strip().lower()
+    try:
+        user_id = rls_context.lookup_user_id_by_email(db, email_normalized)
+    except (OperationalError, DisconnectionError, ProgrammingError) as e:
+        logger.error("Error de base de datos en el lookup de login: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database service temporarily unavailable"
+        )
+    if user_id is None:
+        return None
+    rls_context.bind_principal(db, user_id, email_normalized)
+    return get_user_by_id(db, user_id)
+
+
+def get_principal_by_id(db: Session, user_id: int) -> Optional[User]:
+    """Usuario autenticado por un id ya verificado (JWT firmado, refresh token valido): contexto de ese
+    usuario y carga de su fila. No-op de contexto fuera de Postgres."""
+    rls_context.bind_principal(db, int(user_id))
+    return get_user_by_id(db, int(user_id))
+
+
 def resolve_user_scopes(user: User, existing_scopes: Optional[List[str]] = None) -> List[str]:
     """
     Determine effective scopes for a user.
@@ -133,7 +168,7 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     try:
         # Get user from database (case-insensitive)
         try:
-            user = get_user(db, email_normalized)
+            user = get_principal_by_email(db, email_normalized)
         except Exception as db_error:
             error_msg = str(db_error).lower()
             is_connection_error = any(keyword in error_msg for keyword in [
@@ -151,6 +186,7 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
         
         if not user:
             logger.warning(f"Usuario no encontrado en la base de datos: {email_normalized}")
+            rls_context.clear_context(db)
             return None
             
         logger.debug(f"Usuario encontrado: {user.email} (ID: {user.id})")
@@ -158,14 +194,19 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
         # Check if user is active (additional safety check)
         if not user.is_active:
             logger.warning(f"Intento de autenticación de usuario inactivo: {user.email}")
+            rls_context.clear_context(db)
             return None
         
         # Verify password
         password_valid = verify_password(password, user.hashed_password)
         if not password_valid:
             logger.warning(f"Contraseña incorrecta para el usuario: {user.email}")
+            rls_context.clear_context(db)
             return None
-            
+
+        # Credenciales validas: el resto de la peticion (tokens, jornada) actua como este usuario y
+        # sobre sus empresas.
+        rls_context.bind_user_context(db, user)
         logger.info(f"✅ Autenticación exitosa para: {user.email} (ID: {user.id})")
         return user
         

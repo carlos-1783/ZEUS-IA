@@ -16,7 +16,8 @@ from sqlalchemy import inspect
 
 from app.core import security
 from app.core.jwt_auth import create_access_token, create_refresh_token as create_jwt_refresh_token, get_current_user
-from app.core.auth import authenticate_user, get_user_by_email
+from app.core.auth import authenticate_user, get_user_by_email, get_principal_by_email, get_principal_by_id
+from app.db import rls_context
 from app.core.security import get_password_hash, verify_password
 from app.core.config import settings
 from app.db.session import get_db
@@ -296,7 +297,9 @@ async def register_user(
         schedule_post_register_bootstrap,
     )
     email_norm = str(user_data.email).strip().lower()
-    if db.query(User).filter(User.email == email_norm).first():
+    # RLS: peticion anonima. Existencia del email via lookup acotado (solo id); el usuario y la empresa
+    # nuevos se crean con su id reservado y el contexto de ESA fila (no se ve ni toca nada mas).
+    if rls_context.lookup_user_id_by_email(db, email_norm) is not None:
         logger.warning("register 400: email ya existe (%s)", email_norm)
         raise _register_http_400(
             "Este correo ya está registrado. Inicia sesión o usa otro email.",
@@ -312,6 +315,10 @@ async def register_user(
         company_name=user_data.company_name.strip(),
         is_active=True,
     )
+    new_user_id = rls_context.preallocate_id(db, "users")
+    if new_user_id is not None:
+        db_user.id = new_user_id
+        rls_context.bind_principal(db, new_user_id, email_norm)
     db.add(db_user)
     try:
         db.flush()
@@ -358,8 +365,6 @@ async def register_user(
     import threading
 
     def _post_register_side_effects() -> None:
-        from app.db.session import SessionLocal
-
         try:
             schedule_post_register_bootstrap(
                 user_id_saved,
@@ -369,7 +374,8 @@ async def register_user(
         except Exception as exc:
             logger.warning("post_register_bootstrap: %s", exc)
 
-        db_bg = SessionLocal()
+        # Hilo de fondo de ESTE usuario: su contexto (sus empresas), no una sesion sin filtro.
+        db_bg = rls_context.open_user_session(user_id_saved)
         try:
             try:
                 validation = validate_onboarding_state(db_bg, user_id_saved)
@@ -1096,8 +1102,9 @@ async def reset_password(
 ):
     """Genera el token, lo guarda y envia el enlace SOLO por correo al titular. La respuesta es
     siempre el mismo mensaje generico (no revela si la cuenta existe ni contiene el token)."""
-    user = db.query(User).filter(User.email == reset_data.email).first()
-    if not user:
+    # RLS: peticion anonima -> solo se necesita saber si la cuenta existe (lookup acotado, id).
+    user = rls_context.lookup_user_id_by_email(db, str(reset_data.email))
+    if user is None:
         # No revelar si el email existe o no
         return {"msg": _RESET_GENERIC_MSG}
 
@@ -1143,7 +1150,8 @@ async def set_new_password(
             detail="Token inv?lido o expirado. Solicita de nuevo el restablecimiento de contrase?a.",
         )
 
-    user = db.query(User).filter(User.email == row.email).first()
+    # Token de reset valido -> la peticion actua como el titular de ese email (solo su fila).
+    user = get_principal_by_email(db, row.email)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
     
@@ -1185,8 +1193,10 @@ async def refresh_token(
             detail="Invalid or expired refresh token"
         )
     
-    # Get the user
-    user = db.query(User).filter(User.id == db_token.user_id).first()
+    # Get the user (refresh token valido -> contexto RLS de su titular y de sus empresas)
+    user = get_principal_by_id(db, db_token.user_id)
+    if user is not None:
+        rls_context.bind_user_context(db, user)
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -1227,8 +1237,9 @@ async def logout(
     ).first()
     
     if db_token:
-        user = db.query(User).filter(User.id == db_token.user_id).first()
+        user = get_principal_by_id(db, db_token.user_id)
         if user:
+            rls_context.bind_user_context(db, user)
             try:
                 from services.employee_work_session_service import end_work_session_on_logout
 

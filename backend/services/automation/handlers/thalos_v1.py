@@ -6,6 +6,7 @@ from typing import Any, Dict
 
 from app.models.agent_activity import AgentActivity
 from app.db.session import SessionLocal
+from app.db.rls_context import open_activity_session
 from services.thalos_executor import execute_action
 from services.thalos_monitoring_service import run_monitoring_cycle
 from services.thalos_workspace_writer_v1 import write_for_activity
@@ -70,7 +71,7 @@ def _wrap_result(activity: AgentActivity, result: Dict[str, Any]) -> Dict[str, A
 
 
 def handle_thalos_v1_detect(activity: AgentActivity) -> Dict[str, Any]:
-    db = SessionLocal()
+    db = open_activity_session(activity)
     try:
         if not _is_superuser_email(db, activity.user_email):
             return _blocked_superuser_required("detect_suspicious_activity")
@@ -92,7 +93,7 @@ def handle_thalos_v1_detect(activity: AgentActivity) -> Dict[str, Any]:
 
 
 def handle_thalos_v1_cashflow(activity: AgentActivity) -> Dict[str, Any]:
-    db = SessionLocal()
+    db = open_activity_session(activity)
     try:
         if not _is_superuser_email(db, activity.user_email):
             return _blocked_superuser_required("audit_cashflow_anomaly")
@@ -114,7 +115,7 @@ def handle_thalos_v1_cashflow(activity: AgentActivity) -> Dict[str, Any]:
 
 
 def handle_thalos_v1_backup(activity: AgentActivity) -> Dict[str, Any]:
-    db = SessionLocal()
+    db = open_activity_session(activity)
     try:
         if not _is_superuser_email(db, activity.user_email):
             return _blocked_superuser_required("trigger_backup")
@@ -130,7 +131,7 @@ def handle_thalos_v1_backup(activity: AgentActivity) -> Dict[str, Any]:
 
 
 def handle_thalos_v1_block(activity: AgentActivity) -> Dict[str, Any]:
-    db = SessionLocal()
+    db = open_activity_session(activity)
     try:
         if not _is_superuser_email(db, activity.user_email):
             return _blocked_superuser_required("block_user")
@@ -153,7 +154,7 @@ def handle_thalos_v1_block(activity: AgentActivity) -> Dict[str, Any]:
 
 
 def handle_thalos_v1_alert(activity: AgentActivity) -> Dict[str, Any]:
-    db = SessionLocal()
+    db = open_activity_session(activity)
     try:
         if not _is_superuser_email(db, activity.user_email):
             return _blocked_superuser_required("alert_admin")
@@ -175,7 +176,7 @@ def handle_thalos_v1_alert(activity: AgentActivity) -> Dict[str, Any]:
 
 
 def handle_thalos_v1_monitor(activity: AgentActivity) -> Dict[str, Any]:
-    db = SessionLocal()
+    db = open_activity_session(activity)
     try:
         if not _is_superuser_email(db, activity.user_email):
             return _blocked_superuser_required("security_monitor")

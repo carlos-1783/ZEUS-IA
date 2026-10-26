@@ -9,6 +9,7 @@ from sqlalchemy.exc import OperationalError
 from threading import Lock
 from app.models.agent_activity import AgentActivity
 from app.db.session import SessionLocal
+from app.db import rls_context
 from app.db.base import create_tables
 
 
@@ -95,6 +96,44 @@ class ActivityLogger:
             return None
 
     @staticmethod
+    def _payload_user_id(details: Optional[Dict[str, Any]], metrics: Optional[Dict[str, Any]]) -> Optional[int]:
+        for p in (details or {}, metrics or {}):
+            for key in ("user_id", "requested_by_user_id", "owner_user_id"):
+                v = p.get(key)
+                if isinstance(v, int):
+                    return v
+                if isinstance(v, str) and v.isdigit():
+                    return int(v)
+        return None
+
+    @staticmethod
+    def _resolve_owner_pg(
+        db: Session,
+        *,
+        user_email: Optional[str],
+        details: Optional[Dict[str, Any]],
+        metrics: Optional[Dict[str, Any]],
+        company_id: Optional[int],
+        infer_company: bool,
+    ):
+        """(email, company_id) del propietario de la actividad, misma regla que la ruta SQLite:
+        email explicito o el del user_id del payload; empresa explicita o la primaria de ese email."""
+        from sqlalchemy import text
+
+        email = user_email
+        if not email:
+            uid = ActivityLogger._payload_user_id(details, metrics)
+            if uid is not None:
+                row = db.execute(text("SELECT user_email FROM agent_activity_owner(:u, NULL)"), {"u": uid}).first()
+                email = row[0] if row else None
+        if not infer_company or company_id is not None:
+            return email, company_id
+        if not email:
+            return None, None
+        row = db.execute(text("SELECT company_id FROM agent_activity_owner(NULL, :e)"), {"e": email}).first()
+        return email, (int(row[0]) if row and row[0] is not None else None)
+
+    @staticmethod
     def log_activity(
         agent_name: str,
         action_type: str,
@@ -132,20 +171,32 @@ class ActivityLogger:
         ensure_tables_initialized()
         db = SessionLocal()
         try:
-            resolved_email = ActivityLogger._infer_user_email_from_payload(
-                db=db,
-                user_email=user_email,
-                details=details,
-                metrics=metrics,
-            )
-            if infer_company:
-                resolved_company_id = ActivityLogger._resolve_company_id(
-                    db=db,
-                    company_id=company_id,
-                    user_email=resolved_email,
+            if rls_context.is_postgres(db):
+                # RLS: el log se llama desde peticiones, hilos y workers; resolver el email/la empresa del
+                # usuario exige ver users/user_companies de cualquier empresa. Se hace con la funcion
+                # acotada agent_activity_owner() (0071: devuelve solo email y empresa primaria) y la fila
+                # se escribe con el contexto de ESA empresa (o sin empresa: la policy de INSERT de
+                # agent_activities admite company_id NULL).
+                resolved_email, resolved_company_id = ActivityLogger._resolve_owner_pg(
+                    db, user_email=user_email, details=details, metrics=metrics,
+                    company_id=company_id, infer_company=infer_company,
                 )
+                rls_context.set_tenant_context(db, resolved_company_id, user_email=resolved_email)
             else:
-                resolved_company_id = company_id
+                resolved_email = ActivityLogger._infer_user_email_from_payload(
+                    db=db,
+                    user_email=user_email,
+                    details=details,
+                    metrics=metrics,
+                )
+                if infer_company:
+                    resolved_company_id = ActivityLogger._resolve_company_id(
+                        db=db,
+                        company_id=company_id,
+                        user_email=resolved_email,
+                    )
+                else:
+                    resolved_company_id = company_id
             normalized_agent = (agent_name or "").strip().upper()
             activity = AgentActivity(
                 agent_name=normalized_agent or agent_name,
@@ -163,7 +214,8 @@ class ActivityLogger:
             
             db.add(activity)
             db.commit()
-            db.refresh(activity)
+            if resolved_company_id is not None or resolved_email or not rls_context.is_postgres(db):
+                db.refresh(activity)
             
             print(f"[ACTIVITY] {normalized_agent or agent_name}: {action_description}")
             
@@ -205,6 +257,7 @@ class ActivityLogger:
         limit: int = 50,
         days: int = 7,
         _retry: bool = True,
+        db: Optional[Session] = None,
     ) -> List[AgentActivity]:
         """
         Obtener actividades de un agente
@@ -218,7 +271,11 @@ class ActivityLogger:
         Returns:
             Lista de actividades
         """
-        db = SessionLocal()
+        # `db` de la peticion autenticada (contexto RLS del usuario); sin el, sesion propia (que en
+        # Postgres fail-closed no ve filas de empresa).
+        own_session = db is None
+        if own_session:
+            db = SessionLocal()
         try:
             ensure_tables_initialized()
             query = db.query(AgentActivity).filter(
@@ -245,6 +302,7 @@ class ActivityLogger:
                     limit=limit,
                     days=days,
                     _retry=False,
+                    db=None if own_session else db,
                 )
             print(f"[ERROR] Error al obtener actividades (OperationalError): {e}")
             return []
@@ -252,7 +310,8 @@ class ActivityLogger:
             print(f"[ERROR] Error al obtener actividades: {e}")
             return []
         finally:
-            db.close()
+            if own_session:
+                db.close()
     
     @staticmethod
     def get_agent_metrics(
@@ -260,6 +319,7 @@ class ActivityLogger:
         user_email: Optional[str] = None,
         days: int = 30,
         _retry: bool = True,
+        db: Optional[Session] = None,
     ) -> Dict[str, Any]:
         """
         Obtener métricas agregadas de un agente
@@ -272,7 +332,11 @@ class ActivityLogger:
         Returns:
             Dict con métricas agregadas
         """
-        db = SessionLocal()
+        # `db` de la peticion autenticada (contexto RLS del usuario); sin el, sesion propia (que en
+        # Postgres fail-closed no ve filas de empresa).
+        own_session = db is None
+        if own_session:
+            db = SessionLocal()
         try:
             ensure_tables_initialized()
             query = db.query(AgentActivity).filter(
@@ -325,6 +389,7 @@ class ActivityLogger:
                     user_email=user_email,
                     days=days,
                     _retry=False,
+                    db=None if own_session else db,
                 )
             print(f"[ERROR] Error al calcular métricas (OperationalError): {e}")
             return {}
@@ -332,7 +397,8 @@ class ActivityLogger:
             print(f"[ERROR] Error al calcular métricas: {e}")
             return {}
         finally:
-            db.close()
+            if own_session:
+                db.close()
 
 # Funciones helper para métricas específicas de cada agente
 

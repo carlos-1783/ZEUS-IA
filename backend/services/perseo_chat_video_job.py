@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
 from app.db.session import SessionLocal
+from app.db.rls_context import open_user_session
 from app.models.document_approval import DocumentApproval
 
 logger = logging.getLogger(__name__)
@@ -74,7 +75,8 @@ def build_deliverable_from_chat_content(content: Dict[str, Any], title: str) -> 
 
 def _fail_pending_document(doc_id: int, user_id: int, message: str) -> None:
     """Marca generated_video_status=failed para no dejar el UI en 'pending' eterno."""
-    db = SessionLocal()
+    # RLS: trabajo de fondo en nombre de ESTE usuario (su contexto: sus empresas).
+    db = open_user_session(user_id)
     try:
         doc = (
             db.query(DocumentApproval)
@@ -160,7 +162,8 @@ def run_perseo_chat_video_generation(doc_id: int, user_id: int) -> None:
     Genera MP4 o GIF desde el copy del documento y lo guarda en R2 bajo la empresa del
     documento; la URL guardada es /api/v1/files/{id}.
     """
-    db = SessionLocal()
+    # RLS: trabajo de fondo en nombre de ESTE usuario (su contexto: sus empresas).
+    db = open_user_session(user_id)
     try:
         doc = (
             db.query(DocumentApproval)
@@ -283,7 +286,8 @@ def schedule_retry_from_api(doc_id: int, user_id: int) -> Optional[str]:
     Llamado desde el endpoint HTTP: devuelve None si OK, o mensaje de error corto.
     No ejecuta el vídeo aquí: el caller debe añadir BackgroundTasks(run_perseo_chat_video_generation_safe).
     """
-    db = SessionLocal()
+    # RLS: trabajo de fondo en nombre de ESTE usuario (su contexto: sus empresas).
+    db = open_user_session(user_id)
     try:
         doc = (
             db.query(DocumentApproval)

@@ -236,11 +236,11 @@ def _resolve_activity_company(activity) -> Optional[int]:
     email = (getattr(activity, "user_email", None) or "").strip()
     if not email:
         return None
-    from app.db.session import SessionLocal
+    from app.db.rls_context import open_activity_session
     from app.models.user import User
     import services.crm_office_service as crm_svc
 
-    db = SessionLocal()
+    db = open_activity_session(activity)  # RLS: actua como el usuario de la actividad
     try:
         user = db.query(User).filter(User.email == email).first()
         return crm_svc.primary_company_id(db, user) if user else None

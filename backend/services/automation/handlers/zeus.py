@@ -17,6 +17,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy import func
 
 from app.db.session import SessionLocal
+from app.db.rls_context import open_activity_session
 from app.models.agent_activity import AgentActivity
 from app.models.zeus_pending_approval import ZeusPendingApproval
 from .. import utils
@@ -109,7 +110,7 @@ def handle_zeus_task(activity: AgentActivity) -> Dict[str, Any]:
     if company_id is None:
         return _failed("Informe de coordinacion no generado: la actividad no tiene empresa resoluble.")
 
-    db = SessionLocal()
+    db = open_activity_session(activity)
     try:
         report = build_coordination_report(db, company_id, exclude_activity_id=activity.id)
     except Exception:

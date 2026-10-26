@@ -87,6 +87,9 @@ def _ensure_company(db: Session, user: User, company_name: str, sector: Optional
             "roce_id": ROCE_ID,
         },
     )
+    from app.db.rls_context import prepare_new_company
+
+    prepare_new_company(db, company)
     db.add(company)
     db.flush()
 
@@ -148,6 +151,9 @@ def ensure_user_company_link_for_operations(db: Session, user: User) -> Optional
             "note": "Creada automáticamente para multi-tenant (TPV mesas); completar datos en onboarding si aplica.",
         },
     )
+    from app.db.rls_context import prepare_new_company
+
+    prepare_new_company(db, company)
     db.add(company)
     db.flush()
     db.add(

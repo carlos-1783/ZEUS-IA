@@ -166,7 +166,9 @@ def _process_job(job_id: str, user_id: int, input_url: str, operations: List[Dic
     try:
         with tempfile.TemporaryDirectory(prefix="perseo_edit_") as tmp:
             work = Path(tmp)
-            db = SessionLocal()
+            from app.db.rls_context import open_user_session
+
+            db = open_user_session(user_id)  # RLS: el fichero de entrada se busca como SU usuario
             try:
                 input_path = download_input(db, input_url, user_id, work)
             finally:

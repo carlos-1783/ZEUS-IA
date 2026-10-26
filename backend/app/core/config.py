@@ -7,8 +7,13 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
+from app.core.env_sanitize import sanitize_environ
+
 # Cargar variables de entorno
 load_dotenv()
+# Punto central: comillas envolventes y espacios en los extremos fuera de TODO os.environ, antes de que
+# se lea ninguna variable (Settings, resolvedores de STATIC_DIR y flags, y los os.getenv sueltos).
+sanitize_environ()
 logger = logging.getLogger("zeus.config")
 
 # Build Vite en imagen: /app/static con ZEUS_APP_ROOT=/app (Dockerfile); local sin env → …/backend/static.

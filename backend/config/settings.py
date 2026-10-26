@@ -8,6 +8,12 @@ from typing import Optional
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
+from app.core.env_sanitize import sanitize_environ
+
+# Mismo saneado central que app/core/config.py (idempotente): cubre el caso en que este modulo se
+# importe antes que app.core.config (agentes o scripts sueltos), antes de leer OPENAI_* etc.
+sanitize_environ()
+
 
 class Settings(BaseSettings):
     """Configuración de la aplicación"""
